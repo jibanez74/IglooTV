@@ -23,7 +23,7 @@ class ApiModelsSerializationTest {
                   "name": "Jose",
                   "email": "jose@example.com",
                   "is_admin": true,
-                  "avatar": null,
+                  "avatar": {"String": "", "Valid": false},
                   "created_at": "2026-01-01T00:00:00Z",
                   "updated_at": "2026-01-02T00:00:00Z"
                 }
@@ -37,7 +37,7 @@ class ApiModelsSerializationTest {
         val user = envelope.data!!.user
         assertEquals(7L, user.id)
         assertTrue(user.isAdmin)
-        assertNull(user.avatar)
+        assertNull(user.avatar?.orNull())
     }
 
     @Test

@@ -3,13 +3,11 @@ package com.igloo.blindpenguincoder.feature.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,9 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,39 +38,44 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
+import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.data.model.AuthUser
 
 @Composable
-fun IglooApp() {
-    IglooTheme {
-        var currentDestinationName by rememberSaveable { mutableStateOf(IglooDestination.Home.name) }
-        val currentDestination = IglooDestination.valueOf(currentDestinationName)
-        val contentStartRequester = remember { FocusRequester() }
-        val navigationRequesters = remember {
-            PrimaryIglooDestinations.associateWith { FocusRequester() }
-        }
-
-        IglooShell(
-            currentDestination = currentDestination,
-            contentStartRequester = contentStartRequester,
-            navigationRequesters = navigationRequesters,
-            onDestinationSelected = { currentDestinationName = it.name },
-        )
+fun IglooApp(
+    user: AuthUser,
+    onLogout: () -> Unit,
+) {
+    var currentDestinationName by rememberSaveable { mutableStateOf(IglooDestination.Home.name) }
+    val currentDestination = IglooDestination.valueOf(currentDestinationName)
+    val contentStartRequester = remember { FocusRequester() }
+    val navigationRequesters = remember {
+        PrimaryIglooDestinations.associateWith { FocusRequester() }
     }
+
+    IglooShell(
+        user = user,
+        currentDestination = currentDestination,
+        contentStartRequester = contentStartRequester,
+        navigationRequesters = navigationRequesters,
+        onDestinationSelected = { currentDestinationName = it.name },
+        onLogout = onLogout,
+    )
 }
 
 @Composable
 private fun IglooShell(
+    user: AuthUser,
     currentDestination: IglooDestination,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     onDestinationSelected: (IglooDestination) -> Unit,
+    onLogout: () -> Unit,
 ) {
     val colors = IglooTheme.colors
 
@@ -81,10 +85,12 @@ private fun IglooShell(
             .background(colors.background),
     ) {
         NavigationSpine(
+            user = user,
             currentDestination = currentDestination,
             contentStartRequester = contentStartRequester,
             navigationRequesters = navigationRequesters,
             onDestinationSelected = onDestinationSelected,
+            onLogout = onLogout,
             modifier = Modifier
                 .fillMaxHeight()
                 .width(236.dp),
@@ -106,10 +112,12 @@ private fun IglooShell(
 
 @Composable
 private fun NavigationSpine(
+    user: AuthUser,
     currentDestination: IglooDestination,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     onDestinationSelected: (IglooDestination) -> Unit,
+    onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
@@ -151,24 +159,75 @@ private fun NavigationSpine(
             }
         }
 
-        Spacer(modifier = Modifier.height(IglooTheme.spacing.md))
-
-        PrimaryIglooDestinations.forEach { destination ->
-            NavigationItem(
-                destination = destination,
-                selected = destination == currentDestination,
-                focusRequester = navigationRequesters.getValue(destination),
-                rightFocusRequester = contentStartRequester,
-                onClick = { onDestinationSelected(destination) },
-            )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+        ) {
+            PrimaryIglooDestinations.forEach { destination ->
+                NavigationItem(
+                    destination = destination,
+                    selected = destination == currentDestination,
+                    focusRequester = navigationRequesters.getValue(destination),
+                    rightFocusRequester = contentStartRequester,
+                    onClick = { onDestinationSelected(destination) },
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
-
         IglooText(
-            text = "Signed out",
+            text = user.name,
             style = IglooTheme.typography.label,
             color = colors.mutedForeground,
+            maxLines = 1,
+        )
+        SignOutItem(onLogout = onLogout)
+    }
+}
+
+@Composable
+private fun SignOutItem(onLogout: () -> Unit) {
+    val colors = IglooTheme.colors
+    var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(IglooTheme.radius.lg)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(shape)
+            .background(if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent)
+            .focusRing(focused = focused, radius = IglooTheme.radius.lg)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onLogout,
+            )
+            .clearAndSetSemantics {
+                contentDescription = "Sign out"
+                role = Role.Button
+                onClick(label = "Sign out") {
+                    onLogout()
+                    true
+                }
+            }
+            .padding(horizontal = IglooTheme.spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(if (focused) colors.destructive else colors.border),
+        )
+        IglooText(
+            text = "Sign out",
+            style = IglooTheme.typography.bodyLarge,
+            color = colors.foreground,
+            maxLines = 1,
         )
     }
 }
@@ -195,7 +254,7 @@ private fun NavigationItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(44.dp)
             .clip(shape)
             .background(background)
             .focusRing(focused = focused, radius = IglooTheme.radius.lg)
@@ -203,13 +262,12 @@ private fun NavigationItem(
             .focusProperties {
                 right = rightFocusRequester
             }
+            .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
             )
-            .onFocusChanged { focused = it.isFocused }
-            .focusable()
             .clearAndSetSemantics {
                 contentDescription = description
                 role = Role.Button
@@ -387,13 +445,12 @@ private fun FeatureCard(
                     Modifier
                 },
             )
+            .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
             )
-            .onFocusChanged { focused = it.isFocused }
-            .focusable()
             .clearAndSetSemantics {
                 contentDescription = "$title. $body"
                 role = Role.Button
@@ -420,37 +477,3 @@ private fun FeatureCard(
     }
 }
 
-private fun Modifier.focusRing(
-    focused: Boolean,
-    radius: Dp,
-): Modifier {
-    val borderWidth = if (focused) 3.dp else 1.dp
-    val colors = IglooDarkFocusColors
-    return border(
-        width = borderWidth,
-        color = if (focused) colors.focus else colors.border,
-        shape = RoundedCornerShape(radius),
-    )
-}
-
-private object IglooDarkFocusColors {
-    val focus = Color(0xFF38BDF8)
-    val border = Color(0xFF2A3C57)
-}
-
-@Composable
-private fun IglooText(
-    text: String,
-    style: TextStyle,
-    color: Color,
-    modifier: Modifier = Modifier,
-    maxLines: Int = Int.MAX_VALUE,
-) {
-    BasicText(
-        text = text,
-        modifier = modifier,
-        style = style.copy(color = color),
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-    )
-}
