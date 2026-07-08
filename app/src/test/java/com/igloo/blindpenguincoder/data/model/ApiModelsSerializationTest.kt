@@ -139,6 +139,123 @@ class ApiModelsSerializationTest {
     }
 
     @Test
+    fun decodesQuickConnectInitiateEnvelope() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "code": "ABCD12",
+                "secret": "device-secret",
+                "expires_in_seconds": 600,
+                "poll_interval_seconds": 2
+              }
+            }
+        """.trimIndent()
+
+        val envelope = json.decodeFromString<ApiEnvelope<QuickConnectInitiateData>>(body)
+
+        val data = envelope.data!!
+        assertEquals("ABCD12", data.code)
+        assertEquals("device-secret", data.secret)
+        assertEquals(600, data.expiresInSeconds)
+        assertEquals(2, data.pollIntervalSeconds)
+    }
+
+    @Test
+    fun decodesDeviceTokenEnvelope() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "token": "igd_test",
+                "device": {
+                  "id": 9,
+                  "name": "Shield",
+                  "platform": "android_tv",
+                  "app_version": "0.1.0",
+                  "created_at": "2026-07-01T00:00:00Z",
+                  "last_used_at": "2026-07-01T00:01:00Z",
+                  "is_current": true
+                }
+              }
+            }
+        """.trimIndent()
+
+        val envelope = json.decodeFromString<ApiEnvelope<DeviceTokenData>>(body)
+
+        val data = envelope.data!!
+        assertEquals("igd_test", data.token)
+        assertEquals(9L, data.device.id)
+        assertEquals("android_tv", data.device.platform)
+        assertTrue(data.device.isCurrent)
+    }
+
+    @Test
+    fun decodesQuickConnectRedeemStatuses() {
+        val pending = json.decodeFromString<ApiEnvelope<QuickConnectRedeemData>>(
+            """{"error":false,"data":{"status":"pending"}}""",
+        )
+        val approved = json.decodeFromString<ApiEnvelope<QuickConnectRedeemData>>(
+            """
+                {
+                  "error": false,
+                  "data": {
+                    "status": "approved",
+                    "token": "igd_test",
+                    "device": {
+                      "id": 9,
+                      "name": "Shield",
+                      "platform": "android_tv",
+                      "app_version": null,
+                      "created_at": "2026-07-01T00:00:00Z",
+                      "last_used_at": "2026-07-01T00:01:00Z",
+                      "is_current": true
+                    }
+                  }
+                }
+            """.trimIndent(),
+        )
+
+        val pendingData = pending.data!!
+        val approvedData = approved.data!!
+        assertEquals(QuickConnectStatus.Pending, pendingData.status)
+        assertNull(pendingData.token)
+        assertEquals(QuickConnectStatus.Approved, approvedData.status)
+        assertEquals("Shield", approvedData.device!!.name)
+    }
+
+    @Test
+    fun encodesDeviceRequestsWithWireNames() {
+        val initiate = json.encodeToString(
+            QuickConnectInitiateRequest(
+                deviceName = "Shield",
+                platform = "android_tv",
+                appVersion = "0.1.0",
+            ),
+        )
+        assertEquals(
+            """{"device_name":"Shield","platform":"android_tv","app_version":"0.1.0"}""",
+            initiate,
+        )
+
+        val deviceLogin = json.encodeToString(
+            DeviceLoginRequest(
+                email = "a@b.c",
+                password = "secret",
+                deviceName = "Shield",
+                platform = "android_tv",
+            ),
+        )
+        assertEquals(
+            """{"email":"a@b.c","password":"secret","device_name":"Shield","platform":"android_tv"}""",
+            deviceLogin,
+        )
+
+        val rename = json.encodeToString(RenameDeviceRequest(name = "Living Room"))
+        assertEquals("""{"name":"Living Room"}""", rename)
+    }
+
+    @Test
     fun decodesUntypedTrackPayloadAsJsonObject() {
         val body = """
             {

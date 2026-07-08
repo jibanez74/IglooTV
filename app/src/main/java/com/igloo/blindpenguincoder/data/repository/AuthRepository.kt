@@ -7,7 +7,17 @@ import com.igloo.blindpenguincoder.data.api.AuthApi
 import com.igloo.blindpenguincoder.data.model.ApiEnvelope
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.data.model.AuthUserData
+import com.igloo.blindpenguincoder.data.model.Device
+import com.igloo.blindpenguincoder.data.model.DeviceLoginRequest
+import com.igloo.blindpenguincoder.data.model.DeviceTokenData
+import com.igloo.blindpenguincoder.data.model.DevicesListData
 import com.igloo.blindpenguincoder.data.model.LoginRequest
+import com.igloo.blindpenguincoder.data.model.QuickConnectApproveRequest
+import com.igloo.blindpenguincoder.data.model.QuickConnectInitiateData
+import com.igloo.blindpenguincoder.data.model.QuickConnectInitiateRequest
+import com.igloo.blindpenguincoder.data.model.QuickConnectRedeemData
+import com.igloo.blindpenguincoder.data.model.QuickConnectRedeemRequest
+import com.igloo.blindpenguincoder.data.model.RenameDeviceRequest
 import io.ktor.client.call.body
 
 class AuthRepository(
@@ -20,6 +30,31 @@ class AuthRepository(
             decode = { },
         )
 
+    suspend fun deviceLogin(
+        email: String,
+        password: String,
+        deviceName: String,
+        platform: String? = null,
+        appVersion: String? = null,
+    ): ApiResult<DeviceTokenData> =
+        safeApiCall(
+            request = {
+                api.deviceLogin(
+                    DeviceLoginRequest(
+                        email = email,
+                        password = password,
+                        deviceName = deviceName,
+                        platform = platform,
+                        appVersion = appVersion,
+                    ),
+                )
+            },
+            decode = { response ->
+                response.body<ApiEnvelope<DeviceTokenData>>().data
+                    ?: error("Missing device token in auth response")
+            },
+        )
+
     suspend fun fetchCurrentUser(): ApiResult<AuthUser> =
         safeApiCall(
             request = { api.currentUser() },
@@ -27,6 +62,63 @@ class AuthRepository(
                 val envelope = response.body<ApiEnvelope<AuthUserData>>()
                 envelope.data?.user ?: error("Missing user in auth response")
             },
+        )
+
+    suspend fun initiateQuickConnect(
+        deviceName: String,
+        platform: String? = null,
+        appVersion: String? = null,
+    ): ApiResult<QuickConnectInitiateData> =
+        safeApiCall(
+            request = {
+                api.initiateQuickConnect(
+                    QuickConnectInitiateRequest(
+                        deviceName = deviceName,
+                        platform = platform,
+                        appVersion = appVersion,
+                    ),
+                )
+            },
+            decode = { response ->
+                response.body<ApiEnvelope<QuickConnectInitiateData>>().data
+                    ?: error("Missing quick-connect code in response")
+            },
+        )
+
+    suspend fun redeemQuickConnect(code: String, secret: String): ApiResult<QuickConnectRedeemData> =
+        safeApiCall(
+            request = { api.redeemQuickConnect(QuickConnectRedeemRequest(code = code, secret = secret)) },
+            decode = { response ->
+                response.body<ApiEnvelope<QuickConnectRedeemData>>().data
+                    ?: error("Missing quick-connect status in response")
+            },
+        )
+
+    suspend fun approveQuickConnect(code: String): ApiResult<Unit> =
+        safeApiCall(
+            request = { api.approveQuickConnect(QuickConnectApproveRequest(code = code)) },
+            decode = { },
+        )
+
+    suspend fun devices(bearerToken: String? = null): ApiResult<List<Device>> =
+        safeApiCall(
+            request = { api.devices(bearerToken) },
+            decode = { response ->
+                response.body<ApiEnvelope<DevicesListData>>().data?.devices
+                    ?: error("Missing devices in response")
+            },
+        )
+
+    suspend fun renameDevice(id: Long, name: String, bearerToken: String? = null): ApiResult<Unit> =
+        safeApiCall(
+            request = { api.renameDevice(id, RenameDeviceRequest(name = name), bearerToken) },
+            decode = { },
+        )
+
+    suspend fun revokeDevice(id: Long, bearerToken: String? = null): ApiResult<Unit> =
+        safeApiCall(
+            request = { api.revokeDevice(id, bearerToken) },
+            decode = { },
         )
 
     suspend fun logout(): ApiResult<Unit> {

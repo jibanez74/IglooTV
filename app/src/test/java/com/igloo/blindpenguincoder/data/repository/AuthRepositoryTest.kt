@@ -2,7 +2,9 @@ package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.data.model.QuickConnectStatus
 import io.ktor.http.HttpMethod
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import java.io.IOException
 import kotlinx.coroutines.test.runTest
@@ -74,6 +76,36 @@ class AuthRepositoryTest {
     }
 
     @Test
+    fun `device login decodes token response`() = runTest {
+        val http = TestHttp { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals("$TEST_SERVER/auth/device-login", request.url.toString())
+            jsonResponse(
+                body = """
+                    {"error":false,"data":{"token":"igd_test","device":{
+                        "id":9,"name":"Shield","platform":"android_tv","app_version":"0.1.0",
+                        "created_at":"2026-07-01T00:00:00Z",
+                        "last_used_at":"2026-07-01T00:01:00Z","is_current":true
+                    }}}
+                """.trimIndent(),
+            )
+        }
+
+        val result = repo(http).deviceLogin(
+            email = "jose@example.com",
+            password = "hunter2",
+            deviceName = "Shield",
+            platform = "android_tv",
+            appVersion = "0.1.0",
+        )
+
+        val data = (result as ApiResult.Success).value
+        assertEquals("igd_test", data.token)
+        assertEquals("Shield", data.device.name)
+        assertTrue(data.device.isCurrent)
+    }
+
+    @Test
     fun `fetchCurrentUser decodes the user envelope`() = runTest {
         val http = TestHttp { request ->
             assertEquals("$TEST_SERVER/auth/user", request.url.toString())
@@ -106,6 +138,112 @@ class AuthRepositoryTest {
         val result = repo(http).fetchCurrentUser()
 
         assertEquals(AppError.Unauthorized, (result as ApiResult.Failure).error)
+    }
+
+    @Test
+    fun `quick connect initiate and redeem use documented routes`() = runTest {
+        var requestIndex = 0
+        val http = TestHttp { request ->
+            requestIndex += 1
+            when (requestIndex) {
+                1 -> {
+                    assertEquals(HttpMethod.Post, request.method)
+                    assertEquals("$TEST_SERVER/quick-connect/initiate", request.url.toString())
+                    jsonResponse(
+                        body = """
+                            {"error":false,"data":{
+                                "code":"ABCD12","secret":"device-secret",
+                                "expires_in_seconds":600,"poll_interval_seconds":2
+                            }}
+                        """.trimIndent(),
+                        status = HttpStatusCode.Created,
+                    )
+                }
+                2 -> {
+                    assertEquals(HttpMethod.Post, request.method)
+                    assertEquals("$TEST_SERVER/quick-connect/redeem", request.url.toString())
+                    jsonResponse(body = """{"error":false,"data":{"status":"pending"}}""")
+                }
+                else -> error("Unexpected request")
+            }
+        }
+        val repository = repo(http)
+
+        val initiated = repository.initiateQuickConnect("Shield", platform = "android_tv")
+        val redeemed = repository.redeemQuickConnect("ABCD12", "device-secret")
+
+        assertEquals("ABCD12", (initiated as ApiResult.Success).value.code)
+        assertEquals(2, initiated.value.pollIntervalSeconds)
+        assertEquals(QuickConnectStatus.Pending, (redeemed as ApiResult.Success).value.status)
+        assertEquals(2, requestIndex)
+    }
+
+    @Test
+    fun `approveQuickConnect uses the session-authenticated route`() = runTest {
+        val http = TestHttp { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals("$TEST_SERVER/quick-connect/approve", request.url.toString())
+            jsonResponse(body = """{"error":false,"message":"approved"}""")
+        }
+
+        val result = repo(http).approveQuickConnect("ABCD12")
+
+        assertTrue(result is ApiResult.Success)
+    }
+
+    @Test
+    fun `devices can be listed with a bearer device token`() = runTest {
+        val http = TestHttp { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals("$TEST_SERVER/devices", request.url.toString())
+            assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
+            jsonResponse(
+                body = """
+                    {"error":false,"data":{"devices":[{
+                        "id":9,"name":"Shield","platform":"android_tv","app_version":null,
+                        "created_at":"2026-07-01T00:00:00Z",
+                        "last_used_at":"2026-07-01T00:01:00Z","is_current":true
+                    }]}}
+                """.trimIndent(),
+            )
+        }
+
+        val result = repo(http).devices(bearerToken = "igd_test")
+
+        val devices = (result as ApiResult.Success).value
+        assertEquals(1, devices.size)
+        assertEquals("Shield", devices.single().name)
+    }
+
+    @Test
+    fun `rename and revoke device use documented device id route`() = runTest {
+        var requestIndex = 0
+        val http = TestHttp { request ->
+            requestIndex += 1
+            when (requestIndex) {
+                1 -> {
+                    assertEquals(HttpMethod.Patch, request.method)
+                    assertEquals("$TEST_SERVER/devices/9", request.url.toString())
+                    assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
+                    jsonResponse(body = """{"error":false,"message":"renamed"}""")
+                }
+                2 -> {
+                    assertEquals(HttpMethod.Delete, request.method)
+                    assertEquals("$TEST_SERVER/devices/9", request.url.toString())
+                    assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
+                    jsonResponse(body = """{"error":false,"message":"revoked"}""")
+                }
+                else -> error("Unexpected request")
+            }
+        }
+        val repository = repo(http)
+
+        val renamed = repository.renameDevice(id = 9, name = "Living Room", bearerToken = "igd_test")
+        val revoked = repository.revokeDevice(id = 9, bearerToken = "igd_test")
+
+        assertTrue(renamed is ApiResult.Success)
+        assertTrue(revoked is ApiResult.Success)
+        assertEquals(2, requestIndex)
     }
 
     @Test
