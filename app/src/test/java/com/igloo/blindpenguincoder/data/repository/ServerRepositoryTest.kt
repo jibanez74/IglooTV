@@ -1,13 +1,23 @@
 package com.igloo.blindpenguincoder.data.repository
 
+import com.igloo.blindpenguincoder.core.config.ServerAddress
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.core.network.FakeSessionCookieStore
+import com.igloo.blindpenguincoder.core.network.PersistentCookiesStorage
+import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.core.storage.StoredCookie
+import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.MockRequestHandler
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import java.io.IOException
+import javax.net.ssl.SSLHandshakeException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -17,112 +27,276 @@ import org.junit.Test
 
 class ServerRepositoryTest {
 
-    private var requestCount = 0
-
     private class Fixture(
         val repository: ServerRepository,
-        val http: TestHttp,
         val settings: ServerSettingsStore,
+        val serverUrl: ServerUrlProvider,
+        val cookieStore: FakeSessionCookieStore,
     )
 
-    private fun fixture(handler: MockRequestHandler): Fixture {
+    private suspend fun fixture(
+        active: ServerAddress? = null,
+        timeoutMillis: Long = 10_000,
+        handler: MockRequestHandler,
+    ): Fixture {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
-        val http = TestHttp { request ->
-            requestCount++
-            handler(request)
-        }
-        val repository = ServerRepository(http.api, settings, http.serverUrl, http.cookiesStorage)
-        return Fixture(repository, http, settings)
+        if (active != null) settings.save(active.apiBaseUrl)
+        val serverUrl = ServerUrlProvider().apply { set(active) }
+        val cookieStore = FakeSessionCookieStore()
+        val cookiesStorage = PersistentCookiesStorage(cookieStore)
+        val repository = ServerRepository(
+            probe = testServerHealthProbe(handler, timeoutMillis),
+            settings = settings,
+            serverUrl = serverUrl,
+            cookiesStorage = cookiesStorage,
+        )
+        return Fixture(repository, settings, serverUrl, cookieStore)
     }
 
     @Test
-    fun `healthy server is normalized, persisted, and activated`() = runTest {
-        val fixture = fixture { request ->
-            assertEquals("http://igloo.local:8080/api/health", request.url.toString())
-            jsonResponse("""{"error":false,"message":"ok"}""")
+    fun `any direct 2xx response is accepted without parsing its body`() = runTest {
+        val responses = listOf(
+            HttpStatusCode.OK to "",
+            HttpStatusCode.Created to "not json",
+            HttpStatusCode.Accepted to "{malformed",
+        )
+
+        responses.forEach { (status, body) ->
+            val fixture = fixture { request ->
+                assertEquals("http://igloo.local:8080/api/health", request.url.toString())
+                respond(body, status)
+            }
+
+            val connectResult = fixture.repository.connect("igloo.local:8080/api")
+            assertTrue(connectResult.toString(), connectResult is ApiResult.Success)
+            val result = connectResult as ApiResult.Success
+
+            assertEquals("http://igloo.local:8080", result.value.origin)
+            assertEquals("http://igloo.local:8080/api", fixture.settings.serverUrl.first())
+            assertEquals(result.value, fixture.serverUrl.current.value)
         }
-
-        val result = fixture.repository.connect("igloo.local:8080/")
-
-        assertEquals("http://igloo.local:8080/api", (result as ApiResult.Success).value)
-        assertEquals("http://igloo.local:8080/api", fixture.settings.serverUrl.first())
-        assertEquals("http://igloo.local:8080/api", fixture.http.serverUrl.current.value)
     }
 
     @Test
-    fun `failing health check does not persist the url`() = runTest {
+    fun `non-2xx preserves a backend message and does not activate the candidate`() = runTest {
         val fixture = fixture {
             jsonResponse(
                 """{"error":true,"message":"database unavailable"}""",
-                status = HttpStatusCode.InternalServerError,
+                HttpStatusCode.ServiceUnavailable,
             )
         }
-        fixture.http.serverUrl.set(null)
 
         val result = fixture.repository.connect("igloo.local:8080")
 
         val error = (result as ApiResult.Failure).error as AppError.Api
         assertEquals("database unavailable", error.message)
+        assertEquals(503, error.status)
         assertNull(fixture.settings.serverUrl.first())
-        assertNull(fixture.http.serverUrl.current.value)
+        assertNull(fixture.serverUrl.current.value)
     }
 
     @Test
-    fun `unreachable server maps to Network and does not persist`() = runTest {
-        val fixture = fixture { throw IOException("no route to host") }
-        fixture.http.serverUrl.set(null)
+    fun `non-json error falls back to the HTTP status`() = runTest {
+        val fixture = fixture { respond("bad gateway", HttpStatusCode.BadGateway) }
 
-        val result = fixture.repository.connect("igloo.local:8080")
+        val result = fixture.repository.connect("igloo.local")
 
-        assertEquals(AppError.Network, (result as ApiResult.Failure).error)
+        val error = (result as ApiResult.Failure).error as AppError.Api
+        assertTrue(error.message.contains("HTTP 502"))
+    }
+
+    @Test
+    fun `one deadline covers a server that never completes its response`() = runTest {
+        val fixture = fixture(timeoutMillis = 100) {
+            delay(Long.MAX_VALUE)
+            respond("")
+        }
+
+        val result = fixture.repository.connect("igloo.local")
+
+        assertEquals(AppError.Timeout, (result as ApiResult.Failure).error)
         assertNull(fixture.settings.serverUrl.first())
     }
 
     @Test
-    fun `invalid input fails validation without hitting the network`() = runTest {
-        val fixture = fixture { jsonResponse("""{"error":false}""") }
+    fun `network and TLS failures have distinct mappings`() = runTest {
+        val network = fixture { throw IOException("no route to host") }
+        val tls = fixture { throw SSLHandshakeException("certificate unknown") }
 
-        val result = fixture.repository.connect("ftp://example.com")
+        assertEquals(
+            AppError.Network,
+            (network.repository.connect("igloo.local") as ApiResult.Failure).error,
+        )
+        assertEquals(
+            AppError.TlsVerification,
+            (tls.repository.connect("https://igloo.local") as ApiResult.Failure).error,
+        )
+    }
+
+    @Test
+    fun `same-host redirects may select the final secure origin and port`() = runTest {
+        var requestNumber = 0
+        val fixture = fixture { request ->
+            requestNumber += 1
+            when (requestNumber) {
+                1 -> {
+                    assertEquals("http://igloo.local:8080/api/health", request.url.toString())
+                    redirectResponse("https://IGLOO.local:8443/api/health")
+                }
+                2 -> {
+                    assertTrue(
+                        request.url.toString()
+                            .equals("https://igloo.local:8443/api/health", ignoreCase = true),
+                    )
+                    respond("", HttpStatusCode.NoContent)
+                }
+                else -> error("Unexpected request")
+            }
+        }
+
+        val result = fixture.repository.connect("http://igloo.local:8080") as ApiResult.Success
+
+        assertEquals("https://igloo.local:8443", result.value.origin)
+        assertEquals("https://igloo.local:8443/api", fixture.settings.serverUrl.first())
+        assertEquals(2, requestNumber)
+    }
+
+    @Test
+    fun `relative same-host redirects are followed`() = runTest {
+        var requestNumber = 0
+        val fixture = fixture { request ->
+            requestNumber += 1
+            if (requestNumber == 1) {
+                redirectResponse("/api/health/")
+            } else {
+                assertEquals("http://igloo.local/api/health/", request.url.toString())
+                respond("ok")
+            }
+        }
+
+        val result = fixture.repository.connect("igloo.local")
+
+        assertTrue(result is ApiResult.Success)
+        assertEquals(2, requestNumber)
+    }
+
+    @Test
+    fun `cross-host and HTTPS downgrade redirects are rejected`() = runTest {
+        val crossHost = fixture { redirectResponse("http://other.local/api/health") }
+        val downgrade = fixture { redirectResponse("http://igloo.local/api/health") }
+
+        assertTrue(
+            (crossHost.repository.connect("igloo.local") as ApiResult.Failure).error
+                is AppError.UnsafeRedirect,
+        )
+        assertTrue(
+            (downgrade.repository.connect("https://igloo.local") as ApiResult.Failure).error
+                is AppError.UnsafeRedirect,
+        )
+        assertNull(crossHost.settings.serverUrl.first())
+        assertNull(downgrade.settings.serverUrl.first())
+    }
+
+    @Test
+    fun `redirect loops and missing destinations are rejected`() = runTest {
+        val loop = fixture { request ->
+            if (request.url.encodedPath.endsWith("health")) {
+                redirectResponse("/api/health/again")
+            } else {
+                redirectResponse("/api/health")
+            }
+        }
+        val missing = fixture { respond("", HttpStatusCode.Found) }
+
+        assertTrue(
+            (loop.repository.connect("igloo.local") as ApiResult.Failure).error
+                is AppError.UnsafeRedirect,
+        )
+        assertTrue(
+            (missing.repository.connect("igloo.local") as ApiResult.Failure).error
+                is AppError.UnsafeRedirect,
+        )
+    }
+
+    @Test
+    fun `more than five redirects is rejected`() = runTest {
+        var redirects = 0
+        val fixture = fixture { request ->
+            redirects += 1
+            redirectResponse("/api/health/$redirects")
+        }
+
+        val result = fixture.repository.connect("igloo.local")
+
+        assertTrue((result as ApiResult.Failure).error is AppError.UnsafeRedirect)
+        assertEquals(6, redirects)
+    }
+
+    @Test
+    fun `probe never sends cookies or authorization headers`() = runTest {
+        val fixture = fixture(active = testServerAddress()) { request ->
+            assertNull(request.headers[HttpHeaders.Cookie])
+            assertNull(request.headers[HttpHeaders.Authorization])
+            respond("")
+        }
+        fixture.cookieStore.stored = sessionCookie(host = "igloo.test")
+
+        fixture.repository.connect("igloo.test:8080")
+    }
+
+    @Test
+    fun `authentication is preserved only for the identical normalized origin`() = runTest {
+        val active = testServerAddress("http://igloo.local:8080")
+        val same = fixture(active = active) { respond("") }
+        val changedPort = fixture(active = active) { respond("") }
+        val changedScheme = fixture(active = active) { respond("") }
+        val changedHost = fixture(active = active) { respond("") }
+        same.cookieStore.stored = sessionCookie("igloo.local")
+        changedPort.cookieStore.stored = sessionCookie("igloo.local")
+        changedScheme.cookieStore.stored = sessionCookie("igloo.local")
+        changedHost.cookieStore.stored = sessionCookie("igloo.local")
+
+        same.repository.connect("HTTP://IGLOO.local:8080/")
+        changedPort.repository.connect("http://igloo.local:8081")
+        changedScheme.repository.connect("https://igloo.local:8080")
+        changedHost.repository.connect("http://other.local:8080")
+
+        assertEquals("secret", same.cookieStore.stored?.value)
+        assertNull(changedPort.cookieStore.stored)
+        assertNull(changedScheme.cookieStore.stored)
+        assertNull(changedHost.cookieStore.stored)
+    }
+
+    @Test
+    fun `invalid input does not make a request or replace the active server`() = runTest {
+        var requestCount = 0
+        val active = testServerAddress()
+        val fixture = fixture(active = active) {
+            requestCount += 1
+            respond("")
+        }
+
+        val result = fixture.repository.connect("http://igloo.local/media")
 
         assertTrue((result as ApiResult.Failure).error is AppError.Validation)
         assertEquals(0, requestCount)
-        assertNull(fixture.settings.serverUrl.first())
+        assertEquals(active.apiBaseUrl, fixture.settings.serverUrl.first())
+        assertEquals(active, fixture.serverUrl.current.value)
     }
 
-    @Test
-    fun `switching host clears the stored session cookie`() = runTest {
-        val fixture = fixture { jsonResponse("""{"error":false,"message":"ok"}""") }
-        fixture.http.cookieStore.stored = StoredCookie(
-            name = "session",
-            value = "abc123",
-            host = "igloo.test",
-            path = "/",
-            expiresEpochMillis = null,
-            secure = false,
-            httpOnly = true,
-        )
+    private fun MockRequestHandleScope.redirectResponse(location: String) = respond(
+        content = "",
+        status = HttpStatusCode.Found,
+        headers = headersOf(HttpHeaders.Location, location),
+    )
 
-        fixture.repository.connect("other.host:8080")
-
-        assertNull(fixture.http.cookieStore.stored)
-    }
-
-    @Test
-    fun `reconnecting to the same host keeps the session cookie`() = runTest {
-        val fixture = fixture { jsonResponse("""{"error":false,"message":"ok"}""") }
-        val cookie = StoredCookie(
-            name = "session",
-            value = "abc123",
-            host = "igloo.test",
-            path = "/",
-            expiresEpochMillis = null,
-            secure = false,
-            httpOnly = true,
-        )
-        fixture.http.cookieStore.stored = cookie
-
-        fixture.repository.connect("igloo.test:8080")
-
-        assertEquals(cookie, fixture.http.cookieStore.stored)
-    }
+    private fun sessionCookie(host: String) = StoredCookie(
+        name = "session",
+        value = "secret",
+        host = host,
+        path = "/",
+        expiresEpochMillis = null,
+        secure = false,
+        httpOnly = true,
+    )
 }

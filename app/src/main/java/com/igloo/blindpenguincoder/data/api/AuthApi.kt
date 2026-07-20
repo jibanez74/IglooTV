@@ -10,13 +10,11 @@ import com.igloo.blindpenguincoder.data.model.RenameDeviceRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 
 class AuthApi(
@@ -24,63 +22,53 @@ class AuthApi(
     private val serverUrl: ServerUrlProvider,
 ) {
     suspend fun login(request: LoginRequest): HttpResponse =
-        client.post("${serverUrl.require()}/auth/login") {
+        client.post("${serverUrl.require().apiBaseUrl}/auth/login") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
 
     suspend fun deviceLogin(request: DeviceLoginRequest): HttpResponse =
-        client.post("${serverUrl.require()}/auth/device-login") {
+        client.post("${serverUrl.require().apiBaseUrl}/auth/device-login") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
 
     suspend fun currentUser(): HttpResponse =
-        client.get("${serverUrl.require()}/auth/user")
+        client.get("${serverUrl.require().apiBaseUrl}/auth/user")
 
     suspend fun logout(): HttpResponse =
-        client.delete("${serverUrl.require()}/auth/logout")
+        client.delete("${serverUrl.require().apiBaseUrl}/auth/logout")
 
     suspend fun initiateQuickConnect(request: QuickConnectInitiateRequest): HttpResponse =
-        client.post("${serverUrl.require()}/quick-connect/initiate") {
+        client.post("${serverUrl.require().apiBaseUrl}/quick-connect/initiate") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
 
     suspend fun redeemQuickConnect(request: QuickConnectRedeemRequest): HttpResponse =
-        client.post("${serverUrl.require()}/quick-connect/redeem") {
+        client.post("${serverUrl.require().apiBaseUrl}/quick-connect/redeem") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
 
     suspend fun approveQuickConnect(request: QuickConnectApproveRequest): HttpResponse =
-        client.post("${serverUrl.require()}/quick-connect/approve") {
+        client.post("${serverUrl.require().apiBaseUrl}/quick-connect/approve") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
 
-    suspend fun devices(bearerToken: String? = null): HttpResponse =
-        client.get("${serverUrl.require()}/devices") {
-            bearerToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
-        }
+    suspend fun devices(): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/devices")
 
     suspend fun renameDevice(
         id: Long,
         request: RenameDeviceRequest,
-        bearerToken: String? = null,
     ): HttpResponse =
-        client.patch("${serverUrl.require()}/devices/$id") {
-            bearerToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+        client.patch("${serverUrl.require().apiBaseUrl}/devices/$id") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
 
-    suspend fun revokeDevice(id: Long, bearerToken: String? = null): HttpResponse =
-        client.delete("${serverUrl.require()}/devices/$id") {
-            bearerToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
-        }
-
-    /** Health check against a candidate base URL, before it is saved. */
-    suspend fun health(baseUrl: String): HttpResponse =
-        client.get("$baseUrl/health")
+    suspend fun revokeDevice(id: Long): HttpResponse =
+        client.delete("${serverUrl.require().apiBaseUrl}/devices/$id")
 }

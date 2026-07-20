@@ -25,7 +25,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooTextField
 @Composable
 fun LoginScreen(
     viewModel: LoginViewModel,
-    serverUrl: String,
+    serverOrigin: String,
     restoreError: AppError?,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -35,7 +35,7 @@ fun LoginScreen(
 
     AuthSurface(
         title = "Sign in to Igloo",
-        subtitle = serverUrl,
+        subtitle = serverOrigin,
     ) {
         if (restoreError != null) {
             Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
@@ -63,9 +63,9 @@ fun LoginScreen(
                 imeAction = ImeAction.Next,
             ),
             keyboardActions = KeyboardActions(onNext = { passwordFocus.requestFocus() }),
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(emailFocus),
+            focusRequester = emailFocus,
+            downFocusRequester = passwordFocus,
+            modifier = Modifier.fillMaxWidth(),
         )
         IglooTextField(
             value = state.password,
@@ -79,9 +79,9 @@ fun LoginScreen(
                 imeAction = ImeAction.Done,
             ),
             keyboardActions = KeyboardActions(onDone = { viewModel.submit() }),
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(passwordFocus),
+            focusRequester = passwordFocus,
+            upFocusRequester = emailFocus,
+            modifier = Modifier.fillMaxWidth(),
         )
         IglooButton(
             text = if (state.isSubmitting) "Signing in…" else "Sign in",

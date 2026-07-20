@@ -40,9 +40,12 @@ fun IglooRoot(container: IglooAppContainer) {
         when (val state = authState) {
             AppAuthState.Loading -> LoadingSplash()
 
-            AppAuthState.NeedsServer -> {
-                val setupViewModel = viewModel {
+            is AppAuthState.NeedsServer -> {
+                val setupViewModel = viewModel(key = "server-setup") {
                     ServerSetupViewModel(container.serverRepository, sessionManager)
+                }
+                LaunchedEffect(setupViewModel, state) {
+                    setupViewModel.beginSetup(state.initialOrigin)
                 }
                 ServerSetupScreen(setupViewModel)
             }
@@ -53,7 +56,7 @@ fun IglooRoot(container: IglooAppContainer) {
                 }
                 LoginScreen(
                     viewModel = loginViewModel,
-                    serverUrl = state.serverUrl,
+                    serverOrigin = state.serverAddress.origin,
                     restoreError = state.restoreError,
                 )
             }

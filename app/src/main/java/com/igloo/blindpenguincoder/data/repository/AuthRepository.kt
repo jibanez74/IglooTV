@@ -100,24 +100,24 @@ class AuthRepository(
             decode = { },
         )
 
-    suspend fun devices(bearerToken: String? = null): ApiResult<List<Device>> =
+    suspend fun devices(): ApiResult<List<Device>> =
         safeApiCall(
-            request = { api.devices(bearerToken) },
+            request = { api.devices() },
             decode = { response ->
                 response.body<ApiEnvelope<DevicesListData>>().data?.devices
                     ?: error("Missing devices in response")
             },
         )
 
-    suspend fun renameDevice(id: Long, name: String, bearerToken: String? = null): ApiResult<Unit> =
+    suspend fun renameDevice(id: Long, name: String): ApiResult<Unit> =
         safeApiCall(
-            request = { api.renameDevice(id, RenameDeviceRequest(name = name), bearerToken) },
+            request = { api.renameDevice(id, RenameDeviceRequest(name = name)) },
             decode = { },
         )
 
-    suspend fun revokeDevice(id: Long, bearerToken: String? = null): ApiResult<Unit> =
+    suspend fun revokeDevice(id: Long): ApiResult<Unit> =
         safeApiCall(
-            request = { api.revokeDevice(id, bearerToken) },
+            request = { api.revokeDevice(id) },
             decode = { },
         )
 

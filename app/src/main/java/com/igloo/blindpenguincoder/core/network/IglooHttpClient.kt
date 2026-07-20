@@ -32,3 +32,22 @@ fun createIglooHttpClient(
         socketTimeoutMillis = 30_000
     }
 }
+
+fun createServerProbeHttpClient(
+    engine: HttpClientEngine = OkHttp.create {
+        config {
+            followRedirects(false)
+            followSslRedirects(false)
+        }
+    },
+): HttpClient = HttpClient(engine) {
+    expectSuccess = false
+    followRedirects = false
+    install(HttpTimeout) {
+        connectTimeoutMillis = SERVER_PROBE_TIMEOUT_MILLIS
+        requestTimeoutMillis = SERVER_PROBE_TIMEOUT_MILLIS
+        socketTimeoutMillis = SERVER_PROBE_TIMEOUT_MILLIS
+    }
+}
+
+const val SERVER_PROBE_TIMEOUT_MILLIS = 10_000L

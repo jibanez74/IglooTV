@@ -1,10 +1,21 @@
 package com.igloo.blindpenguincoder
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -27,19 +38,53 @@ class AuthGateTest {
 
     @Test
     fun freshLaunchShowsServerSetupWithoutNavChrome() {
+        clearStoredSetup()
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            composeRule.onNodeWithText("Connect to your Igloo server").assertIsDisplayed()
+            composeRule.onNodeWithText("Server address").assertIsDisplayed()
+            composeRule.onNodeWithText("http://10.0.2.2:8080").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Server address").assertIsFocused()
+
+            composeRule.onAllNodesWithContentDescription("Home, selected")
+                .assertCountEquals(0)
+        }
+    }
+
+    @Test
+    fun dpadMovesFromAddressToConnectAndValidationReturnsFocus() {
+        clearStoredSetup()
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            val address = composeRule.onNodeWithContentDescription("Server address")
+            address.performTextInput("http://igloo.local/media")
+            address.performKeyInput { pressKey(Key.DirectionDown) }
+
+            val connect = composeRule.onNodeWithContentDescription("Connect to server")
+            connect.assertIsFocused()
+            connect.performClick()
+
+            composeRule.onNodeWithText(
+                "Enter only the server address, optionally ending in /api.",
+            )
+                .assertIsDisplayed()
+                .assert(
+                    SemanticsMatcher.expectValue(
+                        SemanticsProperties.LiveRegion,
+                        LiveRegionMode.Assertive,
+                    ),
+                )
+            address.assertIsFocused()
+        }
+    }
+
+    private fun clearStoredSetup() {
         val app = InstrumentationRegistry.getInstrumentation()
             .targetContext.applicationContext as IglooApplication
         runBlocking {
             app.container.serverSettingsStore.clear()
             app.container.cookiesStorage.clear()
         }
-
-        ActivityScenario.launch(MainActivity::class.java).use {
-            composeRule.onNodeWithText("Connect to your Igloo server").assertIsDisplayed()
-            composeRule.onNodeWithText("Server address").assertIsDisplayed()
-
-            composeRule.onAllNodesWithContentDescription("Home, selected")
-                .assertCountEquals(0)
-        }
+        app.container.serverUrlProvider.set(null)
     }
 }

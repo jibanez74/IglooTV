@@ -4,6 +4,8 @@ import android.content.Context
 import com.igloo.blindpenguincoder.core.network.PersistentCookiesStorage
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.network.createIglooHttpClient
+import com.igloo.blindpenguincoder.core.network.createServerProbeHttpClient
+import com.igloo.blindpenguincoder.core.network.ServerHealthProbe
 import com.igloo.blindpenguincoder.core.storage.DataStoreSessionCookieStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.core.storage.sessionDataStore
@@ -22,10 +24,12 @@ class IglooAppContainer(context: Context) {
         PersistentCookiesStorage(DataStoreSessionCookieStore(appContext.sessionDataStore))
     }
     val httpClient by lazy { createIglooHttpClient(cookiesStorage) }
+    private val serverProbeHttpClient by lazy { createServerProbeHttpClient() }
+    private val serverHealthProbe by lazy { ServerHealthProbe(serverProbeHttpClient) }
     val authApi by lazy { AuthApi(httpClient, serverUrlProvider) }
     val authRepository by lazy { AuthRepository(authApi, cookiesStorage) }
     val serverRepository by lazy {
-        ServerRepository(authApi, serverSettingsStore, serverUrlProvider, cookiesStorage)
+        ServerRepository(serverHealthProbe, serverSettingsStore, serverUrlProvider, cookiesStorage)
     }
     val sessionManager by lazy {
         SessionManager(authRepository, serverSettingsStore, serverUrlProvider)

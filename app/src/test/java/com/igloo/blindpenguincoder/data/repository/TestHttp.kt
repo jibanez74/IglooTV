@@ -1,9 +1,14 @@
 package com.igloo.blindpenguincoder.data.repository
 
+import com.igloo.blindpenguincoder.core.config.ServerAddress
+import com.igloo.blindpenguincoder.core.config.ServerAddressParseResult
+import com.igloo.blindpenguincoder.core.config.parseServerAddress
 import com.igloo.blindpenguincoder.core.network.FakeSessionCookieStore
 import com.igloo.blindpenguincoder.core.network.PersistentCookiesStorage
+import com.igloo.blindpenguincoder.core.network.ServerHealthProbe
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.network.createIglooHttpClient
+import com.igloo.blindpenguincoder.core.network.createServerProbeHttpClient
 import com.igloo.blindpenguincoder.data.api.AuthApi
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -20,13 +25,24 @@ const val TEST_SERVER = "http://igloo.test:8080/api"
 class TestHttp(handler: MockRequestHandler) {
     val cookieStore = FakeSessionCookieStore()
     val cookiesStorage = PersistentCookiesStorage(cookieStore)
-    val serverUrl = ServerUrlProvider().apply { set(TEST_SERVER) }
+    val serverUrl = ServerUrlProvider().apply { set(testServerAddress()) }
     val client: HttpClient = createIglooHttpClient(
         cookiesStorage = cookiesStorage,
         engine = MockEngine(handler),
     )
     val api = AuthApi(client, serverUrl)
 }
+
+fun testServerAddress(origin: String = "http://igloo.test:8080"): ServerAddress =
+    (parseServerAddress(origin) as ServerAddressParseResult.Valid).address
+
+fun testServerHealthProbe(
+    handler: MockRequestHandler,
+    timeoutMillis: Long = 10_000,
+): ServerHealthProbe = ServerHealthProbe(
+    client = createServerProbeHttpClient(MockEngine(handler)),
+    timeoutMillis = timeoutMillis,
+)
 
 fun MockRequestHandleScope.jsonResponse(
     body: String,

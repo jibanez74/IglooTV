@@ -5,12 +5,16 @@ import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
 import com.igloo.blindpenguincoder.data.repository.TestHttp
-import com.igloo.blindpenguincoder.data.repository.jsonResponse
+import com.igloo.blindpenguincoder.data.repository.testServerAddress
+import com.igloo.blindpenguincoder.data.repository.testServerHealthProbe
 import io.ktor.client.engine.mock.MockRequestHandler
+import io.ktor.client.engine.mock.respond
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -19,6 +23,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -35,75 +40,174 @@ class ServerSetupViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel(handler: MockRequestHandler): Pair<ServerSetupViewModel, SessionManager> {
+    private class Fixture(
+        val viewModel: ServerSetupViewModel,
+        val sessionManager: SessionManager,
+        val http: TestHttp,
+    )
+
+    private fun fixture(
+        initialOrigin: String = "",
+        handler: MockRequestHandler,
+    ): Fixture {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
-        val http = TestHttp(handler)
+        val http = TestHttp { error("Auth client should not be called during setup") }
         http.serverUrl.set(null)
         val authRepository = AuthRepository(http.api, http.cookiesStorage)
-        val serverRepository =
-            ServerRepository(http.api, settings, http.serverUrl, http.cookiesStorage)
+        val serverRepository = ServerRepository(
+            testServerHealthProbe(handler),
+            settings,
+            http.serverUrl,
+            http.cookiesStorage,
+        )
         val sessionManager = SessionManager(authRepository, settings, http.serverUrl)
-        return ServerSetupViewModel(serverRepository, sessionManager) to sessionManager
+        val viewModel = ServerSetupViewModel(serverRepository, sessionManager).apply {
+            beginSetup(initialOrigin)
+        }
+        return Fixture(
+            viewModel,
+            sessionManager,
+            http,
+        )
     }
 
     @Test
-    fun `successful connect moves the session to NeedsLogin`() = runTest {
-        val (viewModel, sessionManager) = viewModel {
-            jsonResponse("""{"error":false,"message":"ok"}""")
-        }
+    fun `fresh setup starts empty while change server preloads the current origin`() = runTest {
+        val fresh = fixture { respond("") }
+        val changed = fixture(initialOrigin = "http://igloo.local:8080") { respond("") }
 
-        viewModel.onInputChange("igloo.local:8080")
-        viewModel.connect()
+        assertEquals("", fresh.viewModel.uiState.value.input)
+        assertEquals("http://igloo.local:8080", changed.viewModel.uiState.value.input)
 
-        val state = sessionManager.state
+        changed.http.serverUrl.set(testServerAddress("http://igloo.local:8080"))
+        changed.sessionManager.requireServerChange()
+        val state = changed.sessionManager.state.value as AppAuthState.NeedsServer
+        assertEquals("http://igloo.local:8080", state.initialOrigin)
+    }
+
+    @Test
+    fun `successful connect hands the normalized origin to login`() = runTest {
+        val fixture = fixture { respond("not json") }
+
+        fixture.viewModel.onInputChange("IGLOO.local:8080")
+        fixture.viewModel.connect()
+
+        val state = fixture.sessionManager.state
             .first { it is AppAuthState.NeedsLogin } as AppAuthState.NeedsLogin
-        assertEquals("http://igloo.local:8080/api", state.serverUrl)
-        assertFalse(viewModel.uiState.value.isConnecting)
-        assertNull(viewModel.uiState.value.error)
+        assertEquals("http://igloo.local:8080", state.serverAddress.origin)
+        assertEquals("http://igloo.local:8080/api", state.serverAddress.apiBaseUrl)
+        assertFalse(fixture.viewModel.uiState.value.isConnecting)
+        assertNull(fixture.viewModel.uiState.value.error)
     }
 
     @Test
-    fun `invalid input shows a validation error`() = runTest {
-        val (viewModel, sessionManager) = viewModel {
-            jsonResponse("""{"error":false,"message":"ok"}""")
+    fun `unsupported path shows specific server-address guidance`() = runTest {
+        val fixture = fixture { respond("") }
+
+        fixture.viewModel.onInputChange("http://igloo.local/media")
+        fixture.viewModel.connect()
+
+        val state = fixture.viewModel.uiState.first { it.error != null }
+        assertEquals("Enter only the server address, optionally ending in /api.", state.error)
+        assertEquals(AppAuthState.Loading, fixture.sessionManager.state.value)
+    }
+
+    @Test
+    fun `beginning a reused setup entry resets retained input and errors`() = runTest {
+        val fixture = fixture(initialOrigin = "http://server-a.local") {
+            throw IOException("unreachable")
         }
 
-        viewModel.onInputChange("ftp://nope")
-        viewModel.connect()
+        fixture.viewModel.onInputChange("http://server-b.local")
+        fixture.viewModel.connect()
+        fixture.viewModel.uiState.first { it.error != null }
 
-        val state = viewModel.uiState.first { it.error != null }
+        fixture.viewModel.beginSetup("http://server-a.local")
+
         assertEquals(
-            "Enter a valid server URL, like http://192.168.1.5:8080",
-            state.error,
+            ServerSetupUiState(input = "http://server-a.local"),
+            fixture.viewModel.uiState.value,
         )
-        assertEquals(AppAuthState.Loading, sessionManager.state.value)
     }
 
     @Test
-    fun `unreachable server shows a network error and stays on setup`() = runTest {
-        val (viewModel, sessionManager) = viewModel { throw IOException("unreachable") }
+    fun `beginning a reused setup entry cancels the previous connection`() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val cancelled = CompletableDeferred<Unit>()
+        val fixture = fixture(initialOrigin = "http://server-a.local") {
+            started.complete(Unit)
+            try {
+                awaitCancellation()
+            } finally {
+                cancelled.complete(Unit)
+            }
+        }
 
-        viewModel.onInputChange("igloo.local:8080")
-        viewModel.connect()
+        fixture.viewModel.onInputChange("http://server-b.local")
+        fixture.viewModel.connect()
+        started.await()
+        assertTrue(fixture.viewModel.uiState.value.isConnecting)
 
-        val state = viewModel.uiState.first { it.error != null }
+        fixture.viewModel.beginSetup("http://server-a.local")
+        cancelled.await()
+
         assertEquals(
-            "Couldn't reach the server. Check the address and your connection.",
+            ServerSetupUiState(input = "http://server-a.local"),
+            fixture.viewModel.uiState.value,
+        )
+        assertEquals(AppAuthState.Loading, fixture.sessionManager.state.value)
+    }
+
+    @Test
+    fun `unreachable server recovers with retained input and an actionable error`() = runTest {
+        val fixture = fixture { throw IOException("unreachable") }
+
+        fixture.viewModel.onInputChange("igloo.local:8080")
+        fixture.viewModel.connect()
+
+        val state = fixture.viewModel.uiState.first { it.error != null }
+        assertEquals(
+            "Couldn't reach the server. Check the address, port, and network connection.",
             state.error,
         )
+        assertEquals("igloo.local:8080", state.input)
         assertFalse(state.isConnecting)
-        assertEquals(AppAuthState.Loading, sessionManager.state.value)
+        assertEquals(AppAuthState.Loading, fixture.sessionManager.state.value)
     }
 
     @Test
-    fun `typing clears the previous error`() = runTest {
-        val (viewModel, _) = viewModel { throw IOException("unreachable") }
+    fun `duplicate submissions are ignored while a connection is active`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        val started = CompletableDeferred<Unit>()
+        var requests = 0
+        val fixture = fixture {
+            requests += 1
+            started.complete(Unit)
+            release.await()
+            respond("")
+        }
+        fixture.viewModel.onInputChange("igloo.local")
 
-        viewModel.onInputChange("igloo.local:8080")
-        viewModel.connect()
-        viewModel.uiState.first { it.error != null }
-        viewModel.onInputChange("igloo.local:8081")
+        fixture.viewModel.connect()
+        assertTrue(fixture.viewModel.uiState.value.isConnecting)
+        started.await()
+        fixture.viewModel.connect()
+        assertEquals(1, requests)
 
-        assertNull(viewModel.uiState.value.error)
+        release.complete(Unit)
+        fixture.sessionManager.state.first { it is AppAuthState.NeedsLogin }
+        assertEquals(1, requests)
+    }
+
+    @Test
+    fun `typing after failure clears the previous error`() = runTest {
+        val fixture = fixture { throw IOException("unreachable") }
+
+        fixture.viewModel.onInputChange("igloo.local:8080")
+        fixture.viewModel.connect()
+        fixture.viewModel.uiState.first { it.error != null }
+        fixture.viewModel.onInputChange("igloo.local:8081")
+
+        assertNull(fixture.viewModel.uiState.value.error)
     }
 }

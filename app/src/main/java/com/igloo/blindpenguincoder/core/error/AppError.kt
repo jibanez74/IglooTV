@@ -4,6 +4,9 @@ sealed interface AppError {
     data class Api(val message: String, val status: Int) : AppError
     data object Unauthorized : AppError
     data object Network : AppError
+    data object Timeout : AppError
+    data object TlsVerification : AppError
+    data class UnsafeRedirect(val message: String) : AppError
     data class Validation(val message: String) : AppError
     data class Unexpected(val debugMessage: String?) : AppError
 }

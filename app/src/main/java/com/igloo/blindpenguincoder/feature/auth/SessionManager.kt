@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.auth
 
+import com.igloo.blindpenguincoder.core.config.ServerAddress
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
@@ -23,19 +24,27 @@ class SessionManager(
     suspend fun restore() {
         val storedUrl = settings.serverUrl.first()
         if (storedUrl == null) {
-            _state.value = AppAuthState.NeedsServer
+            _state.value = AppAuthState.NeedsServer()
             return
         }
-        serverUrl.set(storedUrl)
+        val storedAddress = ServerAddress.fromApiBaseUrl(storedUrl)
+        if (storedAddress == null) {
+            settings.clear()
+            authRepository.clearSession()
+            serverUrl.set(null)
+            _state.value = AppAuthState.NeedsServer()
+            return
+        }
+        serverUrl.set(storedAddress)
 
         when (val result = authRepository.fetchCurrentUser()) {
             is ApiResult.Success -> _state.value = AppAuthState.Authenticated(result.value)
             is ApiResult.Failure -> when (result.error) {
                 AppError.Unauthorized -> {
                     authRepository.clearSession()
-                    _state.value = AppAuthState.NeedsLogin(storedUrl)
+                    _state.value = AppAuthState.NeedsLogin(storedAddress)
                 }
-                else -> _state.value = AppAuthState.NeedsLogin(storedUrl, result.error)
+                else -> _state.value = AppAuthState.NeedsLogin(storedAddress, result.error)
             }
         }
     }
@@ -46,18 +55,21 @@ class SessionManager(
 
     suspend fun logout() {
         authRepository.logout()
-        val url = serverUrl.current.value
-        _state.value = if (url != null) AppAuthState.NeedsLogin(url) else AppAuthState.NeedsServer
+        val address = serverUrl.current.value
+        _state.value = if (address != null) {
+            AppAuthState.NeedsLogin(address)
+        } else {
+            AppAuthState.NeedsServer()
+        }
     }
 
     /** Server setup finished successfully; move on to login. */
-    fun onServerChanged() {
-        val url = serverUrl.require()
-        _state.value = AppAuthState.NeedsLogin(url)
+    fun onServerChanged(address: ServerAddress) {
+        _state.value = AppAuthState.NeedsLogin(address)
     }
 
     /** "Change server" from the login screen. */
     fun requireServerChange() {
-        _state.value = AppAuthState.NeedsServer
+        _state.value = AppAuthState.NeedsServer(serverUrl.current.value?.origin.orEmpty())
     }
 }

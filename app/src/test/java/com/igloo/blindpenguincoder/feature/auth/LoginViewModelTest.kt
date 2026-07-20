@@ -108,7 +108,7 @@ class LoginViewModelTest {
 
         val state = viewModel.uiState.first { it.error != null }
         assertEquals(
-            "Couldn't reach the server. Check the address and your connection.",
+            "Couldn't reach the server. Check the address, port, and network connection.",
             state.error,
         )
     }

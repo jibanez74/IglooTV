@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +24,13 @@ class ServerSetupViewModel(
 
     private val _uiState = MutableStateFlow(ServerSetupUiState())
     val uiState: StateFlow<ServerSetupUiState> = _uiState.asStateFlow()
+    private var connectionJob: Job? = null
+
+    fun beginSetup(initialOrigin: String) {
+        connectionJob?.cancel()
+        connectionJob = null
+        _uiState.value = ServerSetupUiState(input = initialOrigin)
+    }
 
     fun onInputChange(value: String) {
         _uiState.update { it.copy(input = value, error = null) }
@@ -31,11 +39,11 @@ class ServerSetupViewModel(
     fun connect() {
         if (_uiState.value.isConnecting) return
         _uiState.update { it.copy(isConnecting = true, error = null) }
-        viewModelScope.launch {
+        connectionJob = viewModelScope.launch {
             when (val result = serverRepository.connect(_uiState.value.input)) {
                 is ApiResult.Success -> {
                     _uiState.update { it.copy(isConnecting = false) }
-                    sessionManager.onServerChanged()
+                    sessionManager.onServerChanged(result.value)
                 }
                 is ApiResult.Failure -> _uiState.update {
                     it.copy(isConnecting = false, error = result.error.toDisplayMessage())

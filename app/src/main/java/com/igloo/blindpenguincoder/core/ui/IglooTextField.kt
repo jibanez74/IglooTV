@@ -20,6 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -30,6 +33,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.password
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -47,6 +52,9 @@ fun IglooTextField(
     isPassword: Boolean = false,
     errorText: String? = null,
     enabled: Boolean = true,
+    focusRequester: FocusRequester? = null,
+    upFocusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
 ) {
@@ -79,6 +87,17 @@ fun IglooTextField(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = IglooTheme.spacing.md)
+                    .then(
+                        if (focusRequester != null) {
+                            Modifier.focusRequester(focusRequester)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .focusProperties {
+                        upFocusRequester?.let { up = it }
+                        downFocusRequester?.let { down = it }
+                    }
                     .onFocusChanged { focused = it.isFocused }
                     // BasicTextField consumes D-pad up/down for cursor movement,
                     // trapping remote focus when the IME is closed; move focus instead.
@@ -131,6 +150,10 @@ fun IglooTextField(
                 text = errorText,
                 style = IglooTheme.typography.bodyMedium,
                 color = colors.destructive,
+                modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Assertive
+                    error(errorText)
+                },
             )
         }
     }

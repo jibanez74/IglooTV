@@ -46,7 +46,7 @@ class SessionManagerTest {
 
         fixture.manager.restore()
 
-        assertEquals(AppAuthState.NeedsServer, fixture.manager.state.value)
+        assertEquals(AppAuthState.NeedsServer(), fixture.manager.state.value)
         assertNull(fixture.http.serverUrl.current.value)
     }
 
@@ -58,7 +58,7 @@ class SessionManagerTest {
 
         val state = fixture.manager.state.value as AppAuthState.Authenticated
         assertEquals("Jose", state.user.name)
-        assertEquals(TEST_SERVER, fixture.http.serverUrl.current.value)
+        assertEquals(TEST_SERVER, fixture.http.serverUrl.current.value?.apiBaseUrl)
     }
 
     @Test
@@ -79,7 +79,8 @@ class SessionManagerTest {
         fixture.manager.restore()
 
         val state = fixture.manager.state.value as AppAuthState.NeedsLogin
-        assertEquals(TEST_SERVER, state.serverUrl)
+        assertEquals(TEST_SERVER, state.serverAddress.apiBaseUrl)
+        assertEquals("http://igloo.test:8080", state.serverAddress.origin)
         assertNull(state.restoreError)
         assertNull(fixture.http.cookieStore.stored)
     }
@@ -92,6 +93,7 @@ class SessionManagerTest {
 
         val state = fixture.manager.state.value as AppAuthState.NeedsLogin
         assertEquals(AppError.Network, state.restoreError)
+        assertEquals("http://igloo.test:8080", state.serverAddress.origin)
     }
 
     @Test
@@ -108,7 +110,27 @@ class SessionManagerTest {
         fixture.manager.logout()
 
         val state = fixture.manager.state.value as AppAuthState.NeedsLogin
-        assertEquals(TEST_SERVER, state.serverUrl)
+        assertEquals(TEST_SERVER, state.serverAddress.apiBaseUrl)
         assertNull(fixture.http.cookieStore.stored)
+    }
+
+    @Test
+    fun `invalid stored api base is cleared and returns to fresh setup`() = runTest {
+        val fixture = fixture("http://igloo.test:8080/not-api") { error("no request expected") }
+        fixture.http.cookieStore.stored = StoredCookie(
+            name = "session",
+            value = "stale",
+            host = "igloo.test",
+            path = "/",
+            expiresEpochMillis = null,
+            secure = false,
+            httpOnly = true,
+        )
+
+        fixture.manager.restore()
+
+        assertEquals(AppAuthState.NeedsServer(), fixture.manager.state.value)
+        assertNull(fixture.http.cookieStore.stored)
+        assertNull(fixture.http.serverUrl.current.value)
     }
 }

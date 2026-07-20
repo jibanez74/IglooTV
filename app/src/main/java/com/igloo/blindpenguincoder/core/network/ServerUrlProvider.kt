@@ -1,18 +1,19 @@
 package com.igloo.blindpenguincoder.core.network
 
+import com.igloo.blindpenguincoder.core.config.ServerAddress
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** Holds the current normalized API base URL, e.g. `http://10.0.2.2:8080/api`. */
+/** Holds the active normalized server origin and API base URL. */
 class ServerUrlProvider {
-    private val state = MutableStateFlow<String?>(null)
-    val current: StateFlow<String?> = state.asStateFlow()
+    private val state = MutableStateFlow<ServerAddress?>(null)
+    val current: StateFlow<ServerAddress?> = state.asStateFlow()
 
-    fun set(url: String?) {
-        state.value = url
+    fun set(address: ServerAddress?) {
+        state.value = address
     }
 
-    fun require(): String =
-        checkNotNull(state.value) { "Server URL requested before setup completed" }
+    fun require(): ServerAddress =
+        checkNotNull(state.value) { "Server address requested before setup completed" }
 }

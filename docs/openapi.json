@@ -3,7 +3,7 @@
   "info": {
     "title": "Igloo API",
     "version": "0.1.0",
-    "description": "HTTP API for the Igloo self-hosted media center. Most JSON endpoints return a shared envelope with error, optional message, and optional data fields. Device bearer tokens issued via Quick Connect or device login (Authorization: Bearer igd_...) are accepted on every route that accepts cookieAuth."
+    "description": "HTTP API for the Igloo self-hosted media center. Most JSON endpoints return a shared envelope with error, optional message, and optional data fields. Device bearer tokens issued via Quick Connect or device login (Authorization: Bearer igd_...) are accepted on most routes that accept cookieAuth, except device-management and Quick Connect approval endpoints, which require a cookie session. See each operation's security block for route-specific requirements."
   },
   "servers": [
     {
@@ -47,6 +47,10 @@
     {
       "name": "TMDB",
       "description": "TMDB-backed movie metadata"
+    },
+    {
+      "name": "YouTube",
+      "description": "YouTube-backed video thumbnails"
     },
     {
       "name": "Spotify",
@@ -160,7 +164,8 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Destroy the current session",
+        "summary": "Log out the current web session or device client",
+        "description": "For cookie-authenticated web clients, destroys only the current session. For requests authenticated with a device bearer token, revokes only that device token. If both credentials are sent, the device bearer token takes precedence.",
         "operationId": "destroySession",
         "responses": {
           "200": {
@@ -241,7 +246,7 @@
           "Devices"
         ],
         "summary": "Poll a quick-connect code and receive a device token once approved",
-        "description": "Devices poll this endpoint at the advertised interval. A 404 means the code is unknown, expired, or the secret does not match (including after a server restart); the device should request a new code and start over. Approved codes are consumed: the token is returned exactly once.",
+        "description": "Quick Connect pairings are kept in this server process's memory. In multi-instance deployments, initiate, approve, and redeem must reach the same instance through sticky routing or a shared store; otherwise cross-instance requests can return 404. Devices poll this endpoint at the advertised interval. A 404 means the code is unknown, expired, or the secret does not match (including after a server restart); the device should request a new code and start over. Approved codes are consumed: the token is returned exactly once.",
         "operationId": "redeemQuickConnect",
         "security": [],
         "requestBody": {
@@ -253,6 +258,44 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/quick-connect/lookup": {
+      "post": {
+        "tags": [
+          "Devices"
+        ],
+        "summary": "Look up the device behind a pending quick-connect code",
+        "description": "Returns the pending device's name, platform, and app version so the user can see what they are approving. Does not bind or consume the code. Session-authenticated users only, and it shares the approve endpoint's rate limit so lookups cannot be used to guess codes faster.",
+        "operationId": "lookupQuickConnect",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/QuickConnectApproveRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/QuickConnectLookupResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -310,13 +353,11 @@
           "Devices"
         ],
         "summary": "List the current user's devices",
+        "description": "Session-authenticated users only: requests carrying a device bearer token are rejected with 401 so a stolen device token cannot enumerate devices.",
         "operationId": "getDevices",
         "security": [
           {
             "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
           }
         ],
         "responses": {
@@ -338,13 +379,11 @@
           "Devices"
         ],
         "summary": "Rename one of the current user's devices",
+        "description": "Session-authenticated users only: requests carrying a device bearer token are rejected with 401 so a stolen device token cannot rename devices.",
         "operationId": "renameDevice",
         "security": [
           {
             "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -385,14 +424,11 @@
           "Devices"
         ],
         "summary": "Revoke one of the current user's devices",
-        "description": "Deletes the device and its token; the next request using that token receives 401.",
+        "description": "Deletes the device and its token; the next request using that token receives 401. Session-authenticated users only: requests carrying a device bearer token are rejected with 401 so a stolen device token cannot revoke devices.",
         "operationId": "revokeDevice",
         "security": [
           {
             "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -507,6 +543,90 @@
         }
       }
     },
+    "/api/user/pin": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Get the current user's profile PIN",
+        "description": "Session cookie only. Device bearer tokens receive 401 so a shared TV can never read the PIN.",
+        "operationId": "getUserPin",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/UserPinResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Set, change, or remove the current user's profile PIN",
+        "description": "An empty pin removes the PIN. When a PIN is already set, current_pin is required and attempts are rate limited.",
+        "operationId": "updateUserPin",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/UpdateUserPinRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AuthUserResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/user/pin/verify": {
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "summary": "Verify the current user's profile PIN",
+        "description": "Used by TV clients when switching profiles. A wrong PIN returns 200 with valid=false; attempts are rate limited.",
+        "operationId": "verifyUserPin",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/VerifyUserPinRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/UserPinVerifyResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/api/user/avatar": {
       "put": {
         "tags": [
@@ -597,6 +717,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/StaticPath"
+          },
+          {
+            "$ref": "#/components/parameters/RangeHeader"
           }
         ],
         "responses": {
@@ -611,6 +734,12 @@
               }
             }
           },
+          "206": {
+            "$ref": "#/components/responses/PartialBinaryMediaResponse"
+          },
+          "304": {
+            "$ref": "#/components/responses/NotModified"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
@@ -619,6 +748,9 @@
           },
           "404": {
             "description": "Static file not found."
+          },
+          "416": {
+            "$ref": "#/components/responses/RangeNotSatisfiable"
           },
           "500": {
             "description": "Failed to serve static file."
@@ -995,6 +1127,48 @@
         }
       }
     },
+    "/api/youtube/thumbnails/{key}": {
+      "get": {
+        "tags": [
+          "YouTube"
+        ],
+        "summary": "Proxy a YouTube video thumbnail",
+        "operationId": "proxyYouTubeThumbnail",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/YouTubeThumbnailKeyPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "YouTube thumbnail image bytes.",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          }
+        }
+      }
+    },
     "/api/search/": {
       "get": {
         "tags": [
@@ -1154,6 +1328,27 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/LatestMoviesResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/movies/continue-watching": {
+      "get": {
+        "tags": [
+          "Movies"
+        ],
+        "summary": "List movies the current user is watching",
+        "description": "Returns up to 12 movies the current user has started watching but not finished or marked watched, most recently watched first.",
+        "operationId": "getContinueWatchingMovies",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ContinueWatchingMoviesResponse"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1832,6 +2027,9 @@
           },
           {
             "$ref": "#/components/parameters/PlaybackSessionQuery"
+          },
+          {
+            "$ref": "#/components/parameters/HLSReloadQuery"
           }
         ],
         "responses": {
@@ -1843,6 +2041,12 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -1872,6 +2076,9 @@
           },
           {
             "$ref": "#/components/parameters/PlaybackSessionQuery"
+          },
+          {
+            "$ref": "#/components/parameters/HLSReloadQuery"
           }
         ],
         "responses": {
@@ -1886,6 +2093,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -1915,6 +2125,9 @@
           "206": {
             "$ref": "#/components/responses/PartialBinaryMediaResponse"
           },
+          "304": {
+            "$ref": "#/components/responses/NotModified"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -1923,6 +2136,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "416": {
+            "$ref": "#/components/responses/RangeNotSatisfiable"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -2501,6 +2717,9 @@
           "206": {
             "$ref": "#/components/responses/PartialBinaryMediaResponse"
           },
+          "304": {
+            "$ref": "#/components/responses/NotModified"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -2512,6 +2731,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "416": {
+            "$ref": "#/components/responses/RangeNotSatisfiable"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -2543,6 +2765,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -2580,6 +2805,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -2754,6 +2982,9 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -2777,6 +3008,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -3083,6 +3317,9 @@
           "206": {
             "$ref": "#/components/responses/PartialBinaryMediaResponse"
           },
+          "304": {
+            "$ref": "#/components/responses/NotModified"
+          },
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
@@ -3091,6 +3328,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "416": {
+            "$ref": "#/components/responses/RangeNotSatisfiable"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -3519,7 +3759,7 @@
           "$ref": "#/components/requestBodies/AddCollaboratorRequest"
         },
         "responses": {
-          "200": {
+          "201": {
             "$ref": "#/components/responses/PlaylistCollaboratorMutationResponse"
           },
           "400": {
@@ -3803,7 +4043,7 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Long-lived device token issued by POST /api/quick-connect/redeem or POST /api/auth/device-login. Tokens are prefixed with igd_."
+        "description": "Long-lived device token issued by POST /api/quick-connect/redeem or POST /api/auth/device-login. Tokens are prefixed with igd_. Devices unused for 90 days are revoked automatically; the device must pair again."
       }
     },
     "parameters": {
@@ -3890,6 +4130,16 @@
         "schema": {
           "type": "string",
           "pattern": "^[A-Za-z0-9._-]+$"
+        }
+      },
+      "YouTubeThumbnailKeyPath": {
+        "name": "key",
+        "in": "path",
+        "required": true,
+        "description": "Safe YouTube video key.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
         }
       },
       "HLSProfilePath": {
@@ -4036,21 +4286,20 @@
         "name": "audio_track",
         "in": "query",
         "required": false,
+        "description": "Zero-based audio track index. Required for movies with audio; omit for video-only movies.",
         "schema": {
           "type": "integer",
-          "minimum": 0,
-          "default": 0
+          "minimum": 0
         }
       },
       "StartQuery": {
         "name": "start",
         "in": "query",
-        "required": false,
-        "description": "Session start time in seconds.",
+        "required": true,
+        "description": "Session start time in seconds. Values at or beyond the movie duration are normalized to five seconds before the end, or zero when the movie is shorter than five seconds; rewritten HLS asset URLs use the normalized value.",
         "schema": {
-          "type": "number",
-          "minimum": 0,
-          "default": 0
+          "type": "integer",
+          "minimum": 0
         }
       },
       "RangeHeader": {
@@ -4071,6 +4320,15 @@
         "schema": {
           "type": "string",
           "format": "uuid"
+        }
+      },
+      "HLSReloadQuery": {
+        "name": "reload",
+        "in": "query",
+        "required": false,
+        "description": "Opaque client-supplied value echoed into rewritten HLS asset URLs; not part of the session cache key.",
+        "schema": {
+          "type": "string"
         }
       }
     },
@@ -4111,6 +4369,26 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/UpdateUserPasswordRequest"
+            }
+          }
+        }
+      },
+      "UpdateUserPinRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UpdateUserPinRequest"
+            }
+          }
+        }
+      },
+      "VerifyUserPinRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/VerifyUserPinRequest"
             }
           }
         }
@@ -4488,6 +4766,34 @@
           }
         }
       },
+      "UserPinResponse": {
+        "description": "Current profile PIN for the session user.",
+        "headers": {
+          "Cache-Control": {
+            "schema": {
+              "type": "string",
+              "const": "private, no-store"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UserPinEnvelope"
+            }
+          }
+        }
+      },
+      "UserPinVerifyResponse": {
+        "description": "Profile PIN verification result.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UserPinVerifyEnvelope"
+            }
+          }
+        }
+      },
       "AdminUserResponse": {
         "description": "Admin user response.",
         "content": {
@@ -4584,6 +4890,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/LatestMoviesEnvelope"
+            }
+          }
+        }
+      },
+      "ContinueWatchingMoviesResponse": {
+        "description": "Continue watching movies response.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContinueWatchingMoviesEnvelope"
             }
           }
         }
@@ -4903,6 +5219,12 @@
             }
           }
         }
+      },
+      "NotModified": {
+        "description": "Cached representation is still valid."
+      },
+      "RangeNotSatisfiable": {
+        "description": "Requested byte range cannot be satisfied."
       },
       "WebVTTResponse": {
         "description": "Extracted WebVTT subtitle payload.",
@@ -5343,7 +5665,16 @@
         }
       },
       "ServiceUnavailable": {
-        "description": "Generated media segment is not ready yet.",
+        "description": "Generated media is not ready yet or HLS session/transcode capacity is temporarily unavailable.",
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds to wait before retrying when HLS capacity is unavailable.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
         "content": {
           "application/json": {
             "schema": {
@@ -5398,6 +5729,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/QuickConnectRedeemEnvelope"
+            }
+          }
+        }
+      },
+      "QuickConnectLookupResponse": {
+        "description": "The pending device awaiting approval.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/QuickConnectLookupEnvelope"
             }
           }
         }
@@ -5636,6 +5977,97 @@
         },
         "additionalProperties": false
       },
+      "UpdateUserPinRequest": {
+        "type": "object",
+        "required": [
+          "pin"
+        ],
+        "properties": {
+          "pin": {
+            "type": "string",
+            "pattern": "^([0-9]{4})?$",
+            "description": "New 4-digit PIN. Empty string removes the PIN."
+          },
+          "current_pin": {
+            "type": "string",
+            "pattern": "^[0-9]{4}$",
+            "description": "Required when a PIN is already set."
+          }
+        },
+        "additionalProperties": false
+      },
+      "VerifyUserPinRequest": {
+        "type": "object",
+        "required": [
+          "pin"
+        ],
+        "properties": {
+          "pin": {
+            "type": "string",
+            "pattern": "^[0-9]{4}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UserPinEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/JsonSuccess"
+          },
+          {
+            "type": "object",
+            "required": [
+              "data"
+            ],
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": [
+                  "pin"
+                ],
+                "properties": {
+                  "pin": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^[0-9]{4}$",
+                    "description": "The plaintext PIN, or null when none is set."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
+      "UserPinVerifyEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/JsonSuccess"
+          },
+          {
+            "type": "object",
+            "required": [
+              "data"
+            ],
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": [
+                  "valid"
+                ],
+                "properties": {
+                  "valid": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
       "AuthUser": {
         "type": "object",
         "required": [
@@ -5644,6 +6076,7 @@
           "email",
           "is_admin",
           "avatar",
+          "has_pin",
           "created_at",
           "updated_at"
         ],
@@ -5667,6 +6100,9 @@
               "string",
               "null"
             ]
+          },
+          "has_pin": {
+            "type": "boolean"
           },
           "created_at": {
             "type": "string"
@@ -6457,6 +6893,30 @@
         },
         "additionalProperties": true
       },
+      "ContinueWatchingMovie": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LatestMovie"
+          },
+          {
+            "type": "object",
+            "required": [
+              "progress_sec",
+              "duration_sec"
+            ],
+            "properties": {
+              "progress_sec": {
+                "type": "number",
+                "format": "double"
+              },
+              "duration_sec": {
+                "type": "number",
+                "format": "double"
+              }
+            }
+          }
+        ]
+      },
       "MovieLibraryItem": {
         "allOf": [
           {
@@ -6536,6 +6996,36 @@
                     "type": "array",
                     "items": {
                       "$ref": "#/components/schemas/LatestMovie"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
+      "ContinueWatchingMoviesEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/JsonSuccess"
+          },
+          {
+            "type": "object",
+            "required": [
+              "data"
+            ],
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": [
+                  "movies"
+                ],
+                "properties": {
+                  "movies": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ContinueWatchingMovie"
                     }
                   }
                 },
@@ -6943,7 +7433,9 @@
         "type": "object",
         "required": [
           "progress_sec",
-          "duration_sec"
+          "duration_sec",
+          "save_session_id",
+          "save_sequence"
         ],
         "properties": {
           "progress_sec": {
@@ -6953,6 +7445,15 @@
           "duration_sec": {
             "type": "number",
             "exclusiveMinimum": 0
+          },
+          "save_session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "save_sequence": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
           }
         },
         "additionalProperties": false
@@ -7190,10 +7691,13 @@
         ],
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 1000
           },
           "is_public": {
             "type": "boolean"
@@ -7215,10 +7719,13 @@
         ],
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 1000
           },
           "cover_image": {
             "type": "string"
@@ -9098,10 +9605,13 @@
         ],
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 1000
           },
           "is_public": {
             "type": "boolean"
@@ -9116,10 +9626,13 @@
         ],
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 1000
           },
           "cover_image": {
             "type": "string"
@@ -9888,7 +10401,7 @@
           },
           "is_current": {
             "type": "boolean",
-            "description": "True when the request was authenticated with this device's token."
+            "description": "True when the request was authenticated with this device's token. Always false in the device-list response, which is session-only."
           }
         },
         "additionalProperties": false
@@ -9923,6 +10436,44 @@
                   },
                   "device": {
                     "$ref": "#/components/schemas/Device"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
+      "QuickConnectLookupEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/JsonSuccess"
+          },
+          {
+            "type": "object",
+            "required": [
+              "data"
+            ],
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": [
+                  "device_name",
+                  "platform",
+                  "app_version"
+                ],
+                "properties": {
+                  "device_name": {
+                    "type": "string"
+                  },
+                  "platform": {
+                    "type": "string"
+                  },
+                  "app_version": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "additionalProperties": false

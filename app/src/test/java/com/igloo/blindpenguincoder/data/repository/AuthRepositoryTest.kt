@@ -3,9 +3,11 @@ package com.igloo.blindpenguincoder.data.repository
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.QuickConnectStatus
-import io.ktor.http.HttpMethod
+import io.ktor.http.Cookie
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
 import java.io.IOException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -16,6 +18,13 @@ import org.junit.Test
 class AuthRepositoryTest {
 
     private fun repo(http: TestHttp) = AuthRepository(http.api, http.cookiesStorage)
+
+    private suspend fun TestHttp.addSessionCookie() {
+        cookiesStorage.addCookie(
+            Url("$TEST_SERVER/auth/login"),
+            Cookie(name = "session", value = "abc123", path = "/"),
+        )
+    }
 
     @Test
     fun `login success stores the session cookie`() = runTest {
@@ -192,11 +201,12 @@ class AuthRepositoryTest {
     }
 
     @Test
-    fun `devices can be listed with a bearer device token`() = runTest {
+    fun `devices are listed with a session cookie and no bearer token`() = runTest {
         val http = TestHttp { request ->
             assertEquals(HttpMethod.Get, request.method)
             assertEquals("$TEST_SERVER/devices", request.url.toString())
-            assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
+            assertNull(request.headers[HttpHeaders.Authorization])
+            assertTrue(request.headers[HttpHeaders.Cookie]?.contains("session=abc123") == true)
             jsonResponse(
                 body = """
                     {"error":false,"data":{"devices":[{
@@ -207,8 +217,9 @@ class AuthRepositoryTest {
                 """.trimIndent(),
             )
         }
+        http.addSessionCookie()
 
-        val result = repo(http).devices(bearerToken = "igd_test")
+        val result = repo(http).devices()
 
         val devices = (result as ApiResult.Success).value
         assertEquals(1, devices.size)
@@ -216,30 +227,31 @@ class AuthRepositoryTest {
     }
 
     @Test
-    fun `rename and revoke device use documented device id route`() = runTest {
+    fun `rename and revoke use session cookies without bearer tokens`() = runTest {
         var requestIndex = 0
         val http = TestHttp { request ->
             requestIndex += 1
+            assertNull(request.headers[HttpHeaders.Authorization])
+            assertTrue(request.headers[HttpHeaders.Cookie]?.contains("session=abc123") == true)
             when (requestIndex) {
                 1 -> {
                     assertEquals(HttpMethod.Patch, request.method)
                     assertEquals("$TEST_SERVER/devices/9", request.url.toString())
-                    assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
                     jsonResponse(body = """{"error":false,"message":"renamed"}""")
                 }
                 2 -> {
                     assertEquals(HttpMethod.Delete, request.method)
                     assertEquals("$TEST_SERVER/devices/9", request.url.toString())
-                    assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
                     jsonResponse(body = """{"error":false,"message":"revoked"}""")
                 }
                 else -> error("Unexpected request")
             }
         }
+        http.addSessionCookie()
         val repository = repo(http)
 
-        val renamed = repository.renameDevice(id = 9, name = "Living Room", bearerToken = "igd_test")
-        val revoked = repository.revokeDevice(id = 9, bearerToken = "igd_test")
+        val renamed = repository.renameDevice(id = 9, name = "Living Room")
+        val revoked = repository.revokeDevice(id = 9)
 
         assertTrue(renamed is ApiResult.Success)
         assertTrue(revoked is ApiResult.Success)
@@ -257,10 +269,7 @@ class AuthRepositoryTest {
             )
         }
         val repo = repo(http)
-        http.cookiesStorage.addCookie(
-            io.ktor.http.Url("$TEST_SERVER/auth/login"),
-            io.ktor.http.Cookie(name = "session", value = "abc123", path = "/"),
-        )
+        http.addSessionCookie()
 
         repo.logout()
 

@@ -9,17 +9,24 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooTextField
+import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.design.IglooTheme
 
 @Composable
 fun ServerSetupScreen(viewModel: ServerSetupViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val fieldFocus = remember { FocusRequester() }
+    val connectFocus = remember { FocusRequester() }
 
     AuthSurface(
         title = "Connect to your Igloo server",
@@ -29,7 +36,7 @@ fun ServerSetupScreen(viewModel: ServerSetupViewModel) {
             value = state.input,
             onValueChange = viewModel::onInputChange,
             label = "Server address",
-            placeholder = "e.g. http://10.0.2.2:8080/api",
+            placeholder = "http://10.0.2.2:8080",
             errorText = state.error,
             enabled = !state.isConnecting,
             keyboardOptions = KeyboardOptions(
@@ -37,20 +44,35 @@ fun ServerSetupScreen(viewModel: ServerSetupViewModel) {
                 imeAction = ImeAction.Done,
             ),
             keyboardActions = KeyboardActions(onDone = { viewModel.connect() }),
+            focusRequester = fieldFocus,
+            downFocusRequester = connectFocus,
             modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(fieldFocus),
+                .fillMaxWidth(),
         )
+        if (state.isConnecting) {
+            IglooText(
+                text = "Checking server…",
+                style = IglooTheme.typography.bodyMedium,
+                color = IglooTheme.colors.mutedForeground,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
         IglooButton(
             text = if (state.isConnecting) "Connecting…" else "Connect",
             onClick = viewModel::connect,
             enabled = !state.isConnecting,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(connectFocus)
+                .focusProperties { up = fieldFocus },
             semanticLabel = if (state.isConnecting) "Connecting to server" else "Connect to server",
         )
     }
 
     LaunchedEffect(Unit) {
         fieldFocus.requestFocus()
+    }
+    LaunchedEffect(state.error) {
+        if (state.error != null) fieldFocus.requestFocus()
     }
 }
