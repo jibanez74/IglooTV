@@ -25,6 +25,7 @@ fun LoginScreen(
     viewModel: LoginViewModel,
     serverOrigin: String,
     restoreError: AppError?,
+    onSwitchToQuickConnect: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val emailFocus = remember { FocusRequester() }
@@ -87,6 +88,14 @@ fun LoginScreen(
             enabled = !state.isSubmitting,
             modifier = Modifier.fillMaxWidth(),
             semanticLabel = if (state.isSubmitting) "Signing in" else "Sign in",
+        )
+        IglooButton(
+            text = "Use pairing code instead",
+            onClick = onSwitchToQuickConnect,
+            variant = IglooButtonVariant.Ghost,
+            enabled = !state.isSubmitting,
+            modifier = Modifier.fillMaxWidth(),
+            semanticLabel = "Use pairing code instead",
         )
         IglooButton(
             text = "Change server",

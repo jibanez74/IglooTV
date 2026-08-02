@@ -5,7 +5,7 @@ import com.igloo.blindpenguincoder.core.config.ServerAddressParseResult
 import com.igloo.blindpenguincoder.core.config.parseServerAddress
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.core.network.PersistentCookiesStorage
+import com.igloo.blindpenguincoder.core.network.BearerTokenProvider
 import com.igloo.blindpenguincoder.core.network.ServerHealthProbe
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
@@ -14,7 +14,7 @@ class ServerRepository(
     private val probe: ServerHealthProbe,
     private val settings: ServerSettingsStore,
     private val serverUrl: ServerUrlProvider,
-    private val cookiesStorage: PersistentCookiesStorage,
+    private val tokenProvider: BearerTokenProvider,
 ) {
     suspend fun connect(rawInput: String): ApiResult<ServerAddress> {
         val candidate = when (val parsed = parseServerAddress(rawInput)) {
@@ -31,7 +31,7 @@ class ServerRepository(
 
         val previous = serverUrl.current.value
         if (previous == null || !previous.hasSameOrigin(finalAddress)) {
-            cookiesStorage.clear()
+            tokenProvider.clear()
         }
 
         settings.save(finalAddress.apiBaseUrl)

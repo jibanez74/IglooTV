@@ -27,7 +27,7 @@ import org.junit.Test
 class SafeApiCallTest {
 
     private suspend fun message(handler: MockRequestHandler): ApiResult<MessageResponse> {
-        val http = TestHttp(handler)
+        val http = TestHttp(handler = handler)
         return safeApiCall(request = { http.api.currentUser() }, decode = { it.body() })
     }
 

@@ -20,9 +20,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.feature.auth.AppAuthState
-import com.igloo.blindpenguincoder.feature.auth.LoginScreen
 import com.igloo.blindpenguincoder.feature.auth.LoginViewModel
+import com.igloo.blindpenguincoder.feature.auth.QuickConnectViewModel
 import com.igloo.blindpenguincoder.feature.auth.ServerSetupScreen
+import com.igloo.blindpenguincoder.feature.auth.SignInScreen
 import com.igloo.blindpenguincoder.feature.auth.ServerSetupViewModel
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import kotlinx.coroutines.launch
@@ -51,11 +52,15 @@ fun IglooRoot(container: IglooAppContainer) {
             }
 
             is AppAuthState.NeedsLogin -> {
-                val loginViewModel = viewModel {
+                val quickConnectViewModel = viewModel(key = "quick-connect") {
+                    QuickConnectViewModel(container.authRepository, sessionManager)
+                }
+                val loginViewModel = viewModel(key = "login") {
                     LoginViewModel(container.authRepository, sessionManager)
                 }
-                LoginScreen(
-                    viewModel = loginViewModel,
+                SignInScreen(
+                    quickConnectViewModel = quickConnectViewModel,
+                    loginViewModel = loginViewModel,
                     serverOrigin = state.serverAddress.origin,
                     restoreError = state.restoreError,
                 )

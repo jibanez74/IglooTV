@@ -133,9 +133,6 @@ class ApiModelsSerializationTest {
             UpdateMovieWatchProgressRequest(progressSec = 30.0, durationSec = 7200.0),
         )
         assertEquals("""{"progress_sec":30.0,"duration_sec":7200.0}""", progress)
-
-        val login = json.encodeToString(LoginRequest(email = "a@b.c", password = "secret"))
-        assertEquals("""{"email":"a@b.c","password":"secret"}""", login)
     }
 
     @Test
@@ -250,9 +247,6 @@ class ApiModelsSerializationTest {
             """{"email":"a@b.c","password":"secret","device_name":"Shield","platform":"android_tv"}""",
             deviceLogin,
         )
-
-        val rename = json.encodeToString(RenameDeviceRequest(name = "Living Room"))
-        assertEquals("""{"name":"Living Room"}""", rename)
     }
 
     @Test

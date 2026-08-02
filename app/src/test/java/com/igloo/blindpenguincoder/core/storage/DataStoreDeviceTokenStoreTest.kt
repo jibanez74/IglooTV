@@ -11,63 +11,43 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-class DataStoreSessionCookieStoreTest {
+class DataStoreDeviceTokenStoreTest {
 
-    private val key = stringPreferencesKey("session_cookie")
+    private val key = stringPreferencesKey("device_token")
 
-    private val cookie = StoredCookie(
-        name = "session",
-        value = "super-secret-token",
-        host = "igloo.test",
-        path = "/",
-        expiresEpochMillis = null,
-        secure = false,
-        httpOnly = true,
-    )
+    private val token = "igd_super-secret-token"
 
     private fun store(
         dataStore: InMemoryPreferencesDataStore,
         cipher: FakeSecretCipher = FakeSecretCipher(),
-    ) = DataStoreSessionCookieStore(dataStore, cipher, Dispatchers.Unconfined)
+    ) = DataStoreDeviceTokenStore(dataStore, cipher, Dispatchers.Unconfined)
 
     @Test
-    fun `a written cookie round trips`() = runTest {
+    fun `a written token round trips`() = runTest {
         val data = InMemoryPreferencesDataStore()
         val store = store(data)
 
-        store.write(cookie)
+        store.write(token)
 
-        assertEquals(cookie, store.read())
+        assertEquals(token, store.read())
     }
 
     @Test
-    fun `the persisted value is not the plaintext cookie`() = runTest {
+    fun `the persisted value is not the plaintext token`() = runTest {
         val data = InMemoryPreferencesDataStore()
-        store(data).write(cookie)
+        store(data).write(token)
 
         val persisted = data.data.first()[key]
 
         assertNotNull(persisted)
-        assertFalse(persisted!!.contains("super-secret-token"))
+        assertFalse(persisted!!.contains(token))
     }
 
     @Test
-    fun `an undecryptable value is erased and reads as no session`() = runTest {
+    fun `an undecryptable value is erased and reads as no token`() = runTest {
         val data = InMemoryPreferencesDataStore()
-        // What the previous build left behind: the cookie JSON in the clear.
-        data.edit { it[key] = """{"name":"session","value":"super-secret-token"}""" }
+        data.edit { it[key] = "blob-from-a-replaced-key" }
         val store = store(data, FakeSecretCipher(failDecrypt = true))
-
-        assertNull(store.read())
-        assertNull(data.data.first()[key])
-    }
-
-    @Test
-    fun `a value that decrypts to malformed json is erased`() = runTest {
-        val data = InMemoryPreferencesDataStore()
-        val cipher = FakeSecretCipher()
-        data.edit { it[key] = cipher.encrypt("not json")!! }
-        val store = store(data, cipher)
 
         assertNull(store.read())
         assertNull(data.data.first()[key])
@@ -78,7 +58,7 @@ class DataStoreSessionCookieStoreTest {
         val data = InMemoryPreferencesDataStore()
         val store = store(data, FakeSecretCipher(failEncrypt = true))
 
-        store.write(cookie)
+        store.write(token)
 
         assertNull(data.data.first()[key])
         assertNull(store.read())
@@ -88,7 +68,7 @@ class DataStoreSessionCookieStoreTest {
     fun `clear removes the stored value`() = runTest {
         val data = InMemoryPreferencesDataStore()
         val store = store(data)
-        store.write(cookie)
+        store.write(token)
 
         store.clear()
 

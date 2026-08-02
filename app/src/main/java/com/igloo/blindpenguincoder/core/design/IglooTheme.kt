@@ -35,6 +35,13 @@ object IglooTheme {
     }
 
     object typography {
+        val displayCode = TextStyle(
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 64.sp,
+            lineHeight = 76.sp,
+            letterSpacing = 10.sp,
+        )
         val titleLarge = TextStyle(
             fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.SemiBold,

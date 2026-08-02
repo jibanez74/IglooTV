@@ -42,7 +42,7 @@ class LoginViewModel(
         }
         _uiState.update { it.copy(isSubmitting = true, error = null) }
         viewModelScope.launch {
-            val login = authRepository.login(current.email.trim(), current.password)
+            val login = authRepository.deviceLogin(current.email.trim(), current.password)
             if (login is ApiResult.Failure) {
                 _uiState.update {
                     it.copy(isSubmitting = false, error = login.error.toDisplayMessage())

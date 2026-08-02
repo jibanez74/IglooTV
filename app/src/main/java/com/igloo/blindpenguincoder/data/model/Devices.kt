@@ -52,11 +52,6 @@ data class QuickConnectRedeemData(
 )
 
 @Serializable
-data class QuickConnectApproveRequest(
-    val code: String,
-)
-
-@Serializable
 data class DeviceLoginRequest(
     val email: String,
     val password: String,
@@ -69,14 +64,4 @@ data class DeviceLoginRequest(
 data class DeviceTokenData(
     val token: String,
     val device: Device,
-)
-
-@Serializable
-data class DevicesListData(
-    val devices: List<Device>,
-)
-
-@Serializable
-data class RenameDeviceRequest(
-    val name: String,
 )

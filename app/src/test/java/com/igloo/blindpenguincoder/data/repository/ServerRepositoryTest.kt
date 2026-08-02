@@ -3,12 +3,11 @@ package com.igloo.blindpenguincoder.data.repository
 import com.igloo.blindpenguincoder.core.config.ServerAddress
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.core.network.FakeSessionCookieStore
-import com.igloo.blindpenguincoder.core.network.PersistentCookiesStorage
+import com.igloo.blindpenguincoder.core.network.BearerTokenProvider
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.storage.FakeDeviceTokenStore
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
-import com.igloo.blindpenguincoder.core.storage.StoredCookie
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.client.engine.mock.respond
@@ -31,7 +30,7 @@ class ServerRepositoryTest {
         val repository: ServerRepository,
         val settings: ServerSettingsStore,
         val serverUrl: ServerUrlProvider,
-        val cookieStore: FakeSessionCookieStore,
+        val tokenStore: FakeDeviceTokenStore,
     )
 
     private suspend fun fixture(
@@ -42,15 +41,14 @@ class ServerRepositoryTest {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
         if (active != null) settings.save(active.apiBaseUrl)
         val serverUrl = ServerUrlProvider().apply { set(active) }
-        val cookieStore = FakeSessionCookieStore()
-        val cookiesStorage = PersistentCookiesStorage(cookieStore)
+        val tokenStore = FakeDeviceTokenStore()
         val repository = ServerRepository(
             probe = testServerHealthProbe(handler, timeoutMillis),
             settings = settings,
             serverUrl = serverUrl,
-            cookiesStorage = cookiesStorage,
+            tokenProvider = BearerTokenProvider(tokenStore),
         )
-        return Fixture(repository, settings, serverUrl, cookieStore)
+        return Fixture(repository, settings, serverUrl, tokenStore)
     }
 
     @Test
@@ -239,7 +237,7 @@ class ServerRepositoryTest {
             assertNull(request.headers[HttpHeaders.Authorization])
             respond("")
         }
-        fixture.cookieStore.stored = sessionCookie(host = "igloo.test")
+        fixture.tokenStore.stored = "igd_secret"
 
         fixture.repository.connect("igloo.test:8080")
     }
@@ -251,20 +249,20 @@ class ServerRepositoryTest {
         val changedPort = fixture(active = active) { respond("") }
         val changedScheme = fixture(active = active) { respond("") }
         val changedHost = fixture(active = active) { respond("") }
-        same.cookieStore.stored = sessionCookie("igloo.local")
-        changedPort.cookieStore.stored = sessionCookie("igloo.local")
-        changedScheme.cookieStore.stored = sessionCookie("igloo.local")
-        changedHost.cookieStore.stored = sessionCookie("igloo.local")
+        same.tokenStore.stored = "igd_secret"
+        changedPort.tokenStore.stored = "igd_secret"
+        changedScheme.tokenStore.stored = "igd_secret"
+        changedHost.tokenStore.stored = "igd_secret"
 
         same.repository.connect("HTTP://IGLOO.local:8080/")
         changedPort.repository.connect("http://igloo.local:8081")
         changedScheme.repository.connect("https://igloo.local:8080")
         changedHost.repository.connect("http://other.local:8080")
 
-        assertEquals("secret", same.cookieStore.stored?.value)
-        assertNull(changedPort.cookieStore.stored)
-        assertNull(changedScheme.cookieStore.stored)
-        assertNull(changedHost.cookieStore.stored)
+        assertEquals("igd_secret", same.tokenStore.stored)
+        assertNull(changedPort.tokenStore.stored)
+        assertNull(changedScheme.tokenStore.stored)
+        assertNull(changedHost.tokenStore.stored)
     }
 
     @Test
@@ -288,15 +286,5 @@ class ServerRepositoryTest {
         content = "",
         status = HttpStatusCode.Found,
         headers = headersOf(HttpHeaders.Location, location),
-    )
-
-    private fun sessionCookie(host: String) = StoredCookie(
-        name = "session",
-        value = "secret",
-        host = host,
-        path = "/",
-        expiresEpochMillis = null,
-        secure = false,
-        httpOnly = true,
     )
 }

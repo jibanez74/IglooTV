@@ -13,3 +13,9 @@ fun AppError.toDisplayMessage(): String = when (this) {
     is AppError.Validation -> message
     is AppError.Unexpected -> "Something went wrong. Please try again."
 }
+
+/** Pairing has no email/password, so [AppError.Unauthorized] needs different wording. */
+fun AppError.toQuickConnectDisplayMessage(): String = when (this) {
+    AppError.Unauthorized -> "Couldn't pair with the server. Try again."
+    else -> toDisplayMessage()
+}

@@ -5,7 +5,9 @@ import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
+import com.igloo.blindpenguincoder.data.repository.testDeviceIdentity
 import io.ktor.client.engine.mock.MockRequestHandler
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -43,9 +45,17 @@ class LoginViewModelTest {
         }}}
     """.trimIndent()
 
+    private val deviceTokenJson = """
+        {"error":false,"data":{"token":"igd_test","device":{
+            "id":9,"name":"Shield","platform":"android_tv","app_version":"0.1.0",
+            "created_at":"2026-07-01T00:00:00Z",
+            "last_used_at":"2026-07-01T00:01:00Z","is_current":true
+        }}}
+    """.trimIndent()
+
     private fun viewModel(handler: MockRequestHandler): Pair<LoginViewModel, SessionManager> {
-        val http = TestHttp(handler)
-        val repository = AuthRepository(http.api, http.cookiesStorage)
+        val http = TestHttp(handler = handler)
+        val repository = AuthRepository(http.api, http.tokenProvider, testDeviceIdentity)
         val sessionManager = SessionManager(
             authRepository = repository,
             settings = ServerSettingsStore(InMemoryPreferencesDataStore()),
@@ -57,12 +67,11 @@ class LoginViewModelTest {
     @Test
     fun `successful login authenticates the session`() = runTest {
         val (viewModel, sessionManager) = viewModel { request ->
-            if (request.url.encodedPath.endsWith("/auth/login")) {
-                jsonResponse(
-                    """{"error":false,"message":"Hello Jose"}""",
-                    setCookie = "session=abc123; Path=/; HttpOnly",
-                )
+            if (request.url.encodedPath.endsWith("/auth/device-login")) {
+                assertNull(request.headers[HttpHeaders.Authorization])
+                jsonResponse(deviceTokenJson)
             } else {
+                assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
                 jsonResponse(userJson)
             }
         }

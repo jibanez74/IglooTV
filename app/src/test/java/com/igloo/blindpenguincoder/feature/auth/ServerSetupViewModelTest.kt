@@ -5,6 +5,7 @@ import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
 import com.igloo.blindpenguincoder.data.repository.TestHttp
+import com.igloo.blindpenguincoder.data.repository.testDeviceIdentity
 import com.igloo.blindpenguincoder.data.repository.testServerAddress
 import com.igloo.blindpenguincoder.data.repository.testServerHealthProbe
 import io.ktor.client.engine.mock.MockRequestHandler
@@ -53,12 +54,12 @@ class ServerSetupViewModelTest {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
         val http = TestHttp { error("Auth client should not be called during setup") }
         http.serverUrl.set(null)
-        val authRepository = AuthRepository(http.api, http.cookiesStorage)
+        val authRepository = AuthRepository(http.api, http.tokenProvider, testDeviceIdentity)
         val serverRepository = ServerRepository(
             testServerHealthProbe(handler),
             settings,
             http.serverUrl,
-            http.cookiesStorage,
+            http.tokenProvider,
         )
         val sessionManager = SessionManager(authRepository, settings, http.serverUrl)
         val viewModel = ServerSetupViewModel(serverRepository, sessionManager).apply {

@@ -37,6 +37,10 @@ class SessionManager(
         }
         serverUrl.set(storedAddress)
 
+        if (!authRepository.hasToken()) {
+            _state.value = AppAuthState.NeedsLogin(storedAddress)
+            return
+        }
         when (val result = authRepository.fetchCurrentUser()) {
             is ApiResult.Success -> _state.value = AppAuthState.Authenticated(result.value)
             is ApiResult.Failure -> when (result.error) {
