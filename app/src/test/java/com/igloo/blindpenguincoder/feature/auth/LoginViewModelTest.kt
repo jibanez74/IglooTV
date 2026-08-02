@@ -10,6 +10,7 @@ import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -53,7 +54,14 @@ class LoginViewModelTest {
         }}}
     """.trimIndent()
 
-    private fun viewModel(handler: MockRequestHandler): Pair<LoginViewModel, SessionManager> {
+    private class Fixture(
+        val viewModel: LoginViewModel,
+        val quickConnectViewModel: QuickConnectViewModel,
+        val sessionManager: SessionManager,
+        val http: TestHttp,
+    )
+
+    private fun fixture(handler: MockRequestHandler): Fixture {
         val http = TestHttp(handler = handler)
         val repository = AuthRepository(http.api, http.tokenProvider, testDeviceIdentity)
         val sessionManager = SessionManager(
@@ -61,8 +69,16 @@ class LoginViewModelTest {
             settings = ServerSettingsStore(InMemoryPreferencesDataStore()),
             serverUrl = http.serverUrl,
         )
-        return LoginViewModel(repository, sessionManager) to sessionManager
+        return Fixture(
+            viewModel = LoginViewModel(repository, sessionManager),
+            quickConnectViewModel = QuickConnectViewModel(repository, sessionManager),
+            sessionManager = sessionManager,
+            http = http,
+        )
     }
+
+    private fun viewModel(handler: MockRequestHandler): Pair<LoginViewModel, SessionManager> =
+        fixture(handler).let { it.viewModel to it.sessionManager }
 
     @Test
     fun `successful login authenticates the session`() = runTest {
@@ -138,6 +154,35 @@ class LoginViewModelTest {
     }
 
     @Test
+    fun `password is removed as soon as a device token is issued`() = runTest {
+        val userRequestStarted = CompletableDeferred<Unit>()
+        val finishUserRequest = CompletableDeferred<Unit>()
+        val (viewModel, _) = viewModel { request ->
+            if (request.url.encodedPath.endsWith("/auth/device-login")) {
+                jsonResponse(deviceTokenJson)
+            } else {
+                userRequestStarted.complete(Unit)
+                finishUserRequest.await()
+                throw IOException("unreachable")
+            }
+        }
+
+        viewModel.onEmailChange("jose@example.com")
+        viewModel.onPasswordChange("hunter2")
+        viewModel.submit()
+        userRequestStarted.await()
+
+        assertEquals("", viewModel.uiState.value.password)
+        assertTrue(viewModel.uiState.value.awaitingUser)
+        assertTrue(viewModel.uiState.value.isSubmitting)
+
+        finishUserRequest.complete(Unit)
+        val failed = viewModel.uiState.first { it.error != null }
+        assertEquals("", failed.password)
+        assertTrue(failed.awaitingUser)
+    }
+
+    @Test
     fun `retrying after a failed user fetch resumes instead of logging in again`() = runTest {
         var deviceLogins = 0
         var userFetches = 0
@@ -157,6 +202,7 @@ class LoginViewModelTest {
 
         val failed = viewModel.uiState.first { it.error != null }
         assertTrue(failed.awaitingUser)
+        assertEquals("", failed.password)
         assertEquals(1, deviceLogins)
 
         viewModel.submit()
@@ -170,9 +216,9 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `editing credentials after a failed user fetch logs in again`() = runTest {
+    fun `editing either credential clears the pending token and requires another login`() = runTest {
         var deviceLogins = 0
-        val (viewModel, _) = viewModel { request ->
+        val fixture = fixture { request ->
             if (request.url.encodedPath.endsWith("/auth/device-login")) {
                 deviceLogins++
                 jsonResponse(deviceTokenJson)
@@ -180,18 +226,86 @@ class LoginViewModelTest {
                 throw IOException("unreachable")
             }
         }
+        val viewModel = fixture.viewModel
 
         viewModel.onEmailChange("jose@example.com")
         viewModel.onPasswordChange("hunter2")
         viewModel.submit()
         assertTrue(viewModel.uiState.first { it.error != null }.awaitingUser)
+        assertEquals("igd_test", fixture.http.tokenStore.stored)
+
+        viewModel.onEmailChange("other@example.com")
+        assertFalse(viewModel.uiState.value.awaitingUser)
+        assertNull(fixture.http.tokenStore.stored)
+
+        viewModel.onPasswordChange("replacement")
+        viewModel.submit()
+        assertTrue(viewModel.uiState.first { it.error != null }.awaitingUser)
+        assertEquals("igd_test", fixture.http.tokenStore.stored)
 
         viewModel.onPasswordChange("corrected")
         assertFalse(viewModel.uiState.value.awaitingUser)
+        assertNull(fixture.http.tokenStore.stored)
 
-        viewModel.submit()
-        viewModel.uiState.first { it.error != null }
         assertEquals(2, deviceLogins)
+    }
+
+    @Test
+    fun `rejected edited credentials cannot resume the previous token through quick connect`() = runTest {
+        var deviceLogins = 0
+        var userFetches = 0
+        var initiations = 0
+        val fixture = fixture { request ->
+            when {
+                request.url.encodedPath.endsWith("/auth/device-login") -> {
+                    deviceLogins += 1
+                    if (deviceLogins == 1) {
+                        jsonResponse(deviceTokenJson)
+                    } else {
+                        jsonResponse(
+                            """{"error":true,"message":"invalid credentials"}""",
+                            HttpStatusCode.Unauthorized,
+                        )
+                    }
+                }
+                request.url.encodedPath.endsWith("/auth/user") -> {
+                    userFetches += 1
+                    throw IOException("unreachable")
+                }
+                request.url.encodedPath.endsWith("/quick-connect/initiate") -> {
+                    initiations += 1
+                    jsonResponse(
+                        """{"error":false,"data":{"code":"ABCD12","secret":"device-secret","expires_in_seconds":300,"poll_interval_seconds":2}}""",
+                        HttpStatusCode.Created,
+                    )
+                }
+                else -> jsonResponse("""{"error":false,"data":{"status":"pending"}}""")
+            }
+        }
+
+        fixture.viewModel.onEmailChange("jose@example.com")
+        fixture.viewModel.onPasswordChange("hunter2")
+        fixture.viewModel.submit()
+        assertTrue(fixture.viewModel.uiState.first { it.error != null }.awaitingUser)
+
+        fixture.viewModel.onPasswordChange("wrong")
+        assertNull(fixture.http.tokenStore.stored)
+        fixture.viewModel.submit()
+        assertEquals(
+            "Incorrect email or password.",
+            fixture.viewModel.uiState.first { it.error != null }.error,
+        )
+
+        fixture.quickConnectViewModel.start()
+        val quickConnectPhase = fixture.quickConnectViewModel.uiState
+            .first { it.phase is QuickConnectPhase.CodeReady }
+            .phase
+
+        assertEquals(QuickConnectPhase.CodeReady("ABCD12"), quickConnectPhase)
+        assertEquals(1, initiations)
+        assertEquals(1, userFetches)
+        assertNull(fixture.http.tokenStore.stored)
+        fixture.quickConnectViewModel.stop()
     }
 
     @Test

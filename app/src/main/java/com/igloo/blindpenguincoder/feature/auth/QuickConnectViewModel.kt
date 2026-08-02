@@ -100,6 +100,7 @@ class QuickConnectViewModel(
         val pollMillis = initiated.pollIntervalSeconds * 1000L
         var remainingMillis = initiated.expiresInSeconds * 1000L
         var multiplier = 1L
+        var consecutiveFailures = 0
         while (remainingMillis > 0) {
             val waitMillis = (pollMillis * multiplier).coerceAtMost(MAX_BACKOFF_MILLIS)
             delay(waitMillis)
@@ -107,12 +108,24 @@ class QuickConnectViewModel(
             when (val result = authRepository.redeemQuickConnect(initiated.code, initiated.secret)) {
                 is ApiResult.Success -> when (result.value.status) {
                     QuickConnectStatus.Approved -> return finishApproved()
-                    QuickConnectStatus.Pending -> multiplier = 1
+                    QuickConnectStatus.Pending -> {
+                        consecutiveFailures = 0
+                        multiplier = 1
+                    }
                 }
                 is ApiResult.Failure -> {
                     val error = result.error
                     // 404 means unknown or expired: only a fresh code can recover.
                     if (error is AppError.Api && error.status == 404) return false
+                    if (!error.isRetryableRedeemFailure()) {
+                        fail(error)
+                        return true
+                    }
+                    consecutiveFailures += 1
+                    if (consecutiveFailures >= MAX_REDEEM_FAILURES) {
+                        fail(error)
+                        return true
+                    }
                     multiplier *= 2
                 }
             }
@@ -157,7 +170,14 @@ class QuickConnectViewModel(
         const val MAX_BACKOFF_MILLIS = 30_000L
         const val USER_FETCH_RETRY_MILLIS = 2_000L
         const val MAX_INITIATE_ATTEMPTS = 5
+        const val MAX_REDEEM_FAILURES = 5
         const val MAX_USER_FETCH_ATTEMPTS = 6
         val RETRYABLE_STATUSES = setOf(429, 503)
     }
+}
+
+private fun AppError.isRetryableRedeemFailure(): Boolean = when (this) {
+    AppError.Network, AppError.Timeout -> true
+    is AppError.Api -> status == 429 || status in 500..599
+    else -> false
 }

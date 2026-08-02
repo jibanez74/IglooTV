@@ -9,6 +9,8 @@ import com.igloo.blindpenguincoder.data.repository.testDeviceIdentity
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import java.io.IOException
+import java.net.SocketTimeoutException
+import javax.net.ssl.SSLException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -176,6 +178,89 @@ class QuickConnectViewModelTest {
     }
 
     @Test
+    fun `redeem validation and authorization failures fail immediately`() = runTest {
+        data class FailureCase(
+            val status: HttpStatusCode,
+            val backendMessage: String,
+            val expectedMessage: String,
+        )
+
+        val cases = listOf(
+            FailureCase(HttpStatusCode.BadRequest, "invalid request", "invalid request"),
+            FailureCase(
+                HttpStatusCode.Unauthorized,
+                "unauthorized",
+                "Couldn't pair with the server. Try again.",
+            ),
+            FailureCase(HttpStatusCode.Forbidden, "pairing forbidden", "pairing forbidden"),
+        )
+
+        cases.forEach { case ->
+            val f = fixture { request ->
+                if (request.url.encodedPath.endsWith("/initiate")) {
+                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
+                } else {
+                    jsonResponse(
+                        """{"error":true,"message":"${case.backendMessage}"}""",
+                        case.status,
+                    )
+                }
+            }
+
+            f.viewModel.start()
+            advanceTimeBy(2_001)
+
+            assertEquals(QuickConnectPhase.Failed(case.expectedMessage), f.phase)
+            assertEquals(1, f.count("/redeem"))
+            f.viewModel.stop()
+        }
+    }
+
+    @Test
+    fun `malformed successful redeem response fails immediately`() = runTest {
+        val f = fixture { request ->
+            if (request.url.encodedPath.endsWith("/initiate")) {
+                jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
+            } else {
+                jsonResponse("""{"error":false,"data":{"status":"invalid"}}""")
+            }
+        }
+
+        f.viewModel.start()
+        advanceTimeBy(2_001)
+
+        assertEquals(
+            QuickConnectPhase.Failed("Something went wrong. Please try again."),
+            f.phase,
+        )
+        assertEquals(1, f.count("/redeem"))
+        f.viewModel.stop()
+    }
+
+    @Test
+    fun `TLS failure during redeem is terminal`() = runTest {
+        val f = fixture { request ->
+            if (request.url.encodedPath.endsWith("/initiate")) {
+                jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
+            } else {
+                throw SSLException("certificate rejected")
+            }
+        }
+
+        f.viewModel.start()
+        advanceTimeBy(2_001)
+
+        assertEquals(
+            QuickConnectPhase.Failed(
+                "Couldn't verify this server's HTTPS certificate. Check the certificate or use the correct HTTP address.",
+            ),
+            f.phase,
+        )
+        assertEquals(1, f.count("/redeem"))
+        f.viewModel.stop()
+    }
+
+    @Test
     fun `an expired code is auto-refreshed`() = runTest {
         val f = fixture { request ->
             when {
@@ -197,7 +282,7 @@ class QuickConnectViewModelTest {
     }
 
     @Test
-    fun `redeem 429 doubles the poll gap and pending resets it`() = runTest {
+    fun `pending redeem resets the failure count and poll backoff`() = runTest {
         var redeems = 0
         val f = fixture { request ->
             when {
@@ -205,7 +290,7 @@ class QuickConnectViewModelTest {
                     jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
                 else -> {
                     redeems += 1
-                    if (redeems == 1) {
+                    if (redeems in 1..4 || redeems in 6..9) {
                         jsonResponse(
                             """{"error":true,"message":"too many attempts"}""",
                             HttpStatusCode.TooManyRequests,
@@ -218,10 +303,12 @@ class QuickConnectViewModelTest {
         }
 
         f.viewModel.start()
-        // Polls land at 2s (429), then 6s after the doubled gap, then back to 8s.
-        advanceTimeBy(8_001)
+        // Four failures land at 2s, 6s, 14s, and 30s. Pending at 60s resets both
+        // counters, so another four failures land at 62s, 66s, 74s, and 90s.
+        advanceTimeBy(90_001)
 
-        assertEquals(3, f.count("/redeem"))
+        assertEquals(9, f.count("/redeem"))
+        assertEquals(QuickConnectPhase.CodeReady("ABCD12"), f.phase)
 
         f.viewModel.stop()
     }
@@ -244,6 +331,52 @@ class QuickConnectViewModelTest {
         assertEquals(QuickConnectPhase.CodeReady("ABCD12"), f.phase)
 
         f.viewModel.stop()
+    }
+
+    @Test
+    fun `persistent retryable redeem failures stop after five attempts`() = runTest {
+        data class FailureCase(val kind: String, val expectedMessage: String)
+
+        val cases = listOf(
+            FailureCase("rate-limit", "too many attempts"),
+            FailureCase("server", "quick connect unavailable"),
+            FailureCase(
+                "network",
+                "Couldn't reach the server. Check the address, port, and network connection.",
+            ),
+            FailureCase(
+                "timeout",
+                "The server took too long to respond. Check the address and try again.",
+            ),
+        )
+
+        cases.forEach { case ->
+            val f = fixture { request ->
+                if (request.url.encodedPath.endsWith("/initiate")) {
+                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
+                } else {
+                    when (case.kind) {
+                        "rate-limit" -> jsonResponse(
+                            """{"error":true,"message":"too many attempts"}""",
+                            HttpStatusCode.TooManyRequests,
+                        )
+                        "server" -> jsonResponse(
+                            """{"error":true,"message":"quick connect unavailable"}""",
+                            HttpStatusCode.InternalServerError,
+                        )
+                        "network" -> throw IOException("wifi dropped")
+                        else -> throw SocketTimeoutException("redeem timed out")
+                    }
+                }
+            }
+
+            f.viewModel.start()
+            advanceTimeBy(60_001)
+
+            assertEquals(QuickConnectPhase.Failed(case.expectedMessage), f.phase)
+            assertEquals(5, f.count("/redeem"))
+            f.viewModel.stop()
+        }
     }
 
     @Test

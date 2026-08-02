@@ -6,7 +6,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /** Holds the long-lived device bearer token. The value is a secret: never log or display it. */
@@ -29,8 +28,13 @@ class DataStoreDeviceTokenStore(
 ) : DeviceTokenStore {
 
     override suspend fun read(): String? = withContext(dispatcher) {
-        val blob = dataStore.data.first()[DEVICE_TOKEN] ?: return@withContext null
-        val token = cipher.decrypt(blob)
+        var blob: String? = null
+        dataStore.edit { preferences ->
+            blob = preferences[DEVICE_TOKEN]
+            preferences.remove(LEGACY_SESSION_COOKIE)
+        }
+        val encryptedToken = blob ?: return@withContext null
+        val token = cipher.decrypt(encryptedToken)
         if (token == null) {
             clear()
             return@withContext null
@@ -42,19 +46,28 @@ class DataStoreDeviceTokenStore(
         withContext(dispatcher) {
             // A device that cannot encrypt keeps no token; never fall back to plaintext.
             val blob = cipher.encrypt(token)
-            if (blob == null) {
-                dataStore.edit { it.remove(DEVICE_TOKEN) }
-            } else {
-                dataStore.edit { it[DEVICE_TOKEN] = blob }
+            dataStore.edit { preferences ->
+                preferences.remove(LEGACY_SESSION_COOKIE)
+                if (blob == null) {
+                    preferences.remove(DEVICE_TOKEN)
+                } else {
+                    preferences[DEVICE_TOKEN] = blob
+                }
             }
         }
     }
 
     override suspend fun clear() {
-        withContext(dispatcher) { dataStore.edit { it.remove(DEVICE_TOKEN) } }
+        withContext(dispatcher) {
+            dataStore.edit { preferences ->
+                preferences.remove(DEVICE_TOKEN)
+                preferences.remove(LEGACY_SESSION_COOKIE)
+            }
+        }
     }
 
     private companion object {
         val DEVICE_TOKEN = stringPreferencesKey("device_token")
+        val LEGACY_SESSION_COOKIE = stringPreferencesKey("session_cookie")
     }
 }

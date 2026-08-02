@@ -28,19 +28,18 @@ class LoginViewModel(
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
-    // Editing credentials invalidates any half-finished sign-in: start from device-login again.
     fun onEmailChange(value: String) {
-        _uiState.update { it.copy(email = value, error = null, awaitingUser = false) }
+        updateCredentials { it.copy(email = value) }
     }
 
     fun onPasswordChange(value: String) {
-        _uiState.update { it.copy(password = value, error = null, awaitingUser = false) }
+        updateCredentials { it.copy(password = value) }
     }
 
     fun submit() {
         val current = _uiState.value
         if (current.isSubmitting) return
-        if (current.email.isBlank() || current.password.isBlank()) {
+        if (!current.awaitingUser && (current.email.isBlank() || current.password.isBlank())) {
             _uiState.update { it.copy(error = "Enter your email and password.") }
             return
         }
@@ -56,6 +55,9 @@ class LoginViewModel(
                     }
                     return@launch
                 }
+                // The password is no longer needed once the token has been minted. From this
+                // point, retrying resumes that token instead of submitting credentials again.
+                _uiState.update { it.copy(password = "", awaitingUser = true) }
             }
             when (val result = sessionManager.completeSignIn()) {
                 SignInResult.Authenticated ->
@@ -77,6 +79,18 @@ class LoginViewModel(
                     )
                 }
             }
+        }
+    }
+
+    /** Editing credentials abandons the issued token before exposing the edited state. */
+    private fun updateCredentials(transform: (LoginUiState) -> LoginUiState) {
+        if (!_uiState.value.awaitingUser) {
+            _uiState.update { transform(it).copy(error = null, awaitingUser = false) }
+            return
+        }
+        viewModelScope.launch {
+            authRepository.clearSession()
+            _uiState.update { transform(it).copy(error = null, awaitingUser = false) }
         }
     }
 
