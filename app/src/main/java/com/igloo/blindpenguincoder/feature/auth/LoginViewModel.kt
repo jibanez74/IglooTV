@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.feature.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +16,8 @@ data class LoginUiState(
     val password: String = "",
     val isSubmitting: Boolean = false,
     val error: String? = null,
+    /** A token was issued but the user fetch failed; resubmitting resumes it, not a second login. */
+    val awaitingUser: Boolean = false,
 )
 
 class LoginViewModel(
@@ -25,12 +28,13 @@ class LoginViewModel(
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
+    // Editing credentials invalidates any half-finished sign-in: start from device-login again.
     fun onEmailChange(value: String) {
-        _uiState.update { it.copy(email = value, error = null) }
+        _uiState.update { it.copy(email = value, error = null, awaitingUser = false) }
     }
 
     fun onPasswordChange(value: String) {
-        _uiState.update { it.copy(password = value, error = null) }
+        _uiState.update { it.copy(password = value, error = null, awaitingUser = false) }
     }
 
     fun submit() {
@@ -42,20 +46,35 @@ class LoginViewModel(
         }
         _uiState.update { it.copy(isSubmitting = true, error = null) }
         viewModelScope.launch {
-            val login = authRepository.deviceLogin(current.email.trim(), current.password)
-            if (login is ApiResult.Failure) {
-                _uiState.update {
-                    it.copy(isSubmitting = false, error = login.error.toDisplayMessage())
+            // Logging in again would mint a second device token for the same user, so a retry
+            // after a failed user fetch resumes with the token already stored.
+            if (!current.awaitingUser) {
+                val login = authRepository.deviceLogin(current.email.trim(), current.password)
+                if (login is ApiResult.Failure) {
+                    _uiState.update {
+                        it.copy(isSubmitting = false, error = login.error.toDisplayMessage())
+                    }
+                    return@launch
                 }
-                return@launch
             }
-            when (val user = authRepository.fetchCurrentUser()) {
-                is ApiResult.Success -> {
-                    _uiState.update { it.copy(isSubmitting = false, password = "") }
-                    sessionManager.onLoggedIn(user.value)
+            when (val result = sessionManager.completeSignIn()) {
+                SignInResult.Authenticated ->
+                    _uiState.update {
+                        it.copy(isSubmitting = false, password = "", awaitingUser = false)
+                    }
+                SignInResult.Revoked -> _uiState.update {
+                    it.copy(
+                        isSubmitting = false,
+                        error = AppError.Unauthorized.toDisplayMessage(),
+                        awaitingUser = false,
+                    )
                 }
-                is ApiResult.Failure -> _uiState.update {
-                    it.copy(isSubmitting = false, error = user.error.toDisplayMessage())
+                is SignInResult.Failed -> _uiState.update {
+                    it.copy(
+                        isSubmitting = false,
+                        error = result.error.toDisplayMessage(),
+                        awaitingUser = true,
+                    )
                 }
             }
         }

@@ -38,8 +38,6 @@ class AuthRepositoryTest {
 
         val data = (result as ApiResult.Success).value
         assertEquals("igd_test", data.token)
-        assertEquals("Shield", data.device.name)
-        assertTrue(data.device.isCurrent)
         assertEquals("igd_test", http.tokenStore.stored)
     }
 

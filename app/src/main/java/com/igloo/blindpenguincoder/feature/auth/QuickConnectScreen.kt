@@ -70,7 +70,11 @@ fun QuickConnectScreen(
         }
         PairingCode(phase)
         IglooText(
-            text = "On your phone or computer, go to $serverOrigin, sign in, and enter this code.",
+            text = if (phase is QuickConnectPhase.SigningIn) {
+                "Approved. Finishing sign-in…"
+            } else {
+                "On your phone or computer, go to $serverOrigin, sign in, and enter this code."
+            },
             style = IglooTheme.typography.bodyMedium,
             color = IglooTheme.colors.mutedForeground,
         )
@@ -116,6 +120,15 @@ private fun PairingCode(phase: QuickConnectPhase) {
                 modifier = Modifier.semantics {
                     contentDescription =
                         "Pairing code: " + phase.code.toCharArray().joinToString(" ")
+                    liveRegion = LiveRegionMode.Polite
+                },
+            )
+            QuickConnectPhase.SigningIn -> IglooText(
+                text = "Signing you in…",
+                style = IglooTheme.typography.titleLarge,
+                color = colors.cardForeground,
+                modifier = Modifier.semantics {
+                    contentDescription = "Code approved. Signing you in."
                     liveRegion = LiveRegionMode.Polite
                 },
             )

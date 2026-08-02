@@ -34,21 +34,9 @@ enum class QuickConnectStatus {
 }
 
 @Serializable
-data class Device(
-    val id: Long,
-    val name: String,
-    val platform: String,
-    @SerialName("app_version") val appVersion: String? = null,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("last_used_at") val lastUsedAt: String,
-    @SerialName("is_current") val isCurrent: Boolean,
-)
-
-@Serializable
 data class QuickConnectRedeemData(
     val status: QuickConnectStatus,
     val token: String? = null,
-    val device: Device? = null,
 )
 
 @Serializable
@@ -63,5 +51,4 @@ data class DeviceLoginRequest(
 @Serializable
 data class DeviceTokenData(
     val token: String,
-    val device: Device,
 )

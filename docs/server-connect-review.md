@@ -26,9 +26,9 @@ connect round-trip.
 
 ## Status
 
-Findings 2, 3, 4 and the UI/UX finding were fixed on `feature/auth` (see "Resolution"
-under each). **Finding 1 remains open** — it is the authentication rework itself and is
-input to that task, not a defect to patch beforehand.
+All findings are now resolved on `feature/auth` (see "Resolution" under each). Findings
+2, 3, 4 and the UI/UX finding were fixed first; finding 1 was the authentication rework
+itself and was closed by commit `e9d6c30`.
 
 ## UI/UX finding — RESOLVED
 
@@ -51,7 +51,7 @@ sits above the input.
 
 ## Code review findings
 
-1. **Cookie vs. bearer-token mismatch (key input to the auth work).** — STILL OPEN
+1. **Cookie vs. bearer-token mismatch (key input to the auth work).** — RESOLVED
    `docs/tv-client-authentication.md` says TV clients should authenticate with device
    bearer tokens via Quick Connect (`POST /api/quick-connect/initiate` + `redeem`) or
    `POST /api/auth/device-login`, not browser session cookies. The current UI does
@@ -60,6 +60,15 @@ sits above the input.
    unit tests), but no UI uses them and nothing sends an `Authorization: Bearer`
    header. Note the same doc marks `/api/quick-connect/approve` and `/api/devices*` as
    browser-session-only — the TV-side wrappers for those will 401 under a device token.
+
+   **Resolution:** commit `e9d6c30`. Cookie storage (`PersistentCookiesStorage`,
+   `SessionCookieStore`) was deleted in favour of `core/network/BearerTokenProvider` and
+   a Keystore-encrypted `core/storage/DeviceTokenStore`. A `DeviceTokenAuth` Ktor plugin
+   attaches `Authorization: Bearer …` to every request except the three credential-issuing
+   paths (`/auth/device-login`, `/quick-connect/initiate`, `/quick-connect/redeem`), which
+   must never carry a stale token. `QuickConnectScreen` is now the default sign-in mode
+   with `LoginScreen` (device-login) behind a toggle. The browser-session-only routes were
+   deliberately never implemented on the TV side.
 
 2. **Emulator-only placeholder shown on real devices.** — RESOLVED. The address field
    placeholder in `ServerSetupScreen.kt` is `http://10.0.2.2:8080`, which is only
@@ -130,3 +139,75 @@ Shield is in daydream mode (`mWakefulness=Dreaming`) — wake it first.
   datastore was left empty — the old token was actively erased, not just ignored.
 - The assertive live region is asserted on-device by `AuthGateTest`; no live TalkBack
   listening session was run.
+
+## Authentication review & Shield verification (2026-08-02)
+
+Review of both sign-in paths after the bearer-token rework (`e9d6c30`), then an
+end-to-end quick-connect run on the physical Shield.
+
+The structure held up: the `DeviceTokenAuth` plugin withholds the token from the three
+credential-issuing paths, `AndroidKeystoreCipher` never falls back to plaintext, and
+`safeApiCall` rethrows `CancellationException`. The findings were resilience gaps — paths
+that retried forever or minted redundant devices rather than telling the user anything.
+
+### Fixed
+
+1. **Post-approval dead-air.** `QuickConnectViewModel.finishApproved()` retried the user
+   fetch every 2s forever while the UI still showed the (already consumed) pairing code.
+   Added a `SigningIn` phase and capped the retries at six, after which a retryable error
+   is shown.
+2. **Unbounded initiate retries.** 429/503 retried indefinitely behind an unchanging
+   `· · · · · ·` placeholder. Capped at five attempts (~65s of backoff), then a visible
+   failure.
+3. **Password login re-minted a device token per retry.** If device-login succeeded but
+   the user fetch failed, resubmitting called `/auth/device-login` again, creating another
+   server-side device. `LoginUiState.awaitingUser` now resumes the stored token instead;
+   editing either credential clears it.
+4. **Redundant pairing after a transient restore failure.** A server unreachable at launch
+   sent an already-tokened device into a fresh pairing loop. `QuickConnectViewModel.start()`
+   now routes on `authRepository.hasToken()` — a stored token finishes sign-in, no token
+   pairs. This also covers resuming after a lifecycle stop and after a failed sign-in, so
+   no `Recovery` hint or `autoStartPairing` plumbing was needed.
+
+DRY/dead code: the duplicated "fetch user → authenticate / clear on 401" logic in both
+ViewModels moved to `SessionManager.completeSignIn(): SignInResult`; `onLoggedIn()` was
+absorbed and deleted. The unused `Device` model and the two `device` fields referencing it
+were removed (`ignoreUnknownKeys` still tolerates them on the wire). `docs/ffmpeg.md`,
+deleted in `647001a` while `CLAUDE.md` still cites it, was restored.
+
+Left alone, with reasons: `PUBLIC_AUTH_PATHS` uses `endsWith` (correct for the current API
+surface); the poll countdown ignores request latency (the server's 404 is authoritative);
+`DataStoreDeviceTokenStore.write` silently drops a token it cannot encrypt (deliberate, and
+there is no useful UI response). `UpdateUser*Request` in `data/model/Auth.kt` is
+unreferenced but predates this work and belongs to the unbuilt profile screens.
+
+### Shield verification (`SHIELD Android TV`, Android 11, adb over Tailscale)
+
+`./gradlew test` 104/104 green; `./gradlew build` green.
+
+| Step | Result |
+|---|---|
+| Fresh install → launch | Server setup screen, address field focused, IME open |
+| Typed backend address → Done | Health probe passed; sign-in screen with the origin as subtitle |
+| Quick Connect default | Pairing code rendered; focus on "Use email & password instead" |
+| Approved via `POST /api/quick-connect/approve` (admin cookie session) | Shield left the code screen and landed on the home shell with the user in the spine footer |
+| Force-stop + relaunch | Straight to the home shell — no pairing |
+| Token at rest | `igloo_session.preferences_pb` holds opaque ciphertext; zero `igd_` occurrences. Server URL stays plaintext in `igloo_settings` by design |
+| D-pad | LEFT into spine, DOWN to Sign out, CENTER — glacier focus ring visible throughout, no trap |
+| Sign out | Returned to the sign-in screen with a *new* pairing code, confirming the token was cleared |
+| Password path | Correct credentials reached the home shell; wrong password showed "Incorrect email or password." with the destructive field border |
+| Device hygiene | `GET /api/devices` showed exactly one device per pairing — `SHIELD / android_tv / 0.1.0`. Each sign-out revoked its device; no duplicates accumulated across four sign-in cycles |
+
+Not verified on-device: the `SigningIn` state is only visible for ~100ms against a LAN
+backend, so it was covered by unit tests rather than a screenshot. No live TalkBack
+listening session was run — the semantics are asserted in tests.
+
+**Pre-existing instrumented-test failures (not caused by this work).** On the Shield,
+`./gradlew connectedDebugAndroidTest` fails 3/12 — `AuthGateTest.dpadMovesFromAddressTo`
+`ConnectAndValidationReturnsFocus` plus both `QuickConnectGateTest` cases — all
+`assertIsFocused` assertions reporting `Focused = 'false'`. Confirmed by stashing all
+changes and re-running: the same three fail on unmodified `e9d6c30`. The device was awake
+and no other app held window focus. D-pad focus works correctly when driving the app by
+hand, so this looks like a test-harness window-focus issue on this device rather than an
+app defect. Worth a separate look; the remaining 9, including `AndroidKeystoreCipherTest`
+against real TEE keys, pass.

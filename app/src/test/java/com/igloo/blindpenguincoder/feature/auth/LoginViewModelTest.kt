@@ -80,12 +80,13 @@ class LoginViewModelTest {
         viewModel.onPasswordChange("hunter2")
         viewModel.submit()
 
-        val state = sessionManager.state
-            .first { it is AppAuthState.Authenticated } as AppAuthState.Authenticated
-        assertEquals("Jose", state.user.name)
-        assertFalse(viewModel.uiState.value.isSubmitting)
-        assertNull(viewModel.uiState.value.error)
-        assertEquals("", viewModel.uiState.value.password)
+        val state = viewModel.uiState.first { !it.isSubmitting }
+        assertNull(state.error)
+        assertEquals("", state.password)
+        assertFalse(state.awaitingUser)
+
+        val authenticated = sessionManager.state.value as AppAuthState.Authenticated
+        assertEquals("Jose", authenticated.user.name)
     }
 
     @Test
@@ -134,6 +135,63 @@ class LoginViewModelTest {
 
         assertEquals("Enter your email and password.", viewModel.uiState.value.error)
         assertFalse(requested)
+    }
+
+    @Test
+    fun `retrying after a failed user fetch resumes instead of logging in again`() = runTest {
+        var deviceLogins = 0
+        var userFetches = 0
+        val (viewModel, sessionManager) = viewModel { request ->
+            if (request.url.encodedPath.endsWith("/auth/device-login")) {
+                deviceLogins++
+                jsonResponse(deviceTokenJson)
+            } else {
+                // The token is issued, then the user fetch fails once before recovering.
+                if (++userFetches == 1) throw IOException("unreachable") else jsonResponse(userJson)
+            }
+        }
+
+        viewModel.onEmailChange("jose@example.com")
+        viewModel.onPasswordChange("hunter2")
+        viewModel.submit()
+
+        val failed = viewModel.uiState.first { it.error != null }
+        assertTrue(failed.awaitingUser)
+        assertEquals(1, deviceLogins)
+
+        viewModel.submit()
+
+        val recovered = viewModel.uiState.first { !it.isSubmitting && it.error == null }
+        assertFalse(recovered.awaitingUser)
+        // A second device-login would mint a redundant device token for the same user.
+        assertEquals(1, deviceLogins)
+        assertEquals(2, userFetches)
+        assertTrue(sessionManager.state.value is AppAuthState.Authenticated)
+    }
+
+    @Test
+    fun `editing credentials after a failed user fetch logs in again`() = runTest {
+        var deviceLogins = 0
+        val (viewModel, _) = viewModel { request ->
+            if (request.url.encodedPath.endsWith("/auth/device-login")) {
+                deviceLogins++
+                jsonResponse(deviceTokenJson)
+            } else {
+                throw IOException("unreachable")
+            }
+        }
+
+        viewModel.onEmailChange("jose@example.com")
+        viewModel.onPasswordChange("hunter2")
+        viewModel.submit()
+        assertTrue(viewModel.uiState.first { it.error != null }.awaitingUser)
+
+        viewModel.onPasswordChange("corrected")
+        assertFalse(viewModel.uiState.value.awaitingUser)
+
+        viewModel.submit()
+        viewModel.uiState.first { it.error != null }
+        assertEquals(2, deviceLogins)
     }
 
     @Test

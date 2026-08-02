@@ -5,12 +5,22 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
-import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+
+/** Outcome of exchanging a freshly stored device token for the signed-in user. */
+sealed interface SignInResult {
+    data object Authenticated : SignInResult
+
+    /** The token was rejected and has been cleared; the user must pair or log in again. */
+    data object Revoked : SignInResult
+
+    /** Transient failure; the token is still stored, so the caller may retry. */
+    data class Failed(val error: AppError) : SignInResult
+}
 
 class SessionManager(
     private val authRepository: AuthRepository,
@@ -41,21 +51,33 @@ class SessionManager(
             _state.value = AppAuthState.NeedsLogin(storedAddress)
             return
         }
-        when (val result = authRepository.fetchCurrentUser()) {
-            is ApiResult.Success -> _state.value = AppAuthState.Authenticated(result.value)
-            is ApiResult.Failure -> when (result.error) {
-                AppError.Unauthorized -> {
-                    authRepository.clearSession()
-                    _state.value = AppAuthState.NeedsLogin(storedAddress)
-                }
-                else -> _state.value = AppAuthState.NeedsLogin(storedAddress, result.error)
-            }
+        when (val result = completeSignIn()) {
+            SignInResult.Authenticated -> Unit
+            SignInResult.Revoked -> _state.value = AppAuthState.NeedsLogin(storedAddress)
+            // The token survives, so the sign-in screen resumes it rather than pairing again.
+            is SignInResult.Failed ->
+                _state.value = AppAuthState.NeedsLogin(storedAddress, result.error)
         }
     }
 
-    fun onLoggedIn(user: AuthUser) {
-        _state.value = AppAuthState.Authenticated(user)
-    }
+    /**
+     * Exchanges the stored device token for the current user and publishes
+     * [AppAuthState.Authenticated] on success. Shared by every sign-in path, since pairing and
+     * password login both finish the same way once a token exists.
+     */
+    suspend fun completeSignIn(): SignInResult =
+        when (val result = authRepository.fetchCurrentUser()) {
+            is ApiResult.Success -> {
+                _state.value = AppAuthState.Authenticated(result.value)
+                SignInResult.Authenticated
+            }
+            is ApiResult.Failure -> if (result.error == AppError.Unauthorized) {
+                authRepository.clearSession()
+                SignInResult.Revoked
+            } else {
+                SignInResult.Failed(result.error)
+            }
+        }
 
     suspend fun logout() {
         authRepository.logout()

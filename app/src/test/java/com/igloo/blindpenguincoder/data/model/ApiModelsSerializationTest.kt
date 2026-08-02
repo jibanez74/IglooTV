@@ -180,11 +180,9 @@ class ApiModelsSerializationTest {
 
         val envelope = json.decodeFromString<ApiEnvelope<DeviceTokenData>>(body)
 
+        // The client only needs the token; the device object the backend also sends is ignored.
         val data = envelope.data!!
         assertEquals("igd_test", data.token)
-        assertEquals(9L, data.device.id)
-        assertEquals("android_tv", data.device.platform)
-        assertTrue(data.device.isCurrent)
     }
 
     @Test
@@ -218,7 +216,7 @@ class ApiModelsSerializationTest {
         assertEquals(QuickConnectStatus.Pending, pendingData.status)
         assertNull(pendingData.token)
         assertEquals(QuickConnectStatus.Approved, approvedData.status)
-        assertEquals("Shield", approvedData.device!!.name)
+        assertEquals("igd_test", approvedData.token)
     }
 
     @Test

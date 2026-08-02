@@ -368,6 +368,139 @@ class QuickConnectViewModelTest {
     }
 
     @Test
+    fun `approval replaces the code with a signing-in state`() = runTest {
+        var userFetches = 0
+        val f = fixture { request ->
+            when {
+                request.url.encodedPath.endsWith("/initiate") ->
+                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
+                request.url.encodedPath.endsWith("/redeem") -> jsonResponse(approvedJson)
+                else -> {
+                    userFetches += 1
+                    if (userFetches == 1) throw IOException("blip") else jsonResponse(userJson)
+                }
+            }
+        }
+
+        f.viewModel.start()
+        advanceTimeBy(2_001)
+
+        // The code is consumed at this point, so it must not stay on screen.
+        assertEquals(QuickConnectPhase.SigningIn, f.phase)
+
+        advanceTimeBy(2_001)
+        assertTrue(f.sessionManager.state.value is AppAuthState.Authenticated)
+
+        f.viewModel.stop()
+    }
+
+    @Test
+    fun `a user fetch that keeps failing stops retrying and fails visibly`() = runTest {
+        var userFetches = 0
+        val f = fixture { request ->
+            when {
+                request.url.encodedPath.endsWith("/initiate") ->
+                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
+                request.url.encodedPath.endsWith("/redeem") -> jsonResponse(approvedJson)
+                else -> {
+                    userFetches += 1
+                    throw IOException("still down")
+                }
+            }
+        }
+
+        f.viewModel.start()
+        advanceTimeBy(2_001)
+        assertEquals(QuickConnectPhase.SigningIn, f.phase)
+
+        // Six attempts two seconds apart, then it gives up rather than hanging forever.
+        advanceTimeBy(30_000)
+
+        val failed = f.phase as QuickConnectPhase.Failed
+        assertEquals(
+            "Couldn't reach the server. Check the address, port, and network connection.",
+            failed.message,
+        )
+        assertEquals(6, userFetches)
+        assertEquals(1, f.count("/initiate"))
+
+        f.viewModel.stop()
+    }
+
+    @Test
+    fun `retry after a failed sign-in resumes with the stored token`() = runTest {
+        var userFetches = 0
+        val f = fixture { request ->
+            when {
+                request.url.encodedPath.endsWith("/initiate") ->
+                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
+                request.url.encodedPath.endsWith("/redeem") -> jsonResponse(approvedJson)
+                else -> {
+                    userFetches += 1
+                    if (userFetches <= 6) throw IOException("down") else jsonResponse(userJson)
+                }
+            }
+        }
+
+        f.viewModel.start()
+        advanceTimeBy(32_001)
+        assertTrue(f.phase is QuickConnectPhase.Failed)
+
+        f.viewModel.retry()
+
+        assertTrue(f.sessionManager.state.value is AppAuthState.Authenticated)
+        // Pairing already produced a token; asking for another code would mint a second device.
+        assertEquals(1, f.count("/initiate"))
+        assertEquals(1, f.count("/redeem"))
+
+        f.viewModel.stop()
+    }
+
+    @Test
+    fun `initiate that stays busy stops retrying and fails visibly`() = runTest {
+        val f = fixture { request ->
+            when {
+                request.url.encodedPath.endsWith("/initiate") -> jsonResponse(
+                    """{"error":true,"message":"quick connect is busy"}""",
+                    HttpStatusCode.ServiceUnavailable,
+                )
+                else -> jsonResponse(pendingJson)
+            }
+        }
+
+        f.viewModel.start()
+        assertEquals(QuickConnectPhase.RequestingCode, f.phase)
+
+        // Backoffs of 5s, 10s, 20s and 30s separate the five attempts.
+        advanceTimeBy(65_001)
+
+        assertEquals(QuickConnectPhase.Failed("quick connect is busy"), f.phase)
+        assertEquals(5, f.count("/initiate"))
+
+        f.viewModel.stop()
+    }
+
+    @Test
+    fun `a stored token finishes sign-in instead of pairing again`() = runTest {
+        val f = fixture { request ->
+            if (request.url.encodedPath.endsWith("/auth/user")) {
+                jsonResponse(userJson)
+            } else {
+                error("unexpected request to ${request.url.encodedPath}")
+            }
+        }
+        // Mirrors a launch where restore() could not reach the server but the token survived.
+        f.http.tokenStore.stored = "igd_restored"
+
+        f.viewModel.start()
+
+        assertTrue(f.sessionManager.state.value is AppAuthState.Authenticated)
+        assertEquals(0, f.count("/initiate"))
+
+        f.viewModel.stop()
+    }
+
+    @Test
     fun `unauthorized after approval clears the session and fails`() = runTest {
         val f = fixture { request ->
             when {

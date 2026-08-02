@@ -17,6 +17,9 @@ import kotlinx.coroutines.launch
 sealed interface QuickConnectPhase {
     data object RequestingCode : QuickConnectPhase
     data class CodeReady(val code: String) : QuickConnectPhase
+
+    /** Approved on the other device; exchanging the stored token for the user. */
+    data object SigningIn : QuickConnectPhase
     data class Failed(val message: String) : QuickConnectPhase
 }
 
@@ -42,7 +45,11 @@ class QuickConnectViewModel(
     fun start() {
         if (pairingJob?.isActive == true) return
         _uiState.value = QuickConnectUiState(QuickConnectPhase.RequestingCode)
-        pairingJob = viewModelScope.launch { runPairing() }
+        pairingJob = viewModelScope.launch {
+            // A stored token outlives a failed restore or a half-finished pairing. Finishing that
+            // sign-in is always right; pairing again would mint a second device for one user.
+            if (authRepository.hasToken()) finishApproved() else runPairing()
+        }
     }
 
     fun stop() {
@@ -68,18 +75,19 @@ class QuickConnectViewModel(
 
     private suspend fun initiateWithBackoff(): QuickConnectInitiateData? {
         var backoffMillis = INITIATE_BACKOFF_MILLIS
+        var attemptsLeft = MAX_INITIATE_ATTEMPTS
         while (true) {
             when (val result = authRepository.initiateQuickConnect()) {
                 is ApiResult.Success -> return result.value
                 is ApiResult.Failure -> {
                     val error = result.error
-                    if (error is AppError.Api && error.status in RETRYABLE_STATUSES) {
+                    val retryable = error is AppError.Api && error.status in RETRYABLE_STATUSES
+                    // A busy server is worth waiting out, but not silently and not forever.
+                    if (retryable && --attemptsLeft > 0) {
                         delay(backoffMillis)
                         backoffMillis = (backoffMillis * 2).coerceAtMost(MAX_BACKOFF_MILLIS)
                     } else {
-                        _uiState.value = QuickConnectUiState(
-                            QuickConnectPhase.Failed(error.toQuickConnectDisplayMessage()),
-                        )
+                        fail(error)
                         return null
                     }
                 }
@@ -112,20 +120,24 @@ class QuickConnectViewModel(
         return false
     }
 
-    /** The token is already persisted; keep retrying the user fetch rather than re-pairing. */
+    /**
+     * The token is already persisted, so a transient failure here is retried rather than
+     * re-paired. Always returns true: pairing itself is done either way.
+     */
     private suspend fun finishApproved(): Boolean {
+        _uiState.value = QuickConnectUiState(QuickConnectPhase.SigningIn)
+        var attemptsLeft = MAX_USER_FETCH_ATTEMPTS
         while (true) {
-            when (val user = authRepository.fetchCurrentUser()) {
-                is ApiResult.Success -> {
-                    sessionManager.onLoggedIn(user.value)
+            when (val result = sessionManager.completeSignIn()) {
+                SignInResult.Authenticated -> return true
+                SignInResult.Revoked -> {
+                    fail(AppError.Unauthorized)
                     return true
                 }
-                is ApiResult.Failure -> {
-                    if (user.error == AppError.Unauthorized) {
-                        authRepository.clearSession()
-                        _uiState.value = QuickConnectUiState(
-                            QuickConnectPhase.Failed(user.error.toQuickConnectDisplayMessage()),
-                        )
+                is SignInResult.Failed -> {
+                    // Give up eventually: an unreachable server must not look like a hung screen.
+                    if (--attemptsLeft <= 0) {
+                        fail(result.error)
                         return true
                     }
                     delay(USER_FETCH_RETRY_MILLIS)
@@ -134,10 +146,18 @@ class QuickConnectViewModel(
         }
     }
 
+    private fun fail(error: AppError) {
+        _uiState.value = QuickConnectUiState(
+            QuickConnectPhase.Failed(error.toQuickConnectDisplayMessage()),
+        )
+    }
+
     private companion object {
         const val INITIATE_BACKOFF_MILLIS = 5_000L
         const val MAX_BACKOFF_MILLIS = 30_000L
         const val USER_FETCH_RETRY_MILLIS = 2_000L
+        const val MAX_INITIATE_ATTEMPTS = 5
+        const val MAX_USER_FETCH_ATTEMPTS = 6
         val RETRYABLE_STATUSES = setOf(429, 503)
     }
 }
