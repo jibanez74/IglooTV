@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooText
@@ -25,6 +26,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 fun AuthSurface(
     title: String,
     subtitle: String,
+    cardWidth: Dp = 480.dp,
     content: @Composable () -> Unit,
 ) {
     val colors = IglooTheme.colors
@@ -41,7 +43,7 @@ fun AuthSurface(
     ) {
         Column(
             modifier = Modifier
-                .width(480.dp)
+                .width(cardWidth)
                 .clip(RoundedCornerShape(IglooTheme.radius.xl))
                 .background(colors.card)
                 .border(

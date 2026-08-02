@@ -9,6 +9,9 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.input.key.Key
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
@@ -34,13 +37,31 @@ class QuickConnectGateTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.onNodeWithText("Sign in to Igloo").assertIsDisplayed()
             composeRule.onNodeWithText("http://192.0.2.1:8080").assertIsDisplayed()
+            composeRule.onNodeWithText(
+                "Scan the QR code to open Account settings. Sign in through your " +
+                    "browser if asked, then enter the six-character TV code.",
+            ).assertIsDisplayed()
             composeRule
+                .onNodeWithText("http://192.0.2.1:8080/settings/account")
+                .assertIsDisplayed()
+            composeRule
+                .onNodeWithContentDescription("Requesting pairing code")
+                .assertIsDisplayed()
+
+            val passwordMode = composeRule
                 .onNodeWithContentDescription("Use email and password instead")
+            val changeServer = composeRule
+                .onNodeWithContentDescription("Change server address")
+
+            passwordMode
                 .assertIsDisplayed()
                 .assertIsFocused()
-            composeRule
-                .onNodeWithContentDescription("Change server address")
-                .assertIsDisplayed()
+            changeServer.assertIsDisplayed()
+
+            passwordMode.performKeyInput { pressKey(Key.DirectionRight) }
+            changeServer.assertIsFocused()
+            changeServer.performKeyInput { pressKey(Key.DirectionLeft) }
+            passwordMode.assertIsFocused()
         }
     }
 
