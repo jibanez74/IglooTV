@@ -6,7 +6,9 @@ import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.network.createIglooHttpClient
 import com.igloo.blindpenguincoder.core.network.createServerProbeHttpClient
 import com.igloo.blindpenguincoder.core.network.ServerHealthProbe
+import com.igloo.blindpenguincoder.core.storage.AndroidKeystoreCipher
 import com.igloo.blindpenguincoder.core.storage.DataStoreSessionCookieStore
+import com.igloo.blindpenguincoder.core.storage.SecretCipher
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.core.storage.sessionDataStore
 import com.igloo.blindpenguincoder.core.storage.settingsDataStore
@@ -20,8 +22,12 @@ class IglooAppContainer(context: Context) {
 
     val serverSettingsStore by lazy { ServerSettingsStore(appContext.settingsDataStore) }
     val serverUrlProvider by lazy { ServerUrlProvider() }
+    // The device bearer token will want the same cipher.
+    private val secretCipher: SecretCipher by lazy { AndroidKeystoreCipher() }
     val cookiesStorage by lazy {
-        PersistentCookiesStorage(DataStoreSessionCookieStore(appContext.sessionDataStore))
+        PersistentCookiesStorage(
+            DataStoreSessionCookieStore(appContext.sessionDataStore, secretCipher),
+        )
     }
     val httpClient by lazy { createIglooHttpClient(cookiesStorage) }
     private val serverProbeHttpClient by lazy { createServerProbeHttpClient() }

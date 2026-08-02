@@ -5,7 +5,6 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.MessageResponse
 import io.ktor.client.HttpClient
-import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
@@ -13,11 +12,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.utils.io.discard
-import java.io.IOException
-import java.net.SocketTimeoutException
 import java.net.URI
-import java.security.cert.CertificateException
-import javax.net.ssl.SSLException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +35,7 @@ class ServerHealthProbe(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            ApiResult.Failure(error.toProbeError())
+            ApiResult.Failure(error.toTransportError())
         }
     }
 
@@ -135,23 +130,6 @@ private suspend fun HttpResponse.safeBackendMessage(): String? = try {
     throw error
 } catch (_: Exception) {
     null
-}
-
-private fun Exception.toProbeError(): AppError {
-    val causes = generateSequence<Throwable>(this) { it.cause }.toList()
-    return when {
-        causes.any {
-            it is HttpRequestTimeoutException ||
-                it is SocketTimeoutException ||
-                it::class.simpleName == "ConnectTimeoutException" ||
-                it::class.simpleName == "SocketTimeoutException"
-        } ->
-            AppError.Timeout
-        causes.any { it is SSLException || it is CertificateException } ->
-            AppError.TlsVerification
-        causes.any { it is IOException } -> AppError.Network
-        else -> AppError.Unexpected(message)
-    }
 }
 
 private fun unsafeRedirect(message: String): ApiResult.Failure =

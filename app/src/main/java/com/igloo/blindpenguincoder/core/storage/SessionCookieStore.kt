@@ -4,7 +4,10 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -29,24 +32,47 @@ interface SessionCookieStore {
     suspend fun clear()
 }
 
-class DataStoreSessionCookieStore(private val dataStore: DataStore<Preferences>) : SessionCookieStore {
+/**
+ * Stores the cookie encrypted via [cipher]; the Keystore calls block, so every
+ * method hops to [dispatcher]. Anything unreadable — a blob written under a
+ * replaced key, or the plaintext left by an earlier build — is erased and read
+ * as "no session", which sends the user back to sign in.
+ */
+class DataStoreSessionCookieStore(
+    private val dataStore: DataStore<Preferences>,
+    private val cipher: SecretCipher,
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+) : SessionCookieStore {
 
-    override suspend fun read(): StoredCookie? {
-        val encoded = dataStore.data.first()[SESSION_COOKIE] ?: return null
-        return try {
-            Json.decodeFromString<StoredCookie>(encoded)
+    override suspend fun read(): StoredCookie? = withContext(dispatcher) {
+        val blob = dataStore.data.first()[SESSION_COOKIE] ?: return@withContext null
+        val json = cipher.decrypt(blob)
+        if (json == null) {
+            clear()
+            return@withContext null
+        }
+        try {
+            Json.decodeFromString<StoredCookie>(json)
         } catch (_: SerializationException) {
+            clear()
             null
         }
     }
 
     override suspend fun write(cookie: StoredCookie) {
-        val encoded = Json.encodeToString(cookie)
-        dataStore.edit { it[SESSION_COOKIE] = encoded }
+        withContext(dispatcher) {
+            // A device that cannot encrypt keeps no session; never fall back to plaintext.
+            val blob = cipher.encrypt(Json.encodeToString(cookie))
+            if (blob == null) {
+                dataStore.edit { it.remove(SESSION_COOKIE) }
+            } else {
+                dataStore.edit { it[SESSION_COOKIE] = blob }
+            }
+        }
     }
 
     override suspend fun clear() {
-        dataStore.edit { it.remove(SESSION_COOKIE) }
+        withContext(dispatcher) { dataStore.edit { it.remove(SESSION_COOKIE) } }
     }
 
     private companion object {

@@ -4,16 +4,14 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.MessageResponse
 import io.ktor.client.call.body
-import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.http.HttpStatusCode
 import io.ktor.client.statement.HttpResponse
-import java.io.IOException
 import kotlinx.coroutines.CancellationException
 
 /**
  * Runs a request and maps the Igloo envelope conventions onto [ApiResult]:
  * 401 -> Unauthorized, other non-2xx -> Api with the backend message
- * preserved, transport failures -> Network.
+ * preserved, transport failures -> Timeout / TlsVerification / Network.
  */
 suspend fun <T> safeApiCall(
     request: suspend () -> HttpResponse,
@@ -23,12 +21,8 @@ suspend fun <T> safeApiCall(
         request()
     } catch (e: CancellationException) {
         throw e
-    } catch (_: HttpRequestTimeoutException) {
-        return ApiResult.Failure(AppError.Network)
-    } catch (_: IOException) {
-        return ApiResult.Failure(AppError.Network)
     } catch (e: Exception) {
-        return ApiResult.Failure(AppError.Unexpected(e.message))
+        return ApiResult.Failure(e.toTransportError())
     }
 
     if (response.status == HttpStatusCode.Unauthorized) {

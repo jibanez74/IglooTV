@@ -33,8 +33,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.password
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -78,7 +76,11 @@ fun IglooTextField(
                 .height(56.dp)
                 .clip(shape)
                 .background(colors.muted)
-                .focusRing(focused = focused, radius = IglooTheme.radius.lg),
+                .focusRing(
+                    focused = focused,
+                    radius = IglooTheme.radius.lg,
+                    hasError = errorText != null,
+                ),
             contentAlignment = Alignment.CenterStart,
         ) {
             BasicTextField(
@@ -144,17 +146,6 @@ fun IglooTextField(
                     maxLines = 1,
                 )
             }
-        }
-        if (errorText != null) {
-            IglooText(
-                text = errorText,
-                style = IglooTheme.typography.bodyMedium,
-                color = colors.destructive,
-                modifier = Modifier.semantics {
-                    liveRegion = LiveRegionMode.Assertive
-                    error(errorText)
-                },
-            )
         }
     }
 }

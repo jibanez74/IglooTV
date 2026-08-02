@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -20,6 +21,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,7 +45,7 @@ class AuthGateTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.onNodeWithText("Connect to your Igloo server").assertIsDisplayed()
             composeRule.onNodeWithText("Server address").assertIsDisplayed()
-            composeRule.onNodeWithText("http://10.0.2.2:8080").assertIsDisplayed()
+            composeRule.onNodeWithText("http://192.168.1.5:8080").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Server address").assertIsFocused()
 
             composeRule.onAllNodesWithContentDescription("Home, selected")
@@ -64,17 +66,22 @@ class AuthGateTest {
             connect.assertIsFocused()
             connect.performClick()
 
-            composeRule.onNodeWithText(
-                "Enter only the server address, optionally ending in /api.",
-            )
-                .assertIsDisplayed()
+            val message = "Enter only the server address, optionally ending in /api."
+            val banner = composeRule.onNodeWithText(message)
+            banner.assertIsDisplayed()
                 .assert(
                     SemanticsMatcher.expectValue(
                         SemanticsProperties.LiveRegion,
                         LiveRegionMode.Assertive,
                     ),
                 )
+            // The banner must sit above the input, where an open IME cannot cover it.
+            assertTrue(
+                banner.getUnclippedBoundsInRoot().bottom <
+                    address.getUnclippedBoundsInRoot().top,
+            )
             address.assertIsFocused()
+            address.assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, message))
         }
     }
 

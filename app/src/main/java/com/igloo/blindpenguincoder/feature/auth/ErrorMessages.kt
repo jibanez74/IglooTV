@@ -6,7 +6,7 @@ fun AppError.toDisplayMessage(): String = when (this) {
     is AppError.Api -> message
     AppError.Unauthorized -> "Incorrect email or password."
     AppError.Network -> "Couldn't reach the server. Check the address, port, and network connection."
-    AppError.Timeout -> "The server didn't respond within 10 seconds. Check the address and try again."
+    AppError.Timeout -> "The server took too long to respond. Check the address and try again."
     AppError.TlsVerification ->
         "Couldn't verify this server's HTTPS certificate. Check the certificate or use the correct HTTP address."
     is AppError.UnsafeRedirect -> message

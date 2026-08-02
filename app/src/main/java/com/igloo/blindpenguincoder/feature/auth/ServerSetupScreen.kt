@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -18,6 +19,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.ui.IglooButton
+import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooTextField
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -27,23 +29,31 @@ fun ServerSetupScreen(viewModel: ServerSetupViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val fieldFocus = remember { FocusRequester() }
     val connectFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val submit = {
+        keyboard?.hide()
+        viewModel.connect()
+    }
 
     AuthSurface(
         title = "Connect to your Igloo server",
         subtitle = "Enter the address of your self-hosted Igloo backend.",
     ) {
+        state.error?.let { message ->
+            IglooInlineError(message = message, modifier = Modifier.fillMaxWidth())
+        }
         IglooTextField(
             value = state.input,
             onValueChange = viewModel::onInputChange,
             label = "Server address",
-            placeholder = "http://10.0.2.2:8080",
+            placeholder = "http://192.168.1.5:8080",
             errorText = state.error,
             enabled = !state.isConnecting,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Done,
             ),
-            keyboardActions = KeyboardActions(onDone = { viewModel.connect() }),
+            keyboardActions = KeyboardActions(onDone = { submit() }),
             focusRequester = fieldFocus,
             downFocusRequester = connectFocus,
             modifier = Modifier
@@ -59,7 +69,7 @@ fun ServerSetupScreen(viewModel: ServerSetupViewModel) {
         }
         IglooButton(
             text = if (state.isConnecting) "Connecting…" else "Connect",
-            onClick = viewModel::connect,
+            onClick = submit,
             enabled = !state.isConnecting,
             modifier = Modifier
                 .fillMaxWidth()
@@ -73,6 +83,11 @@ fun ServerSetupScreen(viewModel: ServerSetupViewModel) {
         fieldFocus.requestFocus()
     }
     LaunchedEffect(state.error) {
-        if (state.error != null) fieldFocus.requestFocus()
+        if (state.error != null) {
+            // Order matters: requesting focus starts a text input session and
+            // re-shows the IME, so the hide has to come after it.
+            fieldFocus.requestFocus()
+            keyboard?.hide()
+        }
     }
 }
