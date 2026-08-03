@@ -41,7 +41,11 @@ fun IglooInlineError(
             .fillMaxWidth()
             .clip(shape)
             .background(colors.destructive.copy(alpha = 0.10f))
-            .border(width = 1.dp, color = colors.destructive.copy(alpha = 0.25f), shape = shape)
+            .border(
+                width = IglooTheme.focus.restWidth,
+                color = colors.destructive.copy(alpha = 0.25f),
+                shape = shape,
+            )
             .padding(IglooTheme.spacing.md),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {

@@ -11,6 +11,7 @@ import com.igloo.blindpenguincoder.core.storage.AndroidKeystoreCipher
 import com.igloo.blindpenguincoder.core.storage.DataStoreDeviceTokenStore
 import com.igloo.blindpenguincoder.core.storage.SecretCipher
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
+import com.igloo.blindpenguincoder.core.storage.UiPreferencesStore
 import com.igloo.blindpenguincoder.core.storage.sessionDataStore
 import com.igloo.blindpenguincoder.core.storage.settingsDataStore
 import com.igloo.blindpenguincoder.data.api.AuthApi
@@ -22,6 +23,7 @@ class IglooAppContainer(context: Context) {
     private val appContext = context.applicationContext
 
     val serverSettingsStore by lazy { ServerSettingsStore(appContext.settingsDataStore) }
+    val uiPreferencesStore by lazy { UiPreferencesStore(appContext.settingsDataStore) }
     val serverUrlProvider by lazy { ServerUrlProvider() }
     private val secretCipher: SecretCipher by lazy { AndroidKeystoreCipher() }
     val deviceTokenProvider by lazy {

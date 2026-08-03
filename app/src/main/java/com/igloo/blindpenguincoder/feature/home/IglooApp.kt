@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.IglooText
@@ -78,7 +79,9 @@ private fun IglooShell(
     onLogout: () -> Unit,
 ) {
     val colors = IglooTheme.colors
+    val layout = IglooTheme.layout
 
+    // Backgrounds bleed to the physical edge; only chrome and text are inset for overscan.
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -93,7 +96,7 @@ private fun IglooShell(
             onLogout = onLogout,
             modifier = Modifier
                 .fillMaxHeight()
-                .width(236.dp),
+                .width(layout.navSpineWidth),
         )
         HomeContent(
             currentDestination = currentDestination,
@@ -103,8 +106,10 @@ private fun IglooShell(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
-                    horizontal = IglooTheme.spacing.xl,
-                    vertical = IglooTheme.spacing.lg,
+                    start = IglooTheme.spacing.xl,
+                    end = layout.safeAreaHorizontal,
+                    top = layout.safeAreaVertical,
+                    bottom = layout.safeAreaVertical,
                 ),
         )
     }
@@ -125,7 +130,12 @@ private fun NavigationSpine(
     Column(
         modifier = modifier
             .background(colors.sidebar)
-            .padding(IglooTheme.spacing.lg),
+            .padding(
+                start = IglooTheme.layout.safeAreaHorizontal,
+                end = IglooTheme.spacing.lg,
+                top = IglooTheme.layout.safeAreaVertical,
+                bottom = IglooTheme.layout.safeAreaVertical,
+            ),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
     ) {
         Row(
@@ -134,7 +144,7 @@ private fun NavigationSpine(
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(IglooTheme.sizes.brandTile)
                     .clip(RoundedCornerShape(IglooTheme.radius.lg))
                     .background(colors.primary),
                 contentAlignment = Alignment.Center,
@@ -195,7 +205,7 @@ private fun SignOutItem(onLogout: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .heightIn(min = IglooTheme.sizes.navItemHeight)
             .clip(shape)
             .background(if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent)
             .focusRing(focused = focused, radius = IglooTheme.radius.lg)
@@ -219,7 +229,7 @@ private fun SignOutItem(onLogout: () -> Unit) {
     ) {
         Box(
             modifier = Modifier
-                .size(10.dp)
+                .size(IglooTheme.sizes.dot)
                 .clip(CircleShape)
                 .background(if (focused) colors.destructive else colors.border),
         )
@@ -254,7 +264,7 @@ private fun NavigationItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .heightIn(min = IglooTheme.sizes.navItemHeight)
             .clip(shape)
             .background(background)
             .focusRing(focused = focused, radius = IglooTheme.radius.lg)
@@ -282,7 +292,7 @@ private fun NavigationItem(
     ) {
         Box(
             modifier = Modifier
-                .size(10.dp)
+                .size(IglooTheme.sizes.dot)
                 .clip(CircleShape)
                 .background(if (selected || focused) colors.primary else colors.border),
         )
@@ -370,12 +380,12 @@ private fun StatusBadge() {
     val colors = IglooTheme.colors
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
+            .clip(RoundedCornerShape(IglooTheme.radius.pill))
             .background(colors.aurora.copy(alpha = 0.16f))
             .border(
-                width = 1.dp,
+                width = IglooTheme.focus.restWidth,
                 color = colors.aurora.copy(alpha = 0.48f),
-                shape = RoundedCornerShape(999.dp),
+                shape = RoundedCornerShape(IglooTheme.radius.pill),
             )
             .padding(horizontal = IglooTheme.spacing.md, vertical = IglooTheme.spacing.sm),
     ) {
@@ -396,7 +406,7 @@ private fun HeroPanel() {
             .clip(RoundedCornerShape(IglooTheme.radius.xl))
             .background(colors.card)
             .border(
-                width = 1.dp,
+                width = IglooTheme.focus.restWidth,
                 color = colors.border,
                 shape = RoundedCornerShape(IglooTheme.radius.xl),
             )
@@ -431,7 +441,7 @@ private fun FeatureCard(
 
     Column(
         modifier = modifier
-            .height(178.dp)
+            .heightIn(min = 178.dp.scaled())
             .clip(shape)
             .background(if (focused) colors.card.copy(alpha = 0.96f) else colors.muted)
             .focusRing(focused = focused, radius = IglooTheme.radius.xl)

@@ -1,527 +1,744 @@
-# Igloo Design System
+# Igloo TV Design System
 
-This document describes the Igloo visual design system as implemented in the web
-client (`web/`), explains the app's UI and UEX, and gives a mapping for recreating
-both in a **Kotlin Android TV app built with Jetpack Compose**. It also records
-styling issues and improvement suggestions found while documenting it.
+The design system for **Igloo TV**, the Android TV client (Kotlin + Jetpack Compose).
 
-The web client is the **source of truth**. This document drives the Android TV
-reimplementation — read §1 for the visual language, §2 for the Compose/TV port
-strategy, and §3 for the actual screens, navigation, and interaction flows to rebuild.
+- **Audience**: whoever is building or reviewing a screen in this repo.
+- **Status**: authoritative. `core/design/` implements this document; where they disagree,
+  this document is the bug report and the code is what changes — or this document changes
+  first, deliberately. `AGENTS.md` §Design system and §"do not invent theme tokens" both
+  point here.
+- **Palette origin**: the Igloo web client (`../Igloo/web`). Colors are shared so the two
+  clients stay recognizably one product. **Everything else — type sizes, spacing, geometry,
+  focus, motion — is authored for the 10-foot TV target and does not mirror the web.**
+  See [Appendix A](#appendix-a--web-parity) for what came from where.
+- **Last verified**: 2026-08-02, against web client `3b48f9a6`.
 
-> Source of truth for the live web tokens: `web/src/assets/styles.css` (OKLCH
-> design tokens) and `web/src/assets/boot.css` (pre-React boot styles). Contrast
-> is enforced by `web/src/test/contrast.test.ts`.
+> **Changing a number here means changing `core/design/`.** Appendix B maps every token
+> group to its file. A PR that changes one without the other is incomplete.
+
+**Contents** — [1 Principles](#1-principles) · [2 Screen & scale model](#2-screen--scale-model) ·
+[3 Color](#3-color) · [4 Typography](#4-typography) ·
+[5 Spacing, radius, sizes, icons](#5-spacing-radius-sizes-icons) ·
+[6 Focus & interaction](#6-focus--interaction) · [7 Motion](#7-motion) ·
+[8 Layout & navigation shell](#8-layout--navigation-shell) · [9 Components](#9-components) ·
+[10 UI states](#10-ui-states) · [11 Screens & UX](#11-screens--ux) ·
+[12 Accessibility](#12-accessibility) · [Appendix A](#appendix-a--web-parity) ·
+[Appendix B](#appendix-b--tokencode-index)
 
 ---
 
-## 1. The design system
+## 1. Principles
 
-### 1.1 Identity & approach
+1. **Ten feet, not ten inches.** Body text is never smaller than 16sp. Nothing depends on
+   reading fine detail or on precise pointing.
+2. **The remote is the only input.** There is no hover, no cursor, no touch. Every reveal,
+   emphasis, or affordance that a pointer UI would trigger on hover is triggered by **focus**.
+3. **One focus treatment, everywhere.** A single glacier ring (§6). A user must never have to
+   ask which thing is selected.
+4. **Dark by default.** Light exists and must stay correct, but dark is what ships.
+5. **Reduced motion is a hard rule, not a nicety.** Every animation goes through
+   `iglooTween` (§7), which snaps when the system asks it to.
+6. **TalkBack is a product requirement.** Not a later pass. Design the focus order and the
+   spoken labels at the same time as the layout (§12).
+7. **Scale is the user's call.** The app cannot know how big the TV is or how far away the
+   viewer sits, so it does not guess (§2).
 
-Igloo is an "icy glacier" themed media center. The palette is a cool glacier blue
-primary with a sparing warm amber ("aurora") accent, on a cool near-white canvas
-(light) or deep navy canvas (dark). **Dark is the default theme.**
+---
 
-The web system is implemented with:
+## 2. Screen & scale model
 
-- **Tailwind CSS v4** (`@import "tailwindcss"` + `@theme inline`) — no
-  `tailwind.config.js`; configuration lives in CSS.
-- **shadcn/ui** ("new-york" style) primitives in `web/src/components/ui`, built on
-  `radix-ui` and styled with `class-variance-authority` (CVA).
-- **CSS custom properties** as semantic design tokens, defined once per theme
-  (`:root` = light, `.dark` = dark) and consumed through Tailwind utility classes
-  like `bg-card`, `text-muted-foreground`, `ring-ring`.
-- `tw-animate-css` for enter/exit animations, with a strict `motion-reduce:`
-  discipline.
+**This is the section most likely to be skipped and most likely to be needed.** Read it before
+writing any dimension.
 
-Theme switching toggles the `dark` class on `<html>` (`web/src/lib/theme.ts`),
-persisted to `localStorage` under `igloo-theme`, with an anti-flash inline script in
-`index.html` that applies the stored theme before the first paint. Default is dark
-whenever no stored value is present.
+### 2.1 The core fact: TV size is not a layout variable
 
-For an Android TV port, the takeaway: **one palette, two themes, dark by default, a
-single glacier focus color, and a hard motion-reduce rule.** These map directly onto
-a Compose theme (§2).
+Android TV reports a **fixed density-independent viewport regardless of physical screen size**.
+A 26" set and a 65" set, both 1080p, report exactly the same thing:
 
-### 1.2 Color tokens (semantic)
+| Panel | Pixels | Density | Reported viewport |
+|---|---|---|---|
+| 1080p (26", 32", 55", 65" — all identical) | 1920×1080 | 320dpi (xhdpi) | **960×540dp** |
+| 4K | 3840×2160 | 640dpi (xxxhdpi) | **960×540dp** |
+| 720p | 1280×720 | 213dpi (tvdpi) | ~962×541dp |
 
-Colors are authored in **OKLCH** in `styles.css`; the hex equivalents below come from
-the inline comments in that file and from `boot.css`. Tokens are paired (`X` surface +
-`X-foreground` text) so foreground/background contrast is guaranteed. All hexes are
-verified against `styles.css` as of this writing.
+So:
+
+- **Physical inches are not detectable**, and there is no API that would tell you.
+- **Inches are not what varies in dp.** A "65-inch breakpoint" is not a thing that can be
+  written, and would not mean anything if it could.
+- **4K buys you image resolution, not layout room.** Load higher-resolution posters on a 4K
+  panel; do not lay out differently.
+
+Design against **960×540dp** as the reference viewport. It is small, and it is the binding
+constraint — the nav spine plus content pane must fit inside 960dp wide and 540dp tall.
+
+### 2.2 What actually varies
+
+| Variable | Detectable? | How we handle it |
+|---|---|---|
+| Viewing distance ÷ screen size | **No** | User-selectable `UiScale` (§2.3) |
+| dp viewport | Yes | Reference 960×540dp + density-sanity guard (§2.4) |
+| Overscan | Not reliably | Fixed safe-area inset (§2.5) |
+| System font scale | Yes | Honored, with a bounded range (§2.6) |
+
+The first row is the honest answer to "make it work on a 26-inch and a 65-inch TV". A 26" TV
+viewed from 5 feet subtends the *same angle* as a 65" viewed from 12 feet — identical apparent
+size, identical ideal type size. The variable that matters is **angular size**, which depends on
+a distance the app cannot measure. Any attempt to infer it from hardware is guesswork.
+
+**So the user declares it.** That is not a cop-out; it is the only correct model, and it also
+serves the bedroom-TV-at-3-feet and the projector-at-20-feet cases that no heuristic would catch.
+
+### 2.3 `UiScale`
+
+```kotlin
+enum class UiScale(val factor: Float) { Compact(0.875f), Standard(1.0f), Large(1.15f) }
+```
+
+- **Default `Standard`**, persisted in DataStore (`core/storage/UiPreferencesStore.kt`) under
+  the existing `igloo_settings` store.
+- Applied as a **multiplier** over one authored table of Standard values. There are not three
+  hand-maintained scale sets — that would be ~120 numbers to keep in sync with this document,
+  and it would drift.
+- Range is bounded by the 960×540dp viewport: the 236dp nav spine becomes 207 / 236 / 271dp,
+  leaving ≥689dp of content pane. Beyond ~1.2 the shell stops fitting.
+
+⚑ *Android-originated: the web has no equivalent. The three factors were chosen to be
+perceptible but non-destructive at 960×540dp.*
+
+### 2.4 Density-sanity guard
+
+Some TV sticks, cheap boxes, and misconfigured emulators report **density 1.0**, which turns a
+1080p panel into a **1920×1080dp** viewport. A layout tuned for 960dp would render at half its
+intended apparent size — everything tiny and unreadable at 10 feet.
+
+```kotlin
+/** Sticks/boxes reporting density 1.0 show a 1080p panel as 1920x1080dp. */
+internal fun viewportFactor(widthDp: Float): Float =
+    if (widthDp >= 1200f) (widthDp / 960f).coerceAtMost(2f) else 1f
+```
+
+**The two multipliers stay separate.** `UiScale` is the user's apparent-size preference;
+`viewportFactor` corrects a misreporting device. Most tokens are multiplied by both, but the
+safe area (§2.5) is multiplied by **only the viewport factor** — verified on hardware, see §2.5.
+
+The 1200dp threshold sits well above any legitimate TV viewport and well below the 1920dp
+failure case, so normal devices never trigger it. The 2.0 cap stops absurd values.
+
+This is a **guard, not a breakpoint**. It corrects a misreporting device back to the reference
+size; it does not lay anything out differently. Layout shape never changes with viewport — that
+is what `UiScale` is for.
+
+### 2.5 Safe area (overscan)
+
+Older and some current TVs crop the edges of the signal. The convention is a **5% inset**:
+
+```
+safeArea = PaddingValues(horizontal = 48.dp, vertical = 27.dp)   // exactly 5% of 960x540dp
+```
+
+- Applied via `Modifier.iglooSafeArea()` at the **shell** and on full-screen non-shell surfaces
+  (the auth canvas), **not** globally at the root.
+- **Full-bleed content opts out**: backdrops, poster gradients, and the video player surface
+  must be able to reach the physical edge. Only *chrome and text* need the inset.
+- Rails pad their **content** with the safe area while letting the scroll surface bleed, so
+  cards scroll off the edge instead of stopping short of it.
+- **Ignores `UiScale`** — overscan is a property of the panel, not of the user's preference;
+  shrinking it at `Compact` would push content off a real overscanning TV.
+- **But it does track `viewportFactor`.** Verified on a Shield: at a corrected 1920dp viewport
+  an unscaled 48dp inset is physically *half* the intended 5%, on precisely the devices whose
+  density is already wrong. The inset is a fraction of the panel, so it must follow the
+  correction — it just must not follow the user's preference.
+
+`WindowInsets.safeDrawing` is deliberately *not* used: the app does not go edge-to-edge, TV
+insets are ~0, and combining the two double-pads. It is the escalation path if a device ever
+reports a real display cutout.
+
+### 2.6 System font scale
+
+Text is authored in `sp`, so the system font-scale setting applies automatically — and it
+compounds with `UiScale`. Three mechanisms keep that from breaking layouts:
+
+1. **Type stays in `sp`.** Never convert a text size to `dp` to "stabilize" it. That silently
+   opts the user out of an accessibility setting.
+2. **Fixed heights are minimums.** Use `Modifier.heightIn(min = …)`, never
+   `Modifier.height(…)`, on anything that contains text. This is the real fix — it lets a
+   control grow instead of clipping its label.
+3. **Font scale is clamped to `[0.85, 1.30]`** by providing a modified `Density` at the theme.
+
+Point 3 is a deliberate trade-off and is stated openly in §12 rather than buried in code. The
+short version: `UiScale.Large` stacks on top of the clamp, so effective text still reaches
+~1.5×, and it does so through a path the layout is designed for. Revisit this if point 2 alone
+proves sufficient in practice.
+
+### 2.7 What scales and what does not
+
+| Scaled by `UiScale` | Not scaled by `UiScale` |
+|---|---|
+| spacing, radius | `layout.safeArea` — fraction of the panel; follows `viewportFactor` only |
+| type sizes and line heights | `focus.ringWidth` / `restWidth` — hairlines must stay hairlines |
+| component sizes (control/field/nav heights, icons) | `radius.pill` — a sentinel (999dp), not a dimension |
+| layout widths (spine, poster, card) | `motion.*` durations — time, not size |
+| | `layout.gridColumns` — an integer, and inverse (see below) |
+
+`gridColumns` is the one place a discrete authored value is genuinely right: bigger UI means
+*fewer* columns, and the relationship is not linear. **Compact 6 / Standard 5 / Large 4.** ⚑
+
+### 2.8 Writing a dimension
+
+- **Used in ≥2 files** → it is a token. Add it here and to `core/design/`.
+- **Genuinely used once** → `42.dp.scaled()`. This keeps one-offs scaling correctly without
+  a 40-entry token dump of values nobody else needs.
+- **Never** a bare `.dp` literal on anything with a visual size. The only bare literals left
+  should be inside `core/design/` itself.
+
+---
+
+## 3. Color
+
+15 semantic slots, implemented in `core/design/IglooColors.kt`. Tokens are paired (surface +
+foreground) so contrast is structural rather than per-call-site.
 
 | Token | Dark (default) | Light | Role |
-|-------|----------------|-------|------|
+|---|---|---|---|
 | `background` | `#0A1322` | `#F2F7FC` | App canvas |
 | `foreground` | `#F8FAFC` | `#0A1322` | Primary text |
 | `card` | `#15233A` | `#FFFFFF` | Raised surface |
-| `card-foreground` | `#F8FAFC` | `#0A1322` | Text on cards |
-| `popover` | `#1B2B45` | `#FFFFFF` | Overlay surface |
-| `popover-foreground` | `#F8FAFC` | `#0A1322` | Text on overlays |
+| `cardForeground` | `#F8FAFC` | `#0A1322` | Text on cards |
 | `primary` | `#38BDF8` (glacier) | `#0369A1` | Primary actions / brand |
-| `primary-foreground` | `#08131F` | `#FFFFFF` | Text on primary |
-| `secondary` / `muted` / `accent` | `#0F1A2E` | `#E3EDF7` | Subtle surfaces |
-| `muted-foreground` | `#8094AE` | `#475569` | Secondary text |
+| `primaryForeground` | `#08131F` | `#FFFFFF` | Text on primary |
+| `muted` | `#0F1A2E` | `#E3EDF7` | Subtle surface |
+| `mutedForeground` | `#8094AE` | `#475569` | Secondary text |
 | `border` | `#2A3C57` | `#CBD9E8` | Borders |
-| `input` | white @ 8% | `#CBD9E8` | Input borders |
 | `ring` | `#38BDF8` | `#0EA5E9` | **The one focus color** |
+| `aurora` | `#F59E0B` | `#F59E0B` | Warm accent, used sparingly |
+| `auroraForeground` | `#08131F` | `#08131F` | Text on aurora |
+| `sidebar` | `#0F1A2E` | `#E8F1FA` | Nav spine chrome |
+| `sidebarPrimary` | `#38BDF8` | `#0369A1` | Active nav item |
 | `destructive` | `#F87171` | `#DC2626` | Danger / delete |
-| `destructive-foreground` | `#08131F` | `#FFFFFF` | Text on destructive |
-| `aurora` | `#F59E0B` | `#F59E0B` | Warm accent (sparing) |
-| `aurora-foreground` | `#08131F` | `#08131F` | Text on aurora |
-| `success` | `#34D399` | `#059669` | Success state |
-| `success-foreground` | `#08131F` | `#08131F` | Text on success |
-| `accent-teal` | `#2DD4BF` | `#0D9488` | Secondary accent |
-| `accent-teal-foreground` | `#08131F` | `#08131F` | Text on accent-teal |
-| `sidebar` | `#0F1A2E` | `#E8F1FA` | Sidebar chrome |
-| `sidebar-primary` | `#38BDF8` | `#0369A1` | Active sidebar item |
-| `chart-1..5` | glacier / teal / aurora / success / danger | same families | Data viz |
 
 Notes:
-- `aurora` and `aurora-foreground` are **identical in both themes**.
-- `ring` is deliberately a single focus color across the whole app (glacier blue).
-- Many usages apply alpha at the call site via Tailwind's `/NN` modifier
-  (`bg-primary/90`, `ring-ring/50`, `bg-black/30`). In Compose these become
-  `Color.copy(alpha = …)` — see §2.
-- **Untokenized exceptions to be aware of** (do not hunt for a token for these):
-  - `boot.css` splash-message greys `#64748B` (light) / `#94A3B8` (dark) are
-    hardcoded, not drawn from `muted-foreground`.
-  - The media cards use raw black/alpha + white over posters: `MovieCard` uses
-    `bg-black/30` (dim overlay), `text-white`, and a `from-black/90` poster gradient;
-    `AlbumCard` uses `bg-black/40` (dim overlay). Both share `shadow-black/30`.
-    White-on-darkened-poster is a legitimate over-media pattern; port it as literal
-    black/alpha + white, not tokens.
-- All token pairs pass their contrast budget in both themes (verified by
-  `contrast.test.ts`); e.g. `success-foreground` on `success` measures ~4.96:1 (light)
-  and ~9.73:1 (dark).
 
-### 1.3 Typography
+- `aurora` / `auroraForeground` are **identical in both themes** — intentional.
+- `ring` is the single focus color across the entire app. Do not introduce a second.
+- **Not ported from web**: `success`, `accentTeal`, `popover`, `chart-1..5`. No feature needs
+  them. Add the slot to `IglooColors` (and this table) when one does — do not reach for a
+  near-miss token in the meantime.
 
-- **Font family**: `Inter`, then a system-UI fallback stack. Defined **only** in
-  `boot.css` on `body` (`Inter, ui-sans-serif, system-ui, -apple-system,
-  BlinkMacSystemFont, "Segoe UI", sans-serif`), with `-webkit-font-smoothing:
-  antialiased`. It is **not** a CSS custom property / token.
-- **Scale**: Tailwind's default type scale, used as utility literals (there is no
-  custom font-size token in CSS). Actual usage: `text-sm` and `text-xs` dominate
-  body/secondary text; `text-lg`/`text-xl`/`text-2xl` for section and card titles;
-  `text-3xl`–`text-5xl` for hero/page headings.
-- **Weights**: `font-medium` (controls/labels), `font-semibold` (titles).
-- Headings frequently use tight tracking (`tracking-tight` / `-0.02em`) and
-  `line-clamp-{n}` for truncation. Over-media text uses `drop-shadow-lg` +
-  `text-white` for legibility on posters.
+### 3.1 Alpha conventions
 
-> For a 10-foot TV UI, bump the base type up: TV viewing distance means body copy
-> should be materially larger than the web's `text-sm`/`text-xs`. Keep the *hierarchy*
-> (medium controls, semibold titles, tight heading tracking); scale the absolute sizes.
+Alpha is applied at the call site with `Color.copy(alpha = …)`. These values are already in use
+and are the vocabulary — reuse them rather than inventing neighbors:
 
-### 1.4 Spacing, radius, elevation
+| Alpha | On | Meaning |
+|---|---|---|
+| `0.72f` | `card` | **Focused fill** — the standard focus background |
+| `0.96f` | `card` | Focused fill on an already-elevated card |
+| `0.18f` | `primary` | **Selected** (persistent state, distinct from focus) |
+| `0.40f` | `primary` | Disabled control |
+| `0.60f` | `mutedForeground` | Placeholder text |
+| `0.10f` / `0.25f` | `destructive` | Inline error card fill / border |
+| `0.16f` / `0.48f` | `aurora` | Badge fill / border |
+| `0.20f` | `ring` | Focus glow (§6) |
 
-- **Radius**: base `--radius: 0.625rem` (10px) — the only non-color scale that is an
-  actual CSS token. Aliases: `sm = radius−4px` (6px), `md = radius−2px` (8px),
-  `lg = radius` (10px), `xl = radius+4px` (14px). Cards use `rounded-xl`;
-  buttons/inputs `rounded-md`; pills `rounded-full`.
-- **Spacing**: standard Tailwind 4px scale used as utility literals (`gap-2`, `px-4`,
-  `py-6`, etc.) — **not** tokenized. Cards default to `py-6` with `px-6` sections and
-  `gap-6` between blocks.
-- **Elevation**: `shadow-xs/sm/md/lg/xl/2xl`. Interactive media cards add a colored
-  glow on hover (`hover:shadow-primary/20`) — this becomes a **focus** glow on TV.
+**Focus vs selected is a real distinction**: `card @ 0.72` means "the remote is here right now";
+`primary @ 0.18` means "this is the active destination". Both can be true at once, and the nav
+spine renders them together.
 
-### 1.5 Motion
+### 3.2 Color over media
 
-Centralized in `web/src/lib/constants.ts` as `MOTION_*` / `CARD_*` class constants
-and duration tokens:
+White-on-darkened-poster is a legitimate pattern that does **not** get tokens, because it must
+not track the theme — a poster looks the same in light and dark mode. Use literals:
 
-- Durations: `MOTION_DURATION_MICRO_MS = 150`, `MOTION_DURATION_STANDARD_MS = 200`,
-  `MOTION_DURATION_PAGE_MS = 300`.
-- Transitions are property-scoped (e.g.
-  `transition-[background-color,border-color,color,box-shadow,opacity]`) rather than
-  `transition-all`.
-- **Every** animation includes a `motion-reduce:` fallback that disables or
-  neutralizes it. This is a hard accessibility rule (see §1.7).
-- Reusable patterns: `CARD_SURFACE_CLASS` (hover lift + glacier glow),
-  `CARD_MEDIA_HOVER_CLASS` (poster zoom), `MOTION_PAGE_ENTER_CLASS`,
-  `MOTION_MEDIA_OVERLAY_ENTER_CLASS`, `MOTION_PLAYER_CHROME_ENTER_CLASS`, etc.
-
-### 1.6 Component variants (the contract)
-
-The `Button` (`web/src/components/ui/button.tsx`) is the clearest expression of the
-system. Variants: `default`, `destructive`, `outline`, `secondary`, `ghost`, `link`,
-`accent`, `accent-pill`, `aurora`. Sizes: `default`, `xs`, `sm`, `lg`, plus icon sizes
-`icon`, `icon-xs`, `icon-sm`, `icon-lg`. All share a base with focus-ring
-(`focus-visible:ring-ring/50 ring-[3px]`), disabled opacity, and `aria-invalid`
-styling.
-
-Other tokenized primitives: `Card`, `Dialog`/`Sheet`/`AlertDialog`, `Select`,
-`DropdownMenu`, `Tabs`, `Tooltip`, `Popover`, `Alert`, `Input`, `Checkbox`, `Avatar`,
-`Pagination`, `Skeleton`, `Spinner`, `Sidebar`. Tabs everywhere share one look:
-`bg-muted/50` pill container, active trigger `bg-primary text-primary-foreground
-shadow-primary/20`. Shared cross-component class strings (select trigger styling, card
-surfaces) are exported as constants from `constants.ts`.
-
-### 1.7 Accessibility (non-negotiable)
-
-- A single, consistent focus ring (`ring`) with `focus-visible:ring-[3px]` /
-  `ring-2 ring-offset-2`.
-- `motion-reduce:` on every transition/animation.
-- Contrast budget enforced in CI by `contrast.test.ts`: body text ≥ 7:1 (AAA), all
-  other foreground/surface pairs ≥ 4.5:1 (AA) — in **both** themes.
-- Live regions (`LiveAnnouncer`), skip links, ARIA semantics are preserved throughout
-  (see `CLAUDE.md`).
-
-> On Android TV, accessibility centers on **TalkBack** and **clear focus visibility**
-> rather than pointer focus rings. Reuse the `ring` glacier color as the focus
-> highlight, keep the motion-reduce rule (§2.3), and preserve content descriptions on
-> every focusable/actionable element.
+- Poster dim overlay on focus: `Color.Black.copy(alpha = 0.30f)` (video) / `0.40f` (album art)
+- Title gradient over poster: `Brush.verticalGradient` to `Color.Black.copy(alpha = 0.90f)`
+- Text over media: `Color.White`, with a shadow for legibility
 
 ---
 
-## 2. Rebuilding on Android TV with Jetpack Compose
+## 4. Typography
 
-Compose has no Tailwind, no CSS variables, no OKLCH, and no `@media`-driven theming.
-The strategy is to **port the semantic tokens to an immutable Kotlin theme object,
-expose the active theme via a `CompositionLocal`, and consume tokens through it** —
-mirroring the web system 1:1 so the two clients stay conceptually aligned. Because this
-is a **TV** target, the single biggest translation is **hover → d-pad focus** (§2.2).
+Six styles, implemented in `core/design/IglooTypography.kt`. Family is the system sans
+(`FontFamily.SansSerif`) except the pairing code, which is monospace.
 
-Toolkit: build on **`androidx.tv.material3`** (the TV variant of Material 3, with
-`Surface`, `Card`, `Button`, `Tab`, and TV-aware focus/indication) plus
-`Modifier.focusable()`, `Modifier.onFocusChanged`, and focus restoration
-(`FocusRequester` / `focusRestorer`). Use `androidx.tv.foundation` lists
-(`TvLazyColumn` / `TvLazyRow`) for the horizontal/vertical rails.
+**Standard** column is authored; Compact and Large are derived by multiplier and shown for
+reference.
 
-### 2.1 Tokens as a Compose theme
+| Style | Size / line height | Weight | Compact | Large | Use |
+|---|---|---|---|---|---|
+| `displayCode` | 64 / 76sp, +10sp tracking, mono | Bold | 56 / 67 | 74 / 87 | Quick-connect pairing code only |
+| `titleLarge` | 34 / 40sp | SemiBold | 30 / 35 | 39 / 46 | Screen headings |
+| `titleMedium` | 24 / 30sp | SemiBold | 21 / 26 | 28 / 35 | Section and card titles |
+| `bodyLarge` | 18 / 24sp | Medium | 16 / 21 | 21 / 28 | Emphasized body, control labels |
+| `bodyMedium` | 16 / 22sp | Normal | 14 / 19 | 18 / 25 | Body copy — **the floor** |
+| `label` | 15 / 20sp | SemiBold | 13 / 18 | 17 / 23 | Nav items, chips, metadata |
 
-- Represent each theme as an **immutable data object** of `Color` tokens — one for
-  light, one for dark — mirroring the table in §1.2. Compose `Color(0xFFxxxxxx)` takes
-  ARGB hex; the OKLCH → hex conversion is already done (use the hexes in §1.2
-  directly). No runtime OKLCH is needed.
-- Expose the active theme via a `CompositionLocal` (e.g. `LocalIglooColors`), the
-  Compose analog of the `.dark` class. Select the palette from a mode state that
-  **defaults to dark** and is persisted with **DataStore** under the key `igloo-theme`
-  (same key/semantics as the web `localStorage`). Hydrate on launch before the first
-  frame to avoid a flash.
-- Non-color scales are theme-independent constants: `radius` (sm 6 / md 8 / lg 10 /
-  xl 14 dp), the Tailwind 4px `spacing` steps, a font-size scale (scaled up for TV per
-  §1.3), and `duration` (micro 150 / standard 200 / page 300 ms).
-- **Alpha modifiers**: the web applies alpha at the call site (`bg-primary/90`,
-  `ring-ring/50`, `bg-black/30`). In Compose use `token.copy(alpha = 0.90f)` etc., or
-  precompute the common ones.
+Rules:
 
-### 2.2 The 10-foot / d-pad focus model (the heart of a TV port)
+- **16sp is the hard minimum for body copy.** If something needs to be smaller to fit, the
+  layout is wrong, not the type. `label` at 15sp is the single exception and is reserved for
+  short non-prose strings (nav labels, chips) — never a sentence.
+- **No new style without editing this table first.** `AGENTS.md` forbids inventing theme
+  tokens; adding a `TextStyle` in a feature package is exactly that. Two are anticipated and
+  deliberately not added yet: `caption` (metadata chips) and a hero `display`. Add them when a
+  feature actually needs one.
+- Headings are SemiBold; controls and labels are Medium or SemiBold. Nothing is Light or Thin —
+  thin strokes disintegrate at 10 feet.
 
-The web UI leans heavily on **pointer hover**, which does not exist on a TV remote.
-Every hover affordance must become a **focus** affordance. The good news: the web
-already pairs hover with `focus-within` on the cards, so the *intent* is consistently
-"reveal/emphasize the active item" — on TV that trigger is simply d-pad focus.
+### 4.1 Truncation
 
-| Web pattern | Android TV / Compose equivalent |
-|-------------|---------------------------------|
-| `group-hover` / `group-focus-within` overlay + center Play button reveal | Track focus with `Modifier.onFocusChanged`; show the dim overlay + Play affordance when the card (or its focus group) is focused |
-| `group-hover:scale-105` poster zoom | `animateFloatAsState` scale ~`1.05f` driven by focus state |
-| `hover:-translate-y-1` + `hover:shadow-primary/20` lift + glacier glow | Focused elevation/scale + a glow/border using the `ring` glacier color (`androidx.tv.material3` `Surface` scale/glow/border indication) |
-| `focus-visible:ring-[3px]` (the single `ring` color) | The TV focus highlight — one consistent glacier border/glow reused everywhere |
-| `TrackItem` Play button hidden until hover (musician/album variants) | Always show it, or reveal on **row focus** — never gate an action behind hover |
-| Idle-hide player chrome on pointer move (`useIdleControls`) | Show chrome on any d-pad/media-key event; auto-hide after an idle timeout |
+`IglooText` defaults to `TextOverflow.Ellipsis` with unbounded `maxLines`, so it only truncates
+when *height*-constrained — which, given §2.6 point 2, should be rare. Where truncation is
+intended, say so explicitly with `maxLines`:
 
-Also design **focus restoration** (returning to the last-focused card when coming back
-to a rail/grid) and **spatial d-pad traversal** across the sidebar ↔ content boundary.
+- Card titles: `maxLines = 2`
+- Nav labels, list rows: `maxLines = 1`
+- Hero copy, the pairing code, error messages: **never truncate** — pass
+  `overflow = TextOverflow.Visible` and let the container grow.
 
-### 2.3 Web → Compose mapping table
-
-| Web (Tailwind / CSS) | Jetpack Compose equivalent |
-|----------------------|----------------------------|
-| `bg-card`, `text-card-foreground` | `colors.card`, `colors.cardForeground` from the `CompositionLocal` |
-| `text-foreground` | `colors.foreground` |
-| `.dark` class toggle | mode state → `CompositionLocal` palette (default dark) |
-| `bg-primary/90` (alpha modifier) | `colors.primary.copy(alpha = 0.90f)` |
-| `rounded-xl` | `RoundedCornerShape(radius.xl)` (14.dp) |
-| `shadow-lg` / `hover:shadow-primary/20` | `Surface` tonal/shadow elevation; focus glow via TV `Surface` glow/border |
-| `gap-6`, `px-6`, `py-6` | `Arrangement.spacedBy(24.dp)`, `Modifier.padding(...)` |
-| `transition-* duration-200` | `animate*AsState(tween(durationMillis = 200))` |
-| `motion-reduce:` | check `Settings.Global.ANIMATOR_DURATION_SCALE == 0` (or accessibility reduce-motion) → skip/snap the animation |
-| `focus-visible:ring-*` | focus-driven indication reusing the `ring` color (§2.2) |
-| `bg-linear-to-t from-black/90` gradient | `Brush.verticalGradient(...)` as a `Box` overlay |
-| `drop-shadow-lg` on text | `TextStyle(shadow = Shadow(...))` |
-| `line-clamp-2` | `Text(maxLines = 2, overflow = TextOverflow.Ellipsis)` |
-| `aspect-2/3` | `Modifier.aspectRatio(2f / 3f)` |
-| `backdrop-blur` | `Modifier.blur(...)` / a blurred image layer (or a solid scrim) |
-| `group-hover` reveals | focus state, not touch/hover (§2.2) |
-| remote images (posters/backdrops) | Coil (`AsyncImage`) |
-
-### 2.4 Things that do not translate (and what to do)
-
-- **Hover & `group-hover`**: no hover on a remote. Drive every reveal/emphasis from
-  **focus** (§2.2). The poster "reveal on hover" overlays become "reveal on focus."
-- **Pointer focus rings (`ring`)**: replace with the platform focus engine's visible
-  focused-item style, reusing the `ring` glacier color for a consistent highlight.
-- **OKLCH & alpha modifiers**: pre-convert all tokens to hex (done in §1.2); apply
-  alpha with `Color.copy(alpha = …)`.
-- **`@media (prefers-reduced-motion)`**: replace with the Android animator-duration /
-  reduce-motion check before running any animation — this preserves the web's hard
-  `motion-reduce` rule.
-- **Tailwind utility-merging (`cn`/`tailwind-merge`)**: replace with `Modifier` chains;
-  later modifiers refine earlier ones, which is the Compose analog of "last class wins."
-- **Text entry** (search, login): a full keyboard is painful on a remote. Prefer the
-  TV leanback/on-screen keyboard and keep text entry to the few places that need it
-  (login, search).
+Truncation is a **visual** defect only — `BasicText` still exposes the full string to TalkBack.
+It is still a defect.
 
 ---
 
-## 3. App UI & UEX
+## 5. Spacing, radius, sizes, icons
 
-What to build. This section describes the actual product surfaces so a Compose team
-knows the screens, navigation, and flows. Web file paths are cited for reference — read
-them for exact layout details.
+All in `core/design/IglooDimens.kt`. All scale with `UiScale` unless marked.
 
-### 3.1 Navigation spine & shell
+### 5.1 Spacing — a 4dp step
 
-- **Auth boundary**: all real content lives under the pathless `_auth` route
-  (`web/src/routes/_auth/route.tsx`), whose `beforeLoad` redirects unauthenticated
-  users to `/login`. `/login` (`web/src/routes/login.tsx`) redirects back in if already
-  authed. So the top-level split is **login (no chrome)** vs **authenticated app (full
-  shell)**.
-- **Shell** (`web/src/components/AppShell.tsx`): a persistent **left sidebar** + a right
-  content pane with a **sticky top header** and a single scrolling content column that
-  renders the active route.
-- **Sidebar** (`web/src/components/app-sidebar.tsx`) — the primary navigation. Six
-  destinations, each icon + label: **Home** (`/`), **Movies** (`/movies`), **TV Shows**
-  (`/tv-shows`), **Music** (`/music`), **Photos** (`/photos`), **Settings**
-  (`/settings`). Header shows an "I" logo tile + "Igloo" wordmark; footer has **Logout**.
-  Active item: `bg-sidebar-accent` + primary-colored icon; inactive: muted.
-- **Header** (`web/src/components/Header.tsx`): a **search** form (submits to
-  `/search?q=…`), a **notification bell**, and the **theme toggle** (light/dark).
+| Token | Standard |
+|---|---|
+| `xs` | 4dp |
+| `sm` | 8dp |
+| `md` | 16dp |
+| `lg` | 24dp |
+| `xl` | 32dp |
+| `xxl` | 48dp |
 
-> **On TV**: the sidebar is the primary **vertical d-pad nav spine** (six
-> destinations). The mobile-overlay/hamburger behavior is irrelevant; treat it as an
-> always-present left rail. D-pad **right** from the rail enters the content grid;
-> **left** from the first content column returns focus to the rail.
+Card interiors use `xl`; blocks within a card separate by `lg`; inline pairs by `md` or `sm`.
 
-### 3.2 Key screens
+*Rounding note*: `4.dp × 0.875 = 3.5 → 4`, so `xs` is identical at Compact and Standard. That is
+expected, not a bug.
 
-- **Home** (`_auth/index.tsx`) — dashboard: a welcome hero panel, then stacked
-  **horizontal card rows** (`WatchRooms`, `LatestMovies`, `LatestAlbums`,
-  `MoviesInTheaters`). This row-of-rails layout is the most TV-native screen — a strong
-  model for the TV home.
-- **Movies index** (`_auth/movies/index.tsx`) — header + stats + a "More" menu, then a
-  **3-tab** control (All Movies / Genres / Playlists; tab state in the URL). All Movies
-  is a **poster grid** (2→6 columns responsive) with A–Z/Z–A sort and pagination.
-- **Movie detail** (`_auth/movies/$id/index.tsx`) — the richest screen: a **full-bleed
-  backdrop** with a bottom `from-background` gradient scrim, content pulled up over it,
-  **two-column** on wide (poster left; title/tagline/**metadata chips**/genres/**hero
-  actions** right). Hero actions (`MovieDetailsHeroActions.tsx`): **Play** (→
-  `/movies/$id/play` with resolved mode/audio/subtitle params), **Watch/Watched**
-  toggle, **Like**, and a **More** menu (Playback Settings, Watch Together, Edit
-  [admin], Technical Details, Delete [admin]). Below: `CastSection`,
-  `MovieChaptersSection`, extra details, YouTube videos, production companies.
-- **Music** (`_auth/music/index.tsx`) — header + stats + a "More" menu, then **4 tabs**:
-  **Musicians** (grid of circular cards), **Albums** (grid of square cards), **Tracks**
-  (a **window-virtualized** flat list with A–Z letter headers + Play all / Shuffle all),
-  **Playlists**. Album detail (`_auth/music/album.$id.tsx`) and Musician detail
-  (`_auth/music/musician.$id.tsx`) follow the backdrop + hero + list pattern.
-- **Settings** (`_auth/settings/route.tsx`) — a **tab bar** (General / Account /
-  Libraries / Playback / Users) whose tabs are child routes; **Users** is admin-only.
-- **Search results** (`_auth/search/index.tsx` loader + `index.lazy.tsx` UI) — reached
-  from the header search form (`?q=…`). A heading ("Search results for '{query}'") over a
-  **5-tab** control (**All / Movies / Albums / Musicians / Tracks**; `tab` + `page` in the
-  URL). The **All** tab stacks up to four sections (movies/albums/musicians/tracks), each
-  with a count and a **"See all →"** link into that category's own tab; the per-category
-  tabs are paginated grids/lists reusing `MovieCard` / `AlbumCard` / `MusicianCard` /
-  `TrackItem`. `SEARCH_PER_PAGE = 24`, with numbered `LibraryPagination` (not infinite
-  scroll). Before any query it shows a prompt; no matches shows a centered empty state.
-- **Login** (`login.lazy.tsx`) — full-bleed background image + dark overlay, a centered
-  card (logo, email + password with show/hide, accent "Sign in").
-- **TV Shows** and **Photos** are `ComingSoon` placeholders today.
+### 5.2 Radius
 
-### 3.3 Media card anatomy
+| Token | Standard | Use |
+|---|---|---|
+| `sm` | 6dp | Small chips |
+| `md` | 8dp | Dense inline elements |
+| `lg` | 10dp | **Buttons, inputs, nav rows, brand tile** |
+| `xl` | 14dp | Cards, panels, surfaces |
+| `pill` | 999dp *(unscaled sentinel)* | Fully-rounded badges |
 
-All media cards share style constants in `web/src/lib/constants.ts`
-(`CARD_SURFACE_CLASS`, `CARD_MEDIA_HOVER_CLASS`, `CARD_OVERLAY_REVEAL_CLASS`,
-`CARD_ACTION_REVEAL_CLASS`): a rounded-xl bordered `bg-card` surface, poster zoom
-(`group-hover:scale-105`), and a lift + glacier glow on hover — all of which become
-**focus** treatments on TV (§2.2).
+### 5.3 Component sizes
 
-- **`MovieCard.tsx`** — **2:3 poster** (`aspect-2/3`), `object-cover`. A permanent
-  bottom `from-black/90` gradient carries a white **title** (`line-clamp-2`) + year over
-  the poster. On focus (web: hover/focus-within): a `bg-black/30` dim overlay + a
-  centered circular **Play** button linking straight to `/movies/$id/play`.
-- **`AlbumCard.tsx`** — **square** cover (`aspect-square`), title + artist below. On
-  focus: a `bg-black/40` overlay + a Play button that **plays the album in the global
-  audio player** (not navigation). The card itself links to the album detail.
-- **`MusicianCard.tsx`** — **circular** thumbnail, centered name + "N albums · M
-  tracks". No Play button; focus just zooms + lifts.
-- **`TrackItem.tsx`** — list row, variants `library | playlist | musician | album`. In
-  album variant a track index swaps to a spinner/primary color when playing. **Caveat**:
-  in musician/album variants the Play button is `sm:opacity-0` until hover (`sm:opacity-0
-  sm:group-hover:opacity-100`), so it hides only on `sm`+ screens and is always visible on
-  touch/small screens — on TV, always show it or reveal on **row focus**. Rows also carry a
-  Like heart and an actions menu.
+| Token | Standard | Use |
+|---|---|---|
+| `controlHeight` | 52dp | Buttons — as `heightIn(min=)` |
+| `fieldHeight` | 56dp | Text fields — as `heightIn(min=)` |
+| `navItemHeight` | 44dp | Nav spine rows — as `heightIn(min=)` |
+| `brandTile` | 48dp | The "I" logo tile |
+| `dot` | 10dp | Status / active indicator |
 
-### 3.4 Media playback UX
+Every height here is a **minimum**, never a fixed height (§2.6).
 
-- **Movie player** (`_auth/movies/$id/play.tsx` + `web/src/components/VideoPlayer.tsx`
-  + `MoviePlayerControls.tsx`): the play route resolves playback **mode** (`direct` vs
-  **HLS transcode**), audio track, and subtitle track from user prefs + stream
-  capabilities, then plays via a `<video>` element (HLS.js or native HLS) with
-  start-time seeking, subtitle injection, and HLS session-lost recovery. Layout: a top
-  **header bar** (title + Back) and a bottom **controls footer** that **auto-hide after
-  idle** (`useIdleControls`) and reappear on input. Controls: a **progress/seek bar**,
-  current/total time, Rewind / big Play-Pause / FastForward, a **quality-label chip**, a
-  **chapter menu**, a **volume control**, and a **fullscreen** toggle. A **Resume
-  dialog** offers "Resume" vs "Start from beginning"; progress is persisted and Media
-  Session metadata is set.
-- **Keyboard shortcuts** (`useVideoPlaybackKeyboard.ts`) — the natural **d-pad /
-  media-key mapping for TV**: Space/K play-pause, J/← rewind, L/→ forward, ↑/↓ volume, M
-  mute, F fullscreen, Esc exit, Home/0 restart.
-- **Global audio player** (`web/src/components/AudioPlayer.tsx`, provided app-wide via
-  `AudioPlayerContext`): a **persistent** player — a minimized docked bar (cover,
-  title/artist, prev/play/next, progress, volume) that expands to fullscreen. Album/track
-  Play buttons across the app feed it. It pauses and yields its keys on the video pages.
-- **Watch rooms** (`web/src/components/watch-room/WatchRoomPage.tsx`): **synchronized
-  group watch** — a player panel + a members panel (host badge, connected/away status),
-  with play/pause/seek broadcast over a realtime connection so all members stay in sync.
-  Host can close the room; others leave.
+### 5.4 Icons ⚑
 
-> On Android use **Media3 / ExoPlayer** for playback (it handles HLS + transcode
-> streams and the Media Session), and map the keyboard shortcuts above onto d-pad +
-> the remote's media keys.
+| Token | Standard |
+|---|---|
+| `md` | 24dp |
+| `lg` | 32dp |
 
-### 3.5 UI states — loading, empty, error (cross-cutting)
-
-There is **no single shared `EmptyState`/`ErrorState` component**; each screen inlines its
-states, but they follow a small set of repeated recipes — worth building **once** as shared
-composables on TV.
-
-- **Loading — two tiers.** Route transitions use one app-wide pending component
-  (`RouterPending` → `AppLoadingScreen`: full-screen dim + a centered card with a pulsing
-  glacier `Snowflake`, `role="status"`; wired via `defaultPendingComponent` in `App.tsx`).
-  Within a screen, each query does `if (isLoading) return <XxxSkeleton/>`, and skeletons
-  are **grid-matched to the real layout to avoid layout shift** — e.g. the movies grid
-  skeleton renders `MOVIES_PER_PAGE` placeholder cards in the identical
-  `grid-cols-2 … lg:grid-cols-6`. The placeholder-card recipe (bordered `rounded-xl bg-card`,
-  an `aspect-2/3 bg-muted` poster, two `bg-muted` text bars, `animate-pulse`) recurs across
-  movies/search/music. Primitives: `Skeleton` (`ui/skeleton.tsx`), `Spinner`
-  (`ui/spinner.tsx`, `role="status"`), plus bespoke skeletons (`MovieDetailsSkeleton.tsx`).
-  Shimmer/spin classes (`MOTION_LOADING_STATE_CLASS`, `MOTION_SPINNER_STATE_CLASS` in
-  `constants.ts`) both carry `motion-reduce:animate-none`.
-- **Empty — two variants.** (A) *Minimal*: `py-12 text-center text-muted-foreground` with a
-  large faded lucide icon (`size-10 opacity-50`) + one line ("No movies found in your
-  library."). (B) *Rich CTA* (empty playlists): a gradient icon orb
-  (`bg-linear-to-br from-muted … to-primary/30`), an `<h3>`, a description, and a primary
-  pill button. Empty states also emit a `LiveAnnouncer` message.
-- **Error — inline card + Retry.** Detection is uniform: `isError || isApiFailure(data)`
-  (the API returns an `{ error, data }` envelope; `is-api-failure.ts` catches `error===true`).
-  Shared cards: `MoviesLoadError.tsx` (`role="alert"`, `border-destructive/25
-  bg-destructive/10 text-destructive`, a "Try again" link that calls `refetch()`); detail
-  pages use `MediaNotFound.tsx` (shadcn `Alert variant="destructive"`). **Mutation/action**
-  errors don't render inline — they toast via Sonner (`toast-helpers.ts`
-  `showActionFailed(...)`; top-right, `richColors`, `border-destructive/50` on `bg-card`).
-- **Tab panels cross-fade** on change (`CONTENT_FADE_ENTER/EXIT` via
-  `useContentFadeTransition.ts`).
-
-> **On TV:** build these **once** as shared composables — an `IglooLoading` (grid-matched
-> shimmer), an `IglooEmpty` (icon + text, plus the rich-orb CTA variant), and an
-> `IglooError` (retry button that re-runs the query) — since the web only lacks them by
-> accident. Keep skeletons grid-matched so **focus position doesn't jump** when content
-> arrives. Preserve `motion-reduce` → the Android reduce-motion check (§2.3). Route-level
-> loading → one app pending screen mirroring `AppLoadingScreen`. Announce state changes to
-> **TalkBack** the way `LiveAnnouncer` does on web.
-
-### 3.6 Notifications
-
-- **`NotificationBell.tsx`** (in the header, beside the theme toggle) is a **popover** — not
-  a page or sheet. Trigger: a ghost bell icon button with a glacier **unread badge**
-  (`bg-primary text-primary-foreground` pill, "99+" past 99) shown only when
-  `unreadCount > 0`; the count is also in the button's `aria-label`.
-- **Panel** (`w-80 bg-card`): a header row ("Notifications" + a **"Mark all read"** link when
-  anything is unread), then a `max-h-96` scroll body with states — a non-blocking "Unable to
-  refresh" banner (keeps the stale list), an initial `Spinner`, an empty state ("You're all
-  caught up."), or a `divide-y` list.
-- **Row**: unread rows are tinted `bg-muted/40` and carry a glacier **unread dot**; each
-  shows a **type label** (`movie_request → "Movie request"`, etc.), the message, an optional
-  "From {name}", a right-aligned **relative time**, and a per-row **dismiss (X)** button.
-  Clicking an unread row marks it read.
-- **Data**: the unread-count query **polls every 30 s** (always mounted); the full list query
-  is **`enabled` only while the popover is open** (`staleTime: 0`). Mark-read / mark-all /
-  delete mutations invalidate both query keys; failures toast via `showActionFailed`. Backend
-  contract is the `/api/notifications*` routes (see `docs/openapi.json`).
-
-> **On TV:** a ~320px popover anchored to a header bell can work, but the rows and the X
-> button here **rely on default focus styling** — add explicit d-pad focus treatment (reuse
-> the `ring` glacier highlight, §2.2) to every row-button and dismiss button, and make sure
-> a focused unread row's "mark read" and its dismiss action are both reachable (two focus
-> targets per row). Keep the 30 s badge poll; gate the list fetch on the panel being open. A
-> full side panel may read better than a small popover at 10 feet.
+⚑ *Android-originated. Only two sizes, deliberately: the app has no icon dependency yet, and
+these exist so that the first feature to need one does not invent 26dp.*
 
 ---
 
-## 4. Web-side styling issues found during exploration
+## 6. Focus & interaction
 
-Concrete, fixable inconsistencies in the current web code. Status is current as of this
-revision.
+**Focus is the whole interaction model.** The web client this palette came from leans on hover;
+none of that exists here. Every hover affordance becomes a focus affordance.
 
-1. **Missing token source of truth — STILL OPEN.** `styles.css` (line ~102) cites
-   `docs/igloo-theme.ts` as the "hex source of truth," but **that file does not exist**
-   (nor does `web/src/lib/tokens.ts`) — a **dangling reference**. The hexes only live in
-   CSS comments, so there is no machine-readable token source.
+### 6.1 The one focus treatment
 
-2. **Theme constants duplicated in four places — STILL OPEN.** Kept in sync by hand: the
-   OKLCH tokens (+ hex comments) in `styles.css`, the hexes in `boot.css`, the inline
-   anti-flash script in `index.html`, and `THEME_COLORS`/`THEME_TEXT_COLORS` in
-   `src/lib/theme.ts`. Currently consistent, but a real drift hazard (the code comments
-   acknowledge it).
+| Property | Value | Scaled? |
+|---|---|---|
+| Ring width (focused) | 3dp, `colors.ring` | No |
+| Border width (at rest) | 1dp, `colors.border` | No |
+| Fill (focused) | `colors.card @ 0.72` | — |
+| Scale | 1.05× | No |
+| Glow | `colors.ring @ 0.20`, 16dp elevation | No |
 
-3. **Sonner toaster colors — FIXED.** The toaster (`web/src/components/ui/sonner.tsx`)
-   now uses semantic tokens (`!bg-card`, `!border-success/50`, `!border-destructive/50`,
-   `!text-card-foreground`) instead of the old raw `bg-emerald-900/90` / `bg-red-900/90`
-   / `text-emerald-100`.
+Ring and rest widths are unscaled on purpose: a 2.6dp ring at Compact reads mushy, and a
+hairline must stay a hairline at every scale.
 
-4. **Hardcoded card colors — STILL OPEN.** `MovieCard.tsx` and `AlbumCard.tsx` use raw
-   `bg-black/30`, `bg-black/40`, `text-white`, `from-black/90`, `shadow-black/30`. The
-   white-over-darkened-poster cases are legitimate, but they won't track the palette and
-   have no token equivalent. `boot.css` splash greys (`#64748B` / `#94A3B8`) are
-   similarly untokenized.
+Glow is applied as `Modifier.shadow(elevation, shape, spotColor = colors.ring.copy(alpha = 0.20f))`
+— `spotColor` is available at `minSdk 28`.
 
-5. **Toaster contrast not covered by `contrast.test.ts` — STILL OPEN.** The contrast
-   test guards **token pairs** only; it does not test the toaster's actual rendered
-   combination (`text-card-foreground` on `bg-card` with a translucent success/
-   destructive border), so that could regress silently.
+### 6.2 Converting pointer patterns
 
-6. **Stale "dark-boot / toggle-not-shipped" comment — FIXED.** No such comment remains;
-   the light/dark toggle shipped (`ThemeToggle.tsx`, used in `Header.tsx`).
+| Pointer pattern | TV equivalent |
+|---|---|
+| `hover` overlay + centered Play reveal | Track `Modifier.onFocusChanged`; show dim overlay + Play affordance when the card or its focus group is focused |
+| `hover` poster zoom | `animateFloatAsState` to 1.05×, driven by focus, via `iglooTween` |
+| `hover` lift + colored glow | Focused elevation + glacier glow (§6.1) |
+| Pointer focus ring | The one focus treatment above — no separate style |
+| Action hidden until hover | **Never gate an action behind focus alone.** Show it always, or reveal on *row* focus so it is reachable before it is needed |
+| Idle-hide chrome on pointer move | Show chrome on any d-pad or media-key event; auto-hide after an idle timeout |
 
-7. **No exported numeric scale for spacing/typography — STILL OPEN.** Radius is a token
-   (`--radius` + aliases), but spacing and type rely entirely on Tailwind utility
-   literals scattered across components — there is no single place defining the intended
-   scale (this matters for keeping web and the Android client aligned).
+### 6.3 Focus behavior
+
+- **Restoration**: returning to a rail or grid restores the last-focused item, not the first.
+  Back navigation restores focus to the element that led away.
+- **Spine ↔ content**: d-pad **right** from the spine enters content; **left** from the first
+  content column returns to the spine. This boundary is hand-wired
+  (`FocusRequester` in `feature/home/IglooApp.kt`) and must be preserved.
+- **No traps.** Every focusable region has a reachable exit in every direction that looks like
+  it should work.
+- **Skeletons are grid-matched** (§10) so focus does not jump when content arrives.
+- Order matters: `Modifier.clickable` and `Modifier.onFocusChanged` are order-sensitive. Put
+  focus observation *outside* the clickable so it sees the same focus state the indication does.
 
 ---
 
-## 5. Suggestions for improvements
+## 7. Motion
 
-1. **Create a single token source of truth.** Add `web/src/lib/tokens.ts` (or the
-   `docs/igloo-theme.ts` the comments already promise): one typed object with hex +
-   OKLCH per token. Generate the `styles.css` `:root`/`.dark` blocks, `boot.css`, the
-   `index.html` anti-flash script, and `theme.ts` `THEME_COLORS` from it (or have them
-   import shared constants), eliminating the four-way manual sync — and fix the dangling
-   `styles.css:102` reference.
+| Token | Value | Use |
+|---|---|---|
+| `micro` | 150ms | Focus fill, color, small opacity changes |
+| `standard` | 200ms | Scale, elevation, overlay reveal |
+| `page` | 300ms | Screen and section enter/exit |
 
-2. **Tokenize the remaining raw colors.** Where feasible, replace card `bg-black/*` /
-   `text-white` and the boot splash greys with tokens (add tokens if needed) so they
-   follow the theme and port cleanly. Keep genuinely over-media white/black where it is
-   the correct choice, but document it.
+Easings — two, deliberately:
 
-3. **Extend `contrast.test.ts`** to cover the toaster's rendered success/error
-   combination and any other hardcoded UI colors, keeping the AA/AAA guarantee
-   comprehensive.
+```kotlin
+standard = CubicBezierEasing(0.2f, 0f, 0f, 1f)   // entering, settling
+exit     = CubicBezierEasing(0.4f, 0f, 1f, 1f)   // leaving
+```
 
-4. **Publish the non-color scales as tokens** (spacing, font-size, font-weight,
-   duration) in the same shared module, so the web `@theme`, the boot styles, and the
-   Android theme all consume identical numbers.
+### 7.1 The reduced-motion contract
 
-5. **Own the TV focus model as part of the shared system.** Since the web leans on hover
-   reveals + pointer focus rings and Android TV is a stated target, treat the
-   focus-driven equivalents (reuse the `ring` token for the focused-item highlight,
-   convert every hover reveal to a focus reveal — see §2.2) as a first-class part of the
-   design system rather than a per-client afterthought. Design focus restoration and
-   sidebar ↔ content d-pad traversal up front.
+```kotlin
+@Composable
+fun <T> iglooTween(durationMillis: Int, easing: Easing = IglooEasing.standard): FiniteAnimationSpec<T> =
+    if (LocalIglooReducedMotion.current) snap() else tween(durationMillis, easing = easing)
+```
+
+**Rule: no bare `tween(...)` or raw duration literal in feature code. Always `iglooTween`.**
+This is grep-enforceable and is the reason the helper exists rather than each call site checking
+the flag and forgetting.
+
+Reduced motion reads `Settings.Global.ANIMATOR_DURATION_SCALE == 0f` and observes it live via a
+`ContentObserver`, so toggling the system setting takes effect without an app restart.
+
+### 7.2 What may animate
+
+Focus transitions, overlay reveals, section enters, progress fills. **Not**: anything that moves
+focus itself, anything that delays a user-initiated navigation, or anything looping in the
+periphery while the user is trying to read.
+
+---
+
+## 8. Layout & navigation shell
+
+### 8.1 The shell
+
+A persistent **left nav spine** and a content pane, inside the safe area.
+
+| Token | Standard |
+|---|---|
+| `navSpineWidth` | 236dp |
+| `safeArea` | 48dp × 27dp *(unscaled)* |
+
+At Standard on the 960dp reference viewport: 960 − 96 (safe area) − 236 (spine) = **628dp of
+content pane**. That is the budget. Everything in §8.2 is sized against it.
+
+The spine is the primary vertical d-pad target. It is always present — there is no drawer, no
+hamburger, no overlay mode.
+
+### 8.2 Media geometry
+
+| Token | Standard | Notes |
+|---|---|---|
+| `posterWidth` | 148dp ⚑ | 628dp of pane ⇒ 4 posters + a peek, which cues scrollability |
+| `posterAspect` | 2:3 | `Modifier.aspectRatio(2f / 3f)` |
+| `wideCardWidth` | 264dp | Backdrop / episode cards |
+| `wideAspect` | 16:9 | |
+| `gridColumns` | 6 / 5 / 4 ⚑ | Compact / Standard / Large — *unscaled, and inverse* |
+
+Album art is square (`aspectRatio(1f)`); musician thumbnails are circular. Both use
+`posterWidth` as their base width.
+
+**A partially-visible next card is a feature.** It is the only affordance telling a remote user
+the rail continues.
+
+### 8.3 Rails and grids
+
+> **Use `androidx.compose.foundation`'s `LazyRow` and `LazyColumn`.**
+>
+> `TvLazyRow` / `TvLazyColumn` **do not exist**. They were removed before
+> `androidx.tv:tv-foundation` reached 1.0 — the pinned `1.0.0` artifact contains only
+> `ExperimentalTvFoundationApi`, `TvImeOptionsKt`, and `TvKeyboardAlignment`. Older guidance
+> and blog posts still reference them; **do not reintroduce them**, and do not add
+> `tv-foundation` as a dependency for list purposes.
+
+Grids use `LazyVerticalGrid` with `GridCells.Fixed(IglooTheme.layout.gridColumns)`.
+
+Rails pad content with the safe area and let the scroll surface bleed past it (§2.5).
+
+---
+
+## 9. Components
+
+### 9.1 In-repo primitives (`core/ui/`)
+
+| Composable | Notes |
+|---|---|
+| `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
+| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1 |
+| `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
+| `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
+| `FocusRing` | The single focus border; 3dp focused / 1dp at rest |
+| `IglooQrCode` | Pairing-code QR |
+
+The app deliberately does **not** use Material theming. `IglooTheme` is the only source of
+colors, type, and dimensions.
+
+### 9.2 `androidx.tv.material3` (1.1.0)
+
+Available and appropriate to adopt where it saves hand-rolling:
+
+- `Surface` with `ClickableSurfaceScale` / `Glow` / `Border` — TV-aware focus indication that
+  matches §6.1 if configured with our tokens
+- `Carousel` — featured/hero rotator
+- `NavigationDrawer` — an alternative spine implementation
+- `ListItem`, `TabRow` / `Tab`, `Card`
+
+Adopt these for *behavior*; always configure them with Igloo tokens, never their defaults.
+
+---
+
+## 10. UI states
+
+Build these **once** as shared composables. Three states, one recipe each.
+
+- **`IglooLoading`** — grid-matched skeletons. A movie grid skeleton renders the same column
+  count and the same card aspect as the real grid, so **focus position does not jump** when
+  content arrives. Shimmer goes through `iglooTween`; at reduced motion it is a static block.
+  Route-level loading uses one app-wide pending screen.
+- **`IglooEmpty`** — two variants. *Minimal*: large faded icon + one line ("No movies found in
+  your library."). *Rich CTA*: icon orb, heading, description, and a focusable primary action.
+  Use the rich variant only when there is a real action to offer.
+- **`IglooError`** — inline card, `destructive @ 0.10` fill / `@ 0.25` border, a message, and a
+  **focusable Retry** that re-runs the query. Retry must be reachable by d-pad without leaving
+  the screen.
+
+All three announce themselves to TalkBack when they replace content (§12).
+
+Mutation/action failures do not render inline — they surface as a transient message and must
+also be announced.
+
+---
+
+## 11. Screens & UX
+
+Feature surfaces, in TV terms. Web routes are cited only as a reference for content and field
+names, not for layout.
+
+### 11.1 Auth boundary
+
+Two top-level states: **unauthenticated** (full-bleed auth canvas, no shell) and
+**authenticated** (nav spine + content pane). The auth canvas centers a single card on a
+vertical gradient, scrolls internally if it does not fit, and never shows nav chrome.
+
+Text entry on a remote is painful. Quick-connect pairing is the primary path; email/password is
+the fallback.
+
+### 11.2 Navigation spine
+
+Six destinations, icon + label: **Home**, **Movies**, **TV Shows**, **Music**, **Photos**,
+**Settings**. Brand tile + wordmark at the top, **Sign out** at the bottom.
+
+Active destination uses `primary @ 0.18` fill plus a `sidebarPrimary` icon; the focused row uses
+`card @ 0.72`. Both render simultaneously when the user is focused on the active destination
+(§3.1).
+
+The footer must remain visible at every `UiScale` — at 540dp tall this is the tightest
+constraint in the app and the first thing to break.
+
+### 11.3 Home
+
+Stacked horizontal rails — continue watching, latest movies, latest albums, watch rooms — over
+an optional hero. This is the most TV-native layout in the product and the model for other
+index screens. Vertical d-pad moves between rails; horizontal moves within one; focus is
+restored per-rail on return.
+
+### 11.4 Movies
+
+- **Index** — heading, stats, tab control (All / Genres / Playlists), then a poster grid at
+  `gridColumns` with A–Z sort and pagination. Numbered pagination, not infinite scroll: a
+  remote user needs a bounded, predictable focus target.
+- **Detail** — full-bleed backdrop with a `background` gradient scrim, content pulled up over
+  it. Poster left; title, tagline, metadata chips, genres, and hero actions right. Hero actions:
+  **Play**, **Watched** toggle, **Like**, **More**. Below: cast, chapters, extra details.
+  Play must be the first focused element on entry.
+
+### 11.5 Music
+
+Four tabs: **Musicians** (circular cards), **Albums** (square cards), **Tracks** (flat list with
+letter headers, plus Play all / Shuffle all), **Playlists**. Album and musician detail follow the
+backdrop + hero + list pattern.
+
+Track rows carry a play action, a like toggle, and an overflow menu — **all three focusable**,
+none hidden until focus.
+
+### 11.6 Search
+
+Reached from the spine. A query prompt, then results across **All / Movies / Albums / Musicians
+/ Tracks**. The All tab stacks up to four sections, each with a count and a "See all" into that
+category. Paginated, 24 per page.
+
+Prefer the on-screen keyboard and voice input; keep required text entry to search and login.
+
+### 11.7 Settings
+
+Tabbed child routes: General / Account / Libraries / Playback / Users (admin only).
+
+**General must expose the `UiScale` picker (§2.3) and the light/dark toggle** — without the
+picker, the scale model is inert.
+
+### 11.8 Playback
+
+Media3 / ExoPlayer. Direct play or backend-produced HLS; **never client-side transcoding**;
+preserve audio passthrough.
+
+Chrome is a top bar (title + back) and a bottom control bar that **auto-hide after idle** and
+reappear on any d-pad or media-key event. Controls: seek bar, current/total time, rewind,
+play/pause, fast-forward, quality chip, chapters, volume. A **Resume** dialog offers resume vs.
+start over.
+
+D-pad and media-key mapping:
+
+| Input | Action |
+|---|---|
+| Center / Play-Pause | Play / pause |
+| Left / Rewind | Seek back |
+| Right / Fast-Forward | Seek forward |
+| Up / Down | Show chrome, move between controls |
+| Back | Exit (or dismiss chrome first) |
+
+Progress saves to the backend every 15s, starting only after ~15s of real playback.
+
+### 11.9 Notifications
+
+A badge on the spine when unread. At 10 feet a small anchored popover reads poorly — prefer a
+**full side panel**. Every row is focusable, and a row's "mark read" and its dismiss action are
+**two separate focus targets**. Unread rows are tinted `muted` with a glacier dot.
+
+The unread count polls every 30s; the full list is fetched only while the panel is open.
+
+---
+
+## 12. Accessibility
+
+Non-negotiable. `AGENTS.md` §Accessibility governs; this section covers the design-system side.
+
+- **Every screen works with D-pad only and with TalkBack on.** Both, at TV viewing distance.
+- **Focus visibility** is the accessibility feature on TV, more than any label. One treatment,
+  always visible, never ambiguous (§6.1).
+- **Labels**: every actionable element has a meaningful content description. Media cards
+  announce what matters *in context* — a poster in a grid may need only its title, while a
+  continue-watching card needs title, year, and progress. Decorative images are hidden from
+  the accessibility tree.
+- **No focus traps**, and no custom focus handling that breaks screen-reader traversal.
+- **State changes are announced**: loading → loaded, empty results, errors, and action failures.
+- **Contrast**: body text targets ≥7:1; all other foreground/surface pairs ≥4.5:1, in both
+  themes. The paired token structure (§3) is what makes this hold.
+- **Reduced motion** is honored globally through `iglooTween` (§7.1).
+
+### 12.1 The font-scale clamp — stated openly
+
+System font scale is clamped to **`[0.85, 1.30]`** (§2.6). This bounds a user-facing
+accessibility setting, which deserves an explicit justification rather than silence:
+
+- Android's nonlinear font scaling reaches 2.0×. Combined with `UiScale.Large` that is ~2.3×
+  text inside containers sized for ~1.15× — text would win, and layouts would break in ways
+  that *lose information* rather than enlarge it.
+- The clamp is **1.30, not 1.0** — most of the range is preserved.
+- `UiScale.Large` stacks on top, so effective text still reaches ~1.5×, through a path the
+  layout is explicitly designed and tested for.
+- The `heightIn(min=)` discipline (§2.6 point 2) is the primary defense; the clamp is
+  belt-and-braces.
+
+**This is the design-system decision most worth revisiting.** If the `heightIn` discipline holds
+across the full app, the clamp should be loosened or removed.
+
+---
+
+## Appendix A — web parity
+
+The Igloo web client (`../Igloo/web`) is the origin of the **palette only**. It is a pointer-and-
+mouse product; its type scale, spacing, component sizes, and hover affordances do not transfer,
+and this document does not mirror them.
+
+| Concept | Web | Here |
+|---|---|---|
+| Tokens | CSS custom properties, OKLCH | `IglooColors` data class + `CompositionLocal` |
+| Theme switch | `.dark` class on `<html>` | Palette selected from persisted mode, dark default |
+| Alpha | `bg-primary/90` | `Color.copy(alpha = 0.90f)` |
+| Radius | `--radius` + aliases | `IglooTheme.radius` |
+| Reveal trigger | `hover` / `group-hover` | **Focus** (§6) |
+| Reduced motion | `motion-reduce:` variant | `iglooTween` (§7.1) |
+| Focus ring | `focus-visible:ring-[3px]` | The one focus treatment (§6.1) |
+| Lists | CSS grid, responsive breakpoints | `LazyRow`/`LazyColumn`/`LazyVerticalGrid` + `gridColumns` |
+| Type scale | Tailwind utility literals | Six authored styles (§4) |
+
+Shared: the 15 color values, the three motion durations (150/200/300ms), the 1.05× focus scale,
+and the 0.20 focus-glow alpha.
+
+**Web-side styling issues are tracked in the Igloo repo, not here.** That repo is a sibling
+checkout and is out of scope for this one; do not modify it. The one parity risk worth knowing:
+the web palette has no machine-readable token source — the hexes live in CSS comments — so a
+web palette change will not announce itself. Re-verify §3 against `web/src/assets/styles.css`
+when syncing, and update the "Last verified" stamp at the top of this document.
+
+---
+
+## Appendix B — token→code index
+
+| Token group | Defined in |
+|---|---|
+| Colors (§3) | `core/design/IglooColors.kt` |
+| `UiScale`, `viewportFactor`, `effectiveScale` (§2) | `core/design/UiScale.kt` |
+| Spacing, radius, sizes, icons, focus, layout (§5, §6, §8) | `core/design/IglooDimens.kt` |
+| Type styles (§4) | `core/design/IglooTypography.kt` |
+| Durations, easings, `iglooTween` (§7) | `core/design/IglooMotion.kt` |
+| `IglooTheme` accessors, `iglooSafeArea()`, `Dp.scaled()` | `core/design/IglooTheme.kt` |
+| `UiScale` persistence (§2.3) | `core/storage/UiPreferencesStore.kt` |
+
+Unit tests in `app/src/test/java/.../core/design/` assert that the Standard values in §4 and §5
+match the code exactly. **If you change a number in this document and the tests still pass, you
+forgot to change the code.**
+
+---
+
+## Changelog
+
+**2026-08-02 — TV-first rewrite.**
+
+- Restructured from a web→Android porting memo into a TV design system. Web material reduced to
+  Appendix A.
+- **Added §2 (Screen & scale model)** — previously absent. Records that Android TV reports
+  ~960×540dp regardless of physical size, and introduces `UiScale`, the density-sanity guard,
+  the safe area, and the font-scale policy.
+- **Removed the claim that non-color scales are "theme-independent constants."** That statement
+  was the reason `radius`/`spacing`/`typography` were compile-time constants that could not vary
+  by user preference or viewport.
+- **Added concrete TV numbers** for type, spacing, component sizes, focus, motion, and layout
+  geometry. These previously existed only in Kotlin, making the code the de-facto source of
+  truth in contradiction of `AGENTS.md`.
+- **Corrected**: guidance to use `TvLazyColumn`/`TvLazyRow` from `androidx.tv.foundation`. Those
+  APIs do not exist in the pinned 1.0.0 artifact (§8.3).
+- Collapsed the former §4/§5 (web-repo issue list and suggestions) into the parity note in
+  Appendix A.

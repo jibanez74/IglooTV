@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.UiScale
+import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.feature.auth.AppAuthState
 import com.igloo.blindpenguincoder.feature.auth.LoginViewModel
@@ -30,7 +32,10 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun IglooRoot(container: IglooAppContainer) {
-    IglooTheme {
+    val uiScale by container.uiPreferencesStore.uiScale
+        .collectAsStateWithLifecycle(initialValue = UiScale.Standard)
+
+    IglooTheme(uiScale = uiScale) {
         val sessionManager = container.sessionManager
         val authState by sessionManager.state.collectAsStateWithLifecycle()
 
@@ -89,7 +94,7 @@ private fun LoadingSplash() {
     ) {
         Box(
             modifier = Modifier
-                .size(64.dp)
+                .size(64.dp.scaled())
                 .clip(RoundedCornerShape(IglooTheme.radius.xl))
                 .background(colors.primary),
             contentAlignment = Alignment.Center,

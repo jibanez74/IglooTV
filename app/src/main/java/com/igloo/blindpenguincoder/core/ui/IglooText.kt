@@ -14,12 +14,13 @@ fun IglooText(
     color: Color,
     modifier: Modifier = Modifier,
     maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Ellipsis,
 ) {
     BasicText(
         text = text,
         modifier = modifier,
         style = style.copy(color = color),
         maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
+        overflow = overflow,
     )
 }

@@ -1,89 +1,107 @@
 package com.igloo.blindpenguincoder.core.design
 
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 
 val LocalIglooColors = staticCompositionLocalOf { IglooDarkColors }
+val LocalIglooDimens = staticCompositionLocalOf { iglooDimens(UiScale.Standard) }
+val LocalIglooTypography = staticCompositionLocalOf { iglooTypography(UiScale.Standard.factor) }
+
+/**
+ * System font scale is honored but bounded. See docs/design-system.md section 12.1 for why
+ * this clamp exists and when it should be revisited.
+ */
+private const val MIN_FONT_SCALE = 0.85f
+private const val MAX_FONT_SCALE = 1.30f
 
 object IglooTheme {
     val colors: IglooColors
-        @Composable
-        @ReadOnlyComposable
-        get() = LocalIglooColors.current
+        @Composable @ReadOnlyComposable get() = LocalIglooColors.current
 
-    object radius {
-        val sm = 6.dp
-        val md = 8.dp
-        val lg = 10.dp
-        val xl = 14.dp
-    }
+    val typography: IglooTypography
+        @Composable @ReadOnlyComposable get() = LocalIglooTypography.current
 
-    object spacing {
-        val xs = 4.dp
-        val sm = 8.dp
-        val md = 16.dp
-        val lg = 24.dp
-        val xl = 32.dp
-        val xxl = 48.dp
-    }
+    val spacing: IglooSpacing
+        @Composable @ReadOnlyComposable get() = LocalIglooDimens.current.spacing
 
-    object typography {
-        val displayCode = TextStyle(
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            fontSize = 64.sp,
-            lineHeight = 76.sp,
-            letterSpacing = 10.sp,
-        )
-        val titleLarge = TextStyle(
-            fontFamily = FontFamily.SansSerif,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 34.sp,
-            lineHeight = 40.sp,
-        )
-        val titleMedium = TextStyle(
-            fontFamily = FontFamily.SansSerif,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 24.sp,
-            lineHeight = 30.sp,
-        )
-        val bodyLarge = TextStyle(
-            fontFamily = FontFamily.SansSerif,
-            fontWeight = FontWeight.Medium,
-            fontSize = 18.sp,
-            lineHeight = 24.sp,
-        )
-        val bodyMedium = TextStyle(
-            fontFamily = FontFamily.SansSerif,
-            fontWeight = FontWeight.Normal,
-            fontSize = 16.sp,
-            lineHeight = 22.sp,
-        )
-        val label = TextStyle(
-            fontFamily = FontFamily.SansSerif,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 15.sp,
-            lineHeight = 20.sp,
-        )
-    }
+    val radius: IglooRadius
+        @Composable @ReadOnlyComposable get() = LocalIglooDimens.current.radius
+
+    val sizes: IglooSizes
+        @Composable @ReadOnlyComposable get() = LocalIglooDimens.current.sizes
+
+    val icons: IglooIcons
+        @Composable @ReadOnlyComposable get() = LocalIglooDimens.current.icons
+
+    val focus: IglooFocus
+        @Composable @ReadOnlyComposable get() = LocalIglooDimens.current.focus
+
+    val layout: IglooLayout
+        @Composable @ReadOnlyComposable get() = LocalIglooDimens.current.layout
+
+    val reducedMotion: Boolean
+        @Composable @ReadOnlyComposable get() = LocalIglooReducedMotion.current
 }
 
 @Composable
 fun IglooTheme(
     darkTheme: Boolean = true,
+    uiScale: UiScale = UiScale.Standard,
     content: @Composable () -> Unit,
 ) {
-    val colors = if (darkTheme) IglooDarkColors else IglooLightColors
+    val density = LocalDensity.current
+    val containerWidthPx = LocalWindowInfo.current.containerSize.width
+    val viewportFactor = viewportFactor(containerWidthPx / density.density)
+    val scale = uiScale.factor * viewportFactor
+
+    val dimens = remember(uiScale, viewportFactor) { iglooDimens(uiScale, viewportFactor) }
+    val typography = remember(scale) { iglooTypography(scale) }
+    val boundedDensity = remember(density) {
+        val bounded = density.fontScale.coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE)
+        if (bounded == density.fontScale) density else Density(density.density, bounded)
+    }
+
     CompositionLocalProvider(
-        LocalIglooColors provides colors,
+        LocalDensity provides boundedDensity,
+        LocalIglooColors provides if (darkTheme) IglooDarkColors else IglooLightColors,
+        LocalIglooDimens provides dimens,
+        LocalIglooTypography provides typography,
+        LocalIglooReducedMotion provides rememberReducedMotion(),
         content = content,
     )
 }
 
+/**
+ * Overscan inset for chrome and text. Full-bleed content (backdrops, the player surface)
+ * deliberately does not use this — see docs/design-system.md section 2.5.
+ */
+@Composable
+fun Modifier.iglooSafeArea(): Modifier {
+    val layout = IglooTheme.layout
+    return padding(
+        PaddingValues(
+            horizontal = layout.safeAreaHorizontal,
+            vertical = layout.safeAreaVertical,
+        ),
+    )
+}
+
+/**
+ * Scales a genuinely one-off dimension. A dimension used in two or more files belongs in
+ * [IglooDimens] and in docs/design-system.md instead.
+ */
+@Composable
+@ReadOnlyComposable
+fun Dp.scaled(): Dp = (value * LocalIglooDimens.current.scale).roundToInt().dp
