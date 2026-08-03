@@ -38,9 +38,13 @@ class QuickConnectViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun initiateJson(code: String) = """
+    private fun initiateJson(
+        code: String,
+        pollIntervalSeconds: Int = 2,
+        expiresInSeconds: Int = 300,
+    ) = """
         {"error":false,"data":{"code":"$code","secret":"device-secret",
-        "expires_in_seconds":300,"poll_interval_seconds":2}}
+        "expires_in_seconds":$expiresInSeconds,"poll_interval_seconds":$pollIntervalSeconds}}
     """.trimIndent()
 
     private val pendingJson = """{"error":false,"data":{"status":"pending"}}"""
@@ -123,6 +127,36 @@ class QuickConnectViewModelTest {
         assertEquals(QuickConnectPhase.CodeReady("ABCD12"), f.phase)
 
         f.viewModel.stop()
+    }
+
+    @Test
+    fun `advertised intervals above the backoff cap are not shortened`() = runTest {
+        val f = fixture { request ->
+            if (request.url.encodedPath.endsWith("/initiate")) {
+                jsonResponse(
+                    initiateJson("ABCD12", pollIntervalSeconds = 45),
+                    HttpStatusCode.Created,
+                )
+            } else {
+                jsonResponse(pendingJson)
+            }
+        }
+
+        f.viewModel.start()
+        advanceTimeBy(30_001)
+        assertEquals(0, f.count("/redeem"))
+
+        advanceTimeBy(15_000)
+        assertEquals(1, f.count("/redeem"))
+
+        f.viewModel.stop()
+    }
+
+    @Test
+    fun `poll retry backoff is additional and capped at thirty seconds`() {
+        assertEquals(45_000L, quickConnectPollDelayMillis(45_000L, 0))
+        assertEquals(47_000L, quickConnectPollDelayMillis(45_000L, 1))
+        assertEquals(75_000L, quickConnectPollDelayMillis(45_000L, 10))
     }
 
     @Test
@@ -303,9 +337,9 @@ class QuickConnectViewModelTest {
         }
 
         f.viewModel.start()
-        // Four failures land at 2s, 6s, 14s, and 30s. Pending at 60s resets both
-        // counters, so another four failures land at 62s, 66s, 74s, and 90s.
-        advanceTimeBy(90_001)
+        // Four failures land at 2s, 6s, 12s, and 22s. Pending at 40s resets the
+        // backoff, so another four failures land at 42s, 46s, 52s, and 62s.
+        advanceTimeBy(62_001)
 
         assertEquals(9, f.count("/redeem"))
         assertEquals(QuickConnectPhase.CodeReady("ABCD12"), f.phase)
@@ -324,8 +358,8 @@ class QuickConnectViewModelTest {
         }
 
         f.viewModel.start()
-        // Polls land at 2s, 6s, 14s with doubling backoff.
-        advanceTimeBy(14_001)
+        // Polls land at 2s, 6s, and 12s as retry backoff is added to the 2s base.
+        advanceTimeBy(12_001)
 
         assertEquals(3, f.count("/redeem"))
         assertEquals(QuickConnectPhase.CodeReady("ABCD12"), f.phase)

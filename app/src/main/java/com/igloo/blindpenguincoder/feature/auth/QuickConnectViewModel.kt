@@ -74,7 +74,7 @@ class QuickConnectViewModel(
     }
 
     private suspend fun initiateWithBackoff(): QuickConnectInitiateData? {
-        var backoffMillis = INITIATE_BACKOFF_MILLIS
+        var backoffMillis = INITIATE_INITIAL_BACKOFF_MILLIS
         var attemptsLeft = MAX_INITIATE_ATTEMPTS
         while (true) {
             when (val result = authRepository.initiateQuickConnect()) {
@@ -85,7 +85,9 @@ class QuickConnectViewModel(
                     // A busy server is worth waiting out, but not silently and not forever.
                     if (retryable && --attemptsLeft > 0) {
                         delay(backoffMillis)
-                        backoffMillis = (backoffMillis * 2).coerceAtMost(MAX_BACKOFF_MILLIS)
+                        backoffMillis = (backoffMillis * 2).coerceAtMost(
+                            MAX_INITIATE_BACKOFF_MILLIS,
+                        )
                     } else {
                         fail(error)
                         return null
@@ -99,10 +101,9 @@ class QuickConnectViewModel(
     private suspend fun pollUntilResolved(initiated: QuickConnectInitiateData): Boolean {
         val pollMillis = initiated.pollIntervalSeconds * 1000L
         var remainingMillis = initiated.expiresInSeconds * 1000L
-        var multiplier = 1L
         var consecutiveFailures = 0
         while (remainingMillis > 0) {
-            val waitMillis = (pollMillis * multiplier).coerceAtMost(MAX_BACKOFF_MILLIS)
+            val waitMillis = quickConnectPollDelayMillis(pollMillis, consecutiveFailures)
             delay(waitMillis)
             remainingMillis -= waitMillis
             when (val result = authRepository.redeemQuickConnect(initiated.code, initiated.secret)) {
@@ -110,7 +111,6 @@ class QuickConnectViewModel(
                     QuickConnectStatus.Approved -> return finishApproved()
                     QuickConnectStatus.Pending -> {
                         consecutiveFailures = 0
-                        multiplier = 1
                     }
                 }
                 is ApiResult.Failure -> {
@@ -126,7 +126,6 @@ class QuickConnectViewModel(
                         fail(error)
                         return true
                     }
-                    multiplier *= 2
                 }
             }
         }
@@ -166,14 +165,28 @@ class QuickConnectViewModel(
     }
 
     private companion object {
-        const val INITIATE_BACKOFF_MILLIS = 5_000L
-        const val MAX_BACKOFF_MILLIS = 30_000L
+        const val INITIATE_INITIAL_BACKOFF_MILLIS = 5_000L
+        const val MAX_INITIATE_BACKOFF_MILLIS = 30_000L
         const val USER_FETCH_RETRY_MILLIS = 2_000L
         const val MAX_INITIATE_ATTEMPTS = 5
         const val MAX_REDEEM_FAILURES = 5
         const val MAX_USER_FETCH_ATTEMPTS = 6
         val RETRYABLE_STATUSES = setOf(429, 503)
     }
+}
+
+private const val POLL_INITIAL_BACKOFF_MILLIS = 2_000L
+private const val MAX_POLL_BACKOFF_MILLIS = 30_000L
+
+internal fun quickConnectPollDelayMillis(
+    baseIntervalMillis: Long,
+    consecutiveFailures: Int,
+): Long {
+    if (consecutiveFailures <= 0) return baseIntervalMillis
+    val shift = (consecutiveFailures - 1).coerceAtMost(30)
+    val backoff = (POLL_INITIAL_BACKOFF_MILLIS * (1L shl shift))
+        .coerceAtMost(MAX_POLL_BACKOFF_MILLIS)
+    return baseIntervalMillis + backoff
 }
 
 private fun AppError.isRetryableRedeemFailure(): Boolean = when (this) {

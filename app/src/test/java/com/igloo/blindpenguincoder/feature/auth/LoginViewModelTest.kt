@@ -216,14 +216,20 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `editing either credential clears the pending token and requires another login`() = runTest {
-        var deviceLogins = 0
+    fun `edited credentials revoke the pending token before another login`() = runTest {
+        val requests = mutableListOf<String>()
         val fixture = fixture { request ->
-            if (request.url.encodedPath.endsWith("/auth/device-login")) {
-                deviceLogins++
-                jsonResponse(deviceTokenJson)
-            } else {
-                throw IOException("unreachable")
+            requests += request.url.encodedPath
+            when {
+                request.url.encodedPath.endsWith("/auth/device-login") ->
+                    jsonResponse(deviceTokenJson)
+                request.url.encodedPath.endsWith("/auth/logout") -> {
+                    assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
+                    jsonResponse("""{"error":false,"message":"logged out"}""")
+                }
+                requests.count { it.endsWith("/auth/user") } == 1 ->
+                    throw IOException("unreachable")
+                else -> jsonResponse(userJson)
             }
         }
         val viewModel = fixture.viewModel
@@ -236,50 +242,44 @@ class LoginViewModelTest {
 
         viewModel.onEmailChange("other@example.com")
         assertFalse(viewModel.uiState.value.awaitingUser)
-        assertNull(fixture.http.tokenStore.stored)
-
         viewModel.onPasswordChange("replacement")
-        viewModel.submit()
-        assertTrue(viewModel.uiState.first { it.error != null }.awaitingUser)
         assertEquals("igd_test", fixture.http.tokenStore.stored)
 
-        viewModel.onPasswordChange("corrected")
-        assertFalse(viewModel.uiState.value.awaitingUser)
-        assertNull(fixture.http.tokenStore.stored)
+        viewModel.submit()
 
-        assertEquals(2, deviceLogins)
+        viewModel.uiState.first { !it.isSubmitting && it.error == null }
+        assertTrue(fixture.sessionManager.state.value is AppAuthState.Authenticated)
+        assertEquals(
+            listOf(
+                "/api/auth/device-login",
+                "/api/auth/user",
+                "/api/auth/logout",
+                "/api/auth/device-login",
+                "/api/auth/user",
+            ),
+            requests,
+        )
     }
 
     @Test
-    fun `rejected edited credentials cannot resume the previous token through quick connect`() = runTest {
+    fun `failed replacement revocation retains the token and skips login`() = runTest {
         var deviceLogins = 0
         var userFetches = 0
-        var initiations = 0
+        var logouts = 0
         val fixture = fixture { request ->
             when {
                 request.url.encodedPath.endsWith("/auth/device-login") -> {
                     deviceLogins += 1
-                    if (deviceLogins == 1) {
-                        jsonResponse(deviceTokenJson)
-                    } else {
-                        jsonResponse(
-                            """{"error":true,"message":"invalid credentials"}""",
-                            HttpStatusCode.Unauthorized,
-                        )
-                    }
+                    jsonResponse(deviceTokenJson)
                 }
                 request.url.encodedPath.endsWith("/auth/user") -> {
                     userFetches += 1
                     throw IOException("unreachable")
                 }
-                request.url.encodedPath.endsWith("/quick-connect/initiate") -> {
-                    initiations += 1
-                    jsonResponse(
-                        """{"error":false,"data":{"code":"ABCD12","secret":"device-secret","expires_in_seconds":300,"poll_interval_seconds":2}}""",
-                        HttpStatusCode.Created,
-                    )
+                else -> {
+                    logouts += 1
+                    throw IOException("logout failed")
                 }
-                else -> jsonResponse("""{"error":false,"data":{"status":"pending"}}""")
             }
         }
 
@@ -289,23 +289,41 @@ class LoginViewModelTest {
         assertTrue(fixture.viewModel.uiState.first { it.error != null }.awaitingUser)
 
         fixture.viewModel.onPasswordChange("wrong")
-        assertNull(fixture.http.tokenStore.stored)
+        assertEquals("igd_test", fixture.http.tokenStore.stored)
         fixture.viewModel.submit()
         assertEquals(
-            "Incorrect email or password.",
+            "Couldn't reach the server. Check the address, port, and network connection.",
             fixture.viewModel.uiState.first { it.error != null }.error,
         )
 
-        fixture.quickConnectViewModel.start()
-        val quickConnectPhase = fixture.quickConnectViewModel.uiState
-            .first { it.phase is QuickConnectPhase.CodeReady }
-            .phase
-
-        assertEquals(QuickConnectPhase.CodeReady("ABCD12"), quickConnectPhase)
-        assertEquals(1, initiations)
+        assertEquals(1, logouts)
+        assertEquals(1, deviceLogins)
         assertEquals(1, userFetches)
-        assertNull(fixture.http.tokenStore.stored)
-        fixture.quickConnectViewModel.stop()
+        assertEquals("igd_test", fixture.http.tokenStore.stored)
+    }
+
+    @Test
+    fun `clearPassword preserves email and pending token state`() = runTest {
+        val fixture = fixture { request ->
+            if (request.url.encodedPath.endsWith("/auth/device-login")) {
+                jsonResponse(deviceTokenJson)
+            } else {
+                throw IOException("unreachable")
+            }
+        }
+
+        fixture.viewModel.onEmailChange("jose@example.com")
+        fixture.viewModel.onPasswordChange("hunter2")
+        fixture.viewModel.submit()
+        assertTrue(fixture.viewModel.uiState.first { it.error != null }.awaitingUser)
+
+        fixture.viewModel.clearPassword()
+
+        val state = fixture.viewModel.uiState.value
+        assertEquals("jose@example.com", state.email)
+        assertEquals("", state.password)
+        assertTrue(state.awaitingUser)
+        assertEquals("igd_test", fixture.http.tokenStore.stored)
     }
 
     @Test

@@ -4,13 +4,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,7 +36,7 @@ fun AuthSurface(
 ) {
     val colors = IglooTheme.colors
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(
@@ -41,50 +46,63 @@ fun AuthSurface(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Column(
+        val outerPadding = IglooTheme.spacing.xl
+        val availableWidth = (maxWidth - outerPadding * 2).coerceAtLeast(0.dp)
+        val availableHeight = (maxHeight - outerPadding * 2).coerceAtLeast(0.dp)
+        val shape = RoundedCornerShape(IglooTheme.radius.xl)
+
+        Box(
             modifier = Modifier
-                .width(cardWidth)
-                .clip(RoundedCornerShape(IglooTheme.radius.xl))
+                .width(minOf(cardWidth, availableWidth))
+                .heightIn(max = availableHeight)
+                .clip(shape)
                 .background(colors.card)
                 .border(
                     width = 1.dp,
                     color = colors.border,
-                    shape = RoundedCornerShape(IglooTheme.radius.xl),
-                )
-                .padding(IglooTheme.spacing.xl),
-            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
+                    shape = shape,
+                ),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .verticalScroll(rememberScrollState())
+                    .padding(IglooTheme.spacing.xl),
+                verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(IglooTheme.radius.lg))
-                        .background(colors.primary),
-                    contentAlignment = Alignment.Center,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
                 ) {
-                    IglooText(
-                        text = "I",
-                        style = IglooTheme.typography.titleMedium,
-                        color = colors.primaryForeground,
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(IglooTheme.radius.lg))
+                            .background(colors.primary),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        IglooText(
+                            text = "I",
+                            style = IglooTheme.typography.titleMedium,
+                            color = colors.primaryForeground,
+                        )
+                    }
+                    Column {
+                        IglooText(
+                            text = title,
+                            style = IglooTheme.typography.titleMedium,
+                            color = colors.cardForeground,
+                        )
+                        IglooText(
+                            text = subtitle,
+                            style = IglooTheme.typography.bodyMedium,
+                            color = colors.mutedForeground,
+                        )
+                    }
                 }
-                Column {
-                    IglooText(
-                        text = title,
-                        style = IglooTheme.typography.titleMedium,
-                        color = colors.cardForeground,
-                    )
-                    IglooText(
-                        text = subtitle,
-                        style = IglooTheme.typography.bodyMedium,
-                        color = colors.mutedForeground,
-                    )
-                }
+                content()
             }
-            content()
         }
     }
 }

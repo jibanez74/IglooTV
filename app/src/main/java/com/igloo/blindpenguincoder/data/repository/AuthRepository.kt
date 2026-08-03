@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.config.DeviceIdentity
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.network.BearerTokenProvider
 import com.igloo.blindpenguincoder.core.network.safeApiCall
 import com.igloo.blindpenguincoder.data.api.AuthApi
@@ -88,17 +89,37 @@ class AuthRepository(
         return result
     }
 
-    /** Revokes this device's token server-side; the local token is dropped regardless. */
+    /** Revokes this device's token server-side; explicit logout always drops the local token. */
     suspend fun logout(): ApiResult<Unit> {
-        val result = safeApiCall<Unit>(
-            request = { api.logout() },
-            decode = { },
-        )
+        val result = requestLogout()
         tokens.clear()
         return result
     }
 
+    /**
+     * Revokes the current device token before credentials replace it. The token is retained when
+     * the server cannot confirm revocation, so a transient failure cannot orphan the session.
+     */
+    suspend fun revokeSessionForReplacement(): ApiResult<Unit> =
+        when (val result = requestLogout()) {
+            is ApiResult.Success -> {
+                tokens.clear()
+                result
+            }
+            is ApiResult.Failure -> if (result.error == AppError.Unauthorized) {
+                tokens.clear()
+                ApiResult.Success(Unit)
+            } else {
+                result
+            }
+        }
+
     suspend fun clearSession() {
         tokens.clear()
     }
+
+    private suspend fun requestLogout(): ApiResult<Unit> = safeApiCall(
+        request = { api.logout() },
+        decode = { },
+    )
 }

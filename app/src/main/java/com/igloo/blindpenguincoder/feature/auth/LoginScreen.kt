@@ -91,7 +91,10 @@ fun LoginScreen(
         )
         IglooButton(
             text = "Use pairing code instead",
-            onClick = onSwitchToQuickConnect,
+            onClick = {
+                viewModel.clearPassword()
+                onSwitchToQuickConnect()
+            },
             variant = IglooButtonVariant.Ghost,
             enabled = !state.isSubmitting,
             modifier = Modifier.fillMaxWidth(),

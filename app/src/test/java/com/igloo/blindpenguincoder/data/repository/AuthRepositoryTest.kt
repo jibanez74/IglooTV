@@ -226,6 +226,60 @@ class AuthRepositoryTest {
     }
 
     @Test
+    fun `replacement revocation clears the token after successful logout`() = runTest {
+        val http = TestHttp { request ->
+            assertEquals(HttpMethod.Delete, request.method)
+            assertEquals("$TEST_SERVER/auth/logout", request.url.toString())
+            assertEquals("Bearer igd_old", request.headers[HttpHeaders.Authorization])
+            jsonResponse("""{"error":false,"message":"logged out"}""")
+        }
+        http.tokenStore.stored = "igd_old"
+
+        val result = repo(http).revokeSessionForReplacement()
+
+        assertTrue(result is ApiResult.Success)
+        assertNull(http.tokenStore.stored)
+    }
+
+    @Test
+    fun `replacement revocation treats unauthorized as already revoked`() = runTest {
+        val http = TestHttp {
+            jsonResponse(
+                body = """{"error":true,"message":"invalid token"}""",
+                status = HttpStatusCode.Unauthorized,
+            )
+        }
+        http.tokenStore.stored = "igd_old"
+
+        val result = repo(http).revokeSessionForReplacement()
+
+        assertTrue(result is ApiResult.Success)
+        assertNull(http.tokenStore.stored)
+    }
+
+    @Test
+    fun `failed replacement revocation retains the token`() = runTest {
+        val failures = listOf(
+            "server" to TestHttp {
+                jsonResponse(
+                    body = """{"error":true,"message":"logout unavailable"}""",
+                    status = HttpStatusCode.InternalServerError,
+                )
+            },
+            "network" to TestHttp { throw IOException("connection dropped") },
+        )
+
+        failures.forEach { (kind, http) ->
+            http.tokenStore.stored = "igd_old"
+
+            val result = repo(http).revokeSessionForReplacement()
+
+            assertTrue("$kind should fail", result is ApiResult.Failure)
+            assertEquals("$kind should retain the token", "igd_old", http.tokenStore.stored)
+        }
+    }
+
+    @Test
     fun `logout uses DELETE with the bearer token and clears it even when the server fails`() = runTest {
         val http = TestHttp { request ->
             assertEquals(HttpMethod.Delete, request.method)

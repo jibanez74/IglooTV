@@ -48,6 +48,18 @@ class LoginViewModel(
             // Logging in again would mint a second device token for the same user, so a retry
             // after a failed user fetch resumes with the token already stored.
             if (!current.awaitingUser) {
+                if (authRepository.hasToken()) {
+                    val revocation = authRepository.revokeSessionForReplacement()
+                    if (revocation is ApiResult.Failure) {
+                        _uiState.update {
+                            it.copy(
+                                isSubmitting = false,
+                                error = revocation.error.toDisplayMessage(),
+                            )
+                        }
+                        return@launch
+                    }
+                }
                 val login = authRepository.deviceLogin(current.email.trim(), current.password)
                 if (login is ApiResult.Failure) {
                     _uiState.update {
@@ -82,16 +94,12 @@ class LoginViewModel(
         }
     }
 
-    /** Editing credentials abandons the issued token before exposing the edited state. */
     private fun updateCredentials(transform: (LoginUiState) -> LoginUiState) {
-        if (!_uiState.value.awaitingUser) {
-            _uiState.update { transform(it).copy(error = null, awaitingUser = false) }
-            return
-        }
-        viewModelScope.launch {
-            authRepository.clearSession()
-            _uiState.update { transform(it).copy(error = null, awaitingUser = false) }
-        }
+        _uiState.update { transform(it).copy(error = null, awaitingUser = false) }
+    }
+
+    fun clearPassword() {
+        _uiState.update { it.copy(password = "") }
     }
 
     fun retryRestore() {
