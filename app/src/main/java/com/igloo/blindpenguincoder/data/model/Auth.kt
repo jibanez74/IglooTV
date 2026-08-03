@@ -12,6 +12,7 @@ data class AuthUser(
     // The backend serializes this as a Go sql.NullString object, not a plain
     // string (docs/openapi.json is outdated here; see userResponseMap in ../Igloo).
     val avatar: SqlNullString? = null,
+    @SerialName("has_pin") val hasPin: Boolean,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,
 )
@@ -20,25 +21,4 @@ data class AuthUser(
 @Serializable
 data class AuthUserData(
     val user: AuthUser,
-)
-
-@Serializable
-data class UpdateUserNameRequest(
-    val name: String,
-)
-
-@Serializable
-data class UpdateUserEmailRequest(
-    val email: String,
-)
-
-@Serializable
-data class UpdateUserPasswordRequest(
-    @SerialName("current_password") val currentPassword: String,
-    @SerialName("new_password") val newPassword: String,
-)
-
-@Serializable
-data class UpdateUserAvatarRequest(
-    val avatar: String,
 )

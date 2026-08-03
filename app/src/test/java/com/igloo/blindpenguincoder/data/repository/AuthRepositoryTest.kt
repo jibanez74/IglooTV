@@ -16,7 +16,12 @@ import org.junit.Test
 
 class AuthRepositoryTest {
 
-    private fun repo(http: TestHttp) = AuthRepository(http.api, http.tokenProvider, testDeviceIdentity)
+    private fun repo(http: TestHttp) = http.authRepository
+
+    /** A minted token is held pending until its owner is known. */
+    private fun TestHttp.pendingToken() = profileStore.vault.pendingToken
+
+    private suspend fun TestHttp.activate(token: String) = profiles.setPending(token)
 
     private val deviceTokenJson = """
         {"error":false,"data":{"token":"igd_test","device":{
@@ -36,9 +41,8 @@ class AuthRepositoryTest {
 
         val result = repo(http).deviceLogin("jose@example.com", "hunter2")
 
-        val data = (result as ApiResult.Success).value
-        assertEquals("igd_test", data.token)
-        assertEquals("igd_test", http.tokenStore.stored)
+        assertTrue(result is ApiResult.Success)
+        assertEquals("igd_test", http.pendingToken())
     }
 
     @Test
@@ -69,7 +73,7 @@ class AuthRepositoryTest {
         val result = repo(http).deviceLogin("jose@example.com", "wrong")
 
         assertEquals(AppError.Unauthorized, (result as ApiResult.Failure).error)
-        assertNull(http.tokenStore.stored)
+        assertNull(http.pendingToken())
     }
 
     @Test
@@ -106,12 +110,13 @@ class AuthRepositoryTest {
                 body = """
                     {"error":false,"message":"user found","data":{"user":{
                         "id":1,"name":"Jose","email":"jose@example.com","is_admin":true,
-                        "avatar":{"String":"","Valid":false},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
+                        "avatar":{"String":"","Valid":false},"has_pin":false,
+                        "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
                     }}}
                 """.trimIndent(),
             )
         }
-        http.tokenStore.stored = "igd_test"
+        http.activate("igd_test")
 
         val result = repo(http).fetchCurrentUser()
 
@@ -142,7 +147,7 @@ class AuthRepositoryTest {
                 else -> error("Unexpected request")
             }
         }
-        http.tokenStore.stored = "igd_stale"
+        http.activate("igd_stale")
         val repository = repo(http)
 
         repository.deviceLogin("jose@example.com", "hunter2")
@@ -201,7 +206,7 @@ class AuthRepositoryTest {
         assertEquals("ABCD12", (initiated as ApiResult.Success).value.code)
         assertEquals(2, initiated.value.pollIntervalSeconds)
         assertEquals(QuickConnectStatus.Pending, (redeemed as ApiResult.Success).value.status)
-        assertNull(http.tokenStore.stored)
+        assertNull(http.pendingToken())
         assertEquals(2, requestIndex)
     }
 
@@ -222,78 +227,64 @@ class AuthRepositoryTest {
         val result = repo(http).redeemQuickConnect("ABCD12", "device-secret")
 
         assertEquals(QuickConnectStatus.Approved, (result as ApiResult.Success).value.status)
-        assertEquals("igd_paired", http.tokenStore.stored)
+        assertEquals("igd_paired", http.pendingToken())
     }
 
     @Test
-    fun `replacement revocation clears the token after successful logout`() = runTest {
+    fun `a superseded token is revoked with an explicit bearer override`() = runTest {
         val http = TestHttp { request ->
             assertEquals(HttpMethod.Delete, request.method)
             assertEquals("$TEST_SERVER/auth/logout", request.url.toString())
             assertEquals("Bearer igd_old", request.headers[HttpHeaders.Authorization])
             jsonResponse("""{"error":false,"message":"logged out"}""")
         }
-        http.tokenStore.stored = "igd_old"
+        // The active credential belongs to the new pairing, not the token being revoked.
+        http.activate("igd_new")
 
-        val result = repo(http).revokeSessionForReplacement()
-
-        assertTrue(result is ApiResult.Success)
-        assertNull(http.tokenStore.stored)
-    }
-
-    @Test
-    fun `replacement revocation treats unauthorized as already revoked`() = runTest {
-        val http = TestHttp {
-            jsonResponse(
-                body = """{"error":true,"message":"invalid token"}""",
-                status = HttpStatusCode.Unauthorized,
-            )
-        }
-        http.tokenStore.stored = "igd_old"
-
-        val result = repo(http).revokeSessionForReplacement()
+        val result = repo(http).logout(bearerOverride = "igd_old")
 
         assertTrue(result is ApiResult.Success)
-        assertNull(http.tokenStore.stored)
+        assertEquals("igd_new", http.pendingToken())
     }
 
     @Test
-    fun `failed replacement revocation retains the token`() = runTest {
-        val failures = listOf(
-            "server" to TestHttp {
-                jsonResponse(
-                    body = """{"error":true,"message":"logout unavailable"}""",
-                    status = HttpStatusCode.InternalServerError,
-                )
-            },
-            "network" to TestHttp { throw IOException("connection dropped") },
-        )
-
-        failures.forEach { (kind, http) ->
-            http.tokenStore.stored = "igd_old"
-
-            val result = repo(http).revokeSessionForReplacement()
-
-            assertTrue("$kind should fail", result is ApiResult.Failure)
-            assertEquals("$kind should retain the token", "igd_old", http.tokenStore.stored)
+    fun `PIN verification posts to the documented route with the active token`() = runTest {
+        val http = TestHttp { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals("$TEST_SERVER/user/pin/verify", request.url.toString())
+            assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
+            assertTrue(String(request.body.toByteArray()).contains(""""pin":"1234""""))
+            jsonResponse("""{"error":false,"data":{"valid":true}}""")
         }
+        http.activate("igd_test")
+
+        val result = repo(http).verifyPin("1234")
+
+        assertEquals(true, (result as ApiResult.Success).value)
     }
 
     @Test
-    fun `logout uses DELETE with the bearer token and clears it even when the server fails`() = runTest {
+    fun `a wrong PIN succeeds with false rather than failing`() = runTest {
+        val http = TestHttp { jsonResponse("""{"error":false,"data":{"valid":false}}""") }
+        http.activate("igd_test")
+
+        val result = repo(http).verifyPin("0000")
+
+        assertEquals(false, (result as ApiResult.Success).value)
+    }
+
+    @Test
+    fun `logout uses DELETE with the active bearer token`() = runTest {
         val http = TestHttp { request ->
             assertEquals(HttpMethod.Delete, request.method)
             assertEquals("$TEST_SERVER/auth/logout", request.url.toString())
             assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
-            jsonResponse(
-                body = """{"error":true,"message":"boom"}""",
-                status = HttpStatusCode.InternalServerError,
-            )
+            jsonResponse("""{"error":false,"message":"logged out"}""")
         }
-        http.tokenStore.stored = "igd_test"
+        http.activate("igd_test")
 
-        repo(http).logout()
+        val result = repo(http).logout()
 
-        assertNull(http.tokenStore.stored)
+        assertTrue(result is ApiResult.Success)
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -23,6 +24,10 @@ import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.feature.auth.AppAuthState
 import com.igloo.blindpenguincoder.feature.auth.LoginViewModel
+import com.igloo.blindpenguincoder.feature.auth.PinEntryScreen
+import com.igloo.blindpenguincoder.feature.auth.PinEntryViewModel
+import com.igloo.blindpenguincoder.feature.auth.ProfilePickerScreen
+import com.igloo.blindpenguincoder.feature.auth.ProfilePickerViewModel
 import com.igloo.blindpenguincoder.feature.auth.QuickConnectViewModel
 import com.igloo.blindpenguincoder.feature.auth.ServerSetupScreen
 import com.igloo.blindpenguincoder.feature.auth.SignInScreen
@@ -56,9 +61,27 @@ fun IglooRoot(container: IglooAppContainer) {
                 ServerSetupScreen(setupViewModel)
             }
 
+            is AppAuthState.ChooseProfile -> {
+                val pickerViewModel = viewModel(key = "profile-picker") {
+                    ProfilePickerViewModel(sessionManager)
+                }
+                ProfilePickerScreen(viewModel = pickerViewModel, state = state)
+            }
+
+            is AppAuthState.NeedsPin -> {
+                val pinViewModel = viewModel(key = "pin-entry-${state.profile.userId}") {
+                    PinEntryViewModel(container.authRepository, sessionManager)
+                }
+                PinEntryScreen(viewModel = pinViewModel, state = state)
+            }
+
             is AppAuthState.NeedsLogin -> {
                 val quickConnectViewModel = viewModel(key = "quick-connect") {
-                    QuickConnectViewModel(container.authRepository, sessionManager)
+                    QuickConnectViewModel(
+                        container.authRepository,
+                        container.profileRepository,
+                        sessionManager,
+                    )
                 }
                 val loginViewModel = viewModel(key = "login") {
                     LoginViewModel(container.authRepository, sessionManager)
@@ -68,13 +91,21 @@ fun IglooRoot(container: IglooAppContainer) {
                     loginViewModel = loginViewModel,
                     serverOrigin = state.serverAddress.origin,
                     restoreError = state.restoreError,
+                    canCancel = state.canCancel,
                 )
             }
 
             is AppAuthState.Authenticated -> {
                 val scope = rememberCoroutineScope()
+                // Device tokens are revoked server-side after long disuse, so a session
+                // resumed from the background is re-checked before it is trusted.
+                LifecycleStartEffect(Unit) {
+                    scope.launch { sessionManager.revalidateActive() }
+                    onStopOrDispose { }
+                }
                 IglooApp(
                     user = state.user,
+                    onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },
                     onLogout = { scope.launch { sessionManager.logout() } },
                 )
             }

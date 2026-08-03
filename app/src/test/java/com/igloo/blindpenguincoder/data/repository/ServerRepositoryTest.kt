@@ -5,8 +5,9 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.network.BearerTokenProvider
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
-import com.igloo.blindpenguincoder.core.storage.FakeDeviceTokenStore
+import com.igloo.blindpenguincoder.core.storage.FakeProfileStore
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
+import com.igloo.blindpenguincoder.core.storage.ProfileVault
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.MockRequestHandler
@@ -30,7 +31,7 @@ class ServerRepositoryTest {
         val repository: ServerRepository,
         val settings: ServerSettingsStore,
         val serverUrl: ServerUrlProvider,
-        val tokenStore: FakeDeviceTokenStore,
+        val profileStore: FakeProfileStore,
     )
 
     private suspend fun fixture(
@@ -41,14 +42,14 @@ class ServerRepositoryTest {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
         if (active != null) settings.save(active.apiBaseUrl)
         val serverUrl = ServerUrlProvider().apply { set(active) }
-        val tokenStore = FakeDeviceTokenStore()
+        val profileStore = FakeProfileStore()
         val repository = ServerRepository(
             probe = testServerHealthProbe(handler, timeoutMillis),
             settings = settings,
             serverUrl = serverUrl,
-            tokenProvider = BearerTokenProvider(tokenStore),
+            profiles = ProfileRepository(profileStore, BearerTokenProvider()),
         )
-        return Fixture(repository, settings, serverUrl, tokenStore)
+        return Fixture(repository, settings, serverUrl, profileStore)
     }
 
     @Test
@@ -237,7 +238,7 @@ class ServerRepositoryTest {
             assertNull(request.headers[HttpHeaders.Authorization])
             respond("")
         }
-        fixture.tokenStore.stored = "igd_secret"
+        fixture.profileStore.vault = seededVault()
 
         fixture.repository.connect("igloo.test:8080")
     }
@@ -249,21 +250,28 @@ class ServerRepositoryTest {
         val changedPort = fixture(active = active) { respond("") }
         val changedScheme = fixture(active = active) { respond("") }
         val changedHost = fixture(active = active) { respond("") }
-        same.tokenStore.stored = "igd_secret"
-        changedPort.tokenStore.stored = "igd_secret"
-        changedScheme.tokenStore.stored = "igd_secret"
-        changedHost.tokenStore.stored = "igd_secret"
+        same.profileStore.vault = seededVault()
+        changedPort.profileStore.vault = seededVault()
+        changedScheme.profileStore.vault = seededVault()
+        changedHost.profileStore.vault = seededVault()
 
         same.repository.connect("HTTP://IGLOO.local:8080/")
         changedPort.repository.connect("http://igloo.local:8081")
         changedScheme.repository.connect("https://igloo.local:8080")
         changedHost.repository.connect("http://other.local:8080")
 
-        assertEquals("igd_secret", same.tokenStore.stored)
-        assertNull(changedPort.tokenStore.stored)
-        assertNull(changedScheme.tokenStore.stored)
-        assertNull(changedHost.tokenStore.stored)
+        // Tokens and user ids are server-scoped: a different origin invalidates them all.
+        assertEquals(seededVault(), same.profileStore.vault)
+        assertEquals(ProfileVault(), changedPort.profileStore.vault)
+        assertEquals(ProfileVault(), changedScheme.profileStore.vault)
+        assertEquals(ProfileVault(), changedHost.profileStore.vault)
     }
+
+    private fun seededVault() = ProfileVault(
+        activeUserId = 1,
+        pendingToken = "igd_half_paired",
+        profiles = listOf(testStoredProfile(userId = 1), testStoredProfile(userId = 2, name = "Ana")),
+    )
 
     @Test
     fun `invalid input does not make a request or replace the active server`() = runTest {

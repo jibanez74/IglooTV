@@ -1,14 +1,18 @@
 package com.igloo.blindpenguincoder
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.home.IglooApp
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,14 +28,23 @@ class IglooBaseAppTest {
         email = "jose@example.com",
         isAdmin = false,
         avatar = null,
+        hasPin = false,
         createdAt = "2026-01-01T00:00:00Z",
         updatedAt = "2026-01-01T00:00:00Z",
     )
 
-    private fun setShellContent(onLogout: () -> Unit = {}) {
+    private fun setShellContent(
+        uiScale: UiScale = UiScale.Standard,
+        onSwitchProfile: () -> Unit = {},
+        onLogout: () -> Unit = {},
+    ) {
         composeRule.setContent {
-            IglooTheme {
-                IglooApp(user = user, onLogout = onLogout)
+            IglooTheme(uiScale = uiScale) {
+                IglooApp(
+                    user = user,
+                    onSwitchProfile = onSwitchProfile,
+                    onLogout = onLogout,
+                )
             }
         }
     }
@@ -44,6 +57,7 @@ class IglooBaseAppTest {
         composeRule.onNodeWithText("Welcome to Igloo").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Home, selected").assertIsDisplayed()
         composeRule.onNodeWithText("Jose").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Switch profile").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Sign out").assertIsDisplayed()
     }
 
@@ -67,6 +81,40 @@ class IglooBaseAppTest {
 
         composeRule.runOnIdle {
             check(loggedOut) { "Sign out click did not invoke onLogout" }
+        }
+    }
+
+    @Test
+    fun switchProfileInvokesItsOwnCallbackAndSitsAboveSignOut() {
+        var switched = false
+        var loggedOut = false
+        setShellContent(onSwitchProfile = { switched = true }, onLogout = { loggedOut = true })
+
+        val switch = composeRule.onNodeWithContentDescription("Switch profile")
+        val signOut = composeRule.onNodeWithContentDescription("Sign out")
+        assertTrue(
+            "Switch profile must sit above Sign out",
+            switch.getUnclippedBoundsInRoot().bottom <= signOut.getUnclippedBoundsInRoot().top,
+        )
+
+        switch.performClick()
+
+        composeRule.runOnIdle {
+            check(switched) { "Switch profile click did not invoke onSwitchProfile" }
+            check(!loggedOut) { "Switch profile must not sign the user out" }
+        }
+    }
+
+    @Test
+    fun accountActionsStayOnscreenAtLargeScale() {
+        setShellContent(uiScale = UiScale.Large)
+
+        val rootBottom = composeRule.onRoot().getUnclippedBoundsInRoot().bottom
+        listOf("Switch profile", "Sign out").forEach { label ->
+            val bounds = composeRule.onNodeWithContentDescription(label)
+                .assertIsDisplayed()
+                .getUnclippedBoundsInRoot()
+            assertTrue("$label falls below the viewport: $bounds", bounds.bottom <= rootBottom)
         }
     }
 }

@@ -1,36 +1,32 @@
 package com.igloo.blindpenguincoder.core.network
 
-import com.igloo.blindpenguincoder.core.storage.DeviceTokenStore
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Serves the device bearer token to the HTTP client on every request, so reads
- * come from an in-memory cache after the first DataStore load.
+ * The credential every authenticated request currently carries. [profileId] is null
+ * while the token is pending — minted, but not yet exchanged for a user id.
  */
-class BearerTokenProvider(private val store: DeviceTokenStore) {
+data class ActiveCredential(
+    val profileId: Long?,
+    val token: String,
+)
+
+/** Supplies the active credential to the HTTP client without exposing where it is stored. */
+fun interface DeviceCredentialSource {
+    suspend fun current(): ActiveCredential?
+}
+
+/**
+ * Holds the credential the HTTP client attaches. Persistence belongs to the profile
+ * vault; this only decides who the app is acting as right now.
+ */
+class BearerTokenProvider : DeviceCredentialSource {
 
     private val mutex = Mutex()
-    private var loaded = false
-    private var cached: String? = null
+    private var active: ActiveCredential? = null
 
-    suspend fun token(): String? = mutex.withLock {
-        if (!loaded) {
-            cached = store.read()
-            loaded = true
-        }
-        cached
-    }
+    override suspend fun current(): ActiveCredential? = mutex.withLock { active }
 
-    suspend fun set(token: String) = mutex.withLock {
-        cached = token
-        loaded = true
-        store.write(token)
-    }
-
-    suspend fun clear() = mutex.withLock {
-        cached = null
-        loaded = true
-        store.clear()
-    }
+    suspend fun set(credential: ActiveCredential?) = mutex.withLock { active = credential }
 }

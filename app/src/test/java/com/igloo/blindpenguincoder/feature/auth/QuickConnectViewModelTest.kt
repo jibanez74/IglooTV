@@ -11,6 +11,8 @@ import io.ktor.http.HttpStatusCode
 import java.io.IOException
 import java.net.SocketTimeoutException
 import javax.net.ssl.SSLException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -35,8 +37,15 @@ class QuickConnectViewModelTest {
 
     @After
     fun tearDown() {
+        // SessionManager collects auth events for as long as its scope lives; leaking one
+        // leaves a collector running into the next test class.
+        scopes.forEach { it.cancel() }
         Dispatchers.resetMain()
     }
+
+    private val scopes = mutableListOf<CoroutineScope>()
+
+    private fun newScope() = CoroutineScope(Dispatchers.Unconfined).also { scopes += it }
 
     private fun initiateJson(
         code: String,
@@ -59,7 +68,7 @@ class QuickConnectViewModelTest {
 
     private val userJson = """
         {"error":false,"message":"user found","data":{"user":{
-            "id":1,"name":"Jose","email":"jose@example.com","is_admin":false,
+            "id":1,"name":"Jose","email":"jose@example.com","is_admin":false,"has_pin":false,
             "avatar":{"String":"","Valid":false},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
         }}}
     """.trimIndent()
@@ -82,13 +91,22 @@ class QuickConnectViewModelTest {
             requests += request.url.encodedPath
             handler(request)
         }
-        val repository = AuthRepository(http.api, http.tokenProvider, testDeviceIdentity)
+        val repository = http.authRepository
         val sessionManager = SessionManager(
             authRepository = repository,
+            profiles = http.profiles,
             settings = ServerSettingsStore(InMemoryPreferencesDataStore()),
             serverUrl = http.serverUrl,
+            authEvents = http.authEvents,
+            elapsed = { 0L },
+            scope = newScope(),
         )
-        return Fixture(QuickConnectViewModel(repository, sessionManager), sessionManager, http, requests)
+        return Fixture(
+            QuickConnectViewModel(repository, http.profiles, sessionManager),
+            sessionManager,
+            http,
+            requests,
+        )
     }
 
     @Test
@@ -175,7 +193,7 @@ class QuickConnectViewModelTest {
 
         val state = f.sessionManager.state.value as AppAuthState.Authenticated
         assertEquals("Jose", state.user.name)
-        assertEquals("igd_paired", f.http.tokenStore.stored)
+        assertEquals("igd_paired", f.http.profileStore.vault.profiles.single().token)
 
         advanceTimeBy(60_000)
         assertEquals(1, f.count("/redeem"))
@@ -529,7 +547,7 @@ class QuickConnectViewModelTest {
 
         assertTrue(f.sessionManager.state.value is AppAuthState.Authenticated)
         assertEquals(1, f.count("/initiate"))
-        assertEquals("igd_paired", f.http.tokenStore.stored)
+        assertEquals("igd_paired", f.http.profileStore.vault.profiles.single().token)
 
         f.viewModel.stop()
     }
@@ -657,7 +675,7 @@ class QuickConnectViewModelTest {
             }
         }
         // Mirrors a launch where restore() could not reach the server but the token survived.
-        f.http.tokenStore.stored = "igd_restored"
+        f.http.seedVault(pendingToken = "igd_restored")
 
         f.viewModel.start()
 
@@ -688,7 +706,7 @@ class QuickConnectViewModelTest {
             QuickConnectPhase.Failed("Couldn't pair with the server. Try again."),
             f.phase,
         )
-        assertNull(f.http.tokenStore.stored)
+        assertNull(f.http.profileStore.vault.pendingToken)
 
         f.viewModel.stop()
     }

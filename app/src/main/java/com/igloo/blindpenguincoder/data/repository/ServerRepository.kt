@@ -5,7 +5,6 @@ import com.igloo.blindpenguincoder.core.config.ServerAddressParseResult
 import com.igloo.blindpenguincoder.core.config.parseServerAddress
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.core.network.BearerTokenProvider
 import com.igloo.blindpenguincoder.core.network.ServerHealthProbe
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
@@ -14,7 +13,7 @@ class ServerRepository(
     private val probe: ServerHealthProbe,
     private val settings: ServerSettingsStore,
     private val serverUrl: ServerUrlProvider,
-    private val tokenProvider: BearerTokenProvider,
+    private val profiles: ProfileRepository,
 ) {
     suspend fun connect(rawInput: String): ApiResult<ServerAddress> {
         val candidate = when (val parsed = parseServerAddress(rawInput)) {
@@ -29,9 +28,11 @@ class ServerRepository(
             is ApiResult.Failure -> return result
         }
 
+        // Tokens and user ids belong to one server, so a different origin invalidates
+        // every stored profile.
         val previous = serverUrl.current.value
         if (previous == null || !previous.hasSameOrigin(finalAddress)) {
-            tokenProvider.clear()
+            profiles.clearAll()
         }
 
         settings.save(finalAddress.apiBaseUrl)

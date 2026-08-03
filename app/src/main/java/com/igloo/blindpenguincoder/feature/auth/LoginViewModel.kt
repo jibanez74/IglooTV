@@ -48,18 +48,6 @@ class LoginViewModel(
             // Logging in again would mint a second device token for the same user, so a retry
             // after a failed user fetch resumes with the token already stored.
             if (!current.awaitingUser) {
-                if (authRepository.hasToken()) {
-                    val revocation = authRepository.revokeSessionForReplacement()
-                    if (revocation is ApiResult.Failure) {
-                        _uiState.update {
-                            it.copy(
-                                isSubmitting = false,
-                                error = revocation.error.toDisplayMessage(),
-                            )
-                        }
-                        return@launch
-                    }
-                }
                 val login = authRepository.deviceLogin(current.email.trim(), current.password)
                 if (login is ApiResult.Failure) {
                     _uiState.update {
@@ -108,5 +96,10 @@ class LoginViewModel(
 
     fun changeServer() {
         sessionManager.requireServerChange()
+    }
+
+    /** Abandons "add a user" and goes back to the profiles already on this TV. */
+    fun cancel() {
+        viewModelScope.launch { sessionManager.cancelAddProfile() }
     }
 }

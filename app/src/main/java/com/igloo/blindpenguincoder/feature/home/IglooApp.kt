@@ -50,6 +50,7 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 @Composable
 fun IglooApp(
     user: AuthUser,
+    onSwitchProfile: () -> Unit,
     onLogout: () -> Unit,
 ) {
     var currentDestinationName by rememberSaveable { mutableStateOf(IglooDestination.Home.name) }
@@ -65,6 +66,7 @@ fun IglooApp(
         contentStartRequester = contentStartRequester,
         navigationRequesters = navigationRequesters,
         onDestinationSelected = { currentDestinationName = it.name },
+        onSwitchProfile = onSwitchProfile,
         onLogout = onLogout,
     )
 }
@@ -76,6 +78,7 @@ private fun IglooShell(
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     onDestinationSelected: (IglooDestination) -> Unit,
+    onSwitchProfile: () -> Unit,
     onLogout: () -> Unit,
 ) {
     val colors = IglooTheme.colors
@@ -93,6 +96,7 @@ private fun IglooShell(
             contentStartRequester = contentStartRequester,
             navigationRequesters = navigationRequesters,
             onDestinationSelected = onDestinationSelected,
+            onSwitchProfile = onSwitchProfile,
             onLogout = onLogout,
             modifier = Modifier
                 .fillMaxHeight()
@@ -122,6 +126,7 @@ private fun NavigationSpine(
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     onDestinationSelected: (IglooDestination) -> Unit,
+    onSwitchProfile: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -192,12 +197,26 @@ private fun NavigationSpine(
             color = colors.mutedForeground,
             maxLines = 1,
         )
-        SignOutItem(onLogout = onLogout)
+        // Handing the TV to someone else keeps this profile paired; signing out does not.
+        AccountActionItem(
+            label = "Switch profile",
+            dotColor = colors.ring,
+            onClick = onSwitchProfile,
+        )
+        AccountActionItem(
+            label = "Sign out",
+            dotColor = colors.destructive,
+            onClick = onLogout,
+        )
     }
 }
 
 @Composable
-private fun SignOutItem(onLogout: () -> Unit) {
+private fun AccountActionItem(
+    label: String,
+    dotColor: Color,
+    onClick: () -> Unit,
+) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(IglooTheme.radius.lg)
@@ -213,13 +232,13 @@ private fun SignOutItem(onLogout: () -> Unit) {
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onLogout,
+                onClick = onClick,
             )
             .clearAndSetSemantics {
-                contentDescription = "Sign out"
+                contentDescription = label
                 role = Role.Button
-                onClick(label = "Sign out") {
-                    onLogout()
+                onClick(label = label) {
+                    onClick()
                     true
                 }
             }
@@ -231,10 +250,10 @@ private fun SignOutItem(onLogout: () -> Unit) {
             modifier = Modifier
                 .size(IglooTheme.sizes.dot)
                 .clip(CircleShape)
-                .background(if (focused) colors.destructive else colors.border),
+                .background(if (focused) dotColor else colors.border),
         )
         IglooText(
-            text = "Sign out",
+            text = label,
             style = IglooTheme.typography.bodyLarge,
             color = colors.foreground,
             maxLines = 1,

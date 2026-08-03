@@ -552,20 +552,82 @@ Two top-level states: **unauthenticated** (full-bleed auth canvas, no shell) and
 **authenticated** (nav spine + content pane). The auth canvas centers a single card on a
 vertical gradient, scrolls internally if it does not fit, and never shows nav chrome.
 
+A device token belongs to exactly one user and the backend has no "switch user" call, so
+multiple people on one TV means **one stored token per person**. Every unauthenticated screen
+below is a step toward getting or choosing one.
+
+#### 11.1.1 Profile picker
+
+"Who's watching?" on the auth canvas at 840dp — the width §11.1.3 already uses. A single
+horizontal row of circular tiles, most recently used first, then an **Add profile** tile that
+is always visible and never focus-gated (§6.2). Below the row, a ghost **Change server** row.
+
+Tiles render from stored profiles alone, so the picker appears instantly and works with the
+server unreachable. Cap the row at **6 profiles** so it never scrolls at any `UiScale`; past
+that, "Add profile" explains itself instead of starting another pairing.
+
+- Avatar: 96dp circle. A remote avatar is fetched only when the stored value is an absolute
+  `http(s)` URL — `openapi.json` does not define how a relative avatar path resolves — and
+  falls back to the initial on `primary`.
+- Focus ring: the one treatment (§6.1) at `radius.pill`, which on a square box reads as the
+  circle it wraps. Focused tile fills `card @ 0.72` and scales to 1.06 over `MICRO_MS`.
+- A PIN-protected profile carries a badge in the `aurora @ 0.16 / 0.48` pair (§3.1).
+- Initial focus is the last-used tile, so resuming is one OK press. The row does **not** wrap
+  at either end (§6.3). Returning up from "Change server" lands on whatever was left in the
+  row, including "Add profile".
+- Each tile is one node: `"$name"`, or `"$name, PIN required"`. The avatar and badge are not
+  announced separately. While signing in, the tile becomes a polite live region.
+
+**A single profile with no PIN skips this screen entirely** and signs straight in; a launch
+that already worked must not grow a screen.
+
+#### 11.1.2 PIN entry
+
+A convenience gate over a token that is already authenticated — never a second factor. The
+server verifies it (`POST /api/user/pin/verify`), and a wrong PIN comes back as a success with
+`valid = false`, so only a genuinely dead token ends the session.
+
+**Remotes have no number keys.** This is the constraint the screen is designed around: a 3×4
+on-screen keypad (1–9, delete, 0) plus four masked indicator cells on the 480dp card. Hardware
+digits are accepted where they exist. An `IglooTextField` is wrong here — it would summon the
+IME, which §11.6 reserves for search and login.
+
+- The entered digits are never rendered and **never enter the accessibility tree**. The
+  indicator row is a single node reading "PIN, N of 4 digits entered" as a polite live region;
+  the cells themselves are hidden. Keypad keys announce their own label, not the PIN.
+- The fourth digit submits automatically.
+- A wrong PIN clears the cells and shows an assertive `IglooInlineError`; **focus stays put** —
+  yanking it back to "1" after every miss is hostile with a remote.
+- A rate limit surfaces the backend's own message; the app invents no cooldown of its own.
+- Back returns to the picker with the profile still paired.
+
+#### 11.1.3 Sign in
+
 Text entry on a remote is painful. Quick-connect pairing is the primary path; email/password is
 the fallback.
+
+When this screen is reached by adding a user rather than by first-time setup, the "Change
+server" slot becomes **Back to profiles** — changing the server wipes every stored profile, so
+offering it mid-add is a trap.
 
 ### 11.2 Navigation spine
 
 Six destinations, icon + label: **Home**, **Movies**, **TV Shows**, **Music**, **Photos**,
-**Settings**. Brand tile + wordmark at the top, **Sign out** at the bottom.
+**Settings**. Brand tile + wordmark at the top, the active profile's name and two account
+actions at the bottom: **Switch profile** above **Sign out**.
+
+The two are deliberately separate. Switch profile returns to the picker with the token intact;
+sign out revokes the device token server-side and drops the profile from this TV. One control
+doing both would either strand a credential on a shared TV or force a re-pair to hand over the
+remote.
 
 Active destination uses `primary @ 0.18` fill plus a `sidebarPrimary` icon; the focused row uses
 `card @ 0.72`. Both render simultaneously when the user is focused on the active destination
 (§3.1).
 
 The footer must remain visible at every `UiScale` — at 540dp tall this is the tightest
-constraint in the app and the first thing to break.
+constraint in the app and the first thing to break. It now carries two rows rather than one,
+so re-verify it at `UiScale.Large` after any spine change.
 
 ### 11.3 Home
 
@@ -608,6 +670,9 @@ Tabbed child routes: General / Account / Libraries / Playback / Users (admin onl
 **General must expose the `UiScale` picker (§2.3) and the light/dark toggle** — without the
 picker, the scale model is inert.
 
+Account owns PIN management (`PUT /api/user/pin` accepts a device token). Not built yet: the
+TV can verify a PIN (§11.1.2) but cannot yet set or clear one.
+
 ### 11.8 Playback
 
 Media3 / ExoPlayer. Direct play or backend-produced HLS; **never client-side transcoding**;
@@ -629,6 +694,12 @@ D-pad and media-key mapping:
 | Back | Exit (or dismiss chrome first) |
 
 Progress saves to the backend every 15s, starting only after ~15s of real playback.
+
+**Media3 does not go through the app's Ktor client**, so playback requests carry no
+`Authorization` header and their 401s never reach the session state machine. When the player
+lands it must inject the bearer from `DeviceCredentialSource` and bridge a 401 from
+`HttpDataSource.InvalidResponseCodeException` into `AuthEventBus.signalUnauthorized`. Every
+media route inherits the global security block; there is no signed-URL escape hatch.
 
 ### 11.9 Notifications
 
@@ -724,6 +795,17 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-03 — Multi-profile auth.**
+
+- **Split §11.1** into the profile picker (11.1.1), PIN entry (11.1.2), and sign in (11.1.3).
+  Records why one device token per person forces a picker, and why the PIN keypad is on-screen
+  rather than an IME field.
+- **§11.2** — the spine footer gains **Switch profile** above **Sign out**, and the note about
+  footer height at `UiScale.Large` is now load-bearing.
+- **§11.7** — Account owns PIN management; the TV can verify a PIN but not yet set one.
+- **§11.8** — added the note that ExoPlayer bypasses the Ktor client, so playback must inject
+  the bearer token and report its own 401s.
 
 **2026-08-02 — TV-first rewrite.**
 

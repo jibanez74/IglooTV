@@ -3,35 +3,36 @@ package com.igloo.blindpenguincoder.feature.auth
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
-import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
 import com.igloo.blindpenguincoder.data.repository.TestHttp
+import com.igloo.blindpenguincoder.data.repository.authUserJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
-import com.igloo.blindpenguincoder.data.repository.testDeviceIdentity
+import com.igloo.blindpenguincoder.data.repository.testStoredProfile
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SessionManagerTest {
 
-    private val userJson = """
-        {"error":false,"message":"user found","data":{"user":{
-            "id":1,"name":"Jose","email":"jose@example.com","is_admin":false,
-            "avatar":{"String":"","Valid":false},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
-        }}}
-    """.trimIndent()
-
     private class Fixture(val manager: SessionManager, val http: TestHttp) {
         var requestCount = 0
+        var elapsed = 0L
     }
 
-    private suspend fun fixture(storedServerUrl: String?, handler: MockRequestHandler): Fixture {
+    private suspend fun fixture(
+        storedServerUrl: String?,
+        scope: CoroutineScope,
+        handler: MockRequestHandler,
+    ): Fixture {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
-        if (storedServerUrl != null) settings.save(storedServerUrl)
         lateinit var fixture: Fixture
         val http = TestHttp { request ->
             fixture.requestCount += 1
@@ -39,17 +40,24 @@ class SessionManagerTest {
         }
         http.serverUrl.set(null)
         val manager = SessionManager(
-            authRepository = AuthRepository(http.api, http.tokenProvider, testDeviceIdentity),
+            authRepository = http.authRepository,
+            profiles = http.profiles,
             settings = settings,
             serverUrl = http.serverUrl,
+            authEvents = http.authEvents,
+            scope = scope,
+            elapsed = { fixture.elapsed },
         )
         fixture = Fixture(manager, http)
+        if (storedServerUrl != null) settings.save(storedServerUrl)
         return fixture
     }
 
+    private fun noRequests(): MockRequestHandler = { error("no request expected") }
+
     @Test
     fun `no stored server leads to NeedsServer`() = runTest {
-        val fixture = fixture(null) { error("no request expected") }
+        val fixture = fixture(null, backgroundScope, noRequests())
 
         fixture.manager.restore()
 
@@ -58,86 +66,319 @@ class SessionManagerTest {
     }
 
     @Test
-    fun `no stored token leads to NeedsLogin without any network call`() = runTest {
-        val fixture = fixture(TEST_SERVER) { error("no request expected") }
+    fun `no stored profile leads to NeedsLogin without any network call`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope, noRequests())
 
         fixture.manager.restore()
 
         val state = fixture.manager.state.value as AppAuthState.NeedsLogin
         assertEquals(TEST_SERVER, state.serverAddress.apiBaseUrl)
         assertNull(state.restoreError)
+        assertFalse(state.canCancel)
         assertEquals(0, fixture.requestCount)
     }
 
     @Test
-    fun `stored server with valid token restores Authenticated`() = runTest {
-        val fixture = fixture(TEST_SERVER) { jsonResponse(userJson) }
-        fixture.http.tokenStore.stored = "igd_valid"
+    fun `a single profile without a PIN signs in straight away`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) { jsonResponse(authUserJson()) }
+        fixture.http.seedVault(testStoredProfile())
 
         fixture.manager.restore()
 
         val state = fixture.manager.state.value as AppAuthState.Authenticated
         assertEquals("Jose", state.user.name)
+        assertEquals(1, fixture.requestCount)
         assertEquals(TEST_SERVER, fixture.http.serverUrl.current.value?.apiBaseUrl)
     }
 
     @Test
-    fun `revoked token is cleared and lands on NeedsLogin`() = runTest {
-        val fixture = fixture(TEST_SERVER) {
+    fun `a single profile with a PIN stops at the PIN gate`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope, noRequests())
+        fixture.http.seedVault(testStoredProfile(hasPin = true))
+
+        fixture.manager.restore()
+
+        val state = fixture.manager.state.value as AppAuthState.NeedsPin
+        assertEquals("Jose", state.profile.name)
+        assertEquals(0, fixture.requestCount)
+    }
+
+    @Test
+    fun `several profiles show the picker without touching the network`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope, noRequests())
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose", lastUsedAtEpochMillis = 10),
+            testStoredProfile(userId = 2, name = "Ana", lastUsedAtEpochMillis = 20),
+            activeUserId = 2,
+        )
+
+        fixture.manager.restore()
+
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
+        assertEquals(listOf("Ana", "Jose"), state.profiles.map { it.name })
+        assertEquals(2L, state.initialFocusUserId)
+        assertEquals(0, fixture.requestCount)
+    }
+
+    @Test
+    fun `a pending token resumes an interrupted pairing`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) { jsonResponse(authUserJson()) }
+        fixture.http.seedVault(pendingToken = "igd_pending")
+
+        fixture.manager.restore()
+
+        assertTrue(fixture.manager.state.value is AppAuthState.Authenticated)
+        assertNull(fixture.http.profileStore.vault.pendingToken)
+        assertEquals(1, fixture.http.profileStore.vault.profiles.size)
+    }
+
+    @Test
+    fun `a revoked single profile is forgotten and lands on NeedsLogin`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
             jsonResponse("""{"error":true,"message":"expired"}""", HttpStatusCode.Unauthorized)
         }
-        fixture.http.tokenStore.stored = "igd_stale"
+        fixture.http.seedVault(testStoredProfile())
 
         fixture.manager.restore()
 
         val state = fixture.manager.state.value as AppAuthState.NeedsLogin
-        assertEquals(TEST_SERVER, state.serverAddress.apiBaseUrl)
         assertEquals("http://igloo.test:8080", state.serverAddress.origin)
-        assertNull(state.restoreError)
-        assertNull(fixture.http.tokenStore.stored)
+        assertTrue(fixture.http.profileStore.vault.profiles.isEmpty())
     }
 
     @Test
-    fun `unreachable server lands on NeedsLogin with a restore error and keeps the token`() = runTest {
-        val fixture = fixture(TEST_SERVER) { throw IOException("no route to host") }
-        fixture.http.tokenStore.stored = "igd_valid"
+    fun `an unreachable server keeps the profile and offers a retry`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) { throw IOException("no route to host") }
+        fixture.http.seedVault(testStoredProfile())
 
         fixture.manager.restore()
 
-        val state = fixture.manager.state.value as AppAuthState.NeedsLogin
+        // The picker, not sign-in: the profile is still valid, so offering to pair again
+        // would mint a second device for the same person.
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
         assertEquals(AppError.Network, state.restoreError)
-        assertEquals("http://igloo.test:8080", state.serverAddress.origin)
-        assertEquals("igd_valid", fixture.http.tokenStore.stored)
+        assertEquals(1, fixture.http.profileStore.vault.profiles.size)
     }
 
     @Test
-    fun `logout returns to NeedsLogin and clears the token`() = runTest {
-        val fixture = fixture(TEST_SERVER) { request ->
+    fun `signing in as a revoked profile removes only that profile`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            jsonResponse("""{"error":true,"message":"expired"}""", HttpStatusCode.Unauthorized)
+        }
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose"),
+            testStoredProfile(userId = 2, name = "Ana"),
+        )
+        fixture.manager.restore()
+
+        val result = fixture.manager.signInAs(
+            (fixture.manager.state.value as AppAuthState.ChooseProfile).profiles.first { it.userId == 1L },
+        )
+
+        assertEquals(SignInResult.Revoked, result)
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
+        assertEquals(listOf("Ana"), state.profiles.map { it.name })
+        assertNotNull(state.notice)
+    }
+
+    @Test
+    fun `a transient failure keeps the picker up and keeps the profile`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) { throw IOException("offline") }
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose"),
+            testStoredProfile(userId = 2, name = "Ana"),
+        )
+        fixture.manager.restore()
+        val picker = fixture.manager.state.value as AppAuthState.ChooseProfile
+
+        val result = fixture.manager.signInAs(picker.profiles.first())
+
+        assertTrue(result is SignInResult.Failed)
+        assertTrue(fixture.manager.state.value is AppAuthState.ChooseProfile)
+        assertEquals(2, fixture.http.profileStore.vault.profiles.size)
+    }
+
+    @Test
+    fun `a mid-session rejection of the active profile returns to the picker`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) { jsonResponse(authUserJson()) }
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose"),
+            testStoredProfile(userId = 2, name = "Ana"),
+        )
+        fixture.manager.restore()
+        fixture.manager.signInAs(
+            (fixture.manager.state.value as AppAuthState.ChooseProfile).profiles.first { it.userId == 1L },
+        )
+
+        fixture.manager.onActiveSessionRevoked()
+
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
+        assertEquals(listOf("Ana"), state.profiles.map { it.name })
+    }
+
+    @Test
+    fun `a rejection arriving after the session ended is ignored`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope, noRequests())
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose"),
+            testStoredProfile(userId = 2, name = "Ana"),
+        )
+        fixture.manager.restore()
+
+        // The picker is showing: nobody is signed in, so there is nothing to revoke.
+        fixture.manager.onActiveSessionRevoked()
+
+        assertEquals(2, fixture.http.profileStore.vault.profiles.size)
+        assertTrue(fixture.manager.state.value is AppAuthState.ChooseProfile)
+    }
+
+    @Test
+    fun `switching profile keeps every profile paired`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) { jsonResponse(authUserJson()) }
+        fixture.http.seedVault(testStoredProfile())
+        fixture.manager.restore()
+
+        fixture.manager.switchProfile()
+
+        assertEquals(1, fixture.http.profileStore.vault.profiles.size)
+        assertNull(fixture.http.profiles.activeProfileId)
+        assertTrue(fixture.manager.state.value is AppAuthState.ChooseProfile)
+    }
+
+    @Test
+    fun `signing out removes only the active profile`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) { request ->
             if (request.url.encodedPath.endsWith("/logout")) {
                 jsonResponse("""{"error":false,"message":"bye"}""")
             } else {
-                jsonResponse(userJson)
+                jsonResponse(authUserJson())
             }
         }
-        fixture.http.tokenStore.stored = "igd_valid"
-
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose"),
+            testStoredProfile(userId = 2, name = "Ana"),
+        )
         fixture.manager.restore()
+        fixture.manager.signInAs(
+            (fixture.manager.state.value as AppAuthState.ChooseProfile).profiles.first { it.userId == 1L },
+        )
+
         fixture.manager.logout()
 
-        val state = fixture.manager.state.value as AppAuthState.NeedsLogin
-        assertEquals(TEST_SERVER, state.serverAddress.apiBaseUrl)
-        assertNull(fixture.http.tokenStore.stored)
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
+        assertEquals(listOf("Ana"), state.profiles.map { it.name })
     }
 
     @Test
-    fun `invalid stored api base is cleared and returns to fresh setup`() = runTest {
-        val fixture = fixture("http://igloo.test:8080/not-api") { error("no request expected") }
-        fixture.http.tokenStore.stored = "igd_stale"
+    fun `adding a profile offers a way back and drops any half-finished pairing`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope, noRequests())
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose"),
+            testStoredProfile(userId = 2, name = "Ana"),
+        )
+        fixture.manager.restore()
+        // An earlier attempt at adding a user left a token nobody claimed.
+        fixture.http.profileStore.vault =
+            fixture.http.profileStore.vault.copy(pendingToken = "igd_abandoned")
+
+        fixture.manager.addProfile()
+
+        val state = fixture.manager.state.value as AppAuthState.NeedsLogin
+        assertTrue(state.canCancel)
+        assertNull(fixture.http.profileStore.vault.pendingToken)
+    }
+
+    @Test
+    fun `cancelling add-a-profile returns to the picker`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope, noRequests())
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose"),
+            testStoredProfile(userId = 2, name = "Ana"),
+        )
+        fixture.manager.restore()
+        fixture.manager.addProfile()
+
+        fixture.manager.cancelAddProfile()
+
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
+        assertEquals(2, state.profiles.size)
+    }
+
+    @Test
+    fun `revalidation inside the interval makes no request`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) { jsonResponse(authUserJson()) }
+        fixture.http.seedVault(testStoredProfile())
+        fixture.manager.restore()
+        val afterRestore = fixture.requestCount
+
+        fixture.manager.revalidateActive()
+
+        assertEquals(afterRestore, fixture.requestCount)
+    }
+
+    @Test
+    fun `revalidation after the interval refreshes the user without leaving the shell`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            jsonResponse(authUserJson(name = "Jose Renamed"))
+        }
+        fixture.http.seedVault(testStoredProfile())
+        fixture.manager.restore()
+        fixture.elapsed += 10 * 60 * 1000L
+
+        fixture.manager.revalidateActive()
+
+        val state = fixture.manager.state.value as AppAuthState.Authenticated
+        assertEquals("Jose Renamed", state.user.name)
+        assertEquals("Jose Renamed", fixture.http.profileStore.vault.profiles.single().name)
+    }
+
+    @Test
+    fun `revalidation offline leaves the session alone`() = runTest {
+        var offline = false
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            if (offline) throw IOException("offline") else jsonResponse(authUserJson())
+        }
+        fixture.http.seedVault(testStoredProfile())
+        fixture.manager.restore()
+        fixture.elapsed += 10 * 60 * 1000L
+        offline = true
+
+        fixture.manager.revalidateActive()
+
+        assertTrue(fixture.manager.state.value is AppAuthState.Authenticated)
+        assertEquals(1, fixture.http.profileStore.vault.profiles.size)
+    }
+
+    @Test
+    fun `revalidation rejected by the server returns to sign-in`() = runTest {
+        var revoked = false
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            if (revoked) {
+                jsonResponse("""{"error":true,"message":"gone"}""", HttpStatusCode.Unauthorized)
+            } else {
+                jsonResponse(authUserJson())
+            }
+        }
+        fixture.http.seedVault(testStoredProfile())
+        fixture.manager.restore()
+        fixture.elapsed += 10 * 60 * 1000L
+        revoked = true
+
+        fixture.manager.revalidateActive()
+
+        assertTrue(fixture.manager.state.value is AppAuthState.NeedsLogin)
+        assertTrue(fixture.http.profileStore.vault.profiles.isEmpty())
+    }
+
+    @Test
+    fun `invalid stored api base wipes the vault and returns to fresh setup`() = runTest {
+        val fixture = fixture("http://igloo.test:8080/not-api", backgroundScope, noRequests())
+        fixture.http.seedVault(testStoredProfile())
 
         fixture.manager.restore()
 
         assertEquals(AppAuthState.NeedsServer(), fixture.manager.state.value)
-        assertNull(fixture.http.tokenStore.stored)
+        assertTrue(fixture.http.profileStore.vault.profiles.isEmpty())
         assertNull(fixture.http.serverUrl.current.value)
     }
 }

@@ -2,15 +2,16 @@ package com.igloo.blindpenguincoder.feature.auth
 
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
-import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
-import com.igloo.blindpenguincoder.data.repository.testDeviceIdentity
+import com.igloo.blindpenguincoder.data.repository.testStoredProfile
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -36,13 +37,21 @@ class LoginViewModelTest {
 
     @After
     fun tearDown() {
+        // SessionManager collects auth events for as long as its scope lives; leaking one
+        // leaves a collector running into the next test class.
+        scopes.forEach { it.cancel() }
         Dispatchers.resetMain()
     }
+
+    private val scopes = mutableListOf<CoroutineScope>()
+
+    private fun newScope() = CoroutineScope(UnconfinedTestDispatcher()).also { scopes += it }
 
     private val userJson = """
         {"error":false,"message":"user found","data":{"user":{
             "id":1,"name":"Jose","email":"jose@example.com","is_admin":false,
-            "avatar":{"String":"","Valid":false},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
+            "avatar":{"String":"","Valid":false},"has_pin":false,
+            "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
         }}}
     """.trimIndent()
 
@@ -63,19 +72,25 @@ class LoginViewModelTest {
 
     private fun fixture(handler: MockRequestHandler): Fixture {
         val http = TestHttp(handler = handler)
-        val repository = AuthRepository(http.api, http.tokenProvider, testDeviceIdentity)
+        val repository = http.authRepository
         val sessionManager = SessionManager(
             authRepository = repository,
+            profiles = http.profiles,
             settings = ServerSettingsStore(InMemoryPreferencesDataStore()),
             serverUrl = http.serverUrl,
+            authEvents = http.authEvents,
+            elapsed = { 0L },
+            scope = newScope(),
         )
         return Fixture(
             viewModel = LoginViewModel(repository, sessionManager),
-            quickConnectViewModel = QuickConnectViewModel(repository, sessionManager),
+            quickConnectViewModel = QuickConnectViewModel(repository, http.profiles, sessionManager),
             sessionManager = sessionManager,
             http = http,
         )
     }
+
+    private fun TestHttp.pendingToken() = profileStore.vault.pendingToken
 
     private fun viewModel(handler: MockRequestHandler): Pair<LoginViewModel, SessionManager> =
         fixture(handler).let { it.viewModel to it.sessionManager }
@@ -216,17 +231,13 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `edited credentials revoke the pending token before another login`() = runTest {
+    fun `edited credentials mint a replacement token without a logout round trip`() = runTest {
         val requests = mutableListOf<String>()
         val fixture = fixture { request ->
             requests += request.url.encodedPath
             when {
                 request.url.encodedPath.endsWith("/auth/device-login") ->
                     jsonResponse(deviceTokenJson)
-                request.url.encodedPath.endsWith("/auth/logout") -> {
-                    assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
-                    jsonResponse("""{"error":false,"message":"logged out"}""")
-                }
                 requests.count { it.endsWith("/auth/user") } == 1 ->
                     throw IOException("unreachable")
                 else -> jsonResponse(userJson)
@@ -238,22 +249,22 @@ class LoginViewModelTest {
         viewModel.onPasswordChange("hunter2")
         viewModel.submit()
         assertTrue(viewModel.uiState.first { it.error != null }.awaitingUser)
-        assertEquals("igd_test", fixture.http.tokenStore.stored)
+        assertEquals("igd_test", fixture.http.pendingToken())
 
         viewModel.onEmailChange("other@example.com")
         assertFalse(viewModel.uiState.value.awaitingUser)
         viewModel.onPasswordChange("replacement")
-        assertEquals("igd_test", fixture.http.tokenStore.stored)
 
         viewModel.submit()
 
         viewModel.uiState.first { !it.isSubmitting && it.error == null }
         assertTrue(fixture.sessionManager.state.value is AppAuthState.Authenticated)
+        // Revoking here would kill whichever profile is currently signed in; the server
+        // replaces the pending token on its own.
         assertEquals(
             listOf(
                 "/api/auth/device-login",
                 "/api/auth/user",
-                "/api/auth/logout",
                 "/api/auth/device-login",
                 "/api/auth/user",
             ),
@@ -262,44 +273,29 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `failed replacement revocation retains the token and skips login`() = runTest {
-        var deviceLogins = 0
-        var userFetches = 0
-        var logouts = 0
+    fun `adding a profile does not revoke the profile already signed in`() = runTest {
+        val requests = mutableListOf<String>()
         val fixture = fixture { request ->
-            when {
-                request.url.encodedPath.endsWith("/auth/device-login") -> {
-                    deviceLogins += 1
-                    jsonResponse(deviceTokenJson)
-                }
-                request.url.encodedPath.endsWith("/auth/user") -> {
-                    userFetches += 1
-                    throw IOException("unreachable")
-                }
-                else -> {
-                    logouts += 1
-                    throw IOException("logout failed")
-                }
+            requests += request.url.encodedPath
+            if (request.url.encodedPath.endsWith("/auth/device-login")) {
+                jsonResponse(deviceTokenJson)
+            } else {
+                jsonResponse(userJson.replace("\"id\":1", "\"id\":2").replace("Jose", "Ana"))
             }
         }
+        fixture.http.seedVault(testStoredProfile(userId = 1, name = "Jose"))
+        fixture.http.profiles.activate(1)
 
-        fixture.viewModel.onEmailChange("jose@example.com")
+        fixture.viewModel.onEmailChange("ana@example.com")
         fixture.viewModel.onPasswordChange("hunter2")
         fixture.viewModel.submit()
-        assertTrue(fixture.viewModel.uiState.first { it.error != null }.awaitingUser)
+        fixture.viewModel.uiState.first { !it.isSubmitting && it.error == null }
 
-        fixture.viewModel.onPasswordChange("wrong")
-        assertEquals("igd_test", fixture.http.tokenStore.stored)
-        fixture.viewModel.submit()
+        assertFalse(requests.any { it.endsWith("/auth/logout") })
         assertEquals(
-            "Couldn't reach the server. Check the address, port, and network connection.",
-            fixture.viewModel.uiState.first { it.error != null }.error,
+            listOf("Jose", "Ana"),
+            fixture.http.profileStore.vault.profiles.map { it.name },
         )
-
-        assertEquals(1, logouts)
-        assertEquals(1, deviceLogins)
-        assertEquals(1, userFetches)
-        assertEquals("igd_test", fixture.http.tokenStore.stored)
     }
 
     @Test
@@ -323,7 +319,7 @@ class LoginViewModelTest {
         assertEquals("jose@example.com", state.email)
         assertEquals("", state.password)
         assertTrue(state.awaitingUser)
-        assertEquals("igd_test", fixture.http.tokenStore.stored)
+        assertEquals("igd_test", fixture.http.pendingToken())
     }
 
     @Test

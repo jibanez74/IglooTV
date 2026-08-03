@@ -2,16 +2,16 @@ package com.igloo.blindpenguincoder.feature.auth
 
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
-import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
 import com.igloo.blindpenguincoder.data.repository.TestHttp
-import com.igloo.blindpenguincoder.data.repository.testDeviceIdentity
 import com.igloo.blindpenguincoder.data.repository.testServerAddress
 import com.igloo.blindpenguincoder.data.repository.testServerHealthProbe
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.client.engine.mock.respond
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -38,8 +38,15 @@ class ServerSetupViewModelTest {
 
     @After
     fun tearDown() {
+        // SessionManager collects auth events for as long as its scope lives; leaking one
+        // leaves a collector running into the next test class.
+        scopes.forEach { it.cancel() }
         Dispatchers.resetMain()
     }
+
+    private val scopes = mutableListOf<CoroutineScope>()
+
+    private fun newScope() = CoroutineScope(UnconfinedTestDispatcher()).also { scopes += it }
 
     private class Fixture(
         val viewModel: ServerSetupViewModel,
@@ -54,14 +61,22 @@ class ServerSetupViewModelTest {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
         val http = TestHttp { error("Auth client should not be called during setup") }
         http.serverUrl.set(null)
-        val authRepository = AuthRepository(http.api, http.tokenProvider, testDeviceIdentity)
+        val authRepository = http.authRepository
         val serverRepository = ServerRepository(
             testServerHealthProbe(handler),
             settings,
             http.serverUrl,
-            http.tokenProvider,
+            http.profiles,
         )
-        val sessionManager = SessionManager(authRepository, settings, http.serverUrl)
+        val sessionManager = SessionManager(
+            authRepository = authRepository,
+            profiles = http.profiles,
+            settings = settings,
+            serverUrl = http.serverUrl,
+            authEvents = http.authEvents,
+            elapsed = { 0L },
+            scope = newScope(),
+        )
         val viewModel = ServerSetupViewModel(serverRepository, sessionManager).apply {
             beginSetup(initialOrigin)
         }

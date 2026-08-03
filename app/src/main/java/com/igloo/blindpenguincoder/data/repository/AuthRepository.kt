@@ -2,10 +2,9 @@ package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.config.DeviceIdentity
 import com.igloo.blindpenguincoder.core.error.ApiResult
-import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.core.network.BearerTokenProvider
 import com.igloo.blindpenguincoder.core.network.safeApiCall
 import com.igloo.blindpenguincoder.data.api.AuthApi
+import com.igloo.blindpenguincoder.data.api.UserApi
 import com.igloo.blindpenguincoder.data.model.ApiEnvelope
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.data.model.AuthUserData
@@ -16,16 +15,18 @@ import com.igloo.blindpenguincoder.data.model.QuickConnectInitiateRequest
 import com.igloo.blindpenguincoder.data.model.QuickConnectRedeemData
 import com.igloo.blindpenguincoder.data.model.QuickConnectRedeemRequest
 import com.igloo.blindpenguincoder.data.model.QuickConnectStatus
+import com.igloo.blindpenguincoder.data.model.UserPinVerifyData
+import com.igloo.blindpenguincoder.data.model.VerifyUserPinRequest
 import io.ktor.client.call.body
 
 class AuthRepository(
     private val api: AuthApi,
-    private val tokens: BearerTokenProvider,
+    private val userApi: UserApi,
+    private val profiles: ProfileRepository,
     private val deviceIdentity: DeviceIdentity,
 ) {
-    suspend fun hasToken(): Boolean = tokens.token() != null
-
-    suspend fun deviceLogin(email: String, password: String): ApiResult<DeviceTokenData> {
+    /** A minted token is held pending until [ProfileRepository.commitSignIn] learns its owner. */
+    suspend fun deviceLogin(email: String, password: String): ApiResult<Unit> {
         val result = safeApiCall(
             request = {
                 api.deviceLogin(
@@ -43,10 +44,13 @@ class AuthRepository(
                     ?: error("Missing device token in auth response")
             },
         )
-        if (result is ApiResult.Success) {
-            tokens.set(result.value.token)
+        return when (result) {
+            is ApiResult.Success -> {
+                profiles.setPending(result.value.token)
+                ApiResult.Success(Unit)
+            }
+            is ApiResult.Failure -> result
         }
-        return result
     }
 
     suspend fun fetchCurrentUser(): ApiResult<AuthUser> =
@@ -84,42 +88,26 @@ class AuthRepository(
             },
         )
         if (result is ApiResult.Success && result.value.status == QuickConnectStatus.Approved) {
-            result.value.token?.let { tokens.set(it) }
+            result.value.token?.let { profiles.setPending(it) }
         }
-        return result
-    }
-
-    /** Revokes this device's token server-side; explicit logout always drops the local token. */
-    suspend fun logout(): ApiResult<Unit> {
-        val result = requestLogout()
-        tokens.clear()
         return result
     }
 
     /**
-     * Revokes the current device token before credentials replace it. The token is retained when
-     * the server cannot confirm revocation, so a transient failure cannot orphan the session.
+     * Revokes a device token server-side. [bearerOverride] targets a token a re-pairing
+     * already replaced; without it, the active profile's token is revoked.
      */
-    suspend fun revokeSessionForReplacement(): ApiResult<Unit> =
-        when (val result = requestLogout()) {
-            is ApiResult.Success -> {
-                tokens.clear()
-                result
-            }
-            is ApiResult.Failure -> if (result.error == AppError.Unauthorized) {
-                tokens.clear()
-                ApiResult.Success(Unit)
-            } else {
-                result
-            }
-        }
-
-    suspend fun clearSession() {
-        tokens.clear()
-    }
-
-    private suspend fun requestLogout(): ApiResult<Unit> = safeApiCall(
-        request = { api.logout() },
+    suspend fun logout(bearerOverride: String? = null): ApiResult<Unit> = safeApiCall(
+        request = { api.logout(bearerOverride) },
         decode = { },
+    )
+
+    /** A wrong PIN is a successful call returning false; only a dead token fails. */
+    suspend fun verifyPin(pin: String): ApiResult<Boolean> = safeApiCall(
+        request = { userApi.verifyPin(VerifyUserPinRequest(pin)) },
+        decode = { response ->
+            response.body<ApiEnvelope<UserPinVerifyData>>().data?.valid
+                ?: error("Missing PIN verification result in response")
+        },
     )
 }

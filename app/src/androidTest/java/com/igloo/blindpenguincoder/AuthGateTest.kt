@@ -90,7 +90,7 @@ class AuthGateTest {
             .targetContext.applicationContext as IglooApplication
         runBlocking {
             app.container.serverSettingsStore.clear()
-            app.container.deviceTokenProvider.clear()
+            app.container.profileRepository.clearAll()
         }
         app.container.serverUrlProvider.set(null)
     }

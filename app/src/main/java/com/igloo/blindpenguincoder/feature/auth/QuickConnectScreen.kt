@@ -63,9 +63,10 @@ fun QuickConnectScreen(
     viewModel: QuickConnectViewModel,
     serverOrigin: String,
     restoreError: AppError?,
+    canCancel: Boolean,
     onRetryRestore: () -> Unit,
     onSwitchToPassword: () -> Unit,
-    onChangeServer: () -> Unit,
+    onLeave: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val switchFocus = remember { FocusRequester() }
@@ -143,14 +144,14 @@ fun QuickConnectScreen(
                 semanticLabel = "Use email and password instead",
             )
             IglooButton(
-                text = "Change server",
-                onClick = onChangeServer,
+                text = leaveActionText(canCancel),
+                onClick = onLeave,
                 variant = IglooButtonVariant.Ghost,
                 modifier = Modifier
                     .weight(1f)
                     .focusRequester(changeServerFocus)
                     .focusProperties { left = switchFocus },
-                semanticLabel = "Change server address",
+                semanticLabel = leaveActionSemanticLabel(canCancel),
             )
         }
     }

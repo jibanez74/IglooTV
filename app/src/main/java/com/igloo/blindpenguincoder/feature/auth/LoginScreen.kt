@@ -25,6 +25,7 @@ fun LoginScreen(
     viewModel: LoginViewModel,
     serverOrigin: String,
     restoreError: AppError?,
+    canCancel: Boolean,
     onSwitchToQuickConnect: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -101,12 +102,12 @@ fun LoginScreen(
             semanticLabel = "Use pairing code instead",
         )
         IglooButton(
-            text = "Change server",
-            onClick = viewModel::changeServer,
+            text = leaveActionText(canCancel),
+            onClick = if (canCancel) viewModel::cancel else viewModel::changeServer,
             variant = IglooButtonVariant.Ghost,
             enabled = !state.isSubmitting,
             modifier = Modifier.fillMaxWidth(),
-            semanticLabel = "Change server address",
+            semanticLabel = leaveActionSemanticLabel(canCancel),
         )
     }
 

@@ -42,6 +42,7 @@ class QuickConnectGateTest {
         seedServerWithoutToken()
 
         ActivityScenario.launch(MainActivity::class.java).use {
+            composeRule.awaitScreen("Sign in to Igloo")
             composeRule.onNodeWithText("Sign in to Igloo").assertIsDisplayed()
             composeRule.onNodeWithText("http://192.0.2.1:8080").assertIsDisplayed()
             composeRule.onNodeWithText(
@@ -77,6 +78,7 @@ class QuickConnectGateTest {
         seedServerWithoutToken()
 
         ActivityScenario.launch(MainActivity::class.java).use {
+            composeRule.awaitScreen("Sign in to Igloo")
             composeRule
                 .onNodeWithContentDescription("Use email and password instead")
                 .performClick()
@@ -106,6 +108,7 @@ class QuickConnectGateTest {
         seedServerWithUnreachableToken()
 
         ActivityScenario.launch(MainActivity::class.java).use {
+            composeRule.awaitScreen("Sign in to Igloo")
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 composeRule
                     .onAllNodesWithContentDescription("Use email and password instead")
@@ -145,7 +148,7 @@ class QuickConnectGateTest {
             .targetContext.applicationContext as IglooApplication
         runBlocking {
             app.container.serverSettingsStore.save("http://192.0.2.1:8080/api")
-            app.container.deviceTokenProvider.clear()
+            app.container.profileRepository.clearAll()
         }
         app.container.serverUrlProvider.set(null)
     }
@@ -155,7 +158,9 @@ class QuickConnectGateTest {
             .targetContext.applicationContext as IglooApplication
         runBlocking {
             app.container.serverSettingsStore.save("http://127.0.0.1:1/api")
-            app.container.deviceTokenProvider.set("igd_unreachable")
+            app.container.profileRepository.clearAll()
+            // Pending, not committed: pairing resumes against a server that never answers.
+            app.container.profileRepository.setPending("igd_unreachable")
         }
         app.container.serverUrlProvider.set(null)
     }

@@ -16,6 +16,7 @@ fun SignInScreen(
     loginViewModel: LoginViewModel,
     serverOrigin: String,
     restoreError: AppError?,
+    canCancel: Boolean,
 ) {
     var mode by rememberSaveable { mutableStateOf(SignInMode.QuickConnect) }
 
@@ -24,15 +25,27 @@ fun SignInScreen(
             viewModel = quickConnectViewModel,
             serverOrigin = serverOrigin,
             restoreError = restoreError,
+            canCancel = canCancel,
             onRetryRestore = loginViewModel::retryRestore,
             onSwitchToPassword = { mode = SignInMode.Password },
-            onChangeServer = loginViewModel::changeServer,
+            onLeave = if (canCancel) loginViewModel::cancel else loginViewModel::changeServer,
         )
         SignInMode.Password -> LoginScreen(
             viewModel = loginViewModel,
             serverOrigin = serverOrigin,
             restoreError = restoreError,
+            canCancel = canCancel,
             onSwitchToQuickConnect = { mode = SignInMode.QuickConnect },
         )
     }
 }
+
+/**
+ * Changing the server wipes every stored profile, so while adding a user the same slot
+ * offers a way back to the picker instead.
+ */
+internal fun leaveActionText(canCancel: Boolean) =
+    if (canCancel) "Back to profiles" else "Change server"
+
+internal fun leaveActionSemanticLabel(canCancel: Boolean) =
+    if (canCancel) "Back to profiles" else "Change server address"

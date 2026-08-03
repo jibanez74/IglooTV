@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.core.network
 
-import com.igloo.blindpenguincoder.core.storage.FakeDeviceTokenStore
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -9,43 +8,36 @@ import org.junit.Test
 class BearerTokenProviderTest {
 
     @Test
-    fun `serves the stored token`() = runTest {
-        val provider = BearerTokenProvider(FakeDeviceTokenStore(stored = "igd_abc"))
-
-        assertEquals("igd_abc", provider.token())
+    fun `starts with no credential`() = runTest {
+        assertNull(BearerTokenProvider().current())
     }
 
     @Test
-    fun `caches after the first read`() = runTest {
-        val store = FakeDeviceTokenStore(stored = "igd_abc")
-        val provider = BearerTokenProvider(store)
-        provider.token()
+    fun `serves the credential it was given`() = runTest {
+        val provider = BearerTokenProvider()
 
-        store.stored = "igd_changed-behind-the-cache"
+        provider.set(ActiveCredential(profileId = 7, token = "igd_abc"))
 
-        assertEquals("igd_abc", provider.token())
+        assertEquals(ActiveCredential(7, "igd_abc"), provider.current())
     }
 
     @Test
-    fun `set updates the cache and the store`() = runTest {
-        val store = FakeDeviceTokenStore()
-        val provider = BearerTokenProvider(store)
+    fun `a later credential replaces the earlier one`() = runTest {
+        val provider = BearerTokenProvider()
+        provider.set(ActiveCredential(profileId = 1, token = "igd_first"))
 
-        provider.set("igd_new")
+        provider.set(ActiveCredential(profileId = 2, token = "igd_second"))
 
-        assertEquals("igd_new", provider.token())
-        assertEquals("igd_new", store.stored)
+        assertEquals(ActiveCredential(2, "igd_second"), provider.current())
     }
 
     @Test
-    fun `clear wipes the cache and the store`() = runTest {
-        val store = FakeDeviceTokenStore(stored = "igd_abc")
-        val provider = BearerTokenProvider(store)
-        provider.token()
+    fun `clearing leaves nothing to attach`() = runTest {
+        val provider = BearerTokenProvider()
+        provider.set(ActiveCredential(profileId = 1, token = "igd_abc"))
 
-        provider.clear()
+        provider.set(null)
 
-        assertNull(provider.token())
-        assertNull(store.stored)
+        assertNull(provider.current())
     }
 }

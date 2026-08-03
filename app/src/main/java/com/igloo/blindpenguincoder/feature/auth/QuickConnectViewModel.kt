@@ -7,6 +7,7 @@ import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.QuickConnectInitiateData
 import com.igloo.blindpenguincoder.data.model.QuickConnectStatus
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
+import com.igloo.blindpenguincoder.data.repository.ProfileRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +35,7 @@ data class QuickConnectUiState(
  */
 class QuickConnectViewModel(
     private val authRepository: AuthRepository,
+    private val profileRepository: ProfileRepository,
     private val sessionManager: SessionManager,
 ) : ViewModel() {
 
@@ -46,9 +48,10 @@ class QuickConnectViewModel(
         if (pairingJob?.isActive == true) return
         _uiState.value = QuickConnectUiState(QuickConnectPhase.RequestingCode)
         pairingJob = viewModelScope.launch {
-            // A stored token outlives a failed restore or a half-finished pairing. Finishing that
-            // sign-in is always right; pairing again would mint a second device for one user.
-            if (authRepository.hasToken()) finishApproved() else runPairing()
+            // A pending token outlives a failed restore or a half-finished pairing. Finishing
+            // that sign-in is always right; pairing again would mint a second device for one
+            // user.
+            if (profileRepository.activatePending()) finishApproved() else runPairing()
         }
     }
 
