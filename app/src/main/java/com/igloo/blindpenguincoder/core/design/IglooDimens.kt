@@ -47,7 +47,11 @@ data class IglooFocus(
     val ringWidth: Dp,
     val restWidth: Dp,
     val scale: Float,
-    val glowAlpha: Float,
+    /**
+     * There is deliberately no glow *alpha* token: the platform multiplies shadow colours by
+     * the theme's spot/ambient shadow alphas, so the ring goes in at full opacity and the
+     * attenuation is the platform's. See design-system.md section 6.1.
+     */
     val glowElevation: Dp,
 )
 
@@ -128,7 +132,6 @@ private fun iglooDimens(
         ringWidth = 3.dp,
         restWidth = 1.dp,
         scale = 1.05f,
-        glowAlpha = 0.20f,
         glowElevation = 16.dp,
     ),
     layout = IglooLayout(

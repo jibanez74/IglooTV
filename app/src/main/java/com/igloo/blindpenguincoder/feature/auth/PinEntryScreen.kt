@@ -216,15 +216,16 @@ private fun KeypadKey(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(IglooTheme.radius.lg)
     val label = if (key == DELETE_KEY) "Delete last digit" else key.toString()
 
     Box(
         modifier = modifier
             .heightIn(min = IglooTheme.sizes.controlHeight)
-            .clip(shape)
-            .background(if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent)
-            .focusRing(focused = focused, radius = IglooTheme.radius.lg)
+            .focusRing(
+                focused = focused,
+                radius = IglooTheme.radius.lg,
+                fill = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
+            )
             .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.feature.auth
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -45,9 +43,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
-import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
@@ -233,17 +229,16 @@ private fun Tile(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (focused) 1.06f else 1f,
-        animationSpec = iglooTween(IglooMotion.MICRO_MS),
-        label = "profileTileScale",
-    )
 
     Column(
         modifier = modifier
             .width(TILE_WIDTH.scaled())
-            .clip(RoundedCornerShape(IglooTheme.radius.lg))
-            .background(if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent)
+            // Rounds without clipping: nothing here needs masking (the avatar and the add-tile
+            // clip themselves), and a clip would cut the avatar's focus glow at this boundary.
+            .background(
+                color = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
+                shape = RoundedCornerShape(IglooTheme.radius.lg),
+            )
             .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -266,10 +261,7 @@ private fun Tile(
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
         Box(
-            modifier = Modifier
-                .scale(scale)
-                .clip(CircleShape)
-                .focusRing(focused = focused, radius = IglooTheme.radius.pill),
+            modifier = Modifier.focusRing(focused = focused, radius = IglooTheme.radius.pill),
         ) {
             avatar()
         }

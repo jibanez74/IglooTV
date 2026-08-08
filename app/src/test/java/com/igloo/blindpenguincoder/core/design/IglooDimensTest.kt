@@ -87,7 +87,6 @@ class IglooDimensTest {
             assertEquals(3.dp, it.focus.ringWidth)
             assertEquals(1.dp, it.focus.restWidth)
             assertEquals(1.05f, it.focus.scale, 0.0001f)
-            assertEquals(0.20f, it.focus.glowAlpha, 0.0001f)
             assertEquals(16.dp, it.focus.glowElevation)
         }
     }

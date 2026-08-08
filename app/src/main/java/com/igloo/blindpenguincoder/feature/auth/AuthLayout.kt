@@ -58,7 +58,7 @@ fun AuthSurface(
                 .clip(shape)
                 .background(colors.card)
                 .border(
-                    width = 1.dp,
+                    width = IglooTheme.focus.restWidth,
                     color = colors.border,
                     shape = shape,
                 ),

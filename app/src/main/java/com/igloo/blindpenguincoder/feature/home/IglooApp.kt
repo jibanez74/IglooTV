@@ -208,15 +208,16 @@ private fun AccountActionItem(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(IglooTheme.radius.lg)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = IglooTheme.sizes.navItemHeight)
-            .clip(shape)
-            .background(if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent)
-            .focusRing(focused = focused, radius = IglooTheme.radius.lg)
+            .focusRing(
+                focused = focused,
+                radius = IglooTheme.radius.lg,
+                fill = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
+            )
             .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -260,7 +261,6 @@ private fun NavigationItem(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(IglooTheme.radius.lg)
     val background = when {
         selected -> colors.primary.copy(alpha = 0.18f)
         focused -> colors.card.copy(alpha = 0.72f)
@@ -273,9 +273,11 @@ private fun NavigationItem(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = IglooTheme.sizes.navItemHeight)
-            .clip(shape)
-            .background(background)
-            .focusRing(focused = focused, radius = IglooTheme.radius.lg)
+            .focusRing(
+                focused = focused,
+                radius = IglooTheme.radius.lg,
+                fill = background,
+            )
             .focusRequester(focusRequester)
             .focusProperties {
                 right = rightFocusRequester
@@ -445,14 +447,15 @@ private fun FeatureCard(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(IglooTheme.radius.xl)
 
     Column(
         modifier = modifier
             .heightIn(min = 178.dp.scaled())
-            .clip(shape)
-            .background(if (focused) colors.card.copy(alpha = 0.96f) else colors.muted)
-            .focusRing(focused = focused, radius = IglooTheme.radius.xl)
+            .focusRing(
+                focused = focused,
+                radius = IglooTheme.radius.xl,
+                fill = if (focused) colors.card.copy(alpha = 0.96f) else colors.muted,
+            )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .then(
                 if (leftFocusRequester != null) {

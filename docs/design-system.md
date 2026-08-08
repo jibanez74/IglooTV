@@ -176,7 +176,7 @@ proves sufficient in practice.
 | Scaled by `UiScale` | Not scaled by `UiScale` |
 |---|---|
 | spacing, radius | `layout.safeArea` — fraction of the panel; follows `viewportFactor` only |
-| type sizes and line heights | `focus.ringWidth` / `restWidth` — hairlines must stay hairlines |
+| type sizes and line heights | `focus.ringWidth` / `restWidth` — hairlines must stay hairlines (they do grow 5% while focused, since the border is drawn inside the scaled layer: 3dp → 3.15dp) |
 | component sizes (control/field/nav heights, icons) | `radius.pill` — a sentinel (999dp), not a dimension |
 | layout widths (spine, poster, card) | `motion.*` durations — time, not size |
 | | `layout.gridColumns` — an integer, and inverse (see below) |
@@ -239,7 +239,6 @@ and are the vocabulary — reuse them rather than inventing neighbors:
 | `0.60f` | `mutedForeground` | Placeholder text |
 | `0.10f` / `0.25f` | `destructive` | Inline error card fill / border |
 | `0.16f` / `0.48f` | `aurora` | Badge fill / border |
-| `0.20f` | `ring` | Focus glow (§6) |
 | `0.26f` dark / `0.16f` light | `primary` | Welcome backdrop core (§11.1.0) |
 | `0.18f` dark / `0.10f` light | `aurora` | Welcome backdrop core (§11.1.0) |
 
@@ -382,22 +381,53 @@ none of that exists here. Every hover affordance becomes a focus affordance.
 |---|---|---|
 | Ring width (focused) | 3dp, `colors.ring` | No |
 | Border width (at rest) | 1dp, `colors.border` | No |
+| Separator (focused) | 1dp gap between ring and fill, showing the surface behind | No |
 | Fill (focused) | `colors.card @ 0.72` | — |
-| Scale | 1.05× | No |
-| Glow | `colors.ring @ 0.20`, 16dp elevation | No |
+| Scale | 1.05×, over `standard` (§7) | No |
+| Glow | `colors.ring`, 16dp elevation, over `standard` | No |
 
 Ring and rest widths are unscaled on purpose: a 2.6dp ring at Compact reads mushy, and a
 hairline must stay a hairline at every scale.
 
-Glow is applied as `Modifier.shadow(elevation, shape, spotColor = colors.ring.copy(alpha = 0.20f))`
-— `spotColor` is available at `minSdk 28`.
+**All of it lives in one modifier**, `Modifier.focusRing` (`core/ui/FocusRing.kt`), because the
+properties cannot be ordered independently: a shadow drawn inside a clip is discarded (the
+platform projects a child's shadow into its parent render node, which *is* the clip), and a
+border drawn outside one is painted over by the fill. So `focusRing` owns the clip, and
+therefore the fill — **a call site passes `fill =` and does not clip.** The colour transition
+runs at `micro` and the scale/elevation at `standard`, per §7.
+
+**The separator is what makes focus legible on a `Primary` button.** `ring` and `primary` are
+the same value in dark (§3), so a ring drawn on a glacier fill is invisible — and worse than a
+no-op, since at rest that edge carries a visible `border` slate. On focus the fill contracts by
+`ringWidth + restWidth`, leaving a real gap that shows whatever is behind the control rather
+than a guessed colour, so it is correct over `background`, `card`, `sidebar`, or a poster.
+Ring against that gap is 8.68:1. Measured on a Shield the gap bottoms at **3.31:1** against the
+fill after the panel's upscale — thin, but past the 3:1 non-text threshold.
+
+**The glow is ambience, not the indicator, and the colours go in at full alpha.** The platform
+multiplies shadow colours by the theme's `spotShadowAlpha` (0.19) and `ambientShadowAlpha`
+(0.039) before rasterising. A `ring @ 0.20` spot colour — which this section specified until the
+treatment was actually built — lands at 0.038 effective, **1.06:1 against `background`**, i.e.
+nothing. At full alpha it reaches 1.53:1, the ceiling of the platform shadow pipeline; 3:1 would
+need ~0.50. So the ring, the separator, and the scale carry focus, and the glow only softens the
+silhouette. `ambientShadowColor` must also be set to the ring: left at its `Color.Black` default
+it darkens the canvas and cancels part of the spot's blue.
+
+Implemented as `graphicsLayer { shadowElevation; ambientShadowColor; spotShadowColor; shape }` —
+not `Modifier.shadow`, which branches internally on `elevation > 0.dp` and would rebuild the
+layer node on every focus transition. `spotColor` is available at `minSdk 28`.
+
+*Known artifact*: `clipScrollableContainer` clips unconditionally, so the first and last row of
+the nav spine's scroll column lose the outer edge of their glow. Fixing it costs 32dp of the
+spine's vertical budget, which §11.2 already calls the tightest constraint in the app; not worth
+it for a ≤1.5:1 effect.
 
 ### 6.2 Converting pointer patterns
 
 | Pointer pattern | TV equivalent |
 |---|---|
 | `hover` overlay + centered Play reveal | Track `Modifier.onFocusChanged`; show dim overlay + Play affordance when the card or its focus group is focused |
-| `hover` poster zoom | `animateFloatAsState` to 1.05×, driven by focus, via `iglooTween` |
+| `hover` poster zoom | The 1.05× of the one treatment — `focusRing` applies it; call sites do not roll their own |
 | `hover` lift + colored glow | Focused elevation + glacier glow (§6.1) |
 | Pointer focus ring | The one focus treatment above — no separate style |
 | Action hidden until hover | **Never gate an action behind focus alone.** Show it always, or reveal on *row* focus so it is reachable before it is needed |
@@ -547,7 +577,7 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1 |
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
-| `FocusRing` | The single focus border; 3dp focused / 1dp at rest |
+| `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
 
@@ -730,7 +760,9 @@ that, "Add profile" explains itself instead of starting another pairing.
   `http(s)` URL — `openapi.json` does not define how a relative avatar path resolves — and
   falls back to the initial on `primary`.
 - Focus ring: the one treatment (§6.1) at `radius.pill`, which on a square box reads as the
-  circle it wraps. Focused tile fills `card @ 0.72` and scales to 1.06 over `MICRO_MS`.
+  circle it wraps. The tile's own `card @ 0.72` fill sits on the caption column and **rounds
+  without clipping** (`background(color, shape)`, not `clip` + `background`) — a clip there
+  would cut the avatar's glow at the tile boundary.
 - A PIN-protected profile carries a badge in the `aurora @ 0.16 / 0.48` pair (§3.1).
 - Initial focus is the last-used tile, so resuming is one OK press. The row does **not** wrap
   at either end (§6.3). Returning up from "Change server" lands on whatever was left in the
@@ -931,8 +963,8 @@ and this document does not mirror them.
 | Lists | CSS grid, responsive breakpoints | `LazyRow`/`LazyColumn`/`LazyVerticalGrid` + `gridColumns` |
 | Type scale | Tailwind utility literals | Six authored styles (§4) |
 
-Shared: the 15 color values, the three motion durations (150/200/300ms), the 1.05× focus scale,
-and the 0.20 focus-glow alpha.
+Shared: the 15 color values, the three motion durations (150/200/300ms), and the 1.05× focus
+scale. The web's 0.20 focus-glow alpha did **not** transfer — see §6.1 for the platform reason.
 
 **Web-side styling issues are tracked in the Igloo repo, not here.** That repo is a sibling
 checkout and is out of scope for this one; do not modify it. The one parity risk worth knowing:
@@ -962,6 +994,31 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-08 — The focus treatment is real.**
+
+§6.1 had specified five properties since it was written; two were implemented. `IglooFocus.scale`,
+`glowAlpha`, and `glowElevation` had no production consumers at all, and because `ring` and
+`primary` are the same value in dark, a focused `Primary` button showed *no* visible indicator —
+it was less delineated focused than at rest, on two of the three first-run screens.
+
+- **`focusRing` now implements all of §6.1** and owns the clip, and therefore the fill. All seven
+  call sites dropped their `.clip(shape).background(x)` and pass `fill =` instead. §9.1 updated.
+- **Added the separator row to §6.1** — the focused fill contracts to leave a real gap, which is
+  what makes a glacier ring legible on a glacier fill. Measured 3.31:1 on a Shield.
+- **Corrected §6.1's glow.** The prescribed `spotColor = ring.copy(alpha = 0.20f)` yields 1.06:1
+  and could never have worked: the platform applies its own 0.19/0.039 shadow alphas. Colours now
+  go in at full alpha, `ambientShadowColor` included, and the glow is documented as ambience
+  rather than as the indicator. **§3.1's `0.20f` ring row is gone**, as is the `glowAlpha` token —
+  no pixel read it, and Appendix B's rule makes a test-guarded number with no pixel a defect.
+- **§11.1.1's profile tile** no longer specifies its own 1.06× over `MICRO_MS`, which contradicted
+  the 1.05f token, §6.1, §7's duration table, and a passing unit test. It takes the one treatment.
+  Its column now rounds without clipping so the avatar's glow is not cut.
+- **New `FocusTreatmentTest`** asserts pixels, not semantics — the whole existing suite asserts
+  `assertIsFocused()`, which cannot tell "focused" from "invisible", which is why this survived.
+  Verified to fail on the restored defect.
+- `docs/focus-treatment-gap.md` (the bug report) is resolved and deleted; its arithmetic, and the
+  correction to its recommended fix, are in §6.1.
 
 **2026-08-04 — Launch splash.**
 

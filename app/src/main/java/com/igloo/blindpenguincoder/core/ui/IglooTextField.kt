@@ -1,13 +1,11 @@
 package com.igloo.blindpenguincoder.core.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -18,7 +16,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -37,7 +34,6 @@ import androidx.compose.ui.semantics.password
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 
 @Composable
@@ -59,7 +55,6 @@ fun IglooTextField(
     val colors = IglooTheme.colors
     val focusManager = LocalFocusManager.current
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(IglooTheme.radius.lg)
 
     Column(
         modifier = modifier,
@@ -74,12 +69,17 @@ fun IglooTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = IglooTheme.sizes.fieldHeight)
-                .clip(shape)
-                .background(colors.muted)
                 .focusRing(
                     focused = focused,
                     radius = IglooTheme.radius.lg,
+                    fill = colors.muted,
                     hasError = errorText != null,
+                    // The one opt-out from the focus scale, for two mechanical reasons:
+                    // localToWindow composes the layer matrix, so a scaled field would report a
+                    // cursor rect that mis-anchors the IME; and glyphs rasterised at 1x then
+                    // resampled to 1.05x are visibly soft on the one control a user reads
+                    // character by character while typing.
+                    scaleOnFocus = false,
                 ),
             contentAlignment = Alignment.CenterStart,
         ) {
