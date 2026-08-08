@@ -201,8 +201,7 @@ private fun AddProfileTile(
             modifier = Modifier
                 .size(AVATAR_SIZE.scaled())
                 .clip(CircleShape)
-                .background(colors.muted)
-                .border(IglooTheme.focus.restWidth, colors.border, CircleShape),
+                .background(colors.muted),
             contentAlignment = Alignment.Center,
         ) {
             IglooText(

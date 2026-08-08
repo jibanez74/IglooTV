@@ -8,12 +8,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -81,8 +84,8 @@ fun Modifier.focusRing(
             ambientShadowColor = colors.ring
             spotShadowColor = colors.ring
             this.shape = shape
-            // No clip: the fill is drawn as a rounded rect below, and clipping here would only
-            // mask descendants that already clip themselves.
+            // Keep this outer layer unclipped so the scale and glow can extend past the bounds;
+            // descendant masking happens concentrically in the draw phase below.
         }
         .drawWithCache {
             val ringWidth = focus.ringWidth.toPx()
@@ -91,12 +94,34 @@ fun Modifier.focusRing(
             // clamping here is what lets radius.pill (999dp) resolve to the circle it stands for.
             val outerRadius = minOf(radius.toPx(), size.minDimension / 2f)
             val gap = ringWidth + restWidth
+            val contentClip = Path()
 
-            onDrawBehind {
+            onDrawWithContent content@{
                 val t = tint.value
                 // At rest the fill reaches the edge exactly as it always has; on focus it
                 // contracts to expose the surface behind the control.
-                drawInsetRoundRect(fill, outerRadius, gap * t)
+                val contentInset = gap * t
+                drawInsetRoundRect(fill, outerRadius, contentInset)
+
+                if (contentInset > 0f) {
+                    val contentRadius = (outerRadius - contentInset).coerceAtLeast(0f)
+                    contentClip.reset()
+                    contentClip.addRoundRect(
+                        RoundRect(
+                            left = contentInset,
+                            top = contentInset,
+                            right = size.width - contentInset,
+                            bottom = size.height - contentInset,
+                            cornerRadius = CornerRadius(contentRadius, contentRadius),
+                        ),
+                    )
+                    clipPath(contentClip) { this@content.drawContent() }
+                } else {
+                    drawContent()
+                }
+
+                // Strokes are last so opaque edge-to-edge content cannot cover the focus ring or
+                // the resting border. The contracted content leaves the real separator visible.
                 if (t > 0f) {
                     drawInsetRoundRect(
                         color = colors.ring,

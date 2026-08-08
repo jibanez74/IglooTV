@@ -5,12 +5,15 @@ import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -135,6 +138,62 @@ class FocusTreatmentTest {
         )
     }
 
+    @Test
+    fun focusedOpaqueCircularContentShowsRingSeparatorAndAvatarInOrder() {
+        composeRule.setContent {
+            IglooTheme {
+                CompositionLocalProvider(LocalIglooReducedMotion provides true) {
+                    Box(
+                        Modifier
+                            .background(IglooTheme.colors.background)
+                            .padding(24.dp),
+                    ) {
+                        Box(
+                            Modifier
+                                .size(96.dp)
+                                .focusRing(
+                                    focused = true,
+                                    radius = IglooTheme.radius.pill,
+                                ),
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(96.dp)
+                                    .background(OPAQUE_AVATAR, CircleShape),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
+        val focused = composeRule.onRoot().captureToImage().asAndroidBitmap()
+        val row = focused.height / 2
+        val glacier = IglooDarkColors.ring.toArgbLuminance()
+        val avatar = OPAQUE_AVATAR.toArgbLuminance()
+        val inward = (0 until focused.width).map { luminance(focused.getPixel(it, row)) }
+
+        val ring = inward.indexOfFirst { contrastRatio(it, glacier) < 1.2 }
+        assertTrue("the opaque avatar covered every solid ring pixel", ring >= 0)
+
+        val separator = inward.indexOfFirstAfter(ring) {
+            contrastRatio(it, glacier) >= 3.0 && contrastRatio(it, avatar) >= 3.0
+        }
+        assertTrue(
+            "the focused ring runs directly into opaque avatar content; no real separator was " +
+                "visible. Luminance inward: ${inward.traceFrom(ring)}",
+            separator > ring,
+        )
+
+        val content = inward.indexOfFirstAfter(separator) { contrastRatio(it, avatar) < 1.2 }
+        assertTrue(
+            "ring and separator were visible, but opaque avatar content did not follow them. " +
+                "Luminance inward: ${inward.traceFrom(ring)}",
+            content > separator,
+        )
+    }
+
     /**
      * Deliberately not a bare `!=`. A treatment that only lifted the least significant bits — an
      * elevation glow on its own measures about 1.5:1 against the canvas — would satisfy inequality
@@ -225,5 +284,18 @@ class FocusTreatmentTest {
         val hi = maxOf(a, b)
         val lo = minOf(a, b)
         return (hi + 0.05) / (lo + 0.05)
+    }
+
+    private fun List<Double>.indexOfFirstAfter(index: Int, predicate: (Double) -> Boolean): Int {
+        val offset = drop(index + 1).indexOfFirst(predicate)
+        return if (offset < 0) -1 else index + 1 + offset
+    }
+
+    private fun List<Double>.traceFrom(index: Int): String =
+        drop(index.coerceAtLeast(0)).take((12 * density).toInt())
+            .joinToString(" ") { "%.3f".format(it) }
+
+    private companion object {
+        val OPAQUE_AVATAR = Color.White
     }
 }
