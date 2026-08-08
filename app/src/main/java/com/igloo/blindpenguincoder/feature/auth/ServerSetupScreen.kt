@@ -79,15 +79,14 @@ fun ServerSetupScreen(viewModel: ServerSetupViewModel) {
         )
     }
 
-    LaunchedEffect(Unit) {
+    // Connecting disables the field and the button, so focus is cleared for the duration and a
+    // failure would otherwise leave the screen unnavigable. See ServerSetupUiState for why the
+    // key is an attempt counter and not the error or the in-flight flag.
+    LaunchedEffect(state.completedAttempts) {
         fieldFocus.requestFocus()
-    }
-    LaunchedEffect(state.error) {
-        if (state.error != null) {
-            // Order matters: requesting focus starts a text input session and
-            // re-shows the IME, so the hide has to come after it.
-            fieldFocus.requestFocus()
-            keyboard?.hide()
-        }
+        // Order matters: requesting focus starts a text input session and re-shows the IME, so
+        // the hide has to come after it. Only after a failure — on arrival the field is empty
+        // and the keyboard is exactly what the user wants.
+        if (state.error != null) keyboard?.hide()
     }
 }

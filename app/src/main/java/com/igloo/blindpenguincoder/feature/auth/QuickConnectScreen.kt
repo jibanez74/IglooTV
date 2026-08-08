@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +58,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooQrCode
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.focusRing
 
 @Composable
 fun QuickConnectScreen(
@@ -110,7 +112,7 @@ internal fun QuickConnectContent(
     AuthSurface(
         title = "Sign in to Igloo",
         subtitle = serverOrigin,
-        cardWidth = 840.dp,
+        cardWidth = IglooTheme.layout.authCardWideWidth,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -153,7 +155,7 @@ internal fun QuickConnectContent(
             }
             ApprovalDestination(
                 approvalUrl = approvalUrl,
-                modifier = Modifier.width(264.dp),
+                modifier = Modifier.width(IglooTheme.layout.wideCardWidth),
             )
         }
         Row(
@@ -183,10 +185,13 @@ internal fun QuickConnectContent(
         }
     }
 
-    LaunchedEffect(spokenAccessibilityEnabled, phase is QuickConnectPhase.CodeReady) {
-        if (!spokenAccessibilityEnabled || phase !is QuickConnectPhase.CodeReady) {
-            switchFocus.requestFocus()
-        }
+    // The pairing characters are only focusable while spoken accessibility is on and a code is
+    // up; when they go away they take focus with them. Keyed on exactly that, and not on the
+    // phase itself — a phase flip with spoken accessibility off destroys nothing, and re-firing
+    // there would drag the user off whichever button they were on, mid-approval.
+    val accessibleCodeShown = spokenAccessibilityEnabled && phase is QuickConnectPhase.CodeReady
+    LaunchedEffect(accessibleCodeShown) {
+        if (!accessibleCodeShown) switchFocus.requestFocus()
     }
 }
 
@@ -203,7 +208,7 @@ private fun ApprovalDestination(
     ) {
         IglooQrCode(
             value = approvalUrl,
-            modifier = Modifier.size(216.dp),
+            modifier = Modifier.size(216.dp.scaled()),
         )
         IglooText(
             text = "Approval URL",
@@ -298,22 +303,31 @@ private fun AccessiblePairingCode(
 ) {
     val colors = IglooTheme.colors
     val focusManager = LocalFocusManager.current
-    val characterSpacing = with(LocalDensity.current) { 10.sp.toDp() }
+    // Read from the style rather than repeated: IglooTypography scales letterSpacing, so a copy
+    // would lose tracking parity with the same code rendered in sighted mode.
+    val characterSpacing = with(LocalDensity.current) {
+        IglooTheme.typography.displayCode.letterSpacing.toDp()
+    }
     val focusRequesters = remember(code.length) {
         List(code.length) { FocusRequester() }
     }
     var firstCharacterDescription by remember { mutableStateOf<String?>(null) }
     var arrivalFocusReceived by remember { mutableStateOf(false) }
+    var focusedIndex by remember(code.length) { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(code) {
         val firstCharacter = code.firstOrNull() ?: return@LaunchedEffect
+        onPresented()
+        // Re-anchors on every rotation, including from elsewhere on the screen. That looks like
+        // focus theft and was nearly "fixed" as such, but it is deliberate and asserted by
+        // PairingCodeAccessibilityTest: the code the user is being read has just stopped being
+        // valid, so leaving them on a stale one is the worse failure.
         firstCharacterDescription = if (isReplacement) {
             "Pairing code changed. Focus moved to the first character. $firstCharacter."
         } else {
             "Pairing code ready. Focus moved to the first character. " +
                 "Use Left and Right to review each character. $firstCharacter."
         }
-        onPresented()
         arrivalFocusReceived = false
 
         withFrameNanos { }
@@ -336,6 +350,14 @@ private fun AccessiblePairingCode(
                 modifier = Modifier
                     .focusRequester(focusRequesters[index])
                     .onFocusChanged { focusState ->
+                        // Written by index rather than a bare flag so stepping between two
+                        // characters — which unfocuses one and focuses the next in either
+                        // order — never reads as having left the group.
+                        if (focusState.isFocused) {
+                            focusedIndex = index
+                        } else if (focusedIndex == index) {
+                            focusedIndex = null
+                        }
                         if (index != 0) return@onFocusChanged
                         if (focusState.isFocused) {
                             arrivalFocusReceived = true
@@ -344,6 +366,13 @@ private fun AccessiblePairingCode(
                             arrivalFocusReceived = false
                         }
                     }
+                    // These characters are the reason this mode exists, and they were the only
+                    // focusables in the app that showed no focus at all.
+                    .focusRing(
+                        focused = focusedIndex == index,
+                        radius = IglooTheme.radius.md,
+                    )
+                    .padding(IglooTheme.spacing.xs)
                     .focusProperties {
                         if (index > 0) {
                             left = focusRequesters[index - 1]

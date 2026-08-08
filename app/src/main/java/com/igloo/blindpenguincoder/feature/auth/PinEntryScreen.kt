@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +49,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.iglooSurface
 
 /**
  * PIN gate for a protected profile. TV remotes have no number keys, so the digits come
@@ -62,8 +62,11 @@ fun PinEntryScreen(
     state: AppAuthState.NeedsPin,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val firstKeyFocus = remember { FocusRequester() }
+    val keyFocus = remember { List(KEYPAD.size) { FocusRequester() } }
     val backFocus = remember { FocusRequester() }
+    // Coming back up from the footer, and recovering from a rejected PIN, both land on the key
+    // the user actually left rather than the top-left corner of the pad.
+    var lastFocusedKey by remember { mutableStateOf<FocusRequester?>(null) }
 
     AuthSurface(
         title = "Enter ${state.profile.name}'s PIN",
@@ -82,7 +85,8 @@ fun PinEntryScreen(
             enabled = !uiState.isVerifying,
             onDigit = viewModel::append,
             onDelete = viewModel::delete,
-            firstKeyFocus = firstKeyFocus,
+            keyFocus = keyFocus,
+            onKeyFocused = { lastFocusedKey = it },
             downBoundary = backFocus,
         )
 
@@ -93,12 +97,16 @@ fun PinEntryScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(backFocus)
-                .focusProperties { up = firstKeyFocus },
+                .focusProperties { up = lastFocusedKey ?: keyFocus.first() },
             semanticLabel = "Back to profiles",
         )
     }
 
-    LaunchedEffect(Unit) { firstKeyFocus.requestFocus() }
+    // Verifying disables every key, which drops focus off the pad entirely. See
+    // ServerSetupUiState.completedAttempts for why the key is a counter and not the error text.
+    LaunchedEffect(uiState.rejections) {
+        (lastFocusedKey ?: keyFocus.first()).requestFocus()
+    }
 }
 
 /** One node for the whole row: the count is useful, the digits are not for sharing. */
@@ -128,8 +136,9 @@ private fun PinIndicator(
             Box(
                 modifier = Modifier
                     .size(width = 56.dp.scaled(), height = IglooTheme.sizes.fieldHeight)
-                    .clip(RoundedCornerShape(IglooTheme.radius.lg))
-                    .background(colors.muted),
+                    // Same hairline the text fields get from focusRing, so the two input
+                    // affordances on adjacent auth screens are delineated the same way.
+                    .iglooSurface(radius = IglooTheme.radius.lg, fill = colors.muted),
                 contentAlignment = Alignment.Center,
             ) {
                 if (index < enteredCount) {
@@ -150,7 +159,8 @@ private fun Keypad(
     enabled: Boolean,
     onDigit: (Char) -> Unit,
     onDelete: () -> Unit,
-    firstKeyFocus: FocusRequester,
+    keyFocus: List<FocusRequester>,
+    onKeyFocused: (FocusRequester) -> Unit,
     downBoundary: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
@@ -187,16 +197,15 @@ private fun Keypad(
                         Box(modifier = Modifier.weight(1f))
                         return@forEachIndexed
                     }
-                    val isFirstKey = rowIndex == 0 && columnIndex == 0
+                    val requester = keyFocus[rowIndex * KEYPAD_COLUMNS + columnIndex]
                     KeypadKey(
                         key = key,
                         enabled = enabled,
                         onClick = { if (key == DELETE_KEY) onDelete() else onDigit(key) },
                         modifier = Modifier
                             .weight(1f)
-                            .then(
-                                if (isFirstKey) Modifier.focusRequester(firstKeyFocus) else Modifier,
-                            )
+                            .focusRequester(requester)
+                            .onFocusChanged { if (it.isFocused) onKeyFocused(requester) }
                             .focusProperties {
                                 if (rowIndex == lastRowIndex) down = downBoundary
                             },

@@ -61,6 +61,9 @@ data class IglooLayout(
     val safeAreaHorizontal: Dp,
     val safeAreaVertical: Dp,
     val navSpineWidth: Dp,
+    /** The centered auth card: [authCardWidth] for a form, [authCardWideWidth] for a row. */
+    val authCardWidth: Dp,
+    val authCardWideWidth: Dp,
     val posterWidth: Dp,
     val wideCardWidth: Dp,
     val posterAspect: Float,
@@ -138,6 +141,8 @@ private fun iglooDimens(
         safeAreaHorizontal = 48.dp.at(viewportFactor),
         safeAreaVertical = 27.dp.at(viewportFactor),
         navSpineWidth = 236.dp.at(scale),
+        authCardWidth = 480.dp.at(scale),
+        authCardWideWidth = 840.dp.at(scale),
         posterWidth = 148.dp.at(scale),
         wideCardWidth = 264.dp.at(scale),
         posterAspect = 2f / 3f,

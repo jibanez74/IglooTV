@@ -14,6 +14,13 @@ data class ProfilePickerUiState(
     /** The tile currently waiting on the server; the rest of the picker stays put. */
     val signingInUserId: Long? = null,
     val error: String? = null,
+    /**
+     * The tile whose last sign-in attempt finished, and a counter that changes even when the same
+     * tile fails twice. Every tile is disabled while one signs in, so focus is cleared and has to
+     * be handed back; see [ServerSetupUiState.completedAttempts] for why [error] cannot key that.
+     */
+    val lastAttemptedUserId: Long? = null,
+    val completedAttempts: Int = 0,
 )
 
 class ProfilePickerViewModel(
@@ -38,6 +45,8 @@ class ProfilePickerViewModel(
                 it.copy(
                     signingInUserId = null,
                     error = (result as? SignInResult.Failed)?.error?.toDisplayMessage(),
+                    lastAttemptedUserId = profile.userId,
+                    completedAttempts = it.completedAttempts + 1,
                 )
             }
         }

@@ -66,6 +66,9 @@ fun Modifier.focusRing(
     // The layer's shape is the shadow's outline; without it the glow would square off the
     // corners of a rounded control. Hoisted so the draw-phase block allocates nothing.
     val shape = remember(radius) { RoundedCornerShape(radius) }
+    // Hoisted for the same reason as `shape`: a composable modifier factory hands drawWithCache a
+    // fresh capturing lambda on every recomposition, which drops the cache and would re-allocate.
+    val contentClip = remember { Path() }
 
     return this
         .graphicsLayer {
@@ -94,31 +97,34 @@ fun Modifier.focusRing(
             // clamping here is what lets radius.pill (999dp) resolve to the circle it stands for.
             val outerRadius = minOf(radius.toPx(), size.minDimension / 2f)
             val gap = ringWidth + restWidth
-            val contentClip = Path()
+            // The gap is unscaled, so a control narrower than twice it has nothing to contract
+            // into: the inset rect would invert, an inverted rounded rect is the empty path, and
+            // clipping to that would erase the content entirely. Below the threshold the
+            // treatment keeps its ring and drops the separator rather than the control.
+            val peakInset = if (size.minDimension > gap * 2f) gap else 0f
 
             onDrawWithContent content@{
                 val t = tint.value
                 // At rest the fill reaches the edge exactly as it always has; on focus it
                 // contracts to expose the surface behind the control.
-                val contentInset = gap * t
+                val contentInset = peakInset * t
                 drawInsetRoundRect(fill, outerRadius, contentInset)
 
-                if (contentInset > 0f) {
-                    val contentRadius = (outerRadius - contentInset).coerceAtLeast(0f)
-                    contentClip.reset()
-                    contentClip.addRoundRect(
-                        RoundRect(
-                            left = contentInset,
-                            top = contentInset,
-                            right = size.width - contentInset,
-                            bottom = size.height - contentInset,
-                            cornerRadius = CornerRadius(contentRadius, contentRadius),
-                        ),
-                    )
-                    clipPath(contentClip) { this@content.drawContent() }
-                } else {
-                    drawContent()
-                }
+                // Clipped at rest too, not only while focused: callers pass their fill in and do
+                // not clip themselves, so a rest state that skipped this would square off every
+                // rounded control and snap it back round the instant focus arrived.
+                val contentRadius = (outerRadius - contentInset).coerceAtLeast(0f)
+                contentClip.reset()
+                contentClip.addRoundRect(
+                    RoundRect(
+                        left = contentInset,
+                        top = contentInset,
+                        right = size.width - contentInset,
+                        bottom = size.height - contentInset,
+                        cornerRadius = CornerRadius(contentRadius, contentRadius),
+                    ),
+                )
+                clipPath(contentClip) { this@content.drawContent() }
 
                 // Strokes are last so opaque edge-to-edge content cannot cover the focus ring or
                 // the resting border. The contracted content leaves the real separator visible.

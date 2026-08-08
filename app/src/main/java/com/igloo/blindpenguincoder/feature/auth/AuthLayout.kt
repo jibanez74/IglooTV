@@ -1,7 +1,6 @@
 package com.igloo.blindpenguincoder.feature.auth
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -20,21 +19,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooBrandMark
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.iglooSurface
 
 /** Full-bleed auth canvas with a single centered card; no nav chrome. */
 @Composable
 fun AuthSurface(
     title: String,
     subtitle: String,
-    cardWidth: Dp = 480.dp,
+    cardWidth: Dp = IglooTheme.layout.authCardWidth,
     content: @Composable () -> Unit,
 ) {
     val colors = IglooTheme.colors
+    val layout = IglooTheme.layout
 
     BoxWithConstraints(
         modifier = Modifier
@@ -46,22 +49,17 @@ fun AuthSurface(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        val outerPadding = IglooTheme.spacing.xl
-        val availableWidth = (maxWidth - outerPadding * 2).coerceAtLeast(0.dp)
-        val availableHeight = (maxHeight - outerPadding * 2).coerceAtLeast(0.dp)
+        // The auth canvas is a full-screen non-shell surface, so it owes the overscan safe area
+        // (section 2.5) — not spacing.xl, which is both narrower and shrinks at Compact.
+        val availableWidth = (maxWidth - layout.safeAreaHorizontal * 2).coerceAtLeast(0.dp)
+        val availableHeight = (maxHeight - layout.safeAreaVertical * 2).coerceAtLeast(0.dp)
         val shape = RoundedCornerShape(IglooTheme.radius.xl)
 
         Box(
             modifier = Modifier
                 .width(minOf(cardWidth, availableWidth))
                 .heightIn(max = availableHeight)
-                .clip(shape)
-                .background(colors.card)
-                .border(
-                    width = IglooTheme.focus.restWidth,
-                    color = colors.border,
-                    shape = shape,
-                ),
+                .iglooSurface(radius = IglooTheme.radius.xl, fill = colors.card),
         ) {
             Column(
                 modifier = Modifier
@@ -81,6 +79,7 @@ fun AuthSurface(
                             text = title,
                             style = IglooTheme.typography.titleMedium,
                             color = colors.cardForeground,
+                            modifier = Modifier.semantics { heading() },
                         )
                         IglooText(
                             text = subtitle,

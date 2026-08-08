@@ -11,13 +11,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
+import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.IglooTextField
 
 @Composable
@@ -83,6 +88,16 @@ fun LoginScreen(
             upFocusRequester = emailFocus,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (state.isSubmitting) {
+            // The button carries the only other signal, and it is disabled and unfocused for the
+            // whole request, so without this TalkBack says nothing at all while it runs.
+            IglooText(
+                text = "Signing in…",
+                style = IglooTheme.typography.bodyMedium,
+                color = IglooTheme.colors.mutedForeground,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
         IglooButton(
             text = if (state.isSubmitting) "Signing in…" else "Sign in",
             onClick = submit,
@@ -111,7 +126,10 @@ fun LoginScreen(
         )
     }
 
-    LaunchedEffect(Unit) {
+    // Submitting disables every control on the screen, so focus is cleared for the duration and a
+    // failure would otherwise leave nothing focused. See ServerSetupUiState.completedAttempts for
+    // why the key is an attempt counter and not the error or the in-flight flag.
+    LaunchedEffect(state.completedAttempts) {
         emailFocus.requestFocus()
     }
 }

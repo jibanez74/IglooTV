@@ -57,6 +57,8 @@ class IglooDimensTest {
             assertEquals(48.dp, safeAreaHorizontal)
             assertEquals(27.dp, safeAreaVertical)
             assertEquals(236.dp, navSpineWidth)
+            assertEquals(480.dp, authCardWidth)
+            assertEquals(840.dp, authCardWideWidth)
             assertEquals(148.dp, posterWidth)
             assertEquals(264.dp, wideCardWidth)
             assertEquals(2f / 3f, posterAspect, 0.0001f)
@@ -112,6 +114,7 @@ class IglooDimensTest {
             { it.sizes.brandTile },
             { it.icons.md }, { it.icons.lg },
             { it.layout.navSpineWidth }, { it.layout.posterWidth }, { it.layout.wideCardWidth },
+            { it.layout.authCardWidth }, { it.layout.authCardWideWidth },
         )
         scaled.forEach { token ->
             assertTrue(

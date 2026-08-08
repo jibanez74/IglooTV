@@ -18,6 +18,12 @@ data class LoginUiState(
     val error: String? = null,
     /** A token was issued but the user fetch failed; resubmitting resumes it, not a second login. */
     val awaitingUser: Boolean = false,
+    /**
+     * How many submissions have finished. Every control is disabled while one is in flight, so
+     * focus is cleared and has to be handed back; see [ServerSetupUiState.completedAttempts] for
+     * why neither [error] nor [isSubmitting] can key that.
+     */
+    val completedAttempts: Int = 0,
 )
 
 class LoginViewModel(
@@ -40,7 +46,12 @@ class LoginViewModel(
         val current = _uiState.value
         if (current.isSubmitting) return
         if (!current.awaitingUser && (current.email.isBlank() || current.password.isBlank())) {
-            _uiState.update { it.copy(error = "Enter your email and password.") }
+            _uiState.update {
+                it.copy(
+                    error = "Enter your email and password.",
+                    completedAttempts = it.completedAttempts + 1,
+                )
+            }
             return
         }
         _uiState.update { it.copy(isSubmitting = true, error = null) }
@@ -51,7 +62,11 @@ class LoginViewModel(
                 val login = authRepository.deviceLogin(current.email.trim(), current.password)
                 if (login is ApiResult.Failure) {
                     _uiState.update {
-                        it.copy(isSubmitting = false, error = login.error.toDisplayMessage())
+                        it.copy(
+                            isSubmitting = false,
+                            error = login.error.toDisplayMessage(),
+                            completedAttempts = it.completedAttempts + 1,
+                        )
                     }
                     return@launch
                 }
@@ -62,13 +77,19 @@ class LoginViewModel(
             when (val result = sessionManager.completeSignIn()) {
                 SignInResult.Authenticated ->
                     _uiState.update {
-                        it.copy(isSubmitting = false, password = "", awaitingUser = false)
+                        it.copy(
+                            isSubmitting = false,
+                            password = "",
+                            awaitingUser = false,
+                            completedAttempts = it.completedAttempts + 1,
+                        )
                     }
                 SignInResult.Revoked -> _uiState.update {
                     it.copy(
                         isSubmitting = false,
                         error = AppError.Unauthorized.toDisplayMessage(),
                         awaitingUser = false,
+                        completedAttempts = it.completedAttempts + 1,
                     )
                 }
                 is SignInResult.Failed -> _uiState.update {
@@ -76,6 +97,7 @@ class LoginViewModel(
                         isSubmitting = false,
                         error = result.error.toDisplayMessage(),
                         awaitingUser = true,
+                        completedAttempts = it.completedAttempts + 1,
                     )
                 }
             }

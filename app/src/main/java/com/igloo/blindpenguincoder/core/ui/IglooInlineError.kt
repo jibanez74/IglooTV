@@ -1,20 +1,15 @@
 package com.igloo.blindpenguincoder.core.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 
 /**
@@ -34,17 +29,14 @@ fun IglooInlineError(
     onAction: (() -> Unit)? = null,
 ) {
     val colors = IglooTheme.colors
-    val shape = RoundedCornerShape(IglooTheme.radius.lg)
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(colors.destructive.copy(alpha = 0.10f))
-            .border(
-                width = IglooTheme.focus.restWidth,
-                color = colors.destructive.copy(alpha = 0.25f),
-                shape = shape,
+            .iglooSurface(
+                radius = IglooTheme.radius.lg,
+                fill = colors.destructive.copy(alpha = 0.10f),
+                border = colors.destructive.copy(alpha = 0.25f),
             )
             .padding(IglooTheme.spacing.md),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),

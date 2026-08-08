@@ -264,7 +264,7 @@ not track the theme — a poster looks the same in light and dark mode. Use lite
 
 ## 4. Typography
 
-Six styles, implemented in `core/design/IglooTypography.kt`. Family is the system sans
+Seven styles, implemented in `core/design/IglooTypography.kt`. Family is the system sans
 (`FontFamily.SansSerif`) except the pairing code, which is monospace.
 
 **Standard** column is authored; Compact and Large are derived by multiplier and shown for
@@ -395,6 +395,17 @@ platform projects a child's shadow into its parent render node, which *is* the c
 border drawn outside one is painted over by the fill. So `focusRing` owns the clip, and
 therefore the fill — **a call site passes `fill =` and does not clip.** The colour transition
 runs at `micro` and the scale/elevation at `standard`, per §7.
+
+The clip applies **at rest as well as on focus**, at inset zero. A treatment that only clipped
+while focused would square off the corners of every control that had given up its own `clip` on
+the strength of the sentence above, then snap them round the instant focus arrived. The strokes
+are drawn after the content, so opaque edge-to-edge content — an avatar, a poster — cannot paint
+over the ring or the resting border.
+
+**Non-focusable chrome does not use `focusRing`.** A panel that is filled, clipped, and outlined
+by the same hairline but can never take focus uses `Modifier.iglooSurface`
+(`core/ui/IglooSurface.kt`) instead, so `focus.restWidth` stays the one hairline in the app while
+a call site still says plainly whether the thing can be focused.
 
 **The separator is what makes focus legible on a `Primary` button.** `ring` and `primary` are
 the same value in dark (§3), so a ring drawn on a glacier fill is invisible — and worse than a
@@ -528,6 +539,8 @@ A persistent **left nav spine** and a content pane, inside the safe area.
 |---|---|
 | `navSpineWidth` | 236dp |
 | `safeArea` | 48dp × 27dp *(unscaled)* |
+| `authCardWidth` | 480dp *(the centered auth card for a form — §11.1.2, §11.1.3)* |
+| `authCardWideWidth` | 840dp *(the centered auth card for a row — §11.1.1, quick connect)* |
 
 At Standard on the 960dp reference viewport: 960 − 96 (safe area) − 236 (spine) = **628dp of
 content pane**. That is the budget. Everything in §8.2 is sized against it.
@@ -961,7 +974,7 @@ and this document does not mirror them.
 | Reduced motion | `motion-reduce:` variant | `iglooTween` (§7.1) |
 | Focus ring | `focus-visible:ring-[3px]` | The one focus treatment (§6.1) |
 | Lists | CSS grid, responsive breakpoints | `LazyRow`/`LazyColumn`/`LazyVerticalGrid` + `gridColumns` |
-| Type scale | Tailwind utility literals | Six authored styles (§4) |
+| Type scale | Tailwind utility literals | Seven authored styles (§4) |
 
 Shared: the 15 color values, the three motion durations (150/200/300ms), and the 1.05× focus
 scale. The web's 0.20 focus-glow alpha did **not** transfer — see §6.1 for the platform reason.

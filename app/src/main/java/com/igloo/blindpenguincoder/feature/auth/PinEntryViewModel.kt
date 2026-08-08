@@ -16,6 +16,12 @@ data class PinEntryUiState(
     val enteredCount: Int = 0,
     val isVerifying: Boolean = false,
     val error: String? = null,
+    /**
+     * How many verifications have been rejected. Verifying disables all eleven keys, so focus is
+     * cleared and has to be handed back; see [ServerSetupUiState.completedAttempts] for why
+     * neither [error] nor [isVerifying] can key that.
+     */
+    val rejections: Int = 0,
 )
 
 const val PIN_LENGTH = 4
@@ -82,6 +88,13 @@ class PinEntryViewModel(
 
     private fun reject(message: String) {
         pin = ""
-        _uiState.update { it.copy(enteredCount = 0, isVerifying = false, error = message) }
+        _uiState.update {
+            it.copy(
+                enteredCount = 0,
+                isVerifying = false,
+                error = message,
+                rejections = it.rejections + 1,
+            )
+        }
     }
 }

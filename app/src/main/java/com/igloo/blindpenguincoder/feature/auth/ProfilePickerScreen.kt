@@ -1,7 +1,7 @@
 package com.igloo.blindpenguincoder.feature.auth
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -43,13 +43,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.data.model.ProfileSummary
 
 /**
@@ -74,7 +77,7 @@ fun ProfilePickerScreen(
     AuthSurface(
         title = "Who's watching?",
         subtitle = state.serverAddress.origin,
-        cardWidth = 840.dp,
+        cardWidth = IglooTheme.layout.authCardWideWidth,
     ) {
         state.restoreError?.let { error ->
             IglooInlineError(
@@ -155,6 +158,13 @@ fun ProfilePickerScreen(
             ?: addProfileFocus
         target.requestFocus()
     }
+
+    // Signing in disables every tile, so focus is cleared for the duration. A failure leaves the
+    // picker on screen, and without this it would have nothing focused and no way back in.
+    LaunchedEffect(uiState.completedAttempts) {
+        val attempted = uiState.lastAttemptedUserId ?: return@LaunchedEffect
+        tileRequesters[attempted]?.requestFocus()
+    }
 }
 
 @Composable
@@ -228,16 +238,20 @@ private fun Tile(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
+    // Cross-fades on the same micro driver focusRing uses for its own fill, so the tile's
+    // backing and the avatar's ring arrive together instead of one snapping ahead of the other.
+    val fill by animateColorAsState(
+        targetValue = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
+        animationSpec = iglooTween(IglooMotion.MICRO_MS),
+        label = "tileFill",
+    )
 
     Column(
         modifier = modifier
             .width(TILE_WIDTH.scaled())
             // Rounds without clipping: nothing here needs masking (the avatar and the add-tile
             // clip themselves), and a clip would cut the avatar's focus glow at this boundary.
-            .background(
-                color = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
-                shape = RoundedCornerShape(IglooTheme.radius.lg),
-            )
+            .background(color = fill, shape = RoundedCornerShape(IglooTheme.radius.lg))
             .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -276,12 +290,10 @@ private fun Tile(
                 style = IglooTheme.typography.label,
                 color = colors.aurora,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(IglooTheme.radius.pill))
-                    .background(colors.aurora.copy(alpha = 0.16f))
-                    .border(
-                        width = IglooTheme.focus.restWidth,
-                        color = colors.aurora.copy(alpha = 0.48f),
-                        shape = RoundedCornerShape(IglooTheme.radius.pill),
+                    .iglooSurface(
+                        radius = IglooTheme.radius.pill,
+                        fill = colors.aurora.copy(alpha = 0.16f),
+                        border = colors.aurora.copy(alpha = 0.48f),
                     )
                     .padding(
                         horizontal = IglooTheme.spacing.sm,

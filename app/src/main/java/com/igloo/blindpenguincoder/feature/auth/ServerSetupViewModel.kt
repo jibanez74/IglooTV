@@ -15,6 +15,13 @@ data class ServerSetupUiState(
     val input: String = "",
     val isConnecting: Boolean = false,
     val error: String? = null,
+    /**
+     * How many connect attempts have finished. The screen keys focus restoration on this rather
+     * than on [error] or [isConnecting]: two attempts against the same bad address produce the
+     * same message, and a client-side rejection resolves inside one snapshot batch, so neither of
+     * those changes in a way a `LaunchedEffect` can observe.
+     */
+    val completedAttempts: Int = 0,
 )
 
 class ServerSetupViewModel(
@@ -42,11 +49,17 @@ class ServerSetupViewModel(
         connectionJob = viewModelScope.launch {
             when (val result = serverRepository.connect(_uiState.value.input)) {
                 is ApiResult.Success -> {
-                    _uiState.update { it.copy(isConnecting = false) }
+                    _uiState.update {
+                        it.copy(isConnecting = false, completedAttempts = it.completedAttempts + 1)
+                    }
                     sessionManager.onServerChanged(result.value)
                 }
                 is ApiResult.Failure -> _uiState.update {
-                    it.copy(isConnecting = false, error = result.error.toDisplayMessage())
+                    it.copy(
+                        isConnecting = false,
+                        error = result.error.toDisplayMessage(),
+                        completedAttempts = it.completedAttempts + 1,
+                    )
                 }
             }
         }

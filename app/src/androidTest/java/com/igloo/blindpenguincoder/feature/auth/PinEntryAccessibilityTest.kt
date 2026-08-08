@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -154,6 +155,63 @@ class PinEntryAccessibilityTest {
         }
     }
 
+    /**
+     * Coming back up from the footer used to land on the `1` key at the top-left, three rows away
+     * from wherever the user had actually left the pad.
+     */
+    @Test
+    fun leavingTheKeypadAndReturningLandsOnTheKeyTheUserLeft() {
+        seedPinProtectedProfile()
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            composeRule.awaitScreen("Enter Jose's PIN")
+
+            composeRule.onNodeWithContentDescription("1").assertIsFocused()
+                .performKeyInput { pressKey(Key.DirectionRight) }
+            composeRule.onNodeWithContentDescription("2").assertIsFocused()
+                .performKeyInput { pressKey(Key.DirectionDown) }
+            composeRule.onNodeWithContentDescription("5").assertIsFocused()
+                .performKeyInput { pressKey(Key.DirectionDown) }
+            composeRule.onNodeWithContentDescription("8").assertIsFocused()
+                .performKeyInput { pressKey(Key.DirectionDown) }
+            composeRule.onNodeWithContentDescription("0").assertIsFocused()
+                .performKeyInput { pressKey(Key.DirectionDown) }
+
+            composeRule.onNodeWithContentDescription("Back to profiles").assertIsFocused()
+                .performKeyInput { pressKey(Key.DirectionUp) }
+
+            composeRule.onNodeWithContentDescription("0").assertIsFocused()
+        }
+    }
+
+    /**
+     * Verifying disables all eleven keys, so the focused key stops being focusable and focus is
+     * cleared for the duration of the request. The restore used to be keyed on `Unit` — it ran
+     * once at composition and never again — so a rejected PIN left the screen with nothing
+     * focused and no way back onto the pad.
+     *
+     * The seeded address is TEST-NET, so the verification fails on connect rather than on a
+     * wrong PIN. Either way it is the `isVerifying` false edge that has to hand focus back, which
+     * is the thing under test.
+     */
+    @Test
+    fun aRejectedPinHandsFocusBackToTheKeypad() {
+        seedPinProtectedProfile()
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            composeRule.awaitScreen("Enter Jose's PIN")
+            repeat(PIN_LENGTH) {
+                composeRule.onNodeWithContentDescription("1").performClick()
+            }
+
+            composeRule.waitUntil(VERIFY_TIMEOUT_MILLIS) {
+                composeRule.onAllNodesWithContentDescription("PIN, 0 of 4 digits entered")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithContentDescription("1").assertIsFocused()
+        }
+    }
+
     private fun seedPinProtectedProfile() {
         val app = InstrumentationRegistry.getInstrumentation()
             .targetContext.applicationContext as IglooApplication
@@ -178,3 +236,5 @@ class PinEntryAccessibilityTest {
         app.container.serverUrlProvider.set(null)
     }
 }
+
+private const val VERIFY_TIMEOUT_MILLIS = 25_000L

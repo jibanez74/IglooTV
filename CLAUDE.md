@@ -31,7 +31,8 @@ Device targets: Android Studio TV emulator for iteration; Nvidia Shield (via LAN
 
 - `docs/openapi.json` — the API contract (~100 paths). Never invent endpoints or models; check here first, then `../Igloo` if it seems outdated.
 - `docs/design-system.md` — color tokens, typography, focus states, motion rules, screen/UX specs ported from the Igloo web client. Read before any UI work.
-- `docs/ffmpeg.md` — how the backend handles transcoding/HLS/subtitles. The TV app never transcodes; it plays direct streams or backend-produced HLS.
+
+Transcoding, HLS, and subtitle handling live entirely in the backend — see `../Igloo`. The TV app never transcodes; it plays direct streams or backend-produced HLS.
 
 ## Architecture
 

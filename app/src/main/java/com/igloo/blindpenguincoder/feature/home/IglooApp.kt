@@ -18,8 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,11 +33,15 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.scaled
@@ -46,6 +50,7 @@ import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.IglooBrandMark
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.data.model.AuthUser
 
 @Composable
@@ -70,6 +75,14 @@ fun IglooApp(
         onSwitchProfile = onSwitchProfile,
         onLogout = onLogout,
     )
+
+    // The shell is the one screen that used to compose with nothing focused, so the first D-pad
+    // press after signing in was spent creating focus rather than moving it. Once only: the
+    // content pane outlives a destination change, so re-anchoring here would instead steal focus
+    // from the card the user had just activated.
+    LaunchedEffect(Unit) {
+        navigationRequesters.getValue(currentDestination).requestFocus()
+    }
 }
 
 @Composable
@@ -335,10 +348,18 @@ private fun HomeContent(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
+                // A live region on the title, not a merged one over the pair: activating a nav
+                // item or a card swaps this header without moving focus, so it is the only thing
+                // that can tell TalkBack the destination changed at all — but collapsing the two
+                // texts into one node would take the supporting text out of the tree.
                 IglooText(
                     text = currentDestination.label,
                     style = IglooTheme.typography.titleLarge,
                     color = colors.foreground,
+                    modifier = Modifier.semantics {
+                        heading()
+                        liveRegion = LiveRegionMode.Polite
+                    },
                 )
                 IglooText(
                     text = currentDestination.supportingText,
@@ -390,12 +411,10 @@ private fun StatusBadge() {
     val colors = IglooTheme.colors
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(IglooTheme.radius.pill))
-            .background(colors.aurora.copy(alpha = 0.16f))
-            .border(
-                width = IglooTheme.focus.restWidth,
-                color = colors.aurora.copy(alpha = 0.48f),
-                shape = RoundedCornerShape(IglooTheme.radius.pill),
+            .iglooSurface(
+                radius = IglooTheme.radius.pill,
+                fill = colors.aurora.copy(alpha = 0.16f),
+                border = colors.aurora.copy(alpha = 0.48f),
             )
             .padding(horizontal = IglooTheme.spacing.md, vertical = IglooTheme.spacing.sm),
     ) {
@@ -413,13 +432,7 @@ private fun HeroPanel() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(IglooTheme.radius.xl))
-            .background(colors.card)
-            .border(
-                width = IglooTheme.focus.restWidth,
-                color = colors.border,
-                shape = RoundedCornerShape(IglooTheme.radius.xl),
-            )
+            .iglooSurface(radius = IglooTheme.radius.xl, fill = colors.card)
             .padding(IglooTheme.spacing.xl),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
     ) {
