@@ -54,7 +54,7 @@ class IglooBaseAppTest {
         setShellContent()
 
         composeRule.onNodeWithText("Igloo").assertIsDisplayed()
-        composeRule.onNodeWithText("Welcome to Igloo").assertIsDisplayed()
+        composeRule.onNodeWithText("Your library, ready").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Home, selected").assertIsDisplayed()
         composeRule.onNodeWithText("Jose").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Switch profile").assertIsDisplayed()

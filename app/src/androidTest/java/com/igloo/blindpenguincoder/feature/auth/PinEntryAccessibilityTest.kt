@@ -84,9 +84,15 @@ class PinEntryAccessibilityTest {
             composeRule.onNodeWithContentDescription("9").performClick()
 
             val tree = composeRule.onRoot().printToString(maxDepth = Int.MAX_VALUE)
+            // Only what a screen reader would speak. printToString also prints node ids and pixel
+            // geometry, and matching against those makes the assertion fire on any unrelated
+            // composition change that shifts a node id onto "89".
+            val spoken = tree.lineSequence()
+                .filter { it.contains("Text = ") || it.contains("ContentDescription = ") }
+                .joinToString("\n")
             assertFalse(
-                "The entered PIN leaked into the semantics tree:\n$tree",
-                tree.contains("89") || tree.contains("PIN: 8"),
+                "The entered PIN leaked into the semantics tree:\n$spoken",
+                spoken.contains("89") || spoken.contains("PIN: 8"),
             )
             composeRule
                 .onNodeWithContentDescription("PIN, 2 of 4 digits entered")

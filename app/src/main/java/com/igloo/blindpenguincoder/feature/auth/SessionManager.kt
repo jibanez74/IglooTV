@@ -66,7 +66,7 @@ class SessionManager(
     suspend fun restore() {
         val storedUrl = settings.serverUrl.first()
         if (storedUrl == null) {
-            _state.value = AppAuthState.NeedsServer()
+            _state.value = AppAuthState.NeedsServer(firstRun = true)
             return
         }
         val storedAddress = ServerAddress.fromApiBaseUrl(storedUrl)

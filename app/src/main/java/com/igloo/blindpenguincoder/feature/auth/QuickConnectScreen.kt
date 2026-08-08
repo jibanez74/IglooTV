@@ -69,16 +69,43 @@ fun QuickConnectScreen(
     onLeave: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val switchFocus = remember { FocusRequester() }
-    val changeServerFocus = remember { FocusRequester() }
-    val approvalUrl = remember(serverOrigin) { buildQuickConnectApprovalUrl(serverOrigin) }
-    val spokenAccessibilityEnabled = rememberSpokenAccessibilityEnabled()
-    val phase = state.phase
 
     LifecycleStartEffect(Unit) {
         viewModel.start()
         onStopOrDispose { viewModel.stop() }
     }
+
+    QuickConnectContent(
+        phase = state.phase,
+        serverOrigin = serverOrigin,
+        restoreError = restoreError,
+        canCancel = canCancel,
+        onRetryRestore = onRetryRestore,
+        onRetryPairing = viewModel::retry,
+        onSwitchToPassword = onSwitchToPassword,
+        onLeave = onLeave,
+    )
+}
+
+/**
+ * The screen without its view model, so the vertical budget in docs/design-system.md section 11.1.3
+ * can be measured at a fixed phase instead of racing a live pairing loop.
+ */
+@Composable
+internal fun QuickConnectContent(
+    phase: QuickConnectPhase,
+    serverOrigin: String,
+    restoreError: AppError?,
+    canCancel: Boolean,
+    onRetryRestore: () -> Unit,
+    onRetryPairing: () -> Unit,
+    onSwitchToPassword: () -> Unit,
+    onLeave: () -> Unit,
+) {
+    val switchFocus = remember { FocusRequester() }
+    val changeServerFocus = remember { FocusRequester() }
+    val approvalUrl = remember(serverOrigin) { buildQuickConnectApprovalUrl(serverOrigin) }
+    val spokenAccessibilityEnabled = rememberSpokenAccessibilityEnabled()
 
     AuthSurface(
         title = "Sign in to Igloo",
@@ -107,7 +134,7 @@ fun QuickConnectScreen(
                         message = phase.message,
                         actionText = "Try again",
                         actionSemanticLabel = "Request a new pairing code",
-                        onAction = viewModel::retry,
+                        onAction = onRetryPairing,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }

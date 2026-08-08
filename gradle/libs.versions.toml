@@ -4,6 +4,7 @@ kotlin = "2.3.21"
 composeBom = "2026.06.01"
 activityCompose = "1.13.0"
 coreKtx = "1.19.0"
+coreSplashscreen = "1.0.1"
 coroutines = "1.11.0"
 datastore = "1.2.1"
 ktor = "3.5.1"
@@ -21,6 +22,7 @@ zxing = "3.5.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }

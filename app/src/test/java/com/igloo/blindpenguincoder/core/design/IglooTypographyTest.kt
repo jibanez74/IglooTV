@@ -14,7 +14,7 @@ class IglooTypographyTest {
     private val large = iglooTypography(UiScale.Large.factor)
 
     private fun styles(t: IglooTypography) = listOf(
-        t.displayCode, t.titleLarge, t.titleMedium, t.bodyLarge, t.bodyMedium, t.label,
+        t.displayCode, t.display, t.titleLarge, t.titleMedium, t.bodyLarge, t.bodyMedium, t.label,
     )
 
     @Test
@@ -22,6 +22,8 @@ class IglooTypographyTest {
         assertEquals(64.sp, standard.displayCode.fontSize)
         assertEquals(76.sp, standard.displayCode.lineHeight)
         assertEquals(10.sp, standard.displayCode.letterSpacing)
+        assertEquals(44.sp, standard.display.fontSize)
+        assertEquals(52.sp, standard.display.lineHeight)
         assertEquals(34.sp, standard.titleLarge.fontSize)
         assertEquals(40.sp, standard.titleLarge.lineHeight)
         assertEquals(24.sp, standard.titleMedium.fontSize)

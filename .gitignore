@@ -9,3 +9,6 @@ local.properties
 app/build/
 
 .claude/
+
+# Browser-automation scratch output; never belongs in the repo.
+.playwright-mcp/

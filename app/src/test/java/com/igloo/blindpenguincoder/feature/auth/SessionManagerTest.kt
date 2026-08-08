@@ -61,7 +61,10 @@ class SessionManagerTest {
 
         fixture.manager.restore()
 
-        assertEquals(AppAuthState.NeedsServer(), fixture.manager.state.value)
+        assertEquals(
+            AppAuthState.NeedsServer(firstRun = true),
+            fixture.manager.state.value,
+        )
         assertNull(fixture.http.serverUrl.current.value)
     }
 
@@ -377,7 +380,9 @@ class SessionManagerTest {
 
         fixture.manager.restore()
 
-        assertEquals(AppAuthState.NeedsServer(), fixture.manager.state.value)
+        // firstRun stays false: this user had a server and deserves the reconnect prompt, not
+        // the first-run welcome.
+        assertEquals(AppAuthState.NeedsServer(firstRun = false), fixture.manager.state.value)
         assertTrue(fixture.http.profileStore.vault.profiles.isEmpty())
         assertNull(fixture.http.serverUrl.current.value)
     }

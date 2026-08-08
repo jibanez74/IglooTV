@@ -240,6 +240,13 @@ and are the vocabulary — reuse them rather than inventing neighbors:
 | `0.10f` / `0.25f` | `destructive` | Inline error card fill / border |
 | `0.16f` / `0.48f` | `aurora` | Badge fill / border |
 | `0.20f` | `ring` | Focus glow (§6) |
+| `0.26f` dark / `0.16f` light | `primary` | Welcome backdrop core (§11.1.0) |
+| `0.18f` dark / `0.10f` light | `aurora` | Welcome backdrop core (§11.1.0) |
+
+The two backdrop rows are the only alphas that differ by theme, and they differ because the same
+alpha does opposite things: dark `primary` (#38BDF8) *raises* luminance toward the text color,
+while light `primary` (#0369A1) is a heavy navy that *drops* a bright canvas fast. Composited
+luminance under text must stay ≤ 0.093 in dark and ≥ 0.345 in light — the §12 7:1 boundaries.
 
 **Focus vs selected is a real distinction**: `card @ 0.72` means "the remote is here right now";
 `primary @ 0.18` means "this is the active destination". Both can be true at once, and the nav
@@ -267,6 +274,7 @@ reference.
 | Style | Size / line height | Weight | Compact | Large | Use |
 |---|---|---|---|---|---|
 | `displayCode` | 64 / 76sp, +10sp tracking, mono | Bold | 56 / 67 | 74 / 87 | Quick-connect pairing code only |
+| `display` | 44 / 52sp | SemiBold | 39 / 46 | 51 / 60 | Hero headline on a full-bleed canvas |
 | `titleLarge` | 34 / 40sp | SemiBold | 30 / 35 | 39 / 46 | Screen headings |
 | `titleMedium` | 24 / 30sp | SemiBold | 21 / 26 | 28 / 35 | Section and card titles |
 | `bodyLarge` | 18 / 24sp | Medium | 16 / 21 | 21 / 28 | Emphasized body, control labels |
@@ -279,9 +287,17 @@ Rules:
   layout is wrong, not the type. `label` at 15sp is the single exception and is reserved for
   short non-prose strings (nav labels, chips) — never a sentence.
 - **No new style without editing this table first.** `AGENTS.md` forbids inventing theme
-  tokens; adding a `TextStyle` in a feature package is exactly that. Two are anticipated and
-  deliberately not added yet: `caption` (metadata chips) and a hero `display`. Add them when a
-  feature actually needs one.
+  tokens; adding a `TextStyle` in a feature package is exactly that. One is anticipated and
+  deliberately not added yet: `caption` (metadata chips). Add it when a feature actually needs it.
+- **`display` is sized against the vertical budget, not by eye.** At `UiScale.Large` with the
+  font scale at its 1.30 ceiling, a 52sp line height renders at ~78dp per line — 16% of the 486dp
+  the safe area leaves on a 540dp panel. It is 1.29× `titleLarge`, which is a legible step without
+  spending the screen. Reserve it for a canvas with no card.
+- **Budget it at the number of lines it will actually take, not one.** §11.1.0's hero wraps to two
+  in a half-width column at every scale, so it spends ~156dp — about a third of the panel. That
+  fits, and `WelcomeScreenLayoutTest` is what proves it; the point is that "one line" is not a
+  property of the style and must not be assumed when placing it. Measure the wrapped height in the
+  column the text actually gets.
 - Headings are SemiBold; controls and labels are Medium or SemiBold. Nothing is Light or Thin —
   thin strokes disintegrate at 10 feet.
 
@@ -409,6 +425,12 @@ Glow is applied as `Modifier.shadow(elevation, shape, spotColor = colors.ring.co
 | `micro` | 150ms | Focus fill, color, small opacity changes |
 | `standard` | 200ms | Scale, elevation, overlay reveal |
 | `page` | 300ms | Screen and section enter/exit |
+| `stagger` | 60ms | Delay between items of one staggered section enter |
+| `ambient` | 24000ms | One full cycle of a decorative ambient loop (§7.2) |
+| `splashHold` | 900ms | Minimum time the launch splash stays up before it may hand off (§11.1.-1) |
+
+`splashHold` is a hold, not an animation: reduced motion stills the splash but does not shorten
+it, or the brand moment degrades into a flash on a fast device.
 
 Easings — two, deliberately:
 
@@ -421,13 +443,27 @@ exit     = CubicBezierEasing(0.4f, 0f, 1f, 1f)   // leaving
 
 ```kotlin
 @Composable
-fun <T> iglooTween(durationMillis: Int, easing: Easing = IglooEasing.standard): FiniteAnimationSpec<T> =
-    if (LocalIglooReducedMotion.current) snap() else tween(durationMillis, easing = easing)
+fun <T> iglooTween(
+    durationMillis: Int,
+    delayMillis: Int = 0,
+    easing: Easing = IglooEasing.standard,
+): FiniteAnimationSpec<T> =
+    if (LocalIglooReducedMotion.current) snap() else tween(durationMillis, delayMillis, easing)
+
+@Composable
+fun rememberAmbientProgress(periodMillis: Int = IglooMotion.AMBIENT_MS): State<Float>
 ```
 
-**Rule: no bare `tween(...)` or raw duration literal in feature code. Always `iglooTween`.**
-This is grep-enforceable and is the reason the helper exists rather than each call site checking
-the flag and forgetting.
+**Rule: no bare `tween(...)`, `infiniteRepeatable(...)`, `rememberInfiniteTransition(...)` or raw
+duration literal in feature code. Always `iglooTween` or `rememberAmbientProgress`.** This is
+grep-enforceable — `\btween\(|\binfiniteRepeatable\(|rememberInfiniteTransition\(` outside
+`core/design/` must return nothing — and is the reason the helpers exist rather than each call
+site checking the flag and forgetting.
+
+`snap()` discards the delay, so reduced motion collapses a whole stagger to a single frame for
+free. `rememberAmbientProgress` holds at `0f` under reduced motion and, critically, does not
+build the transition at all in that branch — an ignored `rememberInfiniteTransition` still
+requests a frame callback 60×/s forever.
 
 Reduced motion reads `Settings.Global.ANIMATOR_DURATION_SCALE == 0f` and observes it live via a
 `ContentObserver`, so toggling the system setting takes effect without an app restart.
@@ -437,6 +473,18 @@ Reduced motion reads `Settings.Global.ANIMATOR_DURATION_SCALE == 0f` and observe
 Focus transitions, overlay reveals, section enters, progress fills. **Not**: anything that moves
 focus itself, anything that delays a user-initiated navigation, or anything looping in the
 periphery while the user is trying to read.
+
+**The one loop exception.** A decorative backdrop may loop if it meets all four conditions: it
+carries no information, its period is ≥20s, it never moves geometry under text (only the color
+beneath the text changes), and it holds still under reduced motion. Nothing else loops. §11.1.0
+is the only surface that currently qualifies. §11.1.-1 reuses that backdrop's geometry with a
+constant progress, so it does not loop and does not extend the carve-out.
+
+A staggered section enter animates `alpha` and `translationY` through
+`Modifier.graphicsLayer { … }`, never `Modifier.offset` (layout-phase — it would move the focus
+rect mid-animation, which the paragraph above forbids) and never `AnimatedVisibility` (a node
+added late cannot be focused at frame 1, leaving the screen dead to the remote for the duration).
+Every focusable is composed immediately; only its paint is delayed.
 
 ---
 
@@ -501,6 +549,7 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
 | `FocusRing` | The single focus border; 3dp focused / 1dp at rest |
 | `IglooQrCode` | Pairing-code QR |
+| `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
 
 The app deliberately does **not** use Material theming. `IglooTheme` is the only source of
 colors, type, and dimensions.
@@ -526,7 +575,9 @@ Build these **once** as shared composables. Three states, one recipe each.
 - **`IglooLoading`** — grid-matched skeletons. A movie grid skeleton renders the same column
   count and the same card aspect as the real grid, so **focus position does not jump** when
   content arrives. Shimmer goes through `iglooTween`; at reduced motion it is a static block.
-  Route-level loading uses one app-wide pending screen.
+  Route-level loading uses one app-wide pending screen. It is deliberately *not* the launch splash
+  (§11.1.-1): the splash is the boot moment and runs once. No route needs a pending screen yet, so
+  none is built; the first one that does must add it rather than reach for the splash.
 - **`IglooEmpty`** — two variants. *Minimal*: large faded icon + one line ("No movies found in
   your library."). *Rich CTA*: icon orb, heading, description, and a focusable primary action.
   Use the rich variant only when there is a real action to offer.
@@ -549,12 +600,121 @@ names, not for layout.
 ### 11.1 Auth boundary
 
 Two top-level states: **unauthenticated** (full-bleed auth canvas, no shell) and
-**authenticated** (nav spine + content pane). The auth canvas centers a single card on a
-vertical gradient, scrolls internally if it does not fit, and never shows nav chrome.
+**authenticated** (nav spine + content pane). Neither ever shows nav chrome on the auth side.
+
+The auth canvas takes two forms. The **card form** (§11.1.1–11.1.3) centers a single card on a
+vertical gradient and scrolls internally if it does not fit; every step of setup uses it. The
+**hero form** (§11.1.0) is full-bleed with no card, and opens each fresh launch of initial setup
+until the user has saved a valid server URL.
 
 A device token belongs to exactly one user and the backend has no "switch user" call, so
 multiple people on one TV means **one stored token per person**. Every unauthenticated screen
 below is a step toward getting or choosing one.
+
+#### 11.1.-1 Launch splash
+
+Before any of it, the launch screen. It is not an auth step — it covers the interval between the
+launcher and the app's first real screen, whichever that turns out to be.
+
+**Two layers, one canvas.** `androidx.core:core-splashscreen` gives the window a themed splash
+(`Theme.Igloo.Splash`: `background` fill, `@drawable/ic_igloo_mark`), and `SplashScreen` in
+`feature/boot/` continues it in Compose with the §11.1.0 backdrop, the brand tile, and the
+`Igloo` / `TV` lockup §11.2 uses in the spine. `postSplashScreenTheme` returns the window to
+`Theme.Igloo`, and `installSplashScreen()` sets **no** keep-on-screen condition: the system layer
+ends at the first Compose frame, which already draws the same mark on the same navy.
+
+- **The brand tile does not move, resize, or animate in.** The system layer draws it at 120dp of
+  the 960dp reference viewport, centred on the screen; the Compose layer must match all three, so
+  the mark is centred on the *screen* rather than on the lockup and the wordmark is positioned
+  below it instead of pushing it up. Only the wordmark takes the §7.2 stagger. Verified by
+  measuring the tile across a screen recording of the hand-off: it holds size and centre from the
+  system frame through the Compose frames.
+- **That 120dp is the one dimension exempt from the §2 scale model** — it is written `120.dp`, not
+  `120.dp.scaled()`. The system window splash is a static drawable with no knowledge of `UiScale`,
+  so scaling the Compose side would put a 105dp tile (Compact) or 138dp tile (Large) against a
+  fixed system tile and re-open the seam this whole section exists to close. Every *other*
+  dimension on this screen still scales.
+- **The backdrop does not loop here.** It is §11.1.0's two radial gradients driven by a constant
+  `0f` instead of `rememberAmbientProgress()` — a 24s drift is invisible inside a one-second
+  screen, and an infinite transition would request frames for movement nobody sees. §7.2's "one
+  loop exception" therefore still names only §11.1.0.
+- **Held for `splashHold`, then a `page` fade.** Session restore is DataStore reads and can finish
+  in a few frames.
+- **Rendered as an overlay above the destination, not a `Crossfade`.** The screen underneath
+  composes and requests focus on its own schedule and only the pixels above it fade; a crossfade
+  would delay that composition, which §7.2 forbids. The splash drops its `contentDescription` the
+  moment the fade starts, so TalkBack does not read it over the screen that now holds focus.
+- **Confirm keys are swallowed while the splash is up; arrows are not.** Because the screen
+  beneath composes and takes focus behind an opaque overlay, an OK pressed during the brand moment
+  would otherwise activate a control the user cannot see. `IglooRoot` consumes `DirectionCenter`,
+  `Enter`, `NumPadEnter`, `Spacebar` and `ButtonA` via `onPreviewKeyEvent` for exactly as long as
+  the splash is shown. Arrows are deliberately left alone: they only move focus, and the user sees
+  where it landed the instant the splash lifts, whereas blocking everything would leave the remote
+  dead for the whole hold — a worse fault than the one being prevented. The preview pass runs from
+  the root down through the focused node's ancestors, so this needs no focusable of its own and
+  does not disturb the focus the screen below has already claimed.
+- **Gated on the boot, not on the state.** The splash is shown until the first non-`Loading` state
+  has been seen, and never for less than `splashHold`. `AppAuthState.Loading` is today only the
+  value before the first `restore()`, so the two coincide — but the gate is what keeps them
+  coinciding. If a flow ever returns to `Loading`, it needs the §10 pending screen; showing a
+  full-screen brand moment in the middle of signing in would be wrong.
+- **The splash icon is masked to a circle by the system**, so `ic_igloo_mark` keeps the tile inside
+  the canvas's inner circle (45dp of 108dp) rather than filling it. The same tile geometry drives
+  `ic_launcher` and `igloo_banner`, so launcher → splash → app is one mark.
+- **That 45dp is derived from the 120dp above, not picked by eye.** Both paths render the drawable
+  into a 288dp icon box — Android 12+ by platform spec, and `core-splashscreen`'s compat layer by
+  deliberately mirroring it — so the tile lands at 45/108 × 288 = 120dp. Getting this wrong is
+  visible: at 46dp the system drew 122dp and stepped down to 120dp when Compose took over, which a
+  frame-by-frame capture on API 30 shows plainly. If either number changes, re-derive the other.
+
+#### 11.1.0 First-run welcome
+
+The hero form. A greeting, two sentences on what Igloo is, a three-step preview of setup, and one
+**Get started** button that hands off to §11.1.1's server prompt. It exists because the server
+prompt otherwise arrives cold — a bare field asking for an address, with nothing having explained
+that Igloo is a server the user runs themselves.
+
+**Shown on each fresh launch while initial server setup is incomplete.** Saving a valid server URL
+is the durable completion point. **Get started** dismisses the welcome only for the current
+Activity's saved state; it does not write a persistent preference. If the user exits before saving
+a server and launches the app again without restored Activity state, the welcome appears again.
+This repetition is intentional because the device still has no configured server.
+
+`SessionManager.restore()` sets `AppAuthState.NeedsServer.firstRun` when it finds no stored server
+URL. The explicit flag still distinguishes that launch path from an invalid stored value, the auth
+gate's fallback, and **Change server**; those paths go directly to the server prompt without a
+welcome on that transition.
+
+- **Two columns**, hero left and steps right, with the button in a fixed slot beneath both. A
+  single column does not fit: it measures ~506dp at Standard against the 486dp the safe area
+  leaves, and ~705dp at `UiScale.Large` with the font scale at 1.30.
+- **No internal scroll**, unlike the card form. This screen has exactly one focusable, and a
+  remote cannot scroll a container with nothing to move focus toward — clipped content would be
+  unreachable rather than merely off-screen. The fit is guarded by copy-length unit tests instead.
+- **Backdrop**: two radial gradients (`primary` upper-left, `aurora` lower-right) over an opaque
+  `background` fill, at the §3.1 alphas. No image asset, so it is resolution-independent and
+  theme-correct. Outer stops are `color.copy(alpha = 0f)`, never `Color.Transparent` — the latter
+  is transparent *black* and Skia's unpremultiplied interpolation leaves a grey halo.
+  `minSdk 28` rules out `Modifier.blur` (31) and AGSL (33), and both named hardware targets sit
+  below that line anyway.
+- **Motion**: the §7.2 ambient loop, and nothing else. The loop drifts the gradient centers via
+  `translate` inside `onDrawBehind` over a cached `Brush`, so it invalidates the draw phase only —
+  rebuilding a `Brush.radialGradient` per frame would allocate a native shader 60×/s per layer.
+- **No entrance animation, deliberately.** This screen composes as soon as `restore()` resolves,
+  which on a first run is a single DataStore read, while §11.1.-1's splash stays opaque for
+  `splashHold`. A section enter would run `page + 4 × stagger` = 540ms and finish before the fade
+  even starts — motion nobody can see. A screen that is already settled when the splash lifts is
+  the correct result here, not a missing flourish.
+- **Prose uses `foreground`, not `mutedForeground`.** `mutedForeground` on `background` is 6.0:1,
+  under the §12 body target before any gradient and ~4.3:1 over the glacier band. It is reserved
+  here for the step numerals, which are non-prose.
+- Each step is one node reading `"Step N of 3. <title>. <body>."`; the steps are **not** focusable,
+  since they are not actionable and three dead stops between the screen and its only control is
+  hostile with a remote. Both columns are traversal groups, or geometric sort interleaves them.
+- The third step does **not** promise the profile picker. §11.1.1 skips that screen for a single
+  profile with no PIN, which is exactly the first-run case, so naming it would be false in the
+  first thing a new user reads. It describes profiles as a capability instead.
+- Back exits the app. That is correct for a launch screen and is inherited rather than handled.
 
 #### 11.1.1 Profile picker
 
@@ -609,6 +769,12 @@ the fallback.
 When this screen is reached by adding a user rather than by first-time setup, the "Change
 server" slot becomes **Back to profiles** — changing the server wipes every stored profile, so
 offering it mid-add is a trap.
+
+The quick-connect card **fits 960×540 without scrolling in its resting state** at Standard and
+font scale 1.0 — measured, with the header at 38dp. That matters because focus lands on a bottom
+control the moment the screen composes, so overflow would immediately scroll the header out of
+sight. `QuickConnectLayoutTest` guards it, and the card form's internal scroll (§11.1) is left for
+the degraded states — an inline error present, a larger `UiScale`, or a raised font scale.
 
 ### 11.2 Navigation spine
 
@@ -784,7 +950,8 @@ when syncing, and update the "Last verified" stamp at the top of this document.
 | `UiScale`, `viewportFactor`, `effectiveScale` (§2) | `core/design/UiScale.kt` |
 | Spacing, radius, sizes, icons, focus, layout (§5, §6, §8) | `core/design/IglooDimens.kt` |
 | Type styles (§4) | `core/design/IglooTypography.kt` |
-| Durations, easings, `iglooTween` (§7) | `core/design/IglooMotion.kt` |
+| Durations, easings, `iglooTween`, `splashHold` (§7) | `core/design/IglooMotion.kt` |
+| `iglooAuroraBackdrop`, `iglooEnterStagger` (§7.2, §11.1) | `core/ui/IglooBackdrop.kt`, `core/ui/IglooEnterStagger.kt` |
 | `IglooTheme` accessors, `iglooSafeArea()`, `Dp.scaled()` | `core/design/IglooTheme.kt` |
 | `UiScale` persistence (§2.3) | `core/storage/UiPreferencesStore.kt` |
 
@@ -796,8 +963,45 @@ forgot to change the code.**
 
 ## Changelog
 
-**2026-08-03 — Multi-profile auth.**
+**2026-08-04 — Launch splash.**
 
+- **Added §11.1.-1 (launch splash)** — the system window splash and the Compose splash as one
+  canvas, the 120dp screen-centred tile both layers must agree on, why the backdrop does not loop
+  there, and why the splash is gated on the boot rather than on `AppAuthState.Loading`.
+- **§7** gains `splashHold` (900ms), stated as a hold that reduced motion does not shorten.
+- **§7.2** now says explicitly that the splash reuses the backdrop without extending the loop
+  carve-out, which still names only §11.1.0.
+- **§10** distinguishes the once-per-boot splash from the app-wide pending screen.
+- `welcomeBackdrop` and the welcome's private `enterStagger` became `iglooAuroraBackdrop` and
+  `iglooEnterStagger` in `core/ui/`, shared by §11.1.-1 and §11.1.0 (Appendix B).
+- `ic_igloo_mark`, `ic_launcher`, and `igloo_banner` now draw the same brand tile, sized inside
+  the circle the system masks splash icons to.
+- **§11.1.3** records the quick-connect card's vertical budget, now measured rather than assumed,
+  and `QuickConnectScreen` gained a view-model-free `QuickConnectContent` so it can be measured at
+  a fixed phase.
+
+**2026-08-04 — Clarified incomplete server setup relaunches.**
+
+- **§11.1.0** now records that **Get started** is an Activity-scoped dismissal, not a persistent
+  preference. Until a valid server URL is saved, a fresh launch intentionally shows the welcome
+  again; reconnect and **Change server** transitions continue to skip it.
+
+**2026-08-03 — Multi-profile auth, and the first-run welcome.**
+
+- **Added §11.1.0 (first-run welcome)** and split §11.1's canvas into a card form and a hero form.
+  Records the initial server-setup trigger, why the screen does not scroll, and why the third step
+  does not name the profile picker.
+- **§3.1** gains the two welcome-backdrop alpha rows — the only alphas in the system that differ
+  by theme, with the reason stated.
+- **§4** gains `display` (44/52sp), sized against the vertical budget rather than by eye. The
+  anticipated-styles note now lists only `caption`.
+- **§7** gains `stagger` (60ms) and `ambient` (24000ms). **§7.1**'s rule now names
+  `infiniteRepeatable` and `rememberInfiniteTransition` too, and `iglooTween` gained `delayMillis`
+  so a stagger cannot be written without it. **§7.2** gains a four-condition carve-out for a
+  looping decorative backdrop, and states the `graphicsLayer`-not-`offset`,
+  not-`AnimatedVisibility` rules for section enters.
+- **§9.1** gains `IglooBrandMark`, which replaces three drifted inline copies of the "I" tile —
+  one of which used a bare `48.dp` literal and another `radius.xl` against §5.2.
 - **Split §11.1** into the profile picker (11.1.1), PIN entry (11.1.2), and sign in (11.1.3).
   Records why one device token per person forces a picker, and why the PIN keypad is on-screen
   rather than an IME field.

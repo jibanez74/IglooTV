@@ -8,7 +8,15 @@ import com.igloo.blindpenguincoder.data.model.ProfileSummary
 sealed interface AppAuthState {
     data object Loading : AppAuthState
 
-    data class NeedsServer(val initialOrigin: String = "") : AppAuthState
+    /**
+     * [firstRun] is true only for a launch that has never had a server. A corrupted store and the
+     * auth gate's fallback reach this state too, and those users want to reconnect rather than be
+     * welcomed — see docs/design-system.md section 11.1.0.
+     */
+    data class NeedsServer(
+        val initialOrigin: String = "",
+        val firstRun: Boolean = false,
+    ) : AppAuthState
 
     /** Who is watching? Rendered from stored profiles, so it needs no network. */
     data class ChooseProfile(

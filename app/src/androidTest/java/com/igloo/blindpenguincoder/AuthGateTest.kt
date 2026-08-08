@@ -35,7 +35,11 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AuthGateTest {
 
-    @get:Rule
+    // Explicit order: lower is outermost, so animations are off before the compose rule sets up.
+    @get:Rule(order = 0)
+    val animationScale = AnimationScaleRule()
+
+    @get:Rule(order = 1)
     val composeRule = createEmptyComposeRule()
 
     @Test
@@ -43,6 +47,8 @@ class AuthGateTest {
         clearStoredSetup()
 
         ActivityScenario.launch(MainActivity::class.java).use {
+            dismissWelcome()
+
             composeRule.onNodeWithText("Connect to your Igloo server").assertIsDisplayed()
             composeRule.onNodeWithText("Server address").assertIsDisplayed()
             composeRule.onNodeWithText("http://192.168.1.5:8080").assertIsDisplayed()
@@ -58,6 +64,8 @@ class AuthGateTest {
         clearStoredSetup()
 
         ActivityScenario.launch(MainActivity::class.java).use {
+            dismissWelcome()
+
             val address = composeRule.onNodeWithContentDescription("Server address")
             address.performTextInput("http://igloo.local/media")
             address.performKeyInput { pressKey(Key.DirectionDown) }
@@ -83,6 +91,13 @@ class AuthGateTest {
             address.assertIsFocused()
             address.assert(SemanticsMatcher.expectValue(SemanticsProperties.Error, message))
         }
+    }
+
+    /** A first run now opens on the welcome screen; these tests are about what follows it. */
+    private fun dismissWelcome() {
+        composeRule.awaitScreen("Welcome to Igloo")
+        composeRule.onNodeWithContentDescription("Get started").performClick()
+        composeRule.awaitScreen("Connect to your Igloo server")
     }
 
     private fun clearStoredSetup() {

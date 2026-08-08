@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +23,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.ui.IglooBrandMark
 import com.igloo.blindpenguincoder.core.ui.IglooText
 
 /** Full-bleed auth canvas with a single centered card; no nav chrome. */
@@ -75,19 +75,7 @@ fun AuthSurface(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(IglooTheme.radius.lg))
-                            .background(colors.primary),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        IglooText(
-                            text = "I",
-                            style = IglooTheme.typography.titleMedium,
-                            color = colors.primaryForeground,
-                        )
-                    }
+                    IglooBrandMark()
                     Column {
                         IglooText(
                             text = title,

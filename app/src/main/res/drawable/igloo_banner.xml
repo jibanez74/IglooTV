@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Leanback banner: the brand tile beside a stroked geometric wordmark. Uppercase and
+    stroke-drawn rather than letter-shaped fills — it stays crisp at every banner size the
+    launcher asks for, and "TV" carries the mutedForeground token the nav spine uses.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="320dp"
     android:height="180dp"
@@ -8,19 +13,23 @@
         android:fillColor="#0A1322"
         android:pathData="M0,0h320v180h-320z" />
     <path
-        android:fillColor="#0F1A2E"
-        android:pathData="M0,124h320v56h-320z" />
-    <path
         android:fillColor="#38BDF8"
-        android:pathData="M58,42c26.5,0 48,21.5 48,48s-21.5,48 -48,48 -48,-21.5 -48,-48 21.5,-48 48,-48z" />
+        android:pathData="M46.3,46h51.4a18.3,18.3 0 0 1 18.3,18.3v51.4a18.3,18.3 0 0 1 -18.3,18.3h-51.4a18.3,18.3 0 0 1 -18.3,-18.3v-51.4a18.3,18.3 0 0 1 18.3,-18.3z" />
     <path
         android:fillColor="#08131F"
-        android:pathData="M46,62h24v56h-24z" />
+        android:pathData="M65.9,70.9h12.3v38.3h-12.3z" />
     <path
-        android:fillColor="#F8FAFC"
-        android:pathData="M52,68h12v44h-12z" />
+        android:strokeColor="#F8FAFC"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M155,60V86 M188.5,65A13,13 0 1 0 192,76L179,76 M200,60V86H216 M224,73A13,13 0 1 1 250,73A13,13 0 1 1 224,73 M258,73A13,13 0 1 1 284,73A13,13 0 1 1 258,73" />
     <path
-        android:fillColor="#F8FAFC"
-        android:pathData="M136,70h14v52h-14zM164,70h14v52h-14zM192,70h14v52h-14zM220,70h14v52h-14zM248,70h14v52h-14z" />
+        android:strokeColor="#8094AE"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M152,100H170 M161,100V120 M178,100L187,120L196,100" />
 </vector>
-

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The Igloo brand tile, matching core/ui/IglooBrandMark: a glacier rounded square with a
+    primaryForeground "I". Transparent canvas — the splash background supplies the navy.
+
+    The tile is 45dp on the 108dp canvas, and that number is derived, not chosen. Both splash
+    paths render this drawable into a 288dp icon box — Android 12+ by platform spec, and
+    core-splashscreen's compat layer by deliberately mirroring it (see its
+    compat_splash_screen_no_icon_background.xml). So the tile lands at 45/108 × 288 = 120dp, which
+    is exactly what feature/boot/SplashScreen draws. Measured: at 46dp it rendered 122dp and
+    visibly stepped down to 120dp at the hand-off on API 30.
+
+    It also has to fit the circle the system masks splash icons to — two thirds of the icon box,
+    i.e. 72dp here (66dp is the adaptive *launcher* icon safe zone, which is tighter; do not size
+    to that by mistake). A 45dp square's corners sit 31.8dp from centre against a 36dp radius.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M40.9,31.5h26.2a9.4,9.4 0 0 1 9.4,9.4v26.2a9.4,9.4 0 0 1 -9.4,9.4h-26.2a9.4,9.4 0 0 1 -9.4,-9.4v-26.2a9.4,9.4 0 0 1 9.4,-9.4z" />
+    <path
+        android:fillColor="#08131F"
+        android:pathData="M50.85,44.2h6.3v19.6h-6.3z" />
+</vector>

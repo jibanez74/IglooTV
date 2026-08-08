@@ -10,6 +10,12 @@ import androidx.compose.ui.unit.sp
 @Immutable
 data class IglooTypography(
     val displayCode: TextStyle,
+    /**
+     * Hero headline on a full-bleed canvas. Wraps like any other style — budget it at the height
+     * it takes in the column it actually gets, not at one line. See docs/design-system.md
+     * section 4.
+     */
+    val display: TextStyle,
     val titleLarge: TextStyle,
     val titleMedium: TextStyle,
     val bodyLarge: TextStyle,
@@ -36,6 +42,12 @@ fun iglooTypography(scale: Float): IglooTypography = IglooTypography(
         fontSize = 64.sp,
         lineHeight = 76.sp,
         letterSpacing = 10.sp,
+    ).at(scale),
+    display = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 44.sp,
+        lineHeight = 52.sp,
     ).at(scale),
     titleLarge = TextStyle(
         fontFamily = FontFamily.SansSerif,

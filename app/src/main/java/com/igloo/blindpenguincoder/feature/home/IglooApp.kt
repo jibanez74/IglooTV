@@ -43,6 +43,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
+import com.igloo.blindpenguincoder.core.ui.IglooBrandMark
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.data.model.AuthUser
@@ -147,19 +148,7 @@ private fun NavigationSpine(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(IglooTheme.sizes.brandTile)
-                    .clip(RoundedCornerShape(IglooTheme.radius.lg))
-                    .background(colors.primary),
-                contentAlignment = Alignment.Center,
-            ) {
-                IglooText(
-                    text = "I",
-                    style = IglooTheme.typography.titleMedium,
-                    color = colors.primaryForeground,
-                )
-            }
+            IglooBrandMark()
             Column {
                 IglooText(
                     text = "Igloo",
@@ -433,7 +422,7 @@ private fun HeroPanel() {
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
     ) {
         IglooText(
-            text = "Welcome to Igloo",
+            text = "Your library, ready",
             style = IglooTheme.typography.titleLarge,
             color = colors.cardForeground,
         )
