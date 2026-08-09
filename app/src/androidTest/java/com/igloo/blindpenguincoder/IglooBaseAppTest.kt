@@ -1,9 +1,14 @@
 package com.igloo.blindpenguincoder
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -53,12 +58,25 @@ class IglooBaseAppTest {
     fun shellShowsNavigationAndSignedInUser() {
         setShellContent()
 
-        composeRule.onNodeWithText("Igloo").assertIsDisplayed()
+        composeRule.onNodeWithTag("navigation_rail").assertIsDisplayed()
         composeRule.onNodeWithText("Your library, ready").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Home, selected").assertIsDisplayed()
-        composeRule.onNodeWithText("Jose").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Home").assertIsSelected()
+        composeRule.onAllNodes(isSelected()).assertCountEquals(1)
+        composeRule.onNodeWithContentDescription("Signed in as Jose").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Switch profile").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Sign out").assertIsDisplayed()
+    }
+
+    @Test
+    fun railHidesDecorativeTextFromTalkBack() {
+        setShellContent()
+
+        // The brand lockup and the bare profile name fade to alpha 0 when the rail is
+        // collapsed; they must not exist as announceable nodes in either state.
+        composeRule.onAllNodesWithText("Igloo").assertCountEquals(0)
+        composeRule.onAllNodesWithText("TV").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Jose").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("Signed in as Jose").assertExists()
     }
 
     @Test

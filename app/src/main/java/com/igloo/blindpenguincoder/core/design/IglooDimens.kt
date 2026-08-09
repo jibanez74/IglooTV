@@ -60,7 +60,12 @@ data class IglooLayout(
     /** Overscan inset — a fixed fraction of the panel, so it ignores the user's [UiScale]. */
     val safeAreaHorizontal: Dp,
     val safeAreaVertical: Dp,
-    val navSpineWidth: Dp,
+    /**
+     * The navigation rail's two widths. Collapsed is the resting strip (safe area + icon
+     * column); expanded overlays the content pane while d-pad focus is inside the rail.
+     */
+    val navRailCollapsedWidth: Dp,
+    val navRailExpandedWidth: Dp,
     /** The centered auth card: [authCardWidth] for a form, [authCardWideWidth] for a row. */
     val authCardWidth: Dp,
     val authCardWideWidth: Dp,
@@ -140,7 +145,11 @@ private fun iglooDimens(
     layout = IglooLayout(
         safeAreaHorizontal = 48.dp.at(viewportFactor),
         safeAreaVertical = 27.dp.at(viewportFactor),
-        navSpineWidth = 236.dp.at(scale),
+        // Safe area (unscaled by UiScale) plus a fully-scaled icon strip: md + icon md + md
+        // padding inside the row, and the rail's lg end padding. Summed separately so the
+        // icon column never clips at Compact, where the safe portion must not shrink.
+        navRailCollapsedWidth = 48.dp.at(viewportFactor) + 80.dp.at(scale),
+        navRailExpandedWidth = 236.dp.at(scale),
         authCardWidth = 480.dp.at(scale),
         authCardWideWidth = 840.dp.at(scale),
         posterWidth = 148.dp.at(scale),

@@ -4,6 +4,10 @@ enum class IglooDestination(
     val label: String,
     val supportingText: String,
 ) {
+    Search(
+        label = "Search",
+        supportingText = "Find movies, shows, music, and photos across your library.",
+    ),
     Home(
         label = "Home",
         supportingText = "Your media center starts here.",
@@ -31,4 +35,3 @@ enum class IglooDestination(
 }
 
 val PrimaryIglooDestinations: List<IglooDestination> = IglooDestination.entries.toList()
-

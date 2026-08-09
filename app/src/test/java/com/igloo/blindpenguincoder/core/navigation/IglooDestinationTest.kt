@@ -9,6 +9,7 @@ class IglooDestinationTest {
     fun primaryDestinationsKeepTvShellOrder() {
         assertEquals(
             listOf(
+                "Search",
                 "Home",
                 "Movies",
                 "TV Shows",

@@ -15,6 +15,7 @@ fun IglooText(
     modifier: Modifier = Modifier,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Ellipsis,
+    softWrap: Boolean = true,
 ) {
     BasicText(
         text = text,
@@ -22,5 +23,6 @@ fun IglooText(
         style = style.copy(color = color),
         maxLines = maxLines,
         overflow = overflow,
+        softWrap = softWrap,
     )
 }

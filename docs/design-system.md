@@ -100,8 +100,9 @@ enum class UiScale(val factor: Float) { Compact(0.875f), Standard(1.0f), Large(1
 - Applied as a **multiplier** over one authored table of Standard values. There are not three
   hand-maintained scale sets — that would be ~120 numbers to keep in sync with this document,
   and it would drift.
-- Range is bounded by the 960×540dp viewport: the 236dp nav spine becomes 207 / 236 / 271dp,
-  leaving ≥689dp of content pane. Beyond ~1.2 the shell stops fitting.
+- Range is bounded by the 960×540dp viewport: the collapsed nav rail is 118 / 128 / 140dp and
+  the expanded rail 207 / 236 / 271dp — only the collapsed width costs pane layout (§8.1),
+  leaving >700dp of content pane at every scale. Beyond ~1.2 the shell stops fitting.
 
 ⚑ *Android-originated: the web has no equivalent. The three factors were chosen to be
 perceptible but non-destructive at 960×540dp.*
@@ -237,6 +238,7 @@ and are the vocabulary — reuse them rather than inventing neighbors:
 | `0.18f` | `primary` | **Selected** (persistent state, distinct from focus) |
 | `0.40f` | `primary` | Disabled control |
 | `0.60f` | `mutedForeground` | Placeholder text |
+| `0.60f` | `background` | Rail scrim over the content pane while the spine is expanded (§8.1) |
 | `0.10f` / `0.25f` | `destructive` | Inline error card fill / border |
 | `0.16f` / `0.48f` | `aurora` | Badge fill / border |
 | `0.26f` dark / `0.16f` light | `primary` | Welcome backdrop core (§11.1.0) |
@@ -447,7 +449,9 @@ it for a ≤1.5:1 effect.
 ### 6.3 Focus behavior
 
 - **Restoration**: returning to a rail or grid restores the last-focused item, not the first.
-  Back navigation restores focus to the element that led away.
+  Back navigation restores focus to the element that led away. The nav spine is the exception:
+  re-entering it (d-pad left, or Back from content) lands on the **current destination's** row —
+  the row whose selected state is announced — so Back-then-OK is an idempotent "stay here" (§11.2).
 - **Spine ↔ content**: d-pad **right** from the spine enters content; **left** from the first
   content column returns to the spine. This boundary is hand-wired
   (`FocusRequester` in `feature/home/IglooApp.kt`) and must be preserved.
@@ -537,22 +541,29 @@ A persistent **left nav spine** and a content pane, inside the safe area.
 
 | Token | Standard |
 |---|---|
-| `navSpineWidth` | 236dp |
+| `navRailCollapsedWidth` | 128dp *(48dp safe area — `viewportFactor` only — + 80dp scaled icon strip)* |
+| `navRailExpandedWidth` | 236dp |
 | `safeArea` | 48dp × 27dp *(unscaled)* |
 | `authCardWidth` | 480dp *(the centered auth card for a form — §11.1.2, §11.1.3)* |
 | `authCardWideWidth` | 840dp *(the centered auth card for a row — §11.1.1, quick connect)* |
 
-At Standard on the 960dp reference viewport: 960 − 96 (safe area) − 236 (spine) = **628dp of
-content pane**. That is the budget. Everything in §8.2 is sized against it.
+At Standard on the 960dp reference viewport: 960 − 128 (collapsed rail, which absorbs the left
+safe area) − 32 (content gutter, `spacing.xl`) − 48 (right safe area) = **752dp of content
+pane**. That is the budget. Everything in §8.2 is sized against it — the expanded rail overlays
+the pane and costs it nothing.
 
-The spine is the primary vertical d-pad target. It is always present — there is no drawer, no
-hamburger, no overlay mode.
+The spine is the primary vertical d-pad target and is always visible, resting as the collapsed
+icon strip. It expands to `navRailExpandedWidth` exactly while d-pad focus is inside it,
+overlaying the pane behind a `background @ 0.60` scrim (§3.1); the pane is padded by the
+collapsed width only and never reflows. Labels fade in paint only (§7.2) — every row is composed
+and focusable in both states, so the d-pad and TalkBack see the same tree open or shut. There is
+no drawer, no hamburger, and no fully-hidden mode.
 
 ### 8.2 Media geometry
 
 | Token | Standard | Notes |
 |---|---|---|
-| `posterWidth` | 148dp ⚑ | 628dp of pane ⇒ 4 posters + a peek, which cues scrollability |
+| `posterWidth` | 148dp ⚑ | 752dp of pane ⇒ 4 posters + a ~96dp peek, which cues scrollability |
 | `posterAspect` | 2:3 | `Modifier.aspectRatio(2f / 3f)` |
 | `wideCardWidth` | 264dp | Backdrop / episode cards |
 | `wideAspect` | 16:9 | |
@@ -823,9 +834,9 @@ the degraded states — an inline error present, a larger `UiScale`, or a raised
 
 ### 11.2 Navigation spine
 
-Six destinations, icon + label: **Home**, **Movies**, **TV Shows**, **Music**, **Photos**,
-**Settings**. Brand tile + wordmark at the top, the active profile's name and two account
-actions at the bottom: **Switch profile** above **Sign out**.
+Seven destinations, icon + label: **Search**, **Home**, **Movies**, **TV Shows**, **Music**,
+**Photos**, **Settings**. Brand tile + wordmark at the top, the active profile's name and two
+account actions at the bottom: **Switch profile** above **Sign out**.
 
 The two are deliberately separate. Switch profile returns to the picker with the token intact;
 sign out revokes the device token server-side and drops the profile from this TV. One control
@@ -835,6 +846,16 @@ remote.
 Active destination uses `primary @ 0.18` fill plus a `sidebarPrimary` icon; the focused row uses
 `card @ 0.72`. Both render simultaneously when the user is focused on the active destination
 (§3.1).
+
+The rail rests collapsed and expands on focus (§8.1). **Back is three-state**: Back from the
+content pane opens the rail on the current destination's row (§6.3); Back again exits the app; a
+rail entered by d-pad left instead returns focus to the content. Activating a destination hands
+focus to the content pane — that focus move is also what collapses the rail.
+
+TalkBack: the rail and the content pane are separate traversal groups. The brand lockup is
+decorative and silent; the footer's avatar and name read as one node, "Signed in as {name}"; the
+active destination announces through the `selected` semantics property, not a label suffix —
+never announce text the collapsed rail has faded out.
 
 The footer must remain visible at every `UiScale` — at 540dp tall this is the tightest
 constraint in the app and the first thing to break. It now carries two rows rather than one,
@@ -1007,6 +1028,21 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-09 — Main navigation: the collapsible spine.**
+
+- **§8.1: `navSpineWidth` split** into `navRailCollapsedWidth` (128dp = 48dp viewport-corrected
+  safe area + 80dp scaled icon strip) and `navRailExpandedWidth` (236dp). The rail rests
+  collapsed and expands over the pane behind a `background @ 0.60` scrim while d-pad focus is
+  inside it; the pane is padded by the collapsed width only. §2.3 and §8.2's arithmetic redone
+  against the 752dp pane.
+- **§3.1** gains the `background @ 0.60` scrim row.
+- **§11.2: seven destinations** — Search joins, first. Records the three-state Back model and
+  the collapse/expand behavior.
+- **§6.3**: the spine is carved out of last-focused restoration — re-entering it lands on the
+  current destination's row.
+- **A11y decisions recorded in §11.2**: decorative brand lockup, merged "Signed in as" footer
+  node, and the `selected` semantics property instead of a ", selected" label suffix.
 
 **2026-08-08 — The focus treatment is real.**
 

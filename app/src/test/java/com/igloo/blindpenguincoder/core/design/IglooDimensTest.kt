@@ -56,7 +56,8 @@ class IglooDimensTest {
         with(standard.layout) {
             assertEquals(48.dp, safeAreaHorizontal)
             assertEquals(27.dp, safeAreaVertical)
-            assertEquals(236.dp, navSpineWidth)
+            assertEquals(128.dp, navRailCollapsedWidth)
+            assertEquals(236.dp, navRailExpandedWidth)
             assertEquals(480.dp, authCardWidth)
             assertEquals(840.dp, authCardWideWidth)
             assertEquals(148.dp, posterWidth)
@@ -113,7 +114,8 @@ class IglooDimensTest {
             { it.sizes.controlHeight }, { it.sizes.fieldHeight }, { it.sizes.navItemHeight },
             { it.sizes.brandTile },
             { it.icons.md }, { it.icons.lg },
-            { it.layout.navSpineWidth }, { it.layout.posterWidth }, { it.layout.wideCardWidth },
+            { it.layout.navRailCollapsedWidth }, { it.layout.navRailExpandedWidth },
+            { it.layout.posterWidth }, { it.layout.wideCardWidth },
             { it.layout.authCardWidth }, { it.layout.authCardWideWidth },
         )
         scaled.forEach { token ->
@@ -128,18 +130,21 @@ class IglooDimensTest {
     fun `the viewport guard scales dimensions independently of the user preference`() {
         val corrected = iglooDimens(UiScale.Standard, viewportFactor(1920f))
         assertEquals(2f, corrected.scale, 0.0001f)
-        assertEquals(472.dp, corrected.layout.navSpineWidth)
+        assertEquals(472.dp, corrected.layout.navRailExpandedWidth)
+        assertEquals(256.dp, corrected.layout.navRailCollapsedWidth)
         // ...but hairlines and the discrete column count still do not move.
         assertEquals(3.dp, corrected.focus.ringWidth)
         assertEquals(5, corrected.layout.gridColumns)
     }
 
     @Test
-    fun `the spine still fits the reference viewport at every scale`() {
-        // 960dp wide, minus the safe area on both sides, must leave a usable content pane.
+    fun `the collapsed rail still fits the reference viewport at every scale`() {
+        // The expanded rail overlays the pane, so only the collapsed width costs layout:
+        // 960dp wide, minus the right safe area and the collapsed rail, must leave a usable
+        // content pane.
         listOf(compact, standard, large).forEach {
-            val pane = 960.dp - it.layout.safeAreaHorizontal * 2 - it.layout.navSpineWidth
-            assertTrue("content pane collapsed to $pane", pane > 500.dp)
+            val pane = 960.dp - it.layout.safeAreaHorizontal - it.layout.navRailCollapsedWidth
+            assertTrue("content pane collapsed to $pane", pane > 700.dp)
         }
     }
 }

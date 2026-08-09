@@ -4,7 +4,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -52,7 +52,7 @@ class WelcomeGateTest {
             // The server prompt has not been reached yet.
             composeRule.onAllNodesWithText("Server address").assertCountEquals(0)
             // And the auth canvas never shows the shell.
-            composeRule.onAllNodesWithContentDescription("Home, selected").assertCountEquals(0)
+            composeRule.onAllNodesWithTag("navigation_rail").assertCountEquals(0)
         }
     }
 

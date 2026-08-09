@@ -1,7 +1,9 @@
 package com.igloo.blindpenguincoder.feature.home
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -13,11 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,27 +25,30 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.igloo.blindpenguincoder.core.design.IglooEasing
+import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
-import com.igloo.blindpenguincoder.core.ui.IglooBrandMark
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
@@ -65,10 +66,29 @@ fun IglooApp(
     val navigationRequesters = remember {
         PrimaryIglooDestinations.associateWith { FocusRequester() }
     }
+    // The rail expands exactly while d-pad focus is inside it; railOpenedByBack remembers
+    // whether the rail was entered with the Back button, so Back can mean "step outward":
+    // content -> rail -> exit, but a rail entered by d-pad steps back into content instead.
+    var railHasFocus by remember { mutableStateOf(false) }
+    var railOpenedByBack by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = !railHasFocus) {
+        railOpenedByBack = true
+        navigationRequesters.getValue(currentDestination).requestFocus()
+    }
+    BackHandler(enabled = railHasFocus && !railOpenedByBack) {
+        contentStartRequester.requestFocus()
+    }
+    // railHasFocus && railOpenedByBack: no handler enabled, so Back exits the app.
 
     IglooShell(
         user = user,
         currentDestination = currentDestination,
+        railExpanded = railHasFocus,
+        onRailFocusChanged = { hasFocus ->
+            if (!hasFocus) railOpenedByBack = false
+            railHasFocus = hasFocus
+        },
         contentStartRequester = contentStartRequester,
         navigationRequesters = navigationRequesters,
         onDestinationSelected = { currentDestinationName = it.name },
@@ -76,12 +96,12 @@ fun IglooApp(
         onLogout = onLogout,
     )
 
-    // The shell is the one screen that used to compose with nothing focused, so the first D-pad
-    // press after signing in was spent creating focus rather than moving it. Once only: the
-    // content pane outlives a destination change, so re-anchoring here would instead steal focus
-    // from the card the user had just activated.
+    // Land in the content pane with the rail at rest: the library is the first thing seen
+    // and the first D-pad press moves focus instead of creating it. Once only: the content
+    // pane outlives a destination change, so re-anchoring here would steal focus from the
+    // card the user had just activated.
     LaunchedEffect(Unit) {
-        navigationRequesters.getValue(currentDestination).requestFocus()
+        contentStartRequester.requestFocus()
     }
 }
 
@@ -89,6 +109,8 @@ fun IglooApp(
 private fun IglooShell(
     user: AuthUser,
     currentDestination: IglooDestination,
+    railExpanded: Boolean,
+    onRailFocusChanged: (Boolean) -> Unit,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     onDestinationSelected: (IglooDestination) -> Unit,
@@ -98,24 +120,29 @@ private fun IglooShell(
     val colors = IglooTheme.colors
     val layout = IglooTheme.layout
 
+    // The rail's real layout width animates between its two authored states; the content
+    // pane is padded by the collapsed width only, so expansion overlays it and the content
+    // never reflows. Under reduced motion both drivers snap.
+    val railWidth by animateDpAsState(
+        targetValue = if (railExpanded) layout.navRailExpandedWidth else layout.navRailCollapsedWidth,
+        animationSpec = iglooTween(
+            durationMillis = IglooMotion.STANDARD_MS,
+            easing = if (railExpanded) IglooEasing.standard else IglooEasing.exit,
+        ),
+        label = "railWidth",
+    )
+    val scrimAlpha by animateFloatAsState(
+        targetValue = if (railExpanded) RAIL_SCRIM_ALPHA else 0f,
+        animationSpec = iglooTween(IglooMotion.STANDARD_MS),
+        label = "railScrim",
+    )
+
     // Backgrounds bleed to the physical edge; only chrome and text are inset for overscan.
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background),
     ) {
-        NavigationSpine(
-            user = user,
-            currentDestination = currentDestination,
-            contentStartRequester = contentStartRequester,
-            navigationRequesters = navigationRequesters,
-            onDestinationSelected = onDestinationSelected,
-            onSwitchProfile = onSwitchProfile,
-            onLogout = onLogout,
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(layout.navSpineWidth),
-        )
         HomeContent(
             currentDestination = currentDestination,
             contentStartRequester = contentStartRequester,
@@ -124,206 +151,41 @@ private fun IglooShell(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
-                    start = IglooTheme.spacing.xl,
+                    start = layout.navRailCollapsedWidth + IglooTheme.spacing.xl,
                     end = layout.safeAreaHorizontal,
                     top = layout.safeAreaVertical,
                     bottom = layout.safeAreaVertical,
                 ),
         )
-    }
-}
-
-@Composable
-private fun NavigationSpine(
-    user: AuthUser,
-    currentDestination: IglooDestination,
-    contentStartRequester: FocusRequester,
-    navigationRequesters: Map<IglooDestination, FocusRequester>,
-    onDestinationSelected: (IglooDestination) -> Unit,
-    onSwitchProfile: () -> Unit,
-    onLogout: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = IglooTheme.colors
-
-    Column(
-        modifier = modifier
-            .background(colors.sidebar)
-            .padding(
-                start = IglooTheme.layout.safeAreaHorizontal,
-                end = IglooTheme.spacing.lg,
-                top = IglooTheme.layout.safeAreaVertical,
-                bottom = IglooTheme.layout.safeAreaVertical,
-            ),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-        ) {
-            IglooBrandMark()
-            Column {
-                IglooText(
-                    text = "Igloo",
-                    style = IglooTheme.typography.titleMedium,
-                    color = colors.foreground,
-                )
-                IglooText(
-                    text = "TV",
-                    style = IglooTheme.typography.label,
-                    color = colors.mutedForeground,
-                )
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-        ) {
-            PrimaryIglooDestinations.forEach { destination ->
-                NavigationItem(
-                    destination = destination,
-                    selected = destination == currentDestination,
-                    focusRequester = navigationRequesters.getValue(destination),
-                    rightFocusRequester = contentStartRequester,
-                    onClick = { onDestinationSelected(destination) },
-                )
-            }
-        }
-
-        IglooText(
-            text = user.name,
-            style = IglooTheme.typography.label,
-            color = colors.mutedForeground,
-            maxLines = 1,
-        )
-        // Handing the TV to someone else keeps this profile paired; signing out does not.
-        AccountActionItem(
-            label = "Switch profile",
-            dotColor = colors.ring,
-            onClick = onSwitchProfile,
-        )
-        AccountActionItem(
-            label = "Sign out",
-            dotColor = colors.destructive,
-            onClick = onLogout,
-        )
-    }
-}
-
-@Composable
-private fun AccountActionItem(
-    label: String,
-    dotColor: Color,
-    onClick: () -> Unit,
-) {
-    val colors = IglooTheme.colors
-    var focused by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = IglooTheme.sizes.navItemHeight)
-            .focusRing(
-                focused = focused,
-                radius = IglooTheme.radius.lg,
-                fill = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            )
-            .clearAndSetSemantics {
-                contentDescription = label
-                role = Role.Button
-                onClick(label = label) {
-                    onClick()
-                    true
-                }
-            }
-            .padding(horizontal = IglooTheme.spacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-    ) {
+        // Paint-only scrim: no clickable, focusable, or semantics modifiers, so it can
+        // never intercept the d-pad and TalkBack does not know it exists.
         Box(
             modifier = Modifier
-                .size(IglooTheme.sizes.dot)
-                .clip(CircleShape)
-                .background(if (focused) dotColor else colors.border),
+                .fillMaxSize()
+                .drawBehind {
+                    if (scrimAlpha > 0f) drawRect(colors.background.copy(alpha = scrimAlpha))
+                },
         )
-        IglooText(
-            text = label,
-            style = IglooTheme.typography.bodyLarge,
-            color = colors.foreground,
-            maxLines = 1,
-        )
-    }
-}
-
-@Composable
-private fun NavigationItem(
-    destination: IglooDestination,
-    selected: Boolean,
-    focusRequester: FocusRequester,
-    rightFocusRequester: FocusRequester,
-    onClick: () -> Unit,
-) {
-    val colors = IglooTheme.colors
-    var focused by remember { mutableStateOf(false) }
-    val background = when {
-        selected -> colors.primary.copy(alpha = 0.18f)
-        focused -> colors.card.copy(alpha = 0.72f)
-        else -> Color.Transparent
-    }
-    val foreground = if (selected) colors.sidebarPrimary else colors.foreground
-    val description = if (selected) "${destination.label}, selected" else destination.label
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = IglooTheme.sizes.navItemHeight)
-            .focusRing(
-                focused = focused,
-                radius = IglooTheme.radius.lg,
-                fill = background,
-            )
-            .focusRequester(focusRequester)
-            .focusProperties {
-                right = rightFocusRequester
-            }
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            )
-            .clearAndSetSemantics {
-                contentDescription = description
-                role = Role.Button
-                onClick(label = "Open ${destination.label}") {
-                    onClick()
-                    true
-                }
-            }
-            .padding(horizontal = IglooTheme.spacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-    ) {
-        Box(
+        NavigationRail(
+            user = user,
+            expanded = railExpanded,
+            currentDestination = currentDestination,
+            contentStartRequester = contentStartRequester,
+            navigationRequesters = navigationRequesters,
+            // Activating a destination hands focus to the content it just chose — that focus
+            // move is also what collapses the rail. Cards in the pane keep the plain callback,
+            // so activating one never steals focus from it.
+            onDestinationSelected = { destination ->
+                onDestinationSelected(destination)
+                contentStartRequester.requestFocus()
+            },
+            onSwitchProfile = onSwitchProfile,
+            onLogout = onLogout,
             modifier = Modifier
-                .size(IglooTheme.sizes.dot)
-                .clip(CircleShape)
-                .background(if (selected || focused) colors.primary else colors.border),
-        )
-        IglooText(
-            text = destination.label,
-            style = IglooTheme.typography.bodyLarge,
-            color = foreground,
-            maxLines = 1,
+                .fillMaxHeight()
+                .width(railWidth)
+                .onFocusChanged { onRailFocusChanged(it.hasFocus) }
+                .testTag("navigation_rail"),
         )
     }
 }
@@ -339,7 +201,9 @@ private fun HomeContent(
     val colors = IglooTheme.colors
 
     Column(
-        modifier = modifier,
+        // Rail and content are each a traversal group, so TalkBack reads one block at a
+        // time instead of geometrically interleaving rows that share a y position.
+        modifier = modifier.semantics { isTraversalGroup = true },
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
     ) {
         Row(
@@ -511,3 +375,5 @@ private fun FeatureCard(
     }
 }
 
+/** Dim over the content pane while the rail overlays it — the 0.60 step from section 3.1. */
+private const val RAIL_SCRIM_ALPHA = 0.60f

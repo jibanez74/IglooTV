@@ -7,7 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -47,7 +47,7 @@ class ProfilePickerGateTest {
             composeRule.onNodeWithContentDescription("Change server address").assertIsDisplayed()
 
             // The auth canvas never shows the shell.
-            composeRule.onAllNodesWithContentDescription("Home, selected").assertCountEquals(0)
+            composeRule.onAllNodesWithTag("navigation_rail").assertCountEquals(0)
         }
     }
 

@@ -42,11 +42,11 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.ui.IglooAvatar
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
@@ -186,7 +186,11 @@ private fun ProfileTile(
         onClick = onClick,
         modifier = modifier.testTag("profile_tile_${profile.userId}"),
     ) {
-        ProfileAvatar(profile)
+        IglooAvatar(
+            name = profile.name,
+            avatarUrl = profile.avatarUrl,
+            size = AVATAR_SIZE.scaled(),
+        )
     }
 }
 
@@ -299,39 +303,6 @@ private fun Tile(
                         horizontal = IglooTheme.spacing.sm,
                         vertical = IglooTheme.spacing.xs,
                     ),
-            )
-        }
-    }
-}
-
-/**
- * Avatars are only fetched when the backend gave an absolute URL; `openapi.json` does
- * not define how a relative avatar path resolves, so initials cover everything else.
- */
-@Composable
-private fun ProfileAvatar(profile: ProfileSummary) {
-    val colors = IglooTheme.colors
-    val size = Modifier
-        .size(AVATAR_SIZE.scaled())
-        .clip(CircleShape)
-    val url = profile.avatarUrl?.takeIf {
-        it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true)
-    }
-    if (url != null) {
-        AsyncImage(
-            model = url,
-            contentDescription = null,
-            modifier = size.background(colors.muted),
-        )
-    } else {
-        Box(
-            modifier = size.background(colors.primary),
-            contentAlignment = Alignment.Center,
-        ) {
-            IglooText(
-                text = profile.name.take(1).uppercase(),
-                style = IglooTheme.typography.titleLarge,
-                color = colors.primaryForeground,
             )
         }
     }

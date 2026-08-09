@@ -7,7 +7,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -54,8 +54,7 @@ class AuthGateTest {
             composeRule.onNodeWithText("http://192.168.1.5:8080").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Server address").assertIsFocused()
 
-            composeRule.onAllNodesWithContentDescription("Home, selected")
-                .assertCountEquals(0)
+            composeRule.onAllNodesWithTag("navigation_rail").assertCountEquals(0)
         }
     }
 
