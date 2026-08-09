@@ -24,6 +24,12 @@ val NoDeviceAuthAttribute = AttributeKey<Unit>("IglooNoDeviceAuth")
 /** Sends a specific token instead of the active one, to revoke a superseded session. */
 val BearerOverrideAttribute = AttributeKey<String>("IglooBearerOverride")
 
+/**
+ * Marks a request whose own 401 is not a lost session: it is discarding the very credential it
+ * carries, so "already gone" is the outcome it asked for.
+ */
+val ExpectedUnauthorizedAttribute = AttributeKey<Unit>("IglooExpectedUnauthorized")
+
 private val AttachedCredentialAttribute = AttributeKey<ActiveCredential>("IglooAttachedCredential")
 
 fun HttpRequestBuilder.withoutDeviceAuth() {
@@ -32,6 +38,10 @@ fun HttpRequestBuilder.withoutDeviceAuth() {
 
 fun HttpRequestBuilder.withBearerOverride(token: String) {
     attributes.put(BearerOverrideAttribute, token)
+}
+
+fun HttpRequestBuilder.expectingUnauthorized() {
+    attributes.put(ExpectedUnauthorizedAttribute, Unit)
 }
 
 /**
@@ -53,9 +63,11 @@ fun deviceTokenAuth(credentials: DeviceCredentialSource, events: AuthEventBus) =
         onResponse { response ->
             if (response.status != HttpStatusCode.Unauthorized) return@onResponse
             val attributes = response.call.request.attributes
-            // An override is a deliberate revoke of a token already replaced, so its
-            // 401 means "already gone", not "sign the user out".
-            if (attributes.contains(BearerOverrideAttribute)) return@onResponse
+            // A request that set out to discard its own credential asked for "already gone", so
+            // its 401 is the outcome, not a lost session. Suppressed here at the source rather
+            // than filtered downstream: the event bus keeps one slot and drops the oldest, so a
+            // spurious signal would evict a genuine 401 from a concurrent request.
+            if (attributes.contains(ExpectedUnauthorizedAttribute)) return@onResponse
             val attached = attributes.getOrNull(AttachedCredentialAttribute) ?: return@onResponse
             events.signalUnauthorized(attached.profileId)
         }

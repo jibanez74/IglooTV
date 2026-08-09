@@ -39,7 +39,6 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooMotion
@@ -50,6 +49,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooAvatar
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
+import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
@@ -91,14 +91,7 @@ fun ProfilePickerScreen(
             IglooInlineError(message = message)
         }
         state.notice?.let { notice ->
-            IglooText(
-                text = notice,
-                style = IglooTheme.typography.bodyMedium,
-                color = IglooTheme.colors.mutedForeground,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-            )
+            IglooNotice(text = notice)
         }
 
         Row(

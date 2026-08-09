@@ -5,12 +5,18 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -62,10 +68,18 @@ class NavigationRailBehaviorTest {
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
+            var signOut by remember { mutableStateOf(SignOutUiState()) }
             IglooTheme {
                 collapsedWidth = IglooTheme.layout.navRailCollapsedWidth
                 expandedWidth = IglooTheme.layout.navRailExpandedWidth
-                IglooApp(user = user, onSwitchProfile = {}, onLogout = {})
+                IglooApp(
+                    user = user,
+                    signOut = signOut,
+                    onSwitchProfile = {},
+                    onSignOut = { signOut = SignOutUiState(confirming = true) },
+                    onSignOutConfirm = { signOut = SignOutUiState() },
+                    onSignOutDismiss = { signOut = SignOutUiState() },
+                )
             }
         }
         composeRule.waitForIdle()
@@ -171,6 +185,27 @@ class NavigationRailBehaviorTest {
             .performKeyInput { pressKey(Key.DirectionRight) }
         contentStartCard().assertIsFocused()
         rail().assertWidthIsEqualTo(collapsedWidth)
+    }
+
+    @Test
+    fun backInsideTheSignOutDialogCancelsItAndRestoresFocus() {
+        setShellContent()
+        composeRule.onNodeWithContentDescription("Sign out").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Sign out of Igloo?").assertIsDisplayed()
+
+        pressBack()
+
+        // Back reaches the dialog's own handler rather than falling through to the rail's
+        // three-state model — and the shell's handlers are gated while it is open.
+        composeRule.onAllNodesWithText("Sign out of Igloo?").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("Sign out").assertIsFocused()
+        assertTrue(
+            "Back inside the dialog must not finish the activity",
+            checkNotNull(hostActivity).let { !it.isFinishing && !it.isDestroyed },
+        )
+        // The rail stays open behind the dialog, so cancelling lands the user back in it.
+        rail().assertWidthIsEqualTo(expandedWidth)
     }
 }
 

@@ -119,12 +119,28 @@ class DeviceTokenAuthTest {
     }
 
     @Test
+    fun `a request that expects its own 401 reports nothing`() = runTest {
+        val fixture = Fixture(HttpStatusCode.Unauthorized)
+        fixture.credentials.set(ActiveCredential(7, "igd_active"))
+        val signals = backgroundScope.collectSignals(fixture)
+
+        // A revoke of the credential it is carrying: "already gone" is the outcome it asked for,
+        // so it must not be reported as a lost session — nor emitted at all, since the bus keeps
+        // one slot and would drop a genuine 401 from a concurrent request to make room.
+        fixture.client.get("http://igloo.test:8080/api/auth/logout") { expectingUnauthorized() }
+        yield()
+
+        assertTrue(signals.isEmpty())
+    }
+
+    @Test
     fun `a rejected revoke of a superseded token reports nothing`() = runTest {
         val fixture = Fixture(HttpStatusCode.Unauthorized)
         fixture.credentials.set(ActiveCredential(7, "igd_active"))
         val signals = backgroundScope.collectSignals(fixture)
 
         fixture.client.get("http://igloo.test:8080/api/auth/logout") {
+            expectingUnauthorized()
             withBearerOverride("igd_already_gone")
         }
         yield()

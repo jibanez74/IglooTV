@@ -8,7 +8,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -32,6 +36,10 @@ private const val SERVER_ORIGIN = "http://192.0.2.1:8080"
 
 /** The 960×540 box the card is measured against — see `assertFullyOnscreen`. */
 private const val VIEWPORT_TAG = "tv-viewport"
+
+private const val NOTICE =
+    "Signed out on this TV. The server couldn't be reached, so it may still list " +
+        "this TV as signed in."
 
 private const val INSTRUCTIONS =
     "Scan the QR code to open Account settings. Sign in through your " +
@@ -90,7 +98,40 @@ class QuickConnectLayoutTest {
         composeRule.onNodeWithContentDescription("Retry connecting to server").assertIsDisplayed()
     }
 
-    private fun setContent(phase: QuickConnectPhase, restoreError: AppError?) {
+    /**
+     * The sign-out notice: signing out the last profile lands here rather than on the picker, so
+     * this screen carries the announced-message slot too (section 11.1.3). Like an inline error it
+     * is a degraded state and may scroll; what must hold is that it is announced and every control
+     * stays reachable.
+     */
+    @Test
+    fun aNoticeIsAnnouncedAndLeavesEveryControlReachable() {
+        setContent(
+            phase = QuickConnectPhase.RequestingCode,
+            restoreError = null,
+            notice = NOTICE,
+        )
+
+        composeRule.onNodeWithText(NOTICE)
+            .assertIsDisplayed()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
+        composeRule.onNodeWithContentDescription("Use email and password instead")
+            .assertIsFocused()
+            .assertFullyOnscreen("switch button with a notice")
+        composeRule.onNodeWithContentDescription("Change server address")
+            .assertFullyOnscreen("leave button with a notice")
+    }
+
+    private fun setContent(
+        phase: QuickConnectPhase,
+        restoreError: AppError?,
+        notice: String? = null,
+    ) {
         composeRule.setContent {
             assertReferenceViewport()
             IglooTheme(uiScale = UiScale.Standard) {
@@ -109,6 +150,7 @@ class QuickConnectLayoutTest {
                             onRetryPairing = {},
                             onSwitchToPassword = {},
                             onLeave = {},
+                            notice = notice,
                         )
                     }
                 }

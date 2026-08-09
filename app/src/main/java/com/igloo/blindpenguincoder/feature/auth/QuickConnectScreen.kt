@@ -56,6 +56,7 @@ import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
+import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooQrCode
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
@@ -69,6 +70,7 @@ fun QuickConnectScreen(
     onRetryRestore: () -> Unit,
     onSwitchToPassword: () -> Unit,
     onLeave: () -> Unit,
+    notice: String? = null,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -86,6 +88,7 @@ fun QuickConnectScreen(
         onRetryPairing = viewModel::retry,
         onSwitchToPassword = onSwitchToPassword,
         onLeave = onLeave,
+        notice = notice,
     )
 }
 
@@ -103,6 +106,12 @@ internal fun QuickConnectContent(
     onRetryPairing: () -> Unit,
     onSwitchToPassword: () -> Unit,
     onLeave: () -> Unit,
+    /**
+     * Signing out the last profile lands here rather than on the picker, so this screen carries
+     * the same notice slot. A degraded state, so it may push the card into its internal scroll
+     * (section 11.1.3); defaulted, so the layout test's resting-state measurement is unaffected.
+     */
+    notice: String? = null,
 ) {
     val switchFocus = remember { FocusRequester() }
     val changeServerFocus = remember { FocusRequester() }
@@ -139,6 +148,9 @@ internal fun QuickConnectContent(
                         onAction = onRetryPairing,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                }
+                if (notice != null) {
+                    IglooNotice(text = notice)
                 }
                 PairingCode(
                     phase = phase,

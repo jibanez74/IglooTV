@@ -207,11 +207,28 @@ class SessionManager(
         gate()
     }
 
-    /** Sign out for real: the device token is revoked and the profile leaves this TV. */
-    suspend fun logout() {
-        authRepository.logout()
+    /**
+     * Sign out for real: revoke this device token server-side and drop the profile from this TV.
+     *
+     * Only the profile signing out is affected — the request carries its token and no other, and
+     * [forgetActiveCredential] removes that one row. Everyone else on this TV keeps their token.
+     *
+     * Under [transitionMutex] like every other transition, so a queued revocation cannot interleave
+     * with it. The local half is unconditional: a revoke that could not be delivered must not leave
+     * a live credential on a shared TV, so the profile goes either way and the gate says what the
+     * server did not hear. A 401 is *success* — the token it would have revoked is already gone,
+     * which is exactly what this call wanted.
+     */
+    suspend fun logout() = transitionMutex.withLock {
+        // Only the shell can ask, and only while it is up: a request arriving after the session
+        // has already ended must not publish a second gate over the first.
+        if (_state.value !is AppAuthState.Authenticated) return@withLock
+        val revoked = when (val result = authRepository.logout()) {
+            is ApiResult.Success -> true
+            is ApiResult.Failure -> result.error == AppError.Unauthorized
+        }
         forgetActiveCredential()
-        gate()
+        gate(notice = if (revoked) null else UNDELIVERED_REVOKE_NOTICE)
     }
 
     /** Server setup finished successfully; move on to sign-in. */
@@ -247,7 +264,7 @@ class SessionManager(
         }
         val stored = profiles.load()
         _state.value = if (stored.profiles.isEmpty()) {
-            AppAuthState.NeedsLogin(address, restoreError = restoreError)
+            AppAuthState.NeedsLogin(address, restoreError = restoreError, notice = notice)
         } else {
             AppAuthState.ChooseProfile(
                 serverAddress = address,
@@ -261,7 +278,12 @@ class SessionManager(
 
     private fun revokedNotice(name: String) = "$name's session expired. Sign in again."
 
-    private companion object {
-        const val REVALIDATE_INTERVAL_MILLIS = 5 * 60 * 1000L
+    internal companion object {
+        private const val REVALIDATE_INTERVAL_MILLIS = 5 * 60 * 1000L
+
+        /** A sign-out the server never heard: local state is clean, its record may not be. */
+        const val UNDELIVERED_REVOKE_NOTICE =
+            "Signed out on this TV. The server couldn't be reached, so it may still list " +
+                "this TV as signed in."
     }
 }

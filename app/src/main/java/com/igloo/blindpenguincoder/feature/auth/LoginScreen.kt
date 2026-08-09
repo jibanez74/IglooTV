@@ -22,6 +22,7 @@ import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
+import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.IglooTextField
 
@@ -32,6 +33,7 @@ fun LoginScreen(
     restoreError: AppError?,
     canCancel: Boolean,
     onSwitchToQuickConnect: () -> Unit,
+    notice: String? = null,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val emailFocus = remember { FocusRequester() }
@@ -57,6 +59,9 @@ fun LoginScreen(
         }
         state.error?.let { message ->
             IglooInlineError(message = message, modifier = Modifier.fillMaxWidth())
+        }
+        if (notice != null) {
+            IglooNotice(text = notice)
         }
         IglooTextField(
             value = state.email,

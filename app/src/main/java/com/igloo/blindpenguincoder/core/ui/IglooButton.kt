@@ -22,7 +22,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 
-enum class IglooButtonVariant { Primary, Ghost }
+enum class IglooButtonVariant { Primary, Ghost, Destructive }
 
 @Composable
 fun IglooButton(
@@ -40,10 +40,13 @@ fun IglooButton(
             if (enabled) colors.primary else colors.primary.copy(alpha = 0.4f)
         IglooButtonVariant.Ghost ->
             if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent
+        IglooButtonVariant.Destructive ->
+            if (enabled) colors.destructive else colors.destructive.copy(alpha = 0.4f)
     }
     val foreground = when (variant) {
         IglooButtonVariant.Primary -> colors.primaryForeground
         IglooButtonVariant.Ghost -> colors.foreground
+        IglooButtonVariant.Destructive -> colors.destructiveForeground
     }
 
     Box(

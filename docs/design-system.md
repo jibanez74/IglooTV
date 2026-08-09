@@ -197,7 +197,7 @@ proves sufficient in practice.
 
 ## 3. Color
 
-15 semantic slots, implemented in `core/design/IglooColors.kt`. Tokens are paired (surface +
+16 semantic slots, implemented in `core/design/IglooColors.kt`. Tokens are paired (surface +
 foreground) so contrast is structural rather than per-call-site.
 
 | Token | Dark (default) | Light | Role |
@@ -217,11 +217,18 @@ foreground) so contrast is structural rather than per-call-site.
 | `sidebar` | `#0F1A2E` | `#E8F1FA` | Nav spine chrome |
 | `sidebarPrimary` | `#38BDF8` | `#0369A1` | Active nav item |
 | `destructive` | `#F87171` | `#DC2626` | Danger / delete |
+| `destructiveForeground` | `#08131F` | `#FFFFFF` | Text on destructive |
 
 Notes:
 
 - `aurora` / `auroraForeground` are **identical in both themes** — intentional.
 - `ring` is the single focus color across the entire app. Do not introduce a second.
+- `destructiveForeground` is ported from web (`--destructive-foreground`), which authors both
+  values *and* their contrast: **6.76:1 dark / 4.83:1 light**. That makes it the weakest paired
+  token in the app — `primary`/`primaryForeground` is 8.72:1 — and it sits under §12's 7:1 body
+  target. It is admissible because it only ever carries a **control label** (§9.1's `Destructive`
+  button), never prose. Do not reach for it to color body text; a destructive *message* uses
+  `cardForeground` on `card`, as §9.3 requires.
 - **Not ported from web**: `success`, `accentTeal`, `popover`, `chart-1..5`. No feature needs
   them. Add the slot to `IglooColors` (and this table) when one does — do not reach for a
   near-miss token in the meantime.
@@ -236,9 +243,9 @@ and are the vocabulary — reuse them rather than inventing neighbors:
 | `0.72f` | `card` | **Focused fill** — the standard focus background |
 | `0.96f` | `card` | Focused fill on an already-elevated card |
 | `0.18f` | `primary` | **Selected** (persistent state, distinct from focus) |
-| `0.40f` | `primary` | Disabled control |
+| `0.40f` | `primary` / `destructive` | Disabled control |
 | `0.60f` | `mutedForeground` | Placeholder text |
-| `0.60f` | `background` | Rail scrim over the content pane while the spine is expanded (§8.1) |
+| `0.60f` | `background` | Scrim — the rail over the content pane (§8.1) and the modal (§9.3) |
 | `0.10f` / `0.25f` | `destructive` | Inline error card fill / border |
 | `0.16f` / `0.48f` | `aurora` | Badge fill / border |
 | `0.26f` dark / `0.16f` light | `primary` | Welcome backdrop core (§11.1.0) |
@@ -252,6 +259,11 @@ luminance under text must stay ≤ 0.093 in dark and ≥ 0.345 in light — the 
 **Focus vs selected is a real distinction**: `card @ 0.72` means "the remote is here right now";
 `primary @ 0.18` means "this is the active destination". Both can be true at once, and the nav
 spine renders them together.
+
+**Only one scrim renders at a time.** The rail's and the modal's are the same `background @ 0.60`,
+and two of them composite to 0.84 — an alpha this table does not authorize, and dark enough that
+the control the user just left stops being legible. When a modal opens over the expanded rail, the
+rail yields its scrim (§9.3). One implementation enforces this: `core/ui/IglooScrim.kt`.
 
 ### 3.2 Color over media
 
@@ -598,9 +610,12 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | Composable | Notes |
 |---|---|
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
-| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1 |
+| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). |
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
+| `IglooNotice` | One announced line — `bodyMedium` / `mutedForeground`, `liveRegion = Polite`. For a message the user did not ask for and cannot act on: what a gate says after an action that already happened (§10, §11.1.1). Not an error card; no Retry. |
+| `IglooScrim` | The paint-only dim: `background @ 0.60` by default (§3.1), no `clickable`/`focusable`/`semantics`, so it can never intercept the d-pad and TalkBack does not know it exists. Used by the rail (§8.1) and the modal (§9.3) — **never both at once**. |
+| `IglooConfirmDialog` | The confirmation modal (§9.3) |
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
@@ -619,6 +634,80 @@ Available and appropriate to adopt where it saves hand-rolling:
 - `ListItem`, `TabRow` / `Tab`, `Card`
 
 Adopt these for *behavior*; always configure them with Igloo tokens, never their defaults.
+
+### 9.3 The confirmation dialog
+
+`IglooConfirmDialog` is the app's only modal. It exists for actions that destroy something the
+user cannot get back with one press — today, sign out (§11.2).
+
+**It is an in-tree overlay, not `androidx.compose.ui.window.Dialog`.** This is a deliberate
+choice, not an oversight, and four things break if someone "fixes" it into a real dialog window:
+
+1. **The font-scale clamp is silently lost.** A dialog gets its own `AndroidComposeView`, which
+   re-provides `LocalDensity` / `LocalWindowInfo` / `LocalConfiguration` from its own window — so
+   `IglooTheme`'s bounded density (§12.1) does not reach inside it. A clamp bug in a modal is the
+   least visible place to have one.
+2. **The scrim stops being ours.** A dialog window dims with the platform's own black, un-tokened
+   and theme-blind, instead of `background @ 0.60` (§3.1). It looks wrong in light theme.
+3. **Back becomes untestable.** The dialog window handles Back through its own callback, so
+   neither `performKeyInput { pressKey(Key.Back) }` nor an activity-dispatcher `pressBack()` helper
+   reaches it — and Back-cancels-the-dialog is mandatory behavior, so it must be testable without
+   UiAutomator.
+4. **A second Compose root.** `onRoot()` starts matching two nodes, which breaks any test that
+   measures the shell.
+
+Everything a dialog window would give for free — focus containment, accessibility scoping — is a
+handful of modifiers we already use elsewhere.
+
+**Geometry.** Card at `layout.authCardWidth` (reused, not a new token), `radius.xl`, `card` fill,
+`spacing.xl` interior padding, `spacing.lg` between blocks, `spacing.md` between the buttons.
+Centered in an `IglooScrim`. The card is the modal's only surface; it does not clip, so the confirm
+button's focus glow survives (§6.1).
+
+**Copy.** A title that asks a question (`titleMedium`, `cardForeground`, `heading()`), a body that
+says what will be lost (`bodyMedium`, `cardForeground`), two actions. The body uses
+`cardForeground`, **not** `mutedForeground`: at 5.08:1 on `card` the muted token is under §12's
+7:1 body target, and this is prose the user must actually read to make a destructive decision — the
+same rule §11.1.0 states for auth prose.
+
+**Focus.**
+
+- The **dismiss** action is focused when the dialog opens. The destructive one is never the default.
+- Dismiss left, confirm right. The confirm uses `IglooButtonVariant.Destructive`.
+- The trap is `FocusRequester.Cancel` pinned on every direction that would leave the card — focus
+  search terminates there, so no geometric fallback can reach the rail or the pane behind the
+  scrim. It is *not* `focusProperties { canFocus = false }` on the shell.
+- **Restoring focus is the invoker's job**, in its own dismiss callback — the same shape as
+  §6.3's "back navigation restores focus to the element that led away":
+
+  ```kotlin
+  onDismiss = { viewModel.dismiss(); signOutFocus.requestFocus() }
+  ```
+
+  Not a `LaunchedEffect` on the open flag. On the *success* path the flag clears in the same frame
+  the whole screen is disposed, and a late effect would call `requestFocus()` on a detached
+  requester and throw. A click or Back callback runs while the invoker is provably still composed.
+- Back cancels. **The host must also gate its own `BackHandler`s while the dialog is open** —
+  relying on registration order is not "deliberate Back behavior".
+
+**Pending.** While the action is in flight the button row is replaced by a single **focusable**
+status line (`liveRegion = Polite`, so TalkBack speaks it). Not disabled buttons:
+`clickable(enabled = false)` removes the focus target, and in an in-tree modal that punches a hole
+in the trap — the next d-pad press would land on a card behind the scrim. Back stays live, because
+the request cannot be recalled anyway and a dead remote for the length of a network timeout is
+worse; the action belongs to a ViewModel, so leaving does not abandon it (§10).
+
+**TalkBack.** The card carries `paneTitle` and `isTraversalGroup`; the shell behind it carries
+`hideFromAccessibility()` while the dialog is open. That hides it from *traversal* while keeping
+the nodes in the semantics tree, so tests can still assert the rail is not focused.
+
+**Motion.** One `standard` alpha reveal via `graphicsLayer` (§7.2), and **no exit animation** — the
+overlay leaves at once so the restored focus ring is never drawn under a fading scrim. The focus
+request does not wait on the reveal.
+
+**A dialog never carries an inline error.** If the action fails, the dialog closes and the message
+belongs to whatever screen the app lands on (§10) — the modal is gone by the time there is
+anything to say.
 
 ---
 
@@ -641,8 +730,16 @@ Build these **once** as shared composables. Three states, one recipe each.
 
 All three announce themselves to TalkBack when they replace content (§12).
 
-Mutation/action failures do not render inline — they surface as a transient message and must
-also be announced.
+**A pending mutation is shown on the control that started it** — a picker tile (§11.1.1), a submit
+button, a dialog's action row (§9.3) — never as an app-wide overlay. The app-wide pending screen is
+for *routes*. This keeps the rest of the screen readable and keeps focus where the user put it.
+
+**Mutation/action failures do not render inline** as an `IglooError` card: there is nothing to
+retry in place, because the thing that failed is over. They surface as an announced `IglooNotice`
+on the screen the app lands on, and stay until the state changes. (Not a "transient" message —
+nothing in the app implements one, and a self-dismissing toast is the wrong shape for a remote:
+the user cannot scrub it back if they looked away.) A failure that *can* be retried in place is a
+query failure, and that is `IglooError`.
 
 ---
 
@@ -778,7 +875,13 @@ is always visible and never focus-gated (§6.2). Below the row, a ghost **Change
 
 Tiles render from stored profiles alone, so the picker appears instantly and works with the
 server unreachable. Cap the row at **6 profiles** so it never scrolls at any `UiScale`; past
-that, "Add profile" explains itself instead of starting another pairing.
+that, "Add profile" explains itself instead of starting another pairing — and it explains only
+what the app can actually do. Only the *active* profile can be signed out (§11.2), so the full-TV
+message points at that, and must not instruct the user to sign out a tile the picker gives them no
+way to sign out.
+
+This screen is also where a sign-out lands, so it carries the `IglooNotice` slot for anything the
+gate has to say about the action that just happened (§10) — above the row, announced.
 
 - Avatar: 96dp circle. A remote avatar is fetched only when the stored value is an absolute
   `http(s)` URL — `openapi.json` does not define how a relative avatar path resolves — and
@@ -832,6 +935,11 @@ control the moment the screen composes, so overflow would immediately scroll the
 sight. `QuickConnectLayoutTest` guards it, and the card form's internal scroll (§11.1) is left for
 the degraded states — an inline error present, a larger `UiScale`, or a raised font scale.
 
+Signing out the **last** profile lands here rather than on the picker, so this screen carries the
+same `IglooNotice` slot (§11.1.1), on both the quick-connect and password paths. A notice is one of
+those degraded states, and may scroll; what must hold is that it is announced and every control
+stays reachable.
+
 ### 11.2 Navigation spine
 
 Seven destinations, icon + label: **Search**, **Home**, **Movies**, **TV Shows**, **Music**,
@@ -842,6 +950,22 @@ The two are deliberately separate. Switch profile returns to the picker with the
 sign out revokes the device token server-side and drops the profile from this TV. One control
 doing both would either strand a credential on a shared TV or force a re-pair to hand over the
 remote.
+
+**Sign out asks first** (§9.3) — it is destructive, one press away, and reachable by whoever is
+holding the remote. Switch profile does not ask: it loses nothing.
+
+Three rules the sign-out flow follows, all of them consequences of this being a *shared* TV:
+
+- **It only ever affects the profile signing out.** Every other stored profile keeps its token and
+  signs back in without re-pairing. One device token belongs to one person, so the backend revokes
+  exactly the token the request carried, and locally only that one profile leaves the vault.
+- **The local half is unconditional.** If the revoke cannot be delivered — the TV is offline, the
+  server is down — the profile still leaves this TV, because the alternative is stranding a live
+  credential on a shared device. The gate then carries an announced `IglooNotice` saying the server
+  may still list this TV as signed in. Sign-out is never blocked on the network.
+- **A 401 on the revoke is success**, not a lost session. The token it would have revoked is
+  already gone, which is what the request wanted; the user must not be told their session
+  "expired" after deliberately ending it.
 
 Active destination uses `primary @ 0.18` fill plus a `sidebarPrimary` icon; the focused row uses
 `card @ 0.72`. Both render simultaneously when the user is focused on the active destination
@@ -1018,6 +1142,7 @@ when syncing, and update the "Last verified" stamp at the top of this document.
 | Type styles (§4) | `core/design/IglooTypography.kt` |
 | Durations, easings, `iglooTween`, `splashHold` (§7) | `core/design/IglooMotion.kt` |
 | `iglooAuroraBackdrop`, `iglooEnterStagger` (§7.2, §11.1) | `core/ui/IglooBackdrop.kt`, `core/ui/IglooEnterStagger.kt` |
+| The `background @ 0.60` scrim (§3.1, §9.3) | `core/ui/IglooScrim.kt` |
 | `IglooTheme` accessors, `iglooSafeArea()`, `Dp.scaled()` | `core/design/IglooTheme.kt` |
 | `UiScale` persistence (§2.3) | `core/storage/UiPreferencesStore.kt` |
 
@@ -1028,6 +1153,33 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-09 — Sign out, finished: it asks first, and the revoke cannot be quietly lost.**
+
+- **New §9.3 — the confirmation dialog**, the first modal in the app. An in-tree overlay rather
+  than `androidx.compose.ui.window.Dialog`, and the four reasons why, starting with the fact that a
+  dialog window re-provides `LocalDensity` and would silently drop §12.1's font-scale clamp.
+  Records dismiss-focused-first, the `FocusRequester.Cancel` trap, focus restore through the
+  invoker's own requester in its dismiss callback (not an effect — the success path disposes the
+  screen in the same frame), the pending recipe, and that a dialog never carries an inline error.
+- **§3** gains `destructiveForeground`, ported from web (`--destructive-foreground`): 6.76:1 dark /
+  4.83:1 light — the weakest paired token in the app, admissible on a control label and never on
+  prose. **§9.1**: `IglooButton` gains the `Destructive` variant that uses it, plus `IglooNotice`,
+  `IglooScrim`, and `IglooConfirmDialog`.
+- **§3.1**: the `background @ 0.60` row now covers the modal scrim too, and **only one scrim renders
+  at a time** — two composite to 0.84, which this table does not authorize. `0.40f` disabled extends
+  to `destructive`.
+- **§10**: a pending mutation is shown on the control that started it, never app-wide. Action
+  failures were specified as a "transient message" that nothing implemented; they are now an
+  announced `IglooNotice` on the screen the app lands on, with the reason a self-dismissing toast is
+  the wrong shape for a remote.
+- **§11.2**: sign out asks first, and the three rules it follows on a shared TV — it affects only
+  the profile signing out, the local half is unconditional (an undeliverable revoke still drops the
+  profile, and says so), and a 401 on the revoke is success rather than an expired session.
+- **§11.1.1 / §11.1.3**: both gates carry the notice slot, because signing out the last profile
+  lands on sign-in rather than the picker. `AppAuthState.NeedsLogin` gained the `notice` field that
+  made this possible — until now a revoked *last* profile lost its "session expired" message
+  entirely, since `gate()` only passed a notice to the picker.
 
 **2026-08-09 — Main navigation: the collapsible spine.**
 

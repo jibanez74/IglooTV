@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
@@ -49,7 +50,11 @@ import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
+import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
+import com.igloo.blindpenguincoder.core.ui.IglooConfirmDialog
+import com.igloo.blindpenguincoder.core.ui.IglooScrim
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.data.model.AuthUser
@@ -57,12 +62,16 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 @Composable
 fun IglooApp(
     user: AuthUser,
+    signOut: SignOutUiState,
     onSwitchProfile: () -> Unit,
-    onLogout: () -> Unit,
+    onSignOut: () -> Unit,
+    onSignOutConfirm: () -> Unit,
+    onSignOutDismiss: () -> Unit,
 ) {
     var currentDestinationName by rememberSaveable { mutableStateOf(IglooDestination.Home.name) }
     val currentDestination = IglooDestination.valueOf(currentDestinationName)
     val contentStartRequester = remember { FocusRequester() }
+    val signOutRequester = remember { FocusRequester() }
     val navigationRequesters = remember {
         PrimaryIglooDestinations.associateWith { FocusRequester() }
     }
@@ -72,11 +81,13 @@ fun IglooApp(
     var railHasFocus by remember { mutableStateOf(false) }
     var railOpenedByBack by remember { mutableStateOf(false) }
 
-    BackHandler(enabled = !railHasFocus) {
+    // Both are gated while the dialog is up, so Back reaches its own handler rather than winning
+    // on registration order — design-system.md section 9.3 requires the host to be explicit.
+    BackHandler(enabled = !signOut.confirming && !railHasFocus) {
         railOpenedByBack = true
         navigationRequesters.getValue(currentDestination).requestFocus()
     }
-    BackHandler(enabled = railHasFocus && !railOpenedByBack) {
+    BackHandler(enabled = !signOut.confirming && railHasFocus && !railOpenedByBack) {
         contentStartRequester.requestFocus()
     }
     // railHasFocus && railOpenedByBack: no handler enabled, so Back exits the app.
@@ -84,16 +95,31 @@ fun IglooApp(
     IglooShell(
         user = user,
         currentDestination = currentDestination,
-        railExpanded = railHasFocus,
+        // The rail stays open behind the dialog: the row that opened it must still be legible, so
+        // the focus it gets back on cancel is not a surprise.
+        railExpanded = railHasFocus || signOut.confirming,
+        // ...but it yields its scrim, because the dialog is drawing one. Two of them composite to
+        // 0.84, which section 3.1 does not authorize.
+        scrimmed = railHasFocus && !signOut.confirming,
         onRailFocusChanged = { hasFocus ->
             if (!hasFocus) railOpenedByBack = false
             railHasFocus = hasFocus
         },
         contentStartRequester = contentStartRequester,
+        signOutRequester = signOutRequester,
         navigationRequesters = navigationRequesters,
         onDestinationSelected = { currentDestinationName = it.name },
         onSwitchProfile = onSwitchProfile,
-        onLogout = onLogout,
+        onSignOut = onSignOut,
+        signOut = signOut,
+        onSignOutConfirm = onSignOutConfirm,
+        // Restoring focus is the invoker's job and belongs in the callback, not an effect: on the
+        // success path `confirming` clears in the same frame this whole arm is disposed, and a late
+        // effect would call requestFocus() on a detached requester. See section 9.3.
+        onSignOutDismiss = {
+            onSignOutDismiss()
+            signOutRequester.requestFocus()
+        },
     )
 
     // Land in the content pane with the rail at rest: the library is the first thing seen
@@ -110,12 +136,17 @@ private fun IglooShell(
     user: AuthUser,
     currentDestination: IglooDestination,
     railExpanded: Boolean,
+    scrimmed: Boolean,
     onRailFocusChanged: (Boolean) -> Unit,
     contentStartRequester: FocusRequester,
+    signOutRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     onDestinationSelected: (IglooDestination) -> Unit,
     onSwitchProfile: () -> Unit,
-    onLogout: () -> Unit,
+    onSignOut: () -> Unit,
+    signOut: SignOutUiState,
+    onSignOutConfirm: () -> Unit,
+    onSignOutDismiss: () -> Unit,
 ) {
     val colors = IglooTheme.colors
     val layout = IglooTheme.layout
@@ -132,7 +163,7 @@ private fun IglooShell(
         label = "railWidth",
     )
     val scrimAlpha by animateFloatAsState(
-        targetValue = if (railExpanded) RAIL_SCRIM_ALPHA else 0f,
+        targetValue = if (scrimmed) SCRIM_ALPHA else 0f,
         animationSpec = iglooTween(IglooMotion.STANDARD_MS),
         label = "railScrim",
     )
@@ -143,50 +174,75 @@ private fun IglooShell(
             .fillMaxSize()
             .background(colors.background),
     ) {
-        HomeContent(
-            currentDestination = currentDestination,
-            contentStartRequester = contentStartRequester,
-            navigationRequesters = navigationRequesters,
-            onDestinationSelected = onDestinationSelected,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    start = layout.navRailCollapsedWidth + IglooTheme.spacing.xl,
-                    end = layout.safeAreaHorizontal,
-                    top = layout.safeAreaVertical,
-                    bottom = layout.safeAreaVertical,
-                ),
-        )
-        // Paint-only scrim: no clickable, focusable, or semantics modifiers, so it can
-        // never intercept the d-pad and TalkBack does not know it exists.
+        // One group so the dialog can hide the entire shell from TalkBack traversal at once.
+        // hideFromAccessibility, not clearAndSetSemantics: the nodes stay in the semantics tree,
+        // so a test can still assert the rail is not focused while the dialog is open.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .drawBehind {
-                    if (scrimAlpha > 0f) drawRect(colors.background.copy(alpha = scrimAlpha))
+                .testTag("shell_content")
+                .then(
+                    if (signOut.confirming) {
+                        Modifier.semantics { hideFromAccessibility() }
+                    } else {
+                        Modifier
+                    },
+                ),
+        ) {
+            HomeContent(
+                currentDestination = currentDestination,
+                contentStartRequester = contentStartRequester,
+                navigationRequesters = navigationRequesters,
+                onDestinationSelected = onDestinationSelected,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        start = layout.navRailCollapsedWidth + IglooTheme.spacing.xl,
+                        end = layout.safeAreaHorizontal,
+                        top = layout.safeAreaVertical,
+                        bottom = layout.safeAreaVertical,
+                    ),
+            )
+            IglooScrim(alpha = scrimAlpha)
+            NavigationRail(
+                user = user,
+                expanded = railExpanded,
+                currentDestination = currentDestination,
+                contentStartRequester = contentStartRequester,
+                signOutRequester = signOutRequester,
+                navigationRequesters = navigationRequesters,
+                // Activating a destination hands focus to the content it just chose — that focus
+                // move is also what collapses the rail. Cards in the pane keep the plain callback,
+                // so activating one never steals focus from it.
+                onDestinationSelected = { destination ->
+                    onDestinationSelected(destination)
+                    contentStartRequester.requestFocus()
                 },
-        )
-        NavigationRail(
-            user = user,
-            expanded = railExpanded,
-            currentDestination = currentDestination,
-            contentStartRequester = contentStartRequester,
-            navigationRequesters = navigationRequesters,
-            // Activating a destination hands focus to the content it just chose — that focus
-            // move is also what collapses the rail. Cards in the pane keep the plain callback,
-            // so activating one never steals focus from it.
-            onDestinationSelected = { destination ->
-                onDestinationSelected(destination)
-                contentStartRequester.requestFocus()
-            },
-            onSwitchProfile = onSwitchProfile,
-            onLogout = onLogout,
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(railWidth)
-                .onFocusChanged { onRailFocusChanged(it.hasFocus) }
-                .testTag("navigation_rail"),
-        )
+                onSwitchProfile = onSwitchProfile,
+                onSignOut = onSignOut,
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(railWidth)
+                    .onFocusChanged { onRailFocusChanged(it.hasFocus) }
+                    .testTag("navigation_rail"),
+            )
+        }
+
+        // Last child, so it draws over the rail and nothing clips the confirm button's glow.
+        if (signOut.confirming) {
+            IglooConfirmDialog(
+                title = "Sign out of Igloo?",
+                body = "${user.name} will be removed from this TV. You'll need to sign in " +
+                    "again to watch here.",
+                confirmText = "Sign out",
+                dismissText = "Cancel",
+                confirmVariant = IglooButtonVariant.Destructive,
+                pending = signOut.pending,
+                pendingText = "Signing out…",
+                onConfirm = onSignOutConfirm,
+                onDismiss = onSignOutDismiss,
+            )
+        }
     }
 }
 
@@ -374,6 +430,3 @@ private fun FeatureCard(
         )
     }
 }
-
-/** Dim over the content pane while the rail overlays it — the 0.60 step from section 3.1. */
-private const val RAIL_SCRIM_ALPHA = 0.60f

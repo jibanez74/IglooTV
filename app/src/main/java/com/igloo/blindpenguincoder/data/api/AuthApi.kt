@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.data.api
 
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.expectingUnauthorized
 import com.igloo.blindpenguincoder.core.network.withBearerOverride
 import com.igloo.blindpenguincoder.core.network.withoutDeviceAuth
 import com.igloo.blindpenguincoder.data.model.DeviceLoginRequest
@@ -29,9 +30,16 @@ class AuthApi(
     suspend fun currentUser(): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/auth/user")
 
-    /** [bearerOverride] revokes a token that a re-pairing has already replaced. */
+    /**
+     * Revokes the device token this request carries — the active one, or [bearerOverride] for a
+     * token a re-pairing has already replaced.
+     *
+     * Always marked as expecting a 401: every logout is discarding the credential it sends, so
+     * being told that token is already gone is success, not a session to react to.
+     */
     suspend fun logout(bearerOverride: String? = null): HttpResponse =
         client.delete("${serverUrl.require().apiBaseUrl}/auth/logout") {
+            expectingUnauthorized()
             bearerOverride?.let { withBearerOverride(it) }
         }
 

@@ -2,13 +2,16 @@ package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.core.network.ExpectedUnauthorizedAttribute
 import com.igloo.blindpenguincoder.data.model.QuickConnectStatus
 import io.ktor.client.engine.mock.toByteArray
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import java.io.IOException
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -279,6 +282,9 @@ class AuthRepositoryTest {
             assertEquals(HttpMethod.Delete, request.method)
             assertEquals("$TEST_SERVER/auth/logout", request.url.toString())
             assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
+            // The request declares that its own 401 is the outcome it wants, so the auth plugin
+            // does not read it as a lost session.
+            assertTrue(request.attributes.contains(ExpectedUnauthorizedAttribute))
             jsonResponse("""{"error":false,"message":"logged out"}""")
         }
         http.activate("igd_test")
@@ -286,5 +292,35 @@ class AuthRepositoryTest {
         val result = repo(http).logout()
 
         assertTrue(result is ApiResult.Success)
+    }
+
+    @Test
+    fun `a 401 from logout is reported so the caller can read it as already gone`() = runTest {
+        val http = TestHttp {
+            jsonResponse("""{"error":true,"message":"gone"}""", HttpStatusCode.Unauthorized)
+        }
+        http.activate("igd_test")
+
+        val result = repo(http).logout()
+
+        // The repository stays honest about the status; treating it as success is the session
+        // layer's call, since only it knows the token was meant to die.
+        assertEquals(AppError.Unauthorized, (result as ApiResult.Failure).error)
+    }
+
+    @Test
+    fun `logout does not report a lost session`() = runTest {
+        val http = TestHttp {
+            jsonResponse("""{"error":true,"message":"gone"}""", HttpStatusCode.Unauthorized)
+        }
+        http.activate("igd_test")
+        val signals = mutableListOf<Long?>()
+        backgroundScope.launch { http.authEvents.unauthorized.collect { signals += it } }
+        yield()
+
+        repo(http).logout()
+        yield()
+
+        assertTrue(signals.isEmpty())
     }
 }

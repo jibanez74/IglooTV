@@ -8,11 +8,15 @@ import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.authUserJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.testStoredProfile
+import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.MockRequestHandler
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -147,6 +151,9 @@ class SessionManagerTest {
         val state = fixture.manager.state.value as AppAuthState.NeedsLogin
         assertEquals("http://igloo.test:8080", state.serverAddress.origin)
         assertTrue(fixture.http.profileStore.vault.profiles.isEmpty())
+        // The notice reaches this arm too. Before NeedsLogin carried one, a revoked *last*
+        // profile lost its explanation entirely.
+        assertEquals("Jose's session expired. Sign in again.", state.notice)
     }
 
     @Test
@@ -248,11 +255,17 @@ class SessionManagerTest {
         assertTrue(fixture.manager.state.value is AppAuthState.ChooseProfile)
     }
 
-    @Test
-    fun `signing out removes only the active profile`() = runTest {
-        val fixture = fixture(TEST_SERVER, backgroundScope) { request ->
+    /**
+     * Signs in as Jose with Ana also stored, so every sign-out test below is really asking
+     * "did this disturb the other profile?" — see docs/design-system.md section 11.2.
+     */
+    private suspend fun signedInWithASecondProfile(
+        scope: CoroutineScope,
+        logout: MockRequestHandler,
+    ): Fixture {
+        val fixture = fixture(TEST_SERVER, scope) { request ->
             if (request.url.encodedPath.endsWith("/logout")) {
-                jsonResponse("""{"error":false,"message":"bye"}""")
+                logout(request)
             } else {
                 jsonResponse(authUserJson())
             }
@@ -265,11 +278,161 @@ class SessionManagerTest {
         fixture.manager.signInAs(
             (fixture.manager.state.value as AppAuthState.ChooseProfile).profiles.first { it.userId == 1L },
         )
+        return fixture
+    }
+
+    private fun MockRequestHandleScope.logoutAccepted() =
+        jsonResponse("""{"error":false,"message":"bye"}""")
+
+    @Test
+    fun `signing out removes only the active profile`() = runTest {
+        val fixture = signedInWithASecondProfile(backgroundScope) { logoutAccepted() }
 
         fixture.manager.logout()
 
         val state = fixture.manager.state.value as AppAuthState.ChooseProfile
         assertEquals(listOf("Ana"), state.profiles.map { it.name })
+        // A delivered revoke says nothing: reaching the picker is the announcement.
+        assertNull(state.notice)
+    }
+
+    @Test
+    fun `signing out leaves the other profile's token usable`() = runTest {
+        val bearers = mutableListOf<String?>()
+        // Answers as whoever the bearer belongs to, so a token mix-up shows up as a wrong user
+        // rather than being papered over by a fixed response.
+        val fixture = fixture(TEST_SERVER, backgroundScope) { request ->
+            val bearer = request.headers[HttpHeaders.Authorization]
+            bearers += bearer
+            when {
+                request.url.encodedPath.endsWith("/logout") ->
+                    jsonResponse("""{"error":false,"message":"bye"}""")
+                bearer == "Bearer igd_ana" -> jsonResponse(authUserJson(id = 2, name = "Ana"))
+                else -> jsonResponse(authUserJson(id = 1, name = "Jose"))
+            }
+        }
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose", token = "igd_jose"),
+            testStoredProfile(userId = 2, name = "Ana", token = "igd_ana"),
+        )
+        fixture.manager.restore()
+        val picker = fixture.manager.state.value as AppAuthState.ChooseProfile
+        fixture.manager.signInAs(picker.profiles.first { it.userId == 1L })
+        fixture.manager.logout()
+
+        // Ana was never signed out, so this must not need a re-pair.
+        val result = fixture.manager.signInAs(
+            (fixture.manager.state.value as AppAuthState.ChooseProfile).profiles.single(),
+        )
+
+        assertEquals(SignInResult.Authenticated, result)
+        assertEquals("Ana", (fixture.manager.state.value as AppAuthState.Authenticated).user.name)
+        assertEquals("Bearer igd_ana", bearers.last())
+        // And her token was never the one the revoke carried.
+        assertFalse(bearers.dropLast(1).contains("Bearer igd_ana"))
+    }
+
+    @Test
+    fun `signing out clears the in-memory credential`() = runTest {
+        val fixture = signedInWithASecondProfile(backgroundScope) { logoutAccepted() }
+
+        fixture.manager.logout()
+
+        // A revoked token left in the provider would be attached to the next profile's first
+        // request, whose 401 would then sign that innocent profile out.
+        assertNull(fixture.http.credentials.current())
+        assertNull(fixture.http.profiles.activeProfileId)
+    }
+
+    @Test
+    fun `a late rejection of the signed-out profile does not end the next session`() = runTest {
+        val fixture = signedInWithASecondProfile(backgroundScope) { logoutAccepted() }
+        fixture.manager.logout()
+        fixture.manager.signInAs(
+            (fixture.manager.state.value as AppAuthState.ChooseProfile).profiles.single(),
+        )
+
+        // A slow request belonging to Jose lands after Ana is watching.
+        fixture.http.authEvents.signalUnauthorized(1L)
+        yield()
+
+        assertTrue(fixture.manager.state.value is AppAuthState.Authenticated)
+        assertEquals(listOf("Ana"), fixture.http.profileStore.vault.profiles.map { it.name })
+    }
+
+    @Test
+    fun `a sign-out the server says is already gone is still a clean sign-out`() = runTest {
+        val fixture = signedInWithASecondProfile(backgroundScope) {
+            jsonResponse("""{"error":true,"message":"gone"}""", HttpStatusCode.Unauthorized)
+        }
+
+        fixture.manager.logout()
+
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
+        assertEquals(listOf("Ana"), state.profiles.map { it.name })
+        // A 401 is what this request wanted. Not "Jose's session expired. Sign in again."
+        assertNull(state.notice)
+    }
+
+    @Test
+    fun `a sign-out the server never hears still drops the profile and warns`() = runTest {
+        val fixture = signedInWithASecondProfile(backgroundScope) { throw IOException("offline") }
+
+        fixture.manager.logout()
+
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
+        // Local state is clean either way: a credential must never be stranded on a shared TV.
+        assertEquals(listOf("Ana"), state.profiles.map { it.name })
+        assertEquals(SessionManager.UNDELIVERED_REVOKE_NOTICE, state.notice)
+    }
+
+    @Test
+    fun `signing out the last profile warns on the sign-in screen`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) { request ->
+            if (request.url.encodedPath.endsWith("/logout")) {
+                throw IOException("offline")
+            } else {
+                jsonResponse(authUserJson())
+            }
+        }
+        fixture.http.seedVault(testStoredProfile())
+        fixture.manager.restore()
+
+        fixture.manager.logout()
+
+        // No profile left to pick, so the notice has to reach this arm too.
+        val state = fixture.manager.state.value as AppAuthState.NeedsLogin
+        assertEquals(SessionManager.UNDELIVERED_REVOKE_NOTICE, state.notice)
+    }
+
+    @Test
+    fun `a rejected sign-out reports no lost session`() = runTest {
+        val fixture = signedInWithASecondProfile(backgroundScope) {
+            jsonResponse("""{"error":true,"message":"gone"}""", HttpStatusCode.Unauthorized)
+        }
+        val signals = mutableListOf<Long?>()
+        backgroundScope.launch { fixture.http.authEvents.unauthorized.collect { signals += it } }
+        yield()
+
+        fixture.manager.logout()
+        yield()
+
+        // Not merely "the wrong message was suppressed": the event must never be emitted, because
+        // the bus keeps one slot and would drop a genuine 401 to make room for this one.
+        assertTrue(signals.isEmpty())
+    }
+
+    @Test
+    fun `signing out after the session already ended does nothing`() = runTest {
+        val fixture = signedInWithASecondProfile(backgroundScope) { logoutAccepted() }
+        fixture.manager.logout()
+        val afterFirst = fixture.requestCount
+        val state = fixture.manager.state.value
+
+        fixture.manager.logout()
+
+        assertEquals(afterFirst, fixture.requestCount)
+        assertEquals(state, fixture.manager.state.value)
     }
 
     @Test

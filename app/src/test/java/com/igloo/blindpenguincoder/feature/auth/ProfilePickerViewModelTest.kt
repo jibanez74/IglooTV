@@ -135,8 +135,11 @@ class ProfilePickerViewModelTest {
         fixture.viewModel.addProfile(profileCount = ProfileRepository.MAX_PROFILES)
 
         assertTrue(fixture.sessionManager.state.value is AppAuthState.ChooseProfile)
+        // Points at the only sign-out the app actually offers — the active profile's, from the
+        // nav rail. The picker has no way to sign out a tile.
         assertEquals(
-            "This TV already has ${ProfileRepository.MAX_PROFILES} profiles. Sign one out first.",
+            "This TV holds ${ProfileRepository.MAX_PROFILES} profiles. To add someone else, " +
+                "sign in as one of them and use Sign out.",
             fixture.viewModel.uiState.value.error,
         )
     }

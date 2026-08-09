@@ -36,6 +36,7 @@ import com.igloo.blindpenguincoder.feature.auth.ServerSetupViewModel
 import com.igloo.blindpenguincoder.feature.auth.WelcomeScreen
 import com.igloo.blindpenguincoder.feature.boot.SplashScreen
 import com.igloo.blindpenguincoder.feature.home.IglooApp
+import com.igloo.blindpenguincoder.feature.home.SignOutViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -137,6 +138,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         serverOrigin = state.serverAddress.origin,
                         restoreError = state.restoreError,
                         canCancel = state.canCancel,
+                        notice = state.notice,
                     )
                 }
 
@@ -148,10 +150,19 @@ fun IglooRoot(container: IglooAppContainer) {
                         scope.launch { sessionManager.revalidateActive() }
                         onStopOrDispose { }
                     }
+                    // A ViewModel, not this arm's scope: the revoke has to survive the arm being
+                    // disposed mid-request, or a cancelled logout leaves the credential on the TV.
+                    val signOutViewModel = viewModel(key = "sign-out") {
+                        SignOutViewModel(sessionManager)
+                    }
+                    val signOut by signOutViewModel.uiState.collectAsStateWithLifecycle()
                     IglooApp(
                         user = state.user,
+                        signOut = signOut,
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },
-                        onLogout = { scope.launch { sessionManager.logout() } },
+                        onSignOut = signOutViewModel::request,
+                        onSignOutConfirm = signOutViewModel::confirm,
+                        onSignOutDismiss = signOutViewModel::dismiss,
                     )
                 }
             }

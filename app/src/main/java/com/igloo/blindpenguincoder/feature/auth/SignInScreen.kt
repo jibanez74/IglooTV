@@ -17,6 +17,7 @@ fun SignInScreen(
     serverOrigin: String,
     restoreError: AppError?,
     canCancel: Boolean,
+    notice: String? = null,
 ) {
     var mode by rememberSaveable { mutableStateOf(SignInMode.QuickConnect) }
 
@@ -29,6 +30,7 @@ fun SignInScreen(
             onRetryRestore = loginViewModel::retryRestore,
             onSwitchToPassword = { mode = SignInMode.Password },
             onLeave = if (canCancel) loginViewModel::cancel else loginViewModel::changeServer,
+            notice = notice,
         )
         SignInMode.Password -> LoginScreen(
             viewModel = loginViewModel,
@@ -36,6 +38,7 @@ fun SignInScreen(
             restoreError = restoreError,
             canCancel = canCancel,
             onSwitchToQuickConnect = { mode = SignInMode.QuickConnect },
+            notice = notice,
         )
     }
 }

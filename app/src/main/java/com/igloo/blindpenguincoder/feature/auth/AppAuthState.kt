@@ -38,6 +38,12 @@ sealed interface AppAuthState {
         val restoreError: AppError? = null,
         /** True when other profiles exist, so this is "add a user" rather than first setup. */
         val canCancel: Boolean = false,
+        /**
+         * Explains a profile that has just disappeared, as [ChooseProfile.notice] does. Signing out
+         * or losing the *last* profile lands here rather than on the picker, and without this the
+         * gate would have nothing to say about why.
+         */
+        val notice: String? = null,
     ) : AppAuthState
 
     data class Authenticated(val user: AuthUser) : AppAuthState

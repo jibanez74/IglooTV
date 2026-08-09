@@ -64,10 +64,12 @@ fun NavigationRail(
     expanded: Boolean,
     currentDestination: IglooDestination,
     contentStartRequester: FocusRequester,
+    /** Hoisted by the caller, which hands focus back here when the sign-out dialog closes. */
+    signOutRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     onDestinationSelected: (IglooDestination) -> Unit,
     onSwitchProfile: () -> Unit,
-    onLogout: () -> Unit,
+    onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
@@ -184,6 +186,8 @@ fun NavigationRail(
                     up = navigationRequesters.getValue(lastDestination)
                 },
         )
+        // The label says only "Sign out"; the dialog announces itself through its pane title, so
+        // an ", opens a confirmation" suffix would be the announcement section 11.2 forbids.
         RailRow(
             icon = IglooIcons.SignOut,
             label = "Sign out",
@@ -192,8 +196,10 @@ fun NavigationRail(
             iconTint = { focused -> if (focused) colors.destructive else colors.mutedForeground },
             fill = { focused -> if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent },
             labelFade = labelFade,
-            onClick = onLogout,
-            modifier = Modifier.focusProperties { right = contentStartRequester },
+            onClick = onSignOut,
+            modifier = Modifier
+                .focusRequester(signOutRequester)
+                .focusProperties { right = contentStartRequester },
         )
     }
 }

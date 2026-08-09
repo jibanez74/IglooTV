@@ -54,10 +54,12 @@ class ProfilePickerViewModel(
 
     fun addProfile(profileCount: Int) {
         if (profileCount >= ProfileRepository.MAX_PROFILES) {
+            // Only the active profile can sign out, so "sign one out first" would send the user
+            // looking for a control the picker does not have.
             _uiState.update {
                 it.copy(
-                    error = "This TV already has ${ProfileRepository.MAX_PROFILES} profiles. " +
-                        "Sign one out first.",
+                    error = "This TV holds ${ProfileRepository.MAX_PROFILES} profiles. To add " +
+                        "someone else, sign in as one of them and use Sign out.",
                 )
             }
             return

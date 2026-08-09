@@ -20,6 +20,7 @@ data class IglooColors(
     val sidebar: Color,
     val sidebarPrimary: Color,
     val destructive: Color,
+    val destructiveForeground: Color,
 )
 
 val IglooDarkColors = IglooColors(
@@ -38,6 +39,7 @@ val IglooDarkColors = IglooColors(
     sidebar = Color(0xFF0F1A2E),
     sidebarPrimary = Color(0xFF38BDF8),
     destructive = Color(0xFFF87171),
+    destructiveForeground = Color(0xFF08131F),
 )
 
 val IglooLightColors = IglooColors(
@@ -56,5 +58,6 @@ val IglooLightColors = IglooColors(
     sidebar = Color(0xFFE8F1FA),
     sidebarPrimary = Color(0xFF0369A1),
     destructive = Color(0xFFDC2626),
+    destructiveForeground = Color(0xFFFFFFFF),
 )
 
