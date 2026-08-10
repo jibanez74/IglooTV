@@ -24,6 +24,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.feature.auth.AppAuthState
+import com.igloo.blindpenguincoder.feature.auth.AuthenticatedSessionViewModelStoreOwner
 import com.igloo.blindpenguincoder.feature.auth.LoginViewModel
 import com.igloo.blindpenguincoder.feature.auth.PinEntryScreen
 import com.igloo.blindpenguincoder.feature.auth.PinEntryViewModel
@@ -49,6 +50,9 @@ fun IglooRoot(container: IglooAppContainer) {
     IglooTheme(uiScale = uiScale) {
         val sessionManager = container.sessionManager
         val authState by sessionManager.state.collectAsStateWithLifecycle()
+        val authenticatedSessionOwner = viewModel {
+            AuthenticatedSessionViewModelStoreOwner(sessionManager.state)
+        }
 
         LaunchedEffect(Unit) {
             sessionManager.restore()
@@ -163,9 +167,10 @@ fun IglooRoot(container: IglooAppContainer) {
                         SignOutViewModel(sessionManager)
                     }
                     val signOut by signOutViewModel.uiState.collectAsStateWithLifecycle()
-                    // Keyed by user: the Activity-scoped store outlives a sign-out, and an
-                    // unkeyed instance would serve one profile's library to the next.
-                    val homeViewModel = viewModel(key = "home-${state.user.id}") {
+                    val homeViewModel = viewModel(
+                        viewModelStoreOwner = authenticatedSessionOwner,
+                        key = "home",
+                    ) {
                         HomeViewModel(container.movieRepository, container.serverUrlProvider)
                     }
                     val latestMovies by homeViewModel.latestMovies.collectAsStateWithLifecycle()
