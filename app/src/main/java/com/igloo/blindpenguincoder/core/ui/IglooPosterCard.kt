@@ -1,14 +1,17 @@
 package com.igloo.blindpenguincoder.core.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -19,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
@@ -26,9 +30,20 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.scaled
+
+/**
+ * Watch progress shown on a poster card. The description joins the card's one TalkBack
+ * announcement, so a bar can never render without being announced (design system section 12).
+ */
+data class PosterCardProgress(
+    val fraction: Float,
+    val description: String,
+)
 
 /**
  * A 2:3 poster with its title and one optional line of context below. The poster carries the
@@ -36,7 +51,8 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
  * but the whole card is one focus target and one TalkBack node.
  *
  * A null or failed image falls back to the film glyph on the muted fill; the text below is
- * unchanged, so the card loses nothing but the artwork.
+ * unchanged, so the card loses nothing but the artwork. An optional progress bar sits on the
+ * poster's bottom edge and is announced through [PosterCardProgress.description].
  */
 @Composable
 fun IglooPosterCard(
@@ -45,6 +61,7 @@ fun IglooPosterCard(
     imageUrl: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    progress: PosterCardProgress? = null,
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
@@ -60,7 +77,8 @@ fun IglooPosterCard(
                 onClick = onClick,
             )
             .clearAndSetSemantics {
-                contentDescription = listOfNotNull(title, subtitle).joinToString(", ")
+                contentDescription =
+                    listOfNotNull(title, subtitle, progress?.description).joinToString(", ")
                 role = Role.Button
                 onClick(label = "Open $title") {
                     onClick()
@@ -99,6 +117,23 @@ fun IglooPosterCard(
                     colorFilter = ColorFilter.tint(colors.mutedForeground),
                     modifier = Modifier.size(IglooTheme.icons.lg),
                 )
+            }
+            if (progress != null) {
+                // Over-media literal per design system section 3.2; focusRing clips the corners.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(4.dp.scaled())
+                        .background(Color.Black.copy(alpha = 0.40f)),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress.fraction.coerceIn(0f, 1f))
+                            .fillMaxHeight()
+                            .background(colors.primary),
+                    )
+                }
             }
         }
         IglooText(

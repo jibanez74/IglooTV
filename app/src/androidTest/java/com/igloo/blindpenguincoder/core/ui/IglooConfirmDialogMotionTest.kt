@@ -33,6 +33,7 @@ import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeMovie
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
@@ -65,13 +66,16 @@ class IglooConfirmDialogMotionTest {
         updatedAt = "2026-01-01T00:00:00Z",
     )
 
-    // Five cards, so the last one lies right of both the expanded rail's overlay and the
-    // centered 480dp dialog card — the one place a scrimmed content pixel stays visible
-    // through the modal's whole reveal.
-    private val movies = testHomeMovies + listOf(
-        HomeMovie(id = 4, title = "Solaris", year = 1972, posterUrl = null),
-        HomeMovie(id = 5, title = "Alien", year = 1979, posterUrl = null),
-    )
+    // Five cards in the top (Continue Watching) rail, so the last one lies right of both the
+    // expanded rail's overlay and the centered 480dp dialog card — the one place a scrimmed
+    // content pixel stays visible through the modal's whole reveal. Small fractions keep the
+    // sampled left sliver above the poster's bottom edge on the muted placeholder fill.
+    private val continueMovies = (
+        testHomeMovies + listOf(
+            HomeMovie(id = 4, title = "Solaris", year = 1972, posterUrl = null),
+            HomeMovie(id = 5, title = "Alien", year = 1979, posterUrl = null),
+        )
+        ).map { HomeContinueMovie(it, progressFraction = 0.2f, progressLabel = "90 min left") }
 
     @Test
     fun revealStartsTransparentAndReachesFullOpacityAfterStandardDuration() {
@@ -117,7 +121,9 @@ class IglooConfirmDialogMotionTest {
                     IglooApp(
                         user = user,
                         signOut = signOut,
-                        latestMovies = IglooRailState.Loaded(movies),
+                        continueWatching = IglooRailState.Loaded(continueMovies),
+                        onRetryContinueWatching = {},
+                        latestMovies = IglooRailState.Loaded(testHomeMovies),
                         onRetryLatestMovies = {},
                         onMovieSelected = {},
                         onSwitchProfile = {},
@@ -130,7 +136,7 @@ class IglooConfirmDialogMotionTest {
         }
         composeRule.mainClock.advanceTimeByFrame()
 
-        val contentCard = composeRule.onNodeWithTag("poster_card_1")
+        val contentCard = composeRule.onNodeWithTag("continue_card_1")
         contentCard.performKeyInput { pressKey(Key.DirectionLeft) }
         composeRule.mainClock.advanceTimeBy(IglooMotion.STANDARD_MS.toLong() + FRAME_MILLIS)
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
@@ -142,7 +148,7 @@ class IglooConfirmDialogMotionTest {
         // The last card's poster is the placeholder's muted fill; its left sliver stays left
         // of the centered film glyph and inside the screen even where the pane clips the
         // peeking card.
-        val cardBounds = composeRule.onNodeWithTag("poster_card_5").getUnclippedBoundsInRoot()
+        val cardBounds = composeRule.onNodeWithTag("continue_card_5").getUnclippedBoundsInRoot()
         val railDimmed = blend(
             background = IglooDarkColors.muted.toArgb(),
             foreground = IglooDarkColors.background.toArgb(),

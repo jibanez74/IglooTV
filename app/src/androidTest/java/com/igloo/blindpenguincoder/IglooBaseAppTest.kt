@@ -79,6 +79,8 @@ class IglooBaseAppTest {
                 IglooApp(
                     user = user,
                     signOut = signOut,
+                    continueWatching = IglooRailState.Loaded(testContinueMovies),
+                    onRetryContinueWatching = {},
                     latestMovies = IglooRailState.Loaded(testHomeMovies),
                     onRetryLatestMovies = {},
                     onMovieSelected = {},
@@ -110,7 +112,17 @@ class IglooBaseAppTest {
         setShellContent()
 
         composeRule.onNodeWithTag("navigation_rail").assertIsDisplayed()
-        composeRule.onNodeWithText("Recently Added Movies").assertIsDisplayed()
+        val continueWatching = composeRule.onNodeWithText("Continue Watching")
+            .assertIsDisplayed()
+            .getUnclippedBoundsInRoot()
+        val recentlyAdded = composeRule.onNodeWithText("Recently Added Movies")
+            .assertIsDisplayed()
+            .getUnclippedBoundsInRoot()
+        // Design-system section 11.3: continue watching is the first rail on Home.
+        assertTrue(
+            "Continue Watching must sit above Recently Added Movies",
+            continueWatching.bottom <= recentlyAdded.top,
+        )
         composeRule.onNodeWithContentDescription("Home").assertIsSelected()
         composeRule.onAllNodes(isSelected()).assertCountEquals(1)
         composeRule.onNodeWithContentDescription("Signed in as Jose").assertIsDisplayed()

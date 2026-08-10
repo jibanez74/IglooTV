@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder
 
+import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeMovie
 
 /**
@@ -10,4 +11,10 @@ internal val testHomeMovies = listOf(
     HomeMovie(id = 1, title = "Heat", year = 1995, posterUrl = null),
     HomeMovie(id = 2, title = "Arrival", year = 2016, posterUrl = null),
     HomeMovie(id = 3, title = "Ran", year = 1985, posterUrl = null),
+)
+
+internal val testContinueMovies = listOf(
+    HomeContinueMovie(testHomeMovies[0], progressFraction = 0.25f, progressLabel = "127 min left"),
+    HomeContinueMovie(testHomeMovies[1], progressFraction = 0.5f, progressLabel = "58 min left"),
+    HomeContinueMovie(testHomeMovies[2], progressFraction = 0.9f, progressLabel = "16 min left"),
 )

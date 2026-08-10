@@ -90,4 +90,81 @@ class MovieRepositoryTest {
 
         assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
     }
+
+    @Test
+    fun `continue watching hits the contract path with the bearer token`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(
+                continueWatchingMoviesJson(
+                    continueWatchingMovieJson(
+                        id = 5,
+                        title = "Heat",
+                        progressSec = 1800.0,
+                        durationSec = 10200.0,
+                    ),
+                ),
+            )
+        }
+        http.profiles.setPending("igd_test")
+
+        val result = http.movieRepository.continueWatchingMovies()
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/movies/continue-watching", captured.url.encodedPath)
+        assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+        val movie = (result as ApiResult.Success).value.single()
+        assertEquals(5L, movie.id)
+        assertEquals("Heat", movie.title)
+        assertEquals("/heat.jpg", movie.posterPath.orNull())
+        assertEquals(1995L, movie.year.orNull())
+        assertEquals(1800.0, movie.progressSec, 0.0)
+        assertEquals(10200.0, movie.durationSec, 0.0)
+    }
+
+    @Test
+    fun `nothing in progress is a success with no movies`() = runTest {
+        val http = TestHttp { jsonResponse(continueWatchingMoviesJson()) }
+
+        val result = http.movieRepository.continueWatchingMovies()
+
+        assertTrue((result as ApiResult.Success).value.isEmpty())
+    }
+
+    @Test
+    fun `a dead token maps continue watching to Unauthorized`() = runTest {
+        val http = TestHttp {
+            jsonResponse("""{"error":true,"message":"gone"}""", HttpStatusCode.Unauthorized)
+        }
+
+        val result = http.movieRepository.continueWatchingMovies()
+
+        assertEquals(AppError.Unauthorized, (result as ApiResult.Failure).error)
+    }
+
+    @Test
+    fun `a continue watching server failure preserves the backend message`() = runTest {
+        val http = TestHttp {
+            jsonResponse(
+                """{"error":true,"message":"scan in progress"}""",
+                HttpStatusCode.InternalServerError,
+            )
+        }
+
+        val result = http.movieRepository.continueWatchingMovies()
+
+        val error = (result as ApiResult.Failure).error as AppError.Api
+        assertEquals("scan in progress", error.message)
+        assertEquals(500, error.status)
+    }
+
+    @Test
+    fun `a continue watching success envelope with no data is Unexpected`() = runTest {
+        val http = TestHttp { jsonResponse("""{"error":false,"message":"ok"}""") }
+
+        val result = http.movieRepository.continueWatchingMovies()
+
+        assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
+    }
 }

@@ -60,6 +60,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooScrim
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.PosterCardProgress
 import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
@@ -69,6 +70,8 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 fun IglooApp(
     user: AuthUser,
     signOut: SignOutUiState,
+    continueWatching: IglooRailState<HomeContinueMovie>,
+    onRetryContinueWatching: () -> Unit,
     latestMovies: IglooRailState<HomeMovie>,
     onRetryLatestMovies: () -> Unit,
     onMovieSelected: (HomeMovie) -> Unit,
@@ -104,6 +107,8 @@ fun IglooApp(
     IglooShell(
         user = user,
         currentDestination = currentDestination,
+        continueWatching = continueWatching,
+        onRetryContinueWatching = onRetryContinueWatching,
         latestMovies = latestMovies,
         onRetryLatestMovies = onRetryLatestMovies,
         onMovieSelected = onMovieSelected,
@@ -147,6 +152,8 @@ fun IglooApp(
 private fun IglooShell(
     user: AuthUser,
     currentDestination: IglooDestination,
+    continueWatching: IglooRailState<HomeContinueMovie>,
+    onRetryContinueWatching: () -> Unit,
     latestMovies: IglooRailState<HomeMovie>,
     onRetryLatestMovies: () -> Unit,
     onMovieSelected: (HomeMovie) -> Unit,
@@ -206,6 +213,8 @@ private fun IglooShell(
         ) {
             ContentPane(
                 currentDestination = currentDestination,
+                continueWatching = continueWatching,
+                onRetryContinueWatching = onRetryContinueWatching,
                 latestMovies = latestMovies,
                 onRetryLatestMovies = onRetryLatestMovies,
                 onMovieSelected = onMovieSelected,
@@ -278,6 +287,8 @@ private fun IglooShell(
 @Composable
 private fun ContentPane(
     currentDestination: IglooDestination,
+    continueWatching: IglooRailState<HomeContinueMovie>,
+    onRetryContinueWatching: () -> Unit,
     latestMovies: IglooRailState<HomeMovie>,
     onRetryLatestMovies: () -> Unit,
     onMovieSelected: (HomeMovie) -> Unit,
@@ -289,6 +300,8 @@ private fun ContentPane(
     val colors = IglooTheme.colors
     // Hoisted above the destination branch so a Home -> Movies -> Home round trip still knows
     // the card to restore (section 6.3), and saveable so process death does not forget it.
+    // One per rail: each rail keeps its own focus memory.
+    var lastFocusedContinueMovieId by rememberSaveable { mutableStateOf<Long?>(null) }
     var lastFocusedLatestMovieId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     Column(
@@ -327,11 +340,15 @@ private fun ContentPane(
 
         when (currentDestination) {
             IglooDestination.Home -> HomeRails(
+                continueWatching = continueWatching,
+                onRetryContinueWatching = onRetryContinueWatching,
                 latestMovies = latestMovies,
                 onRetryLatestMovies = onRetryLatestMovies,
                 onMovieSelected = onMovieSelected,
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequesters.getValue(IglooDestination.Home),
+                lastFocusedContinueMovieId = lastFocusedContinueMovieId,
+                onContinueMovieFocused = { lastFocusedContinueMovieId = it },
                 lastFocusedLatestMovieId = lastFocusedLatestMovieId,
                 onLatestMovieFocused = { lastFocusedLatestMovieId = it },
             )
@@ -366,11 +383,15 @@ private fun paneBranchIsHome(destination: IglooDestination): Boolean =
 
 @Composable
 private fun HomeRails(
+    continueWatching: IglooRailState<HomeContinueMovie>,
+    onRetryContinueWatching: () -> Unit,
     latestMovies: IglooRailState<HomeMovie>,
     onRetryLatestMovies: () -> Unit,
     onMovieSelected: (HomeMovie) -> Unit,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
+    lastFocusedContinueMovieId: Long?,
+    onContinueMovieFocused: (Long) -> Unit,
     lastFocusedLatestMovieId: Long?,
     onLatestMovieFocused: (Long) -> Unit,
 ) {
@@ -380,11 +401,36 @@ private fun HomeRails(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
     ) {
+        // First rail owns the pane's entry anchor, in every state — the rail never hides on
+        // empty, so the anchor never moves between rails at runtime.
+        IglooMediaRail(
+            title = "Continue Watching",
+            state = continueWatching,
+            itemKey = { it.movie.id },
+            entryRequester = contentStartRequester,
+            leftFocusRequester = navigationRequester,
+            lastFocusedKey = lastFocusedContinueMovieId,
+            onItemFocused = onContinueMovieFocused,
+            loadingLabel = "Loading continue watching",
+            emptyIcon = IglooIcons.Movies,
+            emptyText = "Nothing in progress yet. Movies you start watching appear here.",
+            onRetry = onRetryContinueWatching,
+        ) { item, itemModifier ->
+            IglooPosterCard(
+                title = item.movie.title,
+                subtitle = item.movie.year?.toString(),
+                imageUrl = item.movie.posterUrl,
+                onClick = { onMovieSelected(item.movie) },
+                progress = PosterCardProgress(item.progressFraction, item.progressLabel),
+                modifier = itemModifier.testTag("continue_card_${item.movie.id}"),
+            )
+        }
+
         IglooMediaRail(
             title = "Recently Added Movies",
             state = latestMovies,
             itemKey = { it.id },
-            entryRequester = contentStartRequester,
+            entryRequester = null,
             leftFocusRequester = navigationRequester,
             lastFocusedKey = lastFocusedLatestMovieId,
             onItemFocused = onLatestMovieFocused,

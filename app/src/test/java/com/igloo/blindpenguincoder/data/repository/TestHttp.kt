@@ -137,6 +137,22 @@ fun latestMovieJson(
 fun latestMoviesJson(vararg movies: String): String =
     """{"error":false,"message":"latest movies","data":{"movies":[${movies.joinToString(",")}]}}"""
 
+/** One `GET /movies/continue-watching` list entry: the latest-movie shape plus progress. */
+fun continueWatchingMovieJson(
+    id: Long = 1,
+    title: String = "Heat",
+    posterPath: String? = "/heat.jpg",
+    year: Long? = 1995,
+    progressSec: Double = 1800.0,
+    durationSec: Double = 10200.0,
+): String {
+    val movie = latestMovieJson(id, title, posterPath, year)
+    return movie.dropLast(1) + ""","progress_sec":$progressSec,"duration_sec":$durationSec}"""
+}
+
+fun continueWatchingMoviesJson(vararg movies: String): String =
+    """{"error":false,"message":"continue watching","data":{"movies":[${movies.joinToString(",")}]}}"""
+
 /** `GET /auth/user` payload; `has_pin` is required by the contract. */
 fun authUserJson(
     id: Long = 1,

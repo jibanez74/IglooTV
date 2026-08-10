@@ -12,4 +12,8 @@ class MovieApi(
     /** Newest additions to the library; the backend caps the list at 12. */
     suspend fun latestMovies(): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/movies/latest")
+
+    /** Movies in progress for the current user, most recently watched first; capped at 12. */
+    suspend fun continueWatchingMovies(): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/movies/continue-watching")
 }

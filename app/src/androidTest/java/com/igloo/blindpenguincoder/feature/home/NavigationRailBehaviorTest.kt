@@ -29,6 +29,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHomeMovies
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -79,6 +80,8 @@ class NavigationRailBehaviorTest {
                     signOut = signOut,
                     // Loaded with poster-less movies: the placeholder path renders with no
                     // network or image loading, so the shell tests stay hermetic.
+                    continueWatching = IglooRailState.Loaded(testContinueMovies),
+                    onRetryContinueWatching = {},
                     latestMovies = IglooRailState.Loaded(testHomeMovies),
                     onRetryLatestMovies = {},
                     onMovieSelected = {},
@@ -92,8 +95,8 @@ class NavigationRailBehaviorTest {
         composeRule.waitForIdle()
     }
 
-    /** The content anchor on Home: the first poster card of the first rail. */
-    private fun contentStartCard() = composeRule.onNodeWithTag("poster_card_1")
+    /** The content anchor on Home: the first card of the Continue Watching rail. */
+    private fun contentStartCard() = composeRule.onNodeWithTag("continue_card_1")
 
     /** The content anchor on every other destination: the placeholder's Movies card. */
     private fun placeholderStartCard() = composeRule.onNodeWithContentDescription(

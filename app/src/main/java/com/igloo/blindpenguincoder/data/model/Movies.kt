@@ -39,6 +39,23 @@ data class LatestMoviesData(
     val movies: List<LatestMovie>,
 )
 
+/** LatestMovie plus watch progress; items of `GET /movies/continue-watching`. */
+@Serializable
+data class ContinueWatchingMovie(
+    val id: Long,
+    val title: String,
+    @SerialName("poster_path") val posterPath: SqlNullString,
+    val year: SqlNullInt64,
+    @SerialName("progress_sec") val progressSec: Double,
+    @SerialName("duration_sec") val durationSec: Double,
+)
+
+/** Payload of `ContinueWatchingMoviesEnvelope.data`. */
+@Serializable
+data class ContinueWatchingMoviesData(
+    val movies: List<ContinueWatchingMovie>,
+)
+
 /** Payload of `MoviesStatsEnvelope.data`. */
 @Serializable
 data class MoviesStatsData(

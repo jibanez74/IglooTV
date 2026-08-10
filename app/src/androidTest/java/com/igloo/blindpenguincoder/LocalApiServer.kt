@@ -45,9 +45,10 @@ class LocalApiServer(private val hasPin: Boolean = true) {
         val body = when {
             path.endsWith("/auth/user") -> authUserJson()
             path.endsWith("/user/pin/verify") -> """{"error":false,"data":{"valid":$pinValid}}"""
-            // The home rail loads behind every authenticated gate; an empty library is the
+            // The home rails load behind every authenticated gate; an empty library is the
             // cleanest true state for tests that only assert on the shell.
             path.endsWith("/movies/latest") -> """{"error":false,"data":{"movies":[]}}"""
+            path.endsWith("/movies/continue-watching") -> """{"error":false,"data":{"movies":[]}}"""
             else -> null
         }
         val status = if (body == null) "404 Not Found" else "200 OK"

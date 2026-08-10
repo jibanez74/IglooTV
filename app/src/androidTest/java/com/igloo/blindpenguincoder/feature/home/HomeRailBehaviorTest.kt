@@ -20,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -27,6 +28,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHomeMovies
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -34,9 +36,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The home rail's focus contract: every rail state anchors the content pane, focus survives
- * state swaps, and the last-focused card is restored on re-entry (design-system.md sections
- * 6.3 and 11.3).
+ * The home rails' focus contract: every state of the first rail anchors the content pane,
+ * focus survives state swaps, each rail keeps its own focus memory, and the last-focused card
+ * is restored on re-entry (design-system.md sections 6.3 and 11.3).
  */
 @RunWith(AndroidJUnit4::class)
 class HomeRailBehaviorTest {
@@ -58,16 +60,25 @@ class HomeRailBehaviorTest {
         updatedAt = "2026-01-01T00:00:00Z",
     )
 
+    private val continueMovies = testContinueMovies
     private val movies = testHomeMovies
 
-    private var railState by mutableStateOf<IglooRailState<HomeMovie>>(IglooRailState.Loading)
-    private var retries = 0
+    private var continueState by
+        mutableStateOf<IglooRailState<HomeContinueMovie>>(IglooRailState.Loading)
+    private var latestState by mutableStateOf<IglooRailState<HomeMovie>>(IglooRailState.Loading)
+    private var continueRetries = 0
+    private var latestRetries = 0
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
 
-    private fun setShellContent(initial: IglooRailState<HomeMovie>) {
-        railState = initial
-        retries = 0
+    private fun setShellContent(
+        initialContinue: IglooRailState<HomeContinueMovie>,
+        initialLatest: IglooRailState<HomeMovie> = IglooRailState.Loaded(movies),
+    ) {
+        continueState = initialContinue
+        latestState = initialLatest
+        continueRetries = 0
+        latestRetries = 0
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
@@ -76,8 +87,10 @@ class HomeRailBehaviorTest {
                 IglooApp(
                     user = user,
                     signOut = SignOutUiState(),
-                    latestMovies = railState,
-                    onRetryLatestMovies = { retries += 1 },
+                    continueWatching = continueState,
+                    onRetryContinueWatching = { continueRetries += 1 },
+                    latestMovies = latestState,
+                    onRetryLatestMovies = { latestRetries += 1 },
                     onMovieSelected = {},
                     onSwitchProfile = {},
                     onSignOut = {},
@@ -89,7 +102,9 @@ class HomeRailBehaviorTest {
         composeRule.waitForIdle()
     }
 
-    private fun card(id: Long) = composeRule.onNodeWithTag("poster_card_$id")
+    private fun continueCard(id: Long) = composeRule.onNodeWithTag("continue_card_$id")
+
+    private fun latestCard(id: Long) = composeRule.onNodeWithTag("poster_card_$id")
 
     private fun pressBack() {
         composeRule.runOnUiThread {
@@ -102,7 +117,7 @@ class HomeRailBehaviorTest {
     fun initialFocusLandsOnTheLoadingSkeleton() {
         setShellContent(IglooRailState.Loading)
 
-        val skeleton = composeRule.onNodeWithContentDescription("Loading recently added movies")
+        val skeleton = composeRule.onNodeWithContentDescription("Loading continue watching")
         skeleton.assertIsFocused()
 
         // The skeleton anchor still opens the spine, so a slow network never traps the d-pad.
@@ -114,22 +129,22 @@ class HomeRailBehaviorTest {
     @Test
     fun skeletonHandsFocusToTheFirstCardWhenContentArrives() {
         setShellContent(IglooRailState.Loading)
-        composeRule.onNodeWithContentDescription("Loading recently added movies").assertIsFocused()
+        composeRule.onNodeWithContentDescription("Loading continue watching").assertIsFocused()
 
-        railState = IglooRailState.Loaded(movies)
+        continueState = IglooRailState.Loaded(continueMovies)
         composeRule.waitForIdle()
 
-        card(1).assertIsFocused()
+        continueCard(1).assertIsFocused()
     }
 
     @Test
     fun focusNotInTheRailIsNotStolenWhenContentArrives() {
         setShellContent(IglooRailState.Loading)
-        composeRule.onNodeWithContentDescription("Loading recently added movies")
+        composeRule.onNodeWithContentDescription("Loading continue watching")
             .performKeyInput { pressKey(Key.DirectionLeft) }
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
 
-        railState = IglooRailState.Loaded(movies)
+        continueState = IglooRailState.Loaded(continueMovies)
         composeRule.waitForIdle()
 
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
@@ -137,10 +152,10 @@ class HomeRailBehaviorTest {
 
     @Test
     fun spineReentryRestoresTheLastFocusedCard() {
-        setShellContent(IglooRailState.Loaded(movies))
-        card(1).performKeyInput { pressKey(Key.DirectionRight) }
-        card(2).performKeyInput { pressKey(Key.DirectionRight) }
-        card(3).assertIsFocused()
+        setShellContent(IglooRailState.Loaded(continueMovies))
+        continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(2).performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(3).assertIsFocused()
 
         // Back opens the spine without walking focus through the earlier cards.
         pressBack()
@@ -148,47 +163,84 @@ class HomeRailBehaviorTest {
 
         composeRule.onNodeWithContentDescription("Home")
             .performKeyInput { pressKey(Key.DirectionRight) }
-        card(3).assertIsFocused()
+        continueCard(3).assertIsFocused()
     }
 
     @Test
     fun focusMemorySurvivesADestinationSwitch() {
-        setShellContent(IglooRailState.Loaded(movies))
-        card(1).performKeyInput { pressKey(Key.DirectionRight) }
-        card(2).assertIsFocused()
+        setShellContent(IglooRailState.Loaded(continueMovies))
+        continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(2).assertIsFocused()
 
         composeRule.onNodeWithContentDescription("Movies").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("Home").performClick()
         composeRule.waitForIdle()
 
-        card(2).assertIsFocused()
+        continueCard(2).assertIsFocused()
     }
 
     @Test
     fun lastCardPinsTheRightEdge() {
-        setShellContent(IglooRailState.Loaded(movies))
-        card(1).performKeyInput { pressKey(Key.DirectionRight) }
-        card(2).performKeyInput { pressKey(Key.DirectionRight) }
-        card(3).assertIsFocused()
+        setShellContent(IglooRailState.Loaded(continueMovies))
+        continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(2).performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(3).assertIsFocused()
 
-        card(3).performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(3).performKeyInput { pressKey(Key.DirectionRight) }
 
-        card(3).assertIsFocused()
+        continueCard(3).assertIsFocused()
+    }
+
+    @Test
+    fun dpadDownReachesTheLatestRailAndContinueMemorySurvivesTheTrip() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+        continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(2).assertIsFocused()
+
+        continueCard(2).performKeyInput { pressKey(Key.DirectionDown) }
+        latestCard(2).assertIsFocused()
+        latestCard(2).performKeyInput { pressKey(Key.DirectionRight) }
+        latestCard(3).assertIsFocused()
+
+        // Spine re-entry lands on the Continue Watching rail's remembered card, untouched by
+        // the excursion through the latest rail — the two rails keep separate memories.
+        pressBack()
+        composeRule.onNodeWithContentDescription("Home").assertIsFocused()
+        composeRule.onNodeWithContentDescription("Home")
+            .performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(2).assertIsFocused()
     }
 
     @Test
     fun errorStateAnchorsFocusOnRetry() {
         setShellContent(IglooRailState.Error("scan in progress"))
 
-        val retry = composeRule.onNodeWithContentDescription("Retry loading Recently Added Movies")
+        val retry = composeRule.onNodeWithContentDescription("Retry loading Continue Watching")
         retry.assertIsFocused()
 
         retry.performClick()
-        assertEquals(1, retries)
+        assertEquals(1, continueRetries)
+        assertEquals(0, latestRetries)
 
         retry.performKeyInput { pressKey(Key.DirectionLeft) }
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
+    }
+
+    @Test
+    fun latestRailRetryLeavesTheContinueRailAlone() {
+        setShellContent(
+            initialContinue = IglooRailState.Loaded(continueMovies),
+            initialLatest = IglooRailState.Error("scan in progress"),
+        )
+
+        // The second rail can start below the fold, so bring its Retry into view before tapping.
+        composeRule.onNodeWithContentDescription("Retry loading Recently Added Movies")
+            .performScrollTo()
+            .performClick()
+
+        assertEquals(1, latestRetries)
+        assertEquals(0, continueRetries)
     }
 
     @Test
@@ -196,19 +248,31 @@ class HomeRailBehaviorTest {
         setShellContent(IglooRailState.Loaded(emptyList()))
 
         composeRule.onNodeWithContentDescription(
-            "No movies in your library yet. Add a movies folder on the server and run a scan.",
+            "Nothing in progress yet. Movies you start watching appear here.",
         ).assertIsFocused()
     }
 
     @Test
     fun cardsAnnounceTitleAndYearAsOneButton() {
-        setShellContent(IglooRailState.Loaded(movies))
+        setShellContent(IglooRailState.Loaded(continueMovies))
 
         // One cleared node per card: TalkBack hears the title and year once, and neither the
-        // poster image nor the caption texts exist as separate announceable nodes.
-        card(1)
+        // poster image nor the caption texts exist as separate announceable nodes — in either
+        // rail, even though the same movie appears in both.
+        latestCard(1)
             .assertContentDescriptionEquals("Heat, 1995")
             .assert(hasClickAction())
         composeRule.onAllNodesWithText("Heat").assertCountEquals(0)
+    }
+
+    @Test
+    fun continueCardsAnnounceTitleYearAndProgressAsOneButton() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+
+        // Design-system section 12: a continue-watching card announces title, year, and
+        // progress in its one cleared node.
+        continueCard(1)
+            .assertContentDescriptionEquals("Heat, 1995, 127 min left")
+            .assert(hasClickAction())
     }
 }

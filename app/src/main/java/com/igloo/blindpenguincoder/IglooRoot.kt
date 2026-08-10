@@ -173,12 +173,16 @@ fun IglooRoot(container: IglooAppContainer) {
                     ) {
                         HomeViewModel(container.movieRepository, container.serverUrlProvider)
                     }
+                    val continueWatching by homeViewModel.continueWatching
+                        .collectAsStateWithLifecycle()
                     val latestMovies by homeViewModel.latestMovies.collectAsStateWithLifecycle()
                     IglooApp(
                         user = state.user,
                         signOut = signOut,
+                        continueWatching = continueWatching,
+                        onRetryContinueWatching = homeViewModel::retryContinueWatching,
                         latestMovies = latestMovies,
-                        onRetryLatestMovies = homeViewModel::retry,
+                        onRetryLatestMovies = homeViewModel::retryLatestMovies,
                         // The details screen plugs in here; cards stay full focus targets meanwhile.
                         onMovieSelected = {},
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },
