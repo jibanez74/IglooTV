@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -35,6 +36,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.scaled
@@ -58,7 +60,9 @@ sealed interface IglooRailState<out T> {
  *
  * Focus is restored per rail: [lastFocusedKey] names the card focus re-enters on, both from
  * the spine and across a destination round-trip, where the list is recreated scrolled so the
- * remembered card is composed and can take focus.
+ * remembered card is composed and can take focus. It is snapshot state on purpose — the
+ * recomposition it triggers is what moves [entryRequester] onto the remembered card, so spine
+ * re-entry lands there without the rail being rebuilt.
  */
 @Composable
 fun <T> IglooMediaRail(
@@ -125,13 +129,19 @@ fun <T> IglooMediaRail(
                 loadingLabel = loadingLabel,
             )
 
+            // Rail-shaped, not form-shaped: the card is bounded to the cards it replaces so a
+            // failure reads as this rail's, and Polite because rails fail independently and two
+            // Assertive regions would cut each other off (section 12).
             is IglooRailState.Error -> IglooInlineError(
                 message = state.message,
                 actionText = "Retry",
                 actionSemanticLabel = "Retry loading $title",
                 onAction = onRetry,
                 actionModifier = anchorModifier,
-                modifier = Modifier.padding(vertical = IglooTheme.spacing.md),
+                liveRegionMode = LiveRegionMode.Polite,
+                modifier = Modifier
+                    .padding(vertical = IglooTheme.spacing.md)
+                    .widthIn(max = railErrorWidth()),
             )
 
             is IglooRailState.Loaded -> if (state.items.isEmpty()) {
@@ -277,5 +287,10 @@ private fun RailEmpty(
         IglooEmpty(icon = emptyIcon, message = emptyText)
     }
 }
+
+/** Three cards and their gaps: wide enough for a sentence, still visibly one rail's worth. */
+@Composable
+private fun railErrorWidth(): Dp =
+    IglooTheme.layout.posterWidth * 3 + IglooTheme.spacing.md * 2
 
 private const val SKELETON_CELLS = 6

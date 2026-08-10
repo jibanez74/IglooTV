@@ -155,12 +155,6 @@ fun IglooRoot(container: IglooAppContainer) {
 
                 is AppAuthState.Authenticated -> {
                     val scope = rememberCoroutineScope()
-                    // Device tokens are revoked server-side after long disuse, so a session
-                    // resumed from the background is re-checked before it is trusted.
-                    LifecycleStartEffect(Unit) {
-                        scope.launch { sessionManager.revalidateActive() }
-                        onStopOrDispose { }
-                    }
                     // A ViewModel, not this arm's scope: the revoke has to survive the arm being
                     // disposed mid-request, or a cancelled logout leaves the credential on the TV.
                     val signOutViewModel = viewModel(key = "sign-out") {
@@ -173,18 +167,24 @@ fun IglooRoot(container: IglooAppContainer) {
                     ) {
                         HomeViewModel(container.movieRepository, container.serverUrlProvider)
                     }
-                    val continueWatching by homeViewModel.continueWatching
-                        .collectAsStateWithLifecycle()
-                    val latestMovies by homeViewModel.latestMovies.collectAsStateWithLifecycle()
+                    // Device tokens are revoked server-side after long disuse, so a session
+                    // resumed from the background is re-checked before it is trusted — and the
+                    // library is re-read, because a TV can sit on this screen for days. The
+                    // first START is also the first load; the view model has no init fetch.
+                    LifecycleStartEffect(homeViewModel) {
+                        scope.launch { sessionManager.revalidateActive() }
+                        homeViewModel.refresh()
+                        onStopOrDispose { }
+                    }
+                    val home by homeViewModel.uiState.collectAsStateWithLifecycle()
                     IglooApp(
                         user = state.user,
                         signOut = signOut,
-                        continueWatching = continueWatching,
-                        onRetryContinueWatching = homeViewModel::retryContinueWatching,
-                        latestMovies = latestMovies,
-                        onRetryLatestMovies = homeViewModel::retryLatestMovies,
-                        // The details screen plugs in here; cards stay full focus targets meanwhile.
-                        onMovieSelected = {},
+                        home = home,
+                        onRetryRail = homeViewModel::retry,
+                        // Null until the details screen lands: the cards stay focus targets, but
+                        // must not announce an action nothing implements.
+                        onMovieSelected = null,
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },
                         onSignOut = signOutViewModel::request,
                         onSignOutConfirm = signOutViewModel::confirm,

@@ -19,6 +19,11 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
  * The live region sits on the message text rather than on a merged container:
  * merging would swallow the action button's own semantics node and make it
  * unreachable to TalkBack.
+ *
+ * [liveRegionMode] is `Assertive` for a form, where the error is the only thing
+ * that changed and the user is waiting on it. Hosts that can show several of these
+ * at once — the home rails fail independently — pass `Polite` instead, so the
+ * announcements queue rather than cutting each other off.
  */
 @Composable
 fun IglooInlineError(
@@ -28,6 +33,7 @@ fun IglooInlineError(
     actionSemanticLabel: String = actionText.orEmpty(),
     onAction: (() -> Unit)? = null,
     actionModifier: Modifier = Modifier,
+    liveRegionMode: LiveRegionMode = LiveRegionMode.Assertive,
 ) {
     val colors = IglooTheme.colors
 
@@ -47,7 +53,7 @@ fun IglooInlineError(
             style = IglooTheme.typography.bodyMedium,
             color = colors.destructive,
             modifier = Modifier.semantics {
-                liveRegion = LiveRegionMode.Assertive
+                liveRegion = liveRegionMode
                 error(message)
             },
         )
@@ -56,9 +62,8 @@ fun IglooInlineError(
                 text = actionText,
                 onClick = onAction,
                 variant = IglooButtonVariant.Ghost,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(actionModifier),
+                // Caller's modifier first: a width it sets has to bound the fill, not lose to it.
+                modifier = actionModifier.fillMaxWidth(),
                 semanticLabel = actionSemanticLabel,
             )
         }

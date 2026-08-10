@@ -80,11 +80,12 @@ class NavigationRailBehaviorTest {
                     signOut = signOut,
                     // Loaded with poster-less movies: the placeholder path renders with no
                     // network or image loading, so the shell tests stay hermetic.
-                    continueWatching = IglooRailState.Loaded(testContinueMovies),
-                    onRetryContinueWatching = {},
-                    latestMovies = IglooRailState.Loaded(testHomeMovies),
-                    onRetryLatestMovies = {},
-                    onMovieSelected = {},
+                    home = HomeUiState(
+                        continueWatching = IglooRailState.Loaded(testContinueMovies),
+                        latestMovies = IglooRailState.Loaded(testHomeMovies),
+                    ),
+                    onRetryRail = {},
+                    onMovieSelected = null,
                     onSwitchProfile = {},
                     onSignOut = { signOut = SignOutUiState(confirming = true) },
                     onSignOutConfirm = { signOut = SignOutUiState() },

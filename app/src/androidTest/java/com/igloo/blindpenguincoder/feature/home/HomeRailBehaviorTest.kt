@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertWidthIsEqualTo
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.assertCountEquals
@@ -68,17 +69,20 @@ class HomeRailBehaviorTest {
     private var latestState by mutableStateOf<IglooRailState<HomeMovie>>(IglooRailState.Loading)
     private var continueRetries = 0
     private var latestRetries = 0
+    private val opened = mutableListOf<HomeMovie>()
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
 
     private fun setShellContent(
         initialContinue: IglooRailState<HomeContinueMovie>,
         initialLatest: IglooRailState<HomeMovie> = IglooRailState.Loaded(movies),
+        onMovieSelected: ((HomeMovie) -> Unit)? = { opened += it },
     ) {
         continueState = initialContinue
         latestState = initialLatest
         continueRetries = 0
         latestRetries = 0
+        opened.clear()
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
@@ -87,11 +91,17 @@ class HomeRailBehaviorTest {
                 IglooApp(
                     user = user,
                     signOut = SignOutUiState(),
-                    continueWatching = continueState,
-                    onRetryContinueWatching = { continueRetries += 1 },
-                    latestMovies = latestState,
-                    onRetryLatestMovies = { latestRetries += 1 },
-                    onMovieSelected = {},
+                    home = HomeUiState(
+                        continueWatching = continueState,
+                        latestMovies = latestState,
+                    ),
+                    onRetryRail = { rail ->
+                        when (rail) {
+                            HomeRail.ContinueWatching -> continueRetries += 1
+                            HomeRail.LatestMovies -> latestRetries += 1
+                        }
+                    },
+                    onMovieSelected = onMovieSelected,
                     onSwitchProfile = {},
                     onSignOut = {},
                     onSignOutConfirm = {},
@@ -274,5 +284,30 @@ class HomeRailBehaviorTest {
         continueCard(1)
             .assertContentDescriptionEquals("Heat, 1995, 127 min left")
             .assert(hasClickAction())
+    }
+
+    @Test
+    fun okOnACardOpensIt() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+
+        continueCard(1).assertIsFocused()
+        continueCard(1).performKeyInput { pressKey(Key.DirectionCenter) }
+
+        assertEquals(listOf(movies[0]), opened)
+    }
+
+    @Test
+    fun cardsWithNothingToOpenAnnounceNoAction() {
+        setShellContent(IglooRailState.Loaded(continueMovies), onMovieSelected = null)
+
+        // Until the details screen lands there is nothing to open, and a card that announced
+        // "double tap to Open Heat" would promise a screen reader an action nobody implements.
+        // It stays focusable, because the rails' focus model needs every card to be a landing site.
+        continueCard(1)
+            .assertContentDescriptionEquals("Heat, 1995, 127 min left")
+            .assertHasNoClickAction()
+        continueCard(1).assertIsFocused()
+        continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(2).assertIsFocused()
     }
 }

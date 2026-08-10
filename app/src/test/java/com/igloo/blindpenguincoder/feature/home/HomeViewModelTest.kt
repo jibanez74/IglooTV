@@ -12,6 +12,7 @@ import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -39,19 +40,53 @@ class HomeViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel(http: TestHttp) = HomeViewModel(http.movieRepository, http.serverUrl)
+    /** The host's start effect is what fires the first load; there is no fetch in `init`. */
+    private fun viewModel(http: TestHttp) =
+        HomeViewModel(http.movieRepository, http.serverUrl).also { it.refresh() }
 
-    /** The view model fires both rails' requests on init, so every handler routes by path. */
+    /** A refresh fires both rails' requests, so every handler routes by path. */
     private fun routedHttp(
+        engineDispatcher: CoroutineDispatcher? = null,
         continueWatching: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(continueWatchingMoviesJson()) },
         latest: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(latestMoviesJson()) },
-    ) = TestHttp { request ->
+    ) = TestHttp(engineDispatcher) { request ->
         when (request.url.encodedPath) {
             "/api/movies/continue-watching" -> continueWatching(request)
             else -> latest(request)
         }
+    }
+
+    private suspend fun HomeViewModel.awaitLatest(): IglooRailState.Loaded<HomeMovie> =
+        uiState.first { it.latestMovies is IglooRailState.Loaded }
+            .latestMovies as IglooRailState.Loaded
+
+    private suspend fun HomeViewModel.awaitContinue(): IglooRailState.Loaded<HomeContinueMovie> =
+        uiState.first { it.continueWatching is IglooRailState.Loaded }
+            .continueWatching as IglooRailState.Loaded
+
+    private suspend fun HomeViewModel.awaitLatestError(): IglooRailState.Error =
+        uiState.first { it.latestMovies is IglooRailState.Error }
+            .latestMovies as IglooRailState.Error
+
+    private suspend fun HomeViewModel.awaitContinueError(): IglooRailState.Error =
+        uiState.first { it.continueWatching is IglooRailState.Error }
+            .continueWatching as IglooRailState.Error
+
+    @Test
+    fun `nothing loads until the host asks for it`() = runTest {
+        var requests = 0
+        val http = routedHttp(
+            continueWatching = { requests++; jsonResponse(continueWatchingMoviesJson()) },
+            latest = { requests++; jsonResponse(latestMoviesJson()) },
+        )
+
+        val viewModel = HomeViewModel(http.movieRepository, http.serverUrl)
+
+        assertEquals(0, requests)
+        assertEquals(IglooRailState.Loading, viewModel.uiState.value.continueWatching)
+        assertEquals(IglooRailState.Loading, viewModel.uiState.value.latestMovies)
     }
 
     @Test
@@ -67,8 +102,7 @@ class HomeViewModelTest {
             },
         )
 
-        val state = viewModel(http).latestMovies
-            .first { it is IglooRailState.Loaded } as IglooRailState.Loaded
+        val state = viewModel(http).awaitLatest()
 
         // Both wire shapes — with and without the leading slash — build the same proxy URL form.
         assertEquals(
@@ -88,8 +122,7 @@ class HomeViewModelTest {
             },
         )
 
-        val state = viewModel(http).latestMovies
-            .first { it is IglooRailState.Loaded } as IglooRailState.Loaded
+        val state = viewModel(http).awaitLatest()
 
         assertNull(state.items.single().posterUrl)
         assertNull(state.items.single().year)
@@ -97,10 +130,7 @@ class HomeViewModelTest {
 
     @Test
     fun `an empty library loads as an empty rail, not an error`() = runTest {
-        val http = routedHttp()
-
-        val state = viewModel(http).latestMovies
-            .first { it is IglooRailState.Loaded } as IglooRailState.Loaded
+        val state = viewModel(routedHttp()).awaitLatest()
 
         assertTrue(state.items.isEmpty())
     }
@@ -116,10 +146,26 @@ class HomeViewModelTest {
             },
         )
 
-        val state = viewModel(http).latestMovies
-            .first { it is IglooRailState.Error } as IglooRailState.Error
+        val state = viewModel(http).awaitLatestError()
 
         assertEquals("scan in progress", state.message)
+    }
+
+    @Test
+    fun `a dead token reads as an expired session, not a mistyped password`() = runTest {
+        val http = routedHttp(
+            latest = {
+                jsonResponse("""{"error":true,"message":"gone"}""", HttpStatusCode.Unauthorized)
+            },
+        )
+
+        val state = viewModel(http).awaitLatestError()
+
+        // The sign-in copy for Unauthorized makes no sense on a screen with no password field.
+        assertEquals(
+            "Your session has expired. Sign in again to see your library.",
+            state.message,
+        )
     }
 
     @Test
@@ -138,16 +184,81 @@ class HomeViewModelTest {
             },
         )
         val viewModel = viewModel(http)
-        viewModel.latestMovies.first { it is IglooRailState.Error }
+        viewModel.awaitLatestError()
 
-        viewModel.retryLatestMovies()
+        viewModel.retry(HomeRail.LatestMovies)
 
         // The gated second request holds the rail in Loading so the skeleton renders again.
-        assertEquals(IglooRailState.Loading, viewModel.latestMovies.value)
+        assertEquals(IglooRailState.Loading, viewModel.uiState.value.latestMovies)
         gate.complete(Unit)
-        val state = viewModel.latestMovies
-            .first { it is IglooRailState.Loaded } as IglooRailState.Loaded
-        assertEquals(listOf("Ran"), state.items.map { it.title })
+        assertEquals(listOf("Ran"), viewModel.awaitLatest().items.map { it.title })
+    }
+
+    @Test
+    fun `a refresh keeps the loaded rail on screen until its replacement arrives`() = runTest {
+        var requests = 0
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            latest = {
+                requests += 1
+                if (requests > 1) gate.await()
+                jsonResponse(
+                    latestMoviesJson(
+                        latestMovieJson(id = 1, title = if (requests == 1) "Heat" else "Ran"),
+                    ),
+                )
+            },
+        )
+        val viewModel = viewModel(http)
+        assertEquals(listOf("Heat"), viewModel.awaitLatest().items.map { it.title })
+
+        viewModel.refresh()
+
+        // No skeleton flash: the rail re-anchors focus on every state swap, so dropping back to
+        // Loading here would pull focus off whatever card the user is sitting on.
+        val during = viewModel.uiState.value.latestMovies
+        assertTrue("a refresh must not re-enter Loading", during is IglooRailState.Loaded)
+        assertEquals(listOf("Heat"), (during as IglooRailState.Loaded).items.map { it.title })
+
+        gate.complete(Unit)
+        // Awaiting `Loaded` would match the value already on screen, so wait on the content.
+        val after = viewModel.uiState.first {
+            (it.latestMovies as? IglooRailState.Loaded)?.items?.single()?.title == "Ran"
+        }
+        assertTrue(after.latestMovies is IglooRailState.Loaded)
+    }
+
+    @Test
+    fun `a refresh that fails leaves the loaded rail alone`() = runTest {
+        var requests = 0
+        // The engine shares the test scheduler, so a request is done being handled by the time
+        // the call that triggered it returns — the refresh needs no gate to be observed.
+        val http = routedHttp(
+            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
+            latest = {
+                requests += 1
+                if (requests == 1) {
+                    jsonResponse(latestMoviesJson(latestMovieJson(id = 1, title = "Heat")))
+                } else {
+                    jsonResponse(
+                        """{"error":true,"message":"scan in progress"}""",
+                        HttpStatusCode.InternalServerError,
+                    )
+                }
+            },
+        )
+        val viewModel = viewModel(http)
+        assertEquals(listOf("Heat"), viewModel.awaitLatest().items.map { it.title })
+
+        viewModel.refresh()
+
+        // A moment of bad wifi as the TV wakes must not replace a working Home with an error.
+        assertEquals(2, requests)
+        assertEquals(listOf("Heat"), viewModel.awaitLatest().items.map { it.title })
+
+        // A Retry the user asked for still tells the truth.
+        viewModel.retry(HomeRail.LatestMovies)
+        assertEquals("scan in progress", viewModel.awaitLatestError().message)
     }
 
     @Test
@@ -169,8 +280,7 @@ class HomeViewModelTest {
             },
         )
 
-        val state = viewModel(http).continueWatching
-            .first { it is IglooRailState.Loaded } as IglooRailState.Loaded
+        val state = viewModel(http).awaitContinue()
 
         assertEquals(
             listOf(
@@ -202,8 +312,7 @@ class HomeViewModelTest {
             },
         )
 
-        val state = viewModel(http).continueWatching
-            .first { it is IglooRailState.Loaded } as IglooRailState.Loaded
+        val state = viewModel(http).awaitContinue()
 
         val (overshot, zeroDuration) = state.items
         assertEquals(1f, overshot.progressFraction, 0f)
@@ -214,10 +323,7 @@ class HomeViewModelTest {
 
     @Test
     fun `nothing in progress loads as an empty rail, not an error`() = runTest {
-        val http = routedHttp()
-
-        val state = viewModel(http).continueWatching
-            .first { it is IglooRailState.Loaded } as IglooRailState.Loaded
+        val state = viewModel(routedHttp()).awaitContinue()
 
         assertTrue(state.items.isEmpty())
     }
@@ -235,10 +341,8 @@ class HomeViewModelTest {
         )
         val viewModel = viewModel(http)
 
-        val continueState = viewModel.continueWatching
-            .first { it is IglooRailState.Error } as IglooRailState.Error
-        val latestState = viewModel.latestMovies
-            .first { it is IglooRailState.Loaded } as IglooRailState.Loaded
+        val continueState = viewModel.awaitContinueError()
+        val latestState = viewModel.awaitLatest()
 
         assertEquals("scan in progress", continueState.message)
         assertEquals(listOf("Ran"), latestState.items.map { it.title })
@@ -265,17 +369,15 @@ class HomeViewModelTest {
             },
         )
         val viewModel = viewModel(http)
-        viewModel.continueWatching.first { it is IglooRailState.Error }
-        viewModel.latestMovies.first { it is IglooRailState.Loaded }
+        viewModel.awaitContinueError()
+        viewModel.awaitLatest()
 
-        viewModel.retryContinueWatching()
+        viewModel.retry(HomeRail.ContinueWatching)
 
-        assertEquals(IglooRailState.Loading, viewModel.continueWatching.value)
-        assertTrue(viewModel.latestMovies.value is IglooRailState.Loaded)
+        assertEquals(IglooRailState.Loading, viewModel.uiState.value.continueWatching)
+        assertTrue(viewModel.uiState.value.latestMovies is IglooRailState.Loaded)
         gate.complete(Unit)
-        val state = viewModel.continueWatching
-            .first { it is IglooRailState.Loaded } as IglooRailState.Loaded
-        assertEquals(listOf("Ran"), state.items.map { it.movie.title })
+        assertEquals(listOf("Ran"), viewModel.awaitContinue().items.map { it.movie.title })
         assertEquals(1, latestRequests)
     }
 }

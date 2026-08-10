@@ -70,11 +70,9 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 fun IglooApp(
     user: AuthUser,
     signOut: SignOutUiState,
-    continueWatching: IglooRailState<HomeContinueMovie>,
-    onRetryContinueWatching: () -> Unit,
-    latestMovies: IglooRailState<HomeMovie>,
-    onRetryLatestMovies: () -> Unit,
-    onMovieSelected: (HomeMovie) -> Unit,
+    home: HomeUiState,
+    onRetryRail: (HomeRail) -> Unit,
+    onMovieSelected: ((HomeMovie) -> Unit)?,
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
     onSignOutConfirm: () -> Unit,
@@ -107,10 +105,8 @@ fun IglooApp(
     IglooShell(
         user = user,
         currentDestination = currentDestination,
-        continueWatching = continueWatching,
-        onRetryContinueWatching = onRetryContinueWatching,
-        latestMovies = latestMovies,
-        onRetryLatestMovies = onRetryLatestMovies,
+        home = home,
+        onRetryRail = onRetryRail,
         onMovieSelected = onMovieSelected,
         // The rail stays open behind the dialog: the row that opened it must still be legible, so
         // the focus it gets back on cancel is not a surprise.
@@ -152,11 +148,9 @@ fun IglooApp(
 private fun IglooShell(
     user: AuthUser,
     currentDestination: IglooDestination,
-    continueWatching: IglooRailState<HomeContinueMovie>,
-    onRetryContinueWatching: () -> Unit,
-    latestMovies: IglooRailState<HomeMovie>,
-    onRetryLatestMovies: () -> Unit,
-    onMovieSelected: (HomeMovie) -> Unit,
+    home: HomeUiState,
+    onRetryRail: (HomeRail) -> Unit,
+    onMovieSelected: ((HomeMovie) -> Unit)?,
     railExpanded: Boolean,
     scrimmed: Boolean,
     onRailFocusChanged: (Boolean) -> Unit,
@@ -213,10 +207,8 @@ private fun IglooShell(
         ) {
             ContentPane(
                 currentDestination = currentDestination,
-                continueWatching = continueWatching,
-                onRetryContinueWatching = onRetryContinueWatching,
-                latestMovies = latestMovies,
-                onRetryLatestMovies = onRetryLatestMovies,
+                home = home,
+                onRetryRail = onRetryRail,
                 onMovieSelected = onMovieSelected,
                 contentStartRequester = contentStartRequester,
                 navigationRequesters = navigationRequesters,
@@ -287,11 +279,9 @@ private fun IglooShell(
 @Composable
 private fun ContentPane(
     currentDestination: IglooDestination,
-    continueWatching: IglooRailState<HomeContinueMovie>,
-    onRetryContinueWatching: () -> Unit,
-    latestMovies: IglooRailState<HomeMovie>,
-    onRetryLatestMovies: () -> Unit,
-    onMovieSelected: (HomeMovie) -> Unit,
+    home: HomeUiState,
+    onRetryRail: (HomeRail) -> Unit,
+    onMovieSelected: ((HomeMovie) -> Unit)?,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     onDestinationSelected: (IglooDestination) -> Unit,
@@ -340,10 +330,8 @@ private fun ContentPane(
 
         when (currentDestination) {
             IglooDestination.Home -> HomeRails(
-                continueWatching = continueWatching,
-                onRetryContinueWatching = onRetryContinueWatching,
-                latestMovies = latestMovies,
-                onRetryLatestMovies = onRetryLatestMovies,
+                home = home,
+                onRetryRail = onRetryRail,
                 onMovieSelected = onMovieSelected,
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequesters.getValue(IglooDestination.Home),
@@ -383,11 +371,9 @@ private fun paneBranchIsHome(destination: IglooDestination): Boolean =
 
 @Composable
 private fun HomeRails(
-    continueWatching: IglooRailState<HomeContinueMovie>,
-    onRetryContinueWatching: () -> Unit,
-    latestMovies: IglooRailState<HomeMovie>,
-    onRetryLatestMovies: () -> Unit,
-    onMovieSelected: (HomeMovie) -> Unit,
+    home: HomeUiState,
+    onRetryRail: (HomeRail) -> Unit,
+    onMovieSelected: ((HomeMovie) -> Unit)?,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
     lastFocusedContinueMovieId: Long?,
@@ -405,7 +391,7 @@ private fun HomeRails(
         // empty, so the anchor never moves between rails at runtime.
         IglooMediaRail(
             title = "Continue Watching",
-            state = continueWatching,
+            state = home.continueWatching,
             itemKey = { it.movie.id },
             entryRequester = contentStartRequester,
             leftFocusRequester = navigationRequester,
@@ -414,13 +400,13 @@ private fun HomeRails(
             loadingLabel = "Loading continue watching",
             emptyIcon = IglooIcons.Movies,
             emptyText = "Nothing in progress yet. Movies you start watching appear here.",
-            onRetry = onRetryContinueWatching,
+            onRetry = { onRetryRail(HomeRail.ContinueWatching) },
         ) { item, itemModifier ->
             IglooPosterCard(
                 title = item.movie.title,
                 subtitle = item.movie.year?.toString(),
                 imageUrl = item.movie.posterUrl,
-                onClick = { onMovieSelected(item.movie) },
+                onClick = onMovieSelected?.let { select -> { select(item.movie) } },
                 progress = PosterCardProgress(item.progressFraction, item.progressLabel),
                 modifier = itemModifier.testTag("continue_card_${item.movie.id}"),
             )
@@ -428,7 +414,7 @@ private fun HomeRails(
 
         IglooMediaRail(
             title = "Recently Added Movies",
-            state = latestMovies,
+            state = home.latestMovies,
             itemKey = { it.id },
             entryRequester = null,
             leftFocusRequester = navigationRequester,
@@ -437,13 +423,13 @@ private fun HomeRails(
             loadingLabel = "Loading recently added movies",
             emptyIcon = IglooIcons.Movies,
             emptyText = "No movies in your library yet. Add a movies folder on the server and run a scan.",
-            onRetry = onRetryLatestMovies,
+            onRetry = { onRetryRail(HomeRail.LatestMovies) },
         ) { movie, itemModifier ->
             IglooPosterCard(
                 title = movie.title,
                 subtitle = movie.year?.toString(),
                 imageUrl = movie.posterUrl,
-                onClick = { onMovieSelected(movie) },
+                onClick = onMovieSelected?.let { select -> { select(movie) } },
                 modifier = itemModifier.testTag("poster_card_${movie.id}"),
             )
         }
@@ -521,7 +507,6 @@ private fun HeroPanel() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("hero_panel")
             .iglooSurface(radius = IglooTheme.radius.xl, fill = colors.card)
             .padding(IglooTheme.spacing.xl),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),

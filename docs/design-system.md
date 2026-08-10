@@ -628,7 +628,7 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
-| `IglooPosterCard` | The 2:3 media card (§8.2): poster at `layout.posterWidth` / `layout.posterAspect`, radius `lg`, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year", `Role.Button`); a null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose description joins the cleared node ("Title, Year, N min left", §12) so the bar can never render unannounced. |
+| `IglooPosterCard` | The 2:3 media card (§8.2): poster at `layout.posterWidth` / `layout.posterAspect`, radius `lg`, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose description joins the cleared node ("Title, Year, N min left", §12) so the bar can never render unannounced. |
 | `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons, minimal `IglooEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. |
 | `IglooEmpty` | §10 empty state, minimal variant only: faded icon + one announced line. The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
 
@@ -747,7 +747,10 @@ Build these **once** as shared composables. Three states, one recipe each.
   built — §9.1.)
 - **`IglooError`** — inline card, `destructive @ 0.10` fill / `@ 0.25` border, a message, and a
   **focusable Retry** that re-runs the query. Retry must be reachable by d-pad without leaving
-  the screen. This recipe is `IglooInlineError` (§9.1) — there is no separate composable.
+  the screen. This recipe is `IglooInlineError` (§9.1) — there is no separate composable. Its
+  live region is `Assertive` in a form, where the error is the only thing that changed, and
+  `Polite` anywhere several can appear at once (the §11.3 rails fail independently), so the
+  announcements queue instead of cutting each other off.
 
 All three announce themselves to TalkBack when they replace content (§12).
 
@@ -1204,16 +1207,32 @@ forgot to change the code.**
 
 ## Changelog
 
-**2026-08-10 — Home gets its first rail: Recently Added Movies.**
+**2026-08-10 — Home gets its rails: Continue Watching over Recently Added Movies.**
 
 The §11.3 layout starts landing: the Home destination drops the placeholder hero and renders a
-scrollable column of rails — one rail today, `GET /api/movies/latest` behind it. Other
-destinations keep the placeholder pane until their screens land. New primitives in §9.1:
-`IglooMediaRail`, `IglooPosterCard`, `IglooEmpty` (minimal only).
+scrollable column of rails — Continue Watching first (`GET /api/movies/continue-watching`),
+Recently Added Movies below it (`GET /api/movies/latest`). Other destinations keep the
+placeholder pane until their screens land. New primitives in §9.1: `IglooMediaRail`,
+`IglooPosterCard`, `IglooEmpty` (minimal only).
 
 - **§10's shimmer sentence lost to §7.2's loop rule.** A shimmer is a loop; only §11.1.0's
   ambient drift may loop. Skeletons are static blocks at full motion too, not only under
   reduced motion. Revisit only by authoring an explicit carve-out in §7.2.
+- **A card announces an action only when one exists.** `IglooPosterCard` carries `Role.Button`
+  and "Open <title>" only when it is given something to open; until the details screen lands
+  the home cards are focusable and announce title, year, and progress with **no** action.
+  Announcing an action nothing implements is worse for a screen reader than announcing none —
+  it stays a focus target because §8.1's focus model needs every card to be a landing site.
+- **Rails refresh on foreground, not once per session.** A TV sits on this screen for days, so
+  the host's start effect re-reads every rail alongside the session revalidation. A background
+  refresh **keeps the loaded rail on screen** until its replacement arrives: the rail re-anchors
+  focus on every state swap, so dropping back to the skeleton would flash and pull focus off
+  the card the user is sitting on. Only Retry, which has nothing to preserve, re-enters loading.
+- **§10's error recipe is form-shaped; rails needed it rail-shaped.** Rails fail independently,
+  so `IglooInlineError` gained a live-region mode: `Assertive` still for a form, where the error
+  is the only thing that changed, but `Polite` in a rail so two failed rails queue instead of
+  cutting each other (and the §11.3 heading) off. The rail also bounds the card to roughly
+  three cards' width, so a failure reads as *this rail's* rather than the whole pane's.
 - **Loading and empty states are focusable anchors.** The content pane must always own exactly
   one focus target or the shell's initial focus, d-pad-right from the spine, and the Back model
   all break. So the skeleton's first cell and the empty state's frame take the §6.1 treatment
@@ -1223,6 +1242,10 @@ destinations keep the placeholder pane until their screens land. New primitives 
 - **§6.3's per-rail restore, implemented:** the remembered card is per rail, hoisted above the
   destination switch, and saved across process death. A rail rebuilt on re-entry is *created
   scrolled to* the remembered card, because a focus requester can only land on a composed node.
+  The memory is snapshot state **on purpose**: the recomposition each focus move triggers is
+  what walks the pane's entry requester onto the remembered card, which is how spine re-entry
+  lands there without the rail being rebuilt. Making it non-observable to save that
+  recomposition breaks restore outright — it was tried and reverted.
 - **§8.3's bleed-past-the-safe-area is deferred**, and the rail's horizontal extremes trim the
   focus glow — the same accepted ≤1.5:1 artifact §6.1 records for the spine. The §8.2 peek
   affordance falls out of the pane arithmetic unchanged.

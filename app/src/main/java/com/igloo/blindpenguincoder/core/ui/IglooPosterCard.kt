@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.core.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,13 +54,17 @@ data class PosterCardProgress(
  * A null or failed image falls back to the film glyph on the muted fill; the text below is
  * unchanged, so the card loses nothing but the artwork. An optional progress bar sits on the
  * poster's bottom edge and is announced through [PosterCardProgress.description].
+ *
+ * A null [onClick] still renders a focusable card — the rails' focus model needs every card to
+ * be a landing site — but it drops the button role and the "Open …" action, because announcing
+ * an action that does nothing is worse for a screen reader than announcing none.
  */
 @Composable
 fun IglooPosterCard(
     title: String,
     subtitle: String?,
     imageUrl: String?,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     progress: PosterCardProgress? = null,
 ) {
@@ -71,18 +76,26 @@ fun IglooPosterCard(
         modifier = modifier
             .width(IglooTheme.layout.posterWidth)
             .onFocusChanged { focused = it.isFocused }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier.focusable()
+                },
             )
             .clearAndSetSemantics {
                 contentDescription =
                     listOfNotNull(title, subtitle, progress?.description).joinToString(", ")
-                role = Role.Button
-                onClick(label = "Open $title") {
-                    onClick()
-                    true
+                if (onClick != null) {
+                    role = Role.Button
+                    onClick(label = "Open $title") {
+                        onClick()
+                        true
+                    }
                 }
             },
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),

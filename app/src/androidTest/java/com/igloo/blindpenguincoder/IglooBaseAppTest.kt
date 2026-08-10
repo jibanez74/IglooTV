@@ -34,6 +34,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import org.junit.Assert.assertTrue
@@ -79,11 +80,12 @@ class IglooBaseAppTest {
                 IglooApp(
                     user = user,
                     signOut = signOut,
-                    continueWatching = IglooRailState.Loaded(testContinueMovies),
-                    onRetryContinueWatching = {},
-                    latestMovies = IglooRailState.Loaded(testHomeMovies),
-                    onRetryLatestMovies = {},
-                    onMovieSelected = {},
+                    home = HomeUiState(
+                        continueWatching = IglooRailState.Loaded(testContinueMovies),
+                        latestMovies = IglooRailState.Loaded(testHomeMovies),
+                    ),
+                    onRetryRail = {},
+                    onMovieSelected = null,
                     onSwitchProfile = onSwitchProfile,
                     onSignOut = { signOut = SignOutUiState(confirming = true) },
                     onSignOutConfirm = {

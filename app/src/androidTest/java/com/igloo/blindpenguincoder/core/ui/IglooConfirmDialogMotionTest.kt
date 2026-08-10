@@ -35,6 +35,7 @@ import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeMovie
+import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import com.igloo.blindpenguincoder.testHomeMovies
@@ -121,11 +122,12 @@ class IglooConfirmDialogMotionTest {
                     IglooApp(
                         user = user,
                         signOut = signOut,
-                        continueWatching = IglooRailState.Loaded(continueMovies),
-                        onRetryContinueWatching = {},
-                        latestMovies = IglooRailState.Loaded(testHomeMovies),
-                        onRetryLatestMovies = {},
-                        onMovieSelected = {},
+                        home = HomeUiState(
+                            continueWatching = IglooRailState.Loaded(continueMovies),
+                            latestMovies = IglooRailState.Loaded(testHomeMovies),
+                        ),
+                        onRetryRail = {},
+                        onMovieSelected = null,
                         onSwitchProfile = {},
                         onSignOut = { signOut = SignOutUiState(confirming = true) },
                         onSignOutConfirm = { signOut = SignOutUiState() },
