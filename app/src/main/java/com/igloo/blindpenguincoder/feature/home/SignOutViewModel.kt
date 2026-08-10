@@ -35,8 +35,13 @@ class SignOutViewModel(
         _uiState.value = SignOutUiState(confirming = true)
     }
 
+    /**
+     * Closes the confirmation. While a revoke is in flight this stops *showing* it — it does not
+     * recall it, so `pending` survives and [request] still refuses to re-ask for a sign-out whose
+     * local half is already committed. Only [confirm]'s `finally` clears the flag.
+     */
     fun dismiss() {
-        _uiState.value = SignOutUiState()
+        _uiState.update { SignOutUiState(pending = it.pending) }
     }
 
     fun confirm() {

@@ -4,6 +4,7 @@ import android.os.SystemClock
 import com.igloo.blindpenguincoder.core.config.ServerAddress
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.core.image.ImageCache
 import com.igloo.blindpenguincoder.core.network.AuthEventBus
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
@@ -45,6 +46,7 @@ class SessionManager(
     private val serverUrl: ServerUrlProvider,
     authEvents: AuthEventBus,
     private val scope: CoroutineScope,
+    private val imageCache: ImageCache = ImageCache.None,
     private val elapsed: () -> Long = SystemClock::elapsedRealtime,
 ) {
     private val _state = MutableStateFlow<AppAuthState>(AppAuthState.Loading)
@@ -268,9 +270,12 @@ class SessionManager(
         if (activeProfileId != null && activeProfileId != expectedProfileId) return
 
         // Persistence is the security boundary. It finishes even if the waiting screen is torn
-        // down, and it happens before a network request that may take the full timeout.
+        // down, and it happens before a network request that may take the full timeout. The image
+        // cache goes with it: this profile's avatar is the only trace of it Coil keeps on disk.
         val credential = withContext(NonCancellable) {
-            profiles.removeForSignOut(expectedProfileId)
+            val removed = profiles.removeForSignOut(expectedProfileId)
+            imageCache.clear()
+            removed
         }
         val revoked = if (credential == null) {
             true

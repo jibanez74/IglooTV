@@ -251,6 +251,7 @@ app/
       config/
       design/
       error/
+      image/
       navigation/
       network/
       storage/
@@ -289,6 +290,7 @@ Rules:
 - Keep API models, generated clients, and repositories out of composables.
 - Keep playback-specific logic separate from ordinary screen UI.
 - Keep image URL construction and provider-specific image handling outside composables.
+- Two image packages, and they do not overlap: `core/image/` owns loader infrastructure — the image loader itself and its cache lifecycle — while `images/` owns provider URL construction and fallbacks.  A URL helper does not belong in `core/`, and cache lifecycle does not belong next to TMDB path building.
 - Do not create excessive tiny packages before the project needs them.
 - Prefer clear boundaries over heavy abstraction.
 
@@ -407,6 +409,17 @@ Rules:
 - The app must support logout.
 - Expired or invalid sessions should return the user to the setup/authentication flow.
 
+### Sign out
+
+One Android TV is shared by a household, so sign-out is scoped, not global.  `docs/design-system.md` §11.2 is authoritative and states the rules in full; the ones that constrain the data layer:
+
+- Sign out affects **only** the profile signing out.  Never reach for a "forget everything" path on a sign-out route — remove exactly that profile, revoke exactly the token it carried, and send that token explicitly rather than whatever the client happens to be holding.  Every other stored profile must sign back in without re-pairing.
+- Always clear the in-memory credential when removing the active profile, so no revoked token is attached to the next profile's first request — a 401 there would sign an innocent profile out.
+- The local half is unconditional and must finish even if the screen waiting on it is torn down.  Persist the removal **before** the network call, outside cancellation, and treat an undeliverable revoke as a successful local sign-out that says so on the gate.
+- A 401 on the revoke is success.  The token it would have revoked is already gone.
+- Clear user-scoped caches on the same path (see *Image loading*).
+- Verify with two real profiles against a real backend, not unit tests alone: sign out one, then confirm server-side that only that device token was revoked.
+
 ### Multiple users
 
 Rules:
@@ -523,6 +536,7 @@ Rules:
 
 - Use a modern Compose-compatible image loading library, preferably Coil unless the project chooses another library.
 - Enable normal image caching through the selected image library.
+- Clear the image caches when a profile signs out.  Cache entries are keyed by URL with nothing tying them back to a profile, so a signed-out user's avatar and artwork would otherwise stay on disk on a shared TV.  Clear both memory and disk; the profiles that remain simply re-fetch.
 - Use appropriately sized images for TV layouts.
 - Do not load full-resolution images when a poster, thumbnail, or medium-size image is enough.
 - Preserve visual quality for TV viewing distance.

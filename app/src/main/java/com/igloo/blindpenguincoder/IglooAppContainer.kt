@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder
 
 import android.content.Context
 import com.igloo.blindpenguincoder.core.config.deviceIdentity
+import com.igloo.blindpenguincoder.core.image.CoilImageCache
 import com.igloo.blindpenguincoder.core.network.AuthEventBus
 import com.igloo.blindpenguincoder.core.network.BearerTokenProvider
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
@@ -64,6 +65,7 @@ class IglooAppContainer(context: Context) {
             serverUrl = serverUrlProvider,
             authEvents = authEvents,
             scope = applicationScope,
+            imageCache = CoilImageCache(appContext),
         )
     }
 }

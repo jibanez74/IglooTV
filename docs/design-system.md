@@ -262,8 +262,17 @@ spine renders them together.
 
 **Only one scrim renders at a time.** The rail's and the modal's are the same `background @ 0.60`,
 and two of them composite to 0.84 — an alpha this table does not authorize, and dark enough that
-the control the user just left stops being legible. When a modal opens over the expanded rail, the
-rail yields its scrim (§9.3). One implementation enforces this: `core/ui/IglooScrim.kt`.
+the control the user just left stops being legible. One implementation enforces the alpha itself:
+`core/ui/IglooScrim.kt`.
+
+When a modal opens over the expanded rail, the modal owns the only scrim for its whole lifetime and
+the host **unmounts the rail's scrim node** rather than animating it out — animating it would
+composite a fading 0.60 layer under the modal's reveal for the length of the transition. The rail's
+own animated value is deliberately left at its 0.60 target while hidden, so cancelling the modal
+restores that scrim in the same frame instead of fading it back in under the focus ring the rail is
+getting back (§9.3). `IglooApp.kt` does both halves; `IglooConfirmDialogMotionTest` pins the result
+by sampling the pixel behind the card: one scrim before, none at reveal time-zero, one again once
+the modal is fully revealed.
 
 ### 3.2 Color over media
 
@@ -697,6 +706,13 @@ in the trap — the next d-pad press would land on a card behind the scrim. Back
 the request cannot be recalled anyway and a dead remote for the length of a network timeout is
 worse; the action belongs to a ViewModel, so leaving does not abandon it (§10).
 
+**Pending outlives the modal.** Because Back closes the dialog while the work continues, the
+pending flag must *not* be cleared by dismissal — only by the action finishing. Otherwise the
+control that opened the dialog can open it again and ask a question that is already answered: the
+local half of a destructive action is committed before the network call, so the second
+confirmation would offer a Cancel that undoes nothing, seconds before the screen changes under the
+user. Dismiss stops *showing* the work; it does not recall it.
+
 **TalkBack.** The card carries `paneTitle` and `isTraversalGroup`; the shell behind it carries
 `hideFromAccessibility()` while the dialog is open. That hides it from *traversal* while keeping
 the nodes in the semantics tree, so tests can still assert the rail is not focused.
@@ -958,7 +974,10 @@ Three rules the sign-out flow follows, all of them consequences of this being a 
 
 - **It only ever affects the profile signing out.** Every other stored profile keeps its token and
   signs back in without re-pairing. One device token belongs to one person, so the backend revokes
-  exactly the token the request carried, and locally only that one profile leaves the vault.
+  exactly the token the request carried, and locally only that one profile leaves the vault. The
+  image caches go too — they are keyed by URL with nothing tying an entry back to a profile, so the
+  whole cache is dropped rather than guessed at, and the remaining profiles re-fetch one avatar
+  each. Switch profile does not clear them: nobody is being removed.
 - **The local half is unconditional.** If the revoke cannot be delivered — the TV is offline, the
   server is down — the profile still leaves this TV, because the alternative is stranding a live
   credential on a shared device. The gate then carries an announced `IglooNotice` saying the server
@@ -1153,6 +1172,23 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-09 — Sign out, reviewed on hardware: what the modal owes a revoke it can no longer stop.**
+
+Verified end-to-end on the Shield against a live server with two real profiles: signing one out
+revoked exactly that device token server-side and left the other's usable without re-pairing.
+
+- **§9.3 gains "pending outlives the modal".** Back closes the dialog while the work continues, so
+  the pending flag must survive dismissal and only clear when the action finishes. Otherwise the
+  control reopens a confirmation for something already committed locally, offering a Cancel that
+  undoes nothing.
+- **§3.1 rewritten to describe the mechanism it actually mandates.** "The rail yields its scrim"
+  was true of the result but not of the code: the host *unmounts* the rail's scrim node for the
+  modal's lifetime — animating it out would composite a fading 0.60 layer under the reveal — while
+  leaving the rail's own animated value at its 0.60 target so cancelling restores it in one frame
+  rather than fading it in under the focus ring the rail is getting back.
+- **§11.2**: the "only the profile signing out" rule now covers the image caches, which are keyed
+  by URL with nothing tying an entry to a profile. Switch profile leaves them alone.
 
 **2026-08-09 — Sign out, finished: it asks first, and the revoke cannot be quietly lost.**
 

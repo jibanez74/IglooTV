@@ -232,6 +232,33 @@ class SignOutViewModelTest {
     }
 
     @Test
+    fun `back during a pending sign-out cannot reopen the confirmation`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        val fixture = fixture {
+            release.await()
+            accepted()
+        }
+        fixture.viewModel.request()
+        fixture.viewModel.confirm()
+        yield()
+
+        // Back closes the modal, but the local half is already committed: asking again would
+        // offer a Cancel that cannot undo anything.
+        fixture.viewModel.dismiss()
+        fixture.viewModel.request()
+
+        assertFalse(fixture.viewModel.uiState.value.confirming)
+        assertTrue(fixture.viewModel.uiState.value.pending)
+
+        release.complete(Unit)
+        yield()
+
+        assertEquals(1, fixture.logoutRequests)
+        // Cleared once the revoke is done, so signing back in on this instance can ask again.
+        assertEquals(SignOutUiState(), fixture.viewModel.uiState.value)
+    }
+
+    @Test
     fun `clearing the ViewModel stops waiting without cancelling sign-out cleanup`() = runTest {
         val revokeStarted = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()

@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.auth
 
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.core.image.ImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
@@ -51,6 +52,7 @@ class SessionManagerTest {
         storedServerUrl: String?,
         scope: CoroutineScope,
         engineDispatcher: CoroutineDispatcher?,
+        imageCache: ImageCache = ImageCache.None,
         handler: MockRequestHandler,
     ): Fixture {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
@@ -67,6 +69,7 @@ class SessionManagerTest {
             serverUrl = http.serverUrl,
             authEvents = http.authEvents,
             scope = scope,
+            imageCache = imageCache,
             elapsed = { fixture.elapsed },
         )
         fixture = Fixture(manager, http)
@@ -279,6 +282,7 @@ class SessionManagerTest {
     private suspend fun signedInWithASecondProfile(
         scope: CoroutineScope,
         engineDispatcher: CoroutineDispatcher? = null,
+        imageCache: ImageCache = ImageCache.None,
         logout: MockRequestHandler,
     ): Fixture {
         val fixture = fixture(
@@ -292,6 +296,7 @@ class SessionManagerTest {
                 }
             },
             engineDispatcher = engineDispatcher,
+            imageCache = imageCache,
         )
         fixture.http.seedVault(
             testStoredProfile(userId = 1, name = "Jose"),
@@ -393,6 +398,55 @@ class SessionManagerTest {
         releaseRevoke.complete(Unit)
         waiter.join()
         assertTrue(fixture.manager.state.value is AppAuthState.ChooseProfile)
+    }
+
+    @Test
+    fun `signing out clears the image cache before a delayed revoke finishes`() = runTest {
+        var cleared = 0
+        val revokeStarted = CompletableDeferred<Unit>()
+        val releaseRevoke = CompletableDeferred<Unit>()
+        val fixture = signedInWithASecondProfile(
+            scope = backgroundScope,
+            engineDispatcher = Dispatchers.Unconfined,
+            imageCache = object : ImageCache {
+                override suspend fun clear() {
+                    cleared += 1
+                }
+            },
+        ) {
+            revokeStarted.complete(Unit)
+            releaseRevoke.await()
+            logoutAccepted()
+        }
+
+        val waiter = launch { fixture.manager.logout() }
+        revokeStarted.await()
+
+        // Same NonCancellable block as the vault write: the signed-out profile's avatar is gone
+        // from disk before the network gets a chance to take the full timeout.
+        assertEquals(1, cleared)
+
+        releaseRevoke.complete(Unit)
+        waiter.join()
+        assertEquals(1, cleared)
+    }
+
+    @Test
+    fun `switching profiles keeps the image cache`() = runTest {
+        var cleared = 0
+        val fixture = signedInWithASecondProfile(
+            scope = backgroundScope,
+            imageCache = object : ImageCache {
+                override suspend fun clear() {
+                    cleared += 1
+                }
+            },
+        ) { error("no revoke expected") }
+
+        fixture.manager.switchProfile()
+
+        // Handing the TV over keeps every profile paired, so their avatars stay worth keeping.
+        assertEquals(0, cleared)
     }
 
     @Test
