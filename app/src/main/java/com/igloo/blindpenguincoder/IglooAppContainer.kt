@@ -5,6 +5,7 @@ import com.igloo.blindpenguincoder.core.config.deviceIdentity
 import com.igloo.blindpenguincoder.core.image.CoilImageCache
 import com.igloo.blindpenguincoder.core.network.AuthEventBus
 import com.igloo.blindpenguincoder.core.network.BearerTokenProvider
+import com.igloo.blindpenguincoder.core.network.DeviceCredentialSource
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.network.createIglooHttpClient
 import com.igloo.blindpenguincoder.core.network.createServerProbeHttpClient
@@ -17,8 +18,10 @@ import com.igloo.blindpenguincoder.core.storage.UiPreferencesStore
 import com.igloo.blindpenguincoder.core.storage.sessionDataStore
 import com.igloo.blindpenguincoder.core.storage.settingsDataStore
 import com.igloo.blindpenguincoder.data.api.AuthApi
+import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.api.UserApi
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
+import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.ProfileRepository
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
 import com.igloo.blindpenguincoder.feature.auth.SessionManager
@@ -33,12 +36,13 @@ class IglooAppContainer(context: Context) {
     val uiPreferencesStore by lazy { UiPreferencesStore(appContext.settingsDataStore) }
     val serverUrlProvider by lazy { ServerUrlProvider() }
     private val secretCipher: SecretCipher by lazy { AndroidKeystoreCipher() }
-    private val credentials by lazy { BearerTokenProvider() }
+    val credentials: DeviceCredentialSource by lazy { tokenProvider }
+    private val tokenProvider by lazy { BearerTokenProvider() }
     private val authEvents by lazy { AuthEventBus() }
     val profileRepository by lazy {
         ProfileRepository(
             DataStoreProfileStore(appContext.sessionDataStore, secretCipher),
-            credentials,
+            tokenProvider,
         )
     }
     private val identity by lazy { deviceIdentity(appContext) }
@@ -47,6 +51,8 @@ class IglooAppContainer(context: Context) {
     private val serverHealthProbe by lazy { ServerHealthProbe(serverProbeHttpClient) }
     val authApi by lazy { AuthApi(httpClient, serverUrlProvider) }
     private val userApi by lazy { UserApi(httpClient, serverUrlProvider) }
+    private val movieApi by lazy { MovieApi(httpClient, serverUrlProvider) }
+    val movieRepository by lazy { MovieRepository(movieApi) }
     val authRepository by lazy {
         AuthRepository(authApi, userApi, profileRepository, identity)
     }

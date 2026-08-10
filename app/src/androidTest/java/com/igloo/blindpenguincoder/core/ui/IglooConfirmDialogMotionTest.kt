@@ -33,8 +33,10 @@ import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.feature.home.HomeMovie
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
+import com.igloo.blindpenguincoder.testHomeMovies
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.junit.Assert.assertTrue
@@ -61,6 +63,14 @@ class IglooConfirmDialogMotionTest {
         hasPin = false,
         createdAt = "2026-01-01T00:00:00Z",
         updatedAt = "2026-01-01T00:00:00Z",
+    )
+
+    // Five cards, so the last one lies right of both the expanded rail's overlay and the
+    // centered 480dp dialog card — the one place a scrimmed content pixel stays visible
+    // through the modal's whole reveal.
+    private val movies = testHomeMovies + listOf(
+        HomeMovie(id = 4, title = "Solaris", year = 1972, posterUrl = null),
+        HomeMovie(id = 5, title = "Alien", year = 1979, posterUrl = null),
     )
 
     @Test
@@ -107,6 +117,9 @@ class IglooConfirmDialogMotionTest {
                     IglooApp(
                         user = user,
                         signOut = signOut,
+                        latestMovies = IglooRailState.Loaded(movies),
+                        onRetryLatestMovies = {},
+                        onMovieSelected = {},
                         onSwitchProfile = {},
                         onSignOut = { signOut = SignOutUiState(confirming = true) },
                         onSignOutConfirm = { signOut = SignOutUiState() },
@@ -117,9 +130,7 @@ class IglooConfirmDialogMotionTest {
         }
         composeRule.mainClock.advanceTimeByFrame()
 
-        val contentCard = composeRule.onNodeWithContentDescription(
-            "Movies. API contract loaded. Poster rails and playback will plug into this shell.",
-        )
+        val contentCard = composeRule.onNodeWithTag("poster_card_1")
         contentCard.performKeyInput { pressKey(Key.DirectionLeft) }
         composeRule.mainClock.advanceTimeBy(IglooMotion.STANDARD_MS.toLong() + FRAME_MILLIS)
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
@@ -128,24 +139,27 @@ class IglooConfirmDialogMotionTest {
         // row without making focus traversal geometry part of this pixel-only assertion.
         val signOut = composeRule.onNodeWithContentDescription("Sign out")
 
-        val heroBounds = composeRule.onNodeWithTag("hero_panel").getUnclippedBoundsInRoot()
+        // The last card's poster is the placeholder's muted fill; its left sliver stays left
+        // of the centered film glyph and inside the screen even where the pane clips the
+        // peeking card.
+        val cardBounds = composeRule.onNodeWithTag("poster_card_5").getUnclippedBoundsInRoot()
         val railDimmed = blend(
-            background = IglooDarkColors.card.toArgb(),
+            background = IglooDarkColors.muted.toArgb(),
             foreground = IglooDarkColors.background.toArgb(),
             alpha = SCRIM_ALPHA,
         )
         val baseline = captureRoot()
-        val heroLeft = heroBounds.left.value * density
-        val heroTop = heroBounds.top.value * density
-        val heroRight = heroBounds.right.value * density
-        val heroBottom = heroBounds.bottom.value * density
+        val cardLeft = cardBounds.left.value * density
+        val cardTop = cardBounds.top.value * density
+        val cardWidth = (cardBounds.right.value - cardBounds.left.value) * density
+        val posterBottom = cardTop + cardWidth * 1.5f
         val sample = findClosestPixel(
             bitmap = baseline,
             expected = railDimmed,
-            left = (heroLeft + (heroRight - heroLeft) * 0.85f).roundToInt(),
-            top = (heroTop + EDGE_INSET_PX).roundToInt(),
-            right = (heroRight - EDGE_INSET_PX).roundToInt(),
-            bottom = (heroBottom - EDGE_INSET_PX).roundToInt(),
+            left = (cardLeft + EDGE_INSET_PX).roundToInt(),
+            top = (cardTop + EDGE_INSET_PX).roundToInt(),
+            right = (cardLeft + cardWidth * 0.35f).roundToInt(),
+            bottom = (posterBottom - EDGE_INSET_PX).roundToInt(),
         )
         assertTrue(
             "expanded rail did not render one 0.60 scrim at the sample: ${sample.distance}",
@@ -158,11 +172,11 @@ class IglooConfirmDialogMotionTest {
         composeRule.onNodeWithText("Sign out of Igloo?").assertExists()
 
         // At animation time zero the modal is transparent. The rail scrim must already be
-        // unmounted, leaving the original card pixel rather than an animating second layer.
+        // unmounted, leaving the original poster pixel rather than an animating second layer.
         val revealStart = captureRoot().getPixel(sample.x, sample.y)
         assertTrue(
             "rail scrim remained under the modal reveal",
-            colorDistance(revealStart, IglooDarkColors.card.toArgb()) < COLOR_TOLERANCE,
+            colorDistance(revealStart, IglooDarkColors.muted.toArgb()) < COLOR_TOLERANCE,
         )
 
         composeRule.mainClock.advanceTimeBy(IglooMotion.STANDARD_MS.toLong() + FRAME_MILLIS)

@@ -14,6 +14,7 @@ import com.igloo.blindpenguincoder.core.storage.FakeProfileStore
 import com.igloo.blindpenguincoder.core.storage.ProfileVault
 import com.igloo.blindpenguincoder.core.storage.StoredProfile
 import com.igloo.blindpenguincoder.data.api.AuthApi
+import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.api.UserApi
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -61,6 +62,8 @@ class TestHttp(
     val api = AuthApi(client, serverUrl)
     val userApi = UserApi(client, serverUrl)
     val authRepository = AuthRepository(api, userApi, profiles, testDeviceIdentity)
+    val movieApi = MovieApi(client, serverUrl)
+    val movieRepository = MovieRepository(movieApi)
 
     /** Puts profiles in the vault without going through a sign-in. */
     fun seedVault(
@@ -110,6 +113,29 @@ fun MockRequestHandleScope.jsonResponse(
     status = status,
     headers = headersOf(HttpHeaders.ContentType, "application/json"),
 )
+
+/** One `GET /movies/latest` list entry in the Go `sql.Null*` wire shapes. */
+fun latestMovieJson(
+    id: Long = 1,
+    title: String = "Heat",
+    posterPath: String? = "/heat.jpg",
+    year: Long? = 1995,
+): String {
+    val poster = if (posterPath != null) {
+        """{"String":"$posterPath","Valid":true}"""
+    } else {
+        """{"String":"","Valid":false}"""
+    }
+    val yearField = if (year != null) {
+        """{"Int64":$year,"Valid":true}"""
+    } else {
+        """{"Int64":0,"Valid":false}"""
+    }
+    return """{"id":$id,"title":"$title","poster_path":$poster,"year":$yearField}"""
+}
+
+fun latestMoviesJson(vararg movies: String): String =
+    """{"error":false,"message":"latest movies","data":{"movies":[${movies.joinToString(",")}]}}"""
 
 /** `GET /auth/user` payload; `has_pin` is required by the contract. */
 fun authUserJson(

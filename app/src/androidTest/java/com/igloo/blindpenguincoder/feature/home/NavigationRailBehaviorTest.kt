@@ -27,7 +27,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.testHomeMovies
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -75,6 +77,11 @@ class NavigationRailBehaviorTest {
                 IglooApp(
                     user = user,
                     signOut = signOut,
+                    // Loaded with poster-less movies: the placeholder path renders with no
+                    // network or image loading, so the shell tests stay hermetic.
+                    latestMovies = IglooRailState.Loaded(testHomeMovies),
+                    onRetryLatestMovies = {},
+                    onMovieSelected = {},
                     onSwitchProfile = {},
                     onSignOut = { signOut = SignOutUiState(confirming = true) },
                     onSignOutConfirm = { signOut = SignOutUiState() },
@@ -85,7 +92,11 @@ class NavigationRailBehaviorTest {
         composeRule.waitForIdle()
     }
 
-    private fun contentStartCard() = composeRule.onNodeWithContentDescription(
+    /** The content anchor on Home: the first poster card of the first rail. */
+    private fun contentStartCard() = composeRule.onNodeWithTag("poster_card_1")
+
+    /** The content anchor on every other destination: the placeholder's Movies card. */
+    private fun placeholderStartCard() = composeRule.onNodeWithContentDescription(
         "Movies. API contract loaded. Poster rails and playback will plug into this shell.",
     )
 
@@ -122,7 +133,7 @@ class NavigationRailBehaviorTest {
         setShellContent()
 
         composeRule.onNodeWithContentDescription("Movies").performClick()
-        contentStartCard().assertIsFocused()
+        placeholderStartCard().assertIsFocused()
 
         pressBack()
 
@@ -223,7 +234,7 @@ class NavigationRailBehaviorTest {
     }
 }
 
-private tailrec fun Context.findActivity(): Activity = when (this) {
+internal tailrec fun Context.findActivity(): Activity = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> error("The compose test host context is not an Activity")

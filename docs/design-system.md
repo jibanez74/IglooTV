@@ -628,6 +628,9 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
+| `IglooPosterCard` | The 2:3 media card (§8.2): poster at `layout.posterWidth` / `layout.posterAspect`, radius `lg`, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year", `Role.Button`); a null or failed image falls back to the film glyph on `muted` with the text unchanged. |
+| `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons, minimal `IglooEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. |
+| `IglooEmpty` | §10 empty state, minimal variant only: faded icon + one announced line. The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
 
 The app deliberately does **not** use Material theming. `IglooTheme` is the only source of
 colors, type, and dimensions.
@@ -733,16 +736,18 @@ Build these **once** as shared composables. Three states, one recipe each.
 
 - **`IglooLoading`** — grid-matched skeletons. A movie grid skeleton renders the same column
   count and the same card aspect as the real grid, so **focus position does not jump** when
-  content arrives. Shimmer goes through `iglooTween`; at reduced motion it is a static block.
+  content arrives. Skeletons are **static blocks** — a shimmer is a loop, and nothing in the
+  product loops except §11.1.0's ambient drift (§7.2); that rule wins.
   Route-level loading uses one app-wide pending screen. It is deliberately *not* the launch splash
   (§11.1.-1): the splash is the boot moment and runs once. No route needs a pending screen yet, so
   none is built; the first one that does must add it rather than reach for the splash.
 - **`IglooEmpty`** — two variants. *Minimal*: large faded icon + one line ("No movies found in
   your library."). *Rich CTA*: icon orb, heading, description, and a focusable primary action.
-  Use the rich variant only when there is a real action to offer.
+  Use the rich variant only when there is a real action to offer. (Only the minimal variant is
+  built — §9.1.)
 - **`IglooError`** — inline card, `destructive @ 0.10` fill / `@ 0.25` border, a message, and a
   **focusable Retry** that re-runs the query. Retry must be reachable by d-pad without leaving
-  the screen.
+  the screen. This recipe is `IglooInlineError` (§9.1) — there is no separate composable.
 
 All three announce themselves to TalkBack when they replace content (§12).
 
@@ -1198,6 +1203,34 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-10 — Home gets its first rail: Recently Added Movies.**
+
+The §11.3 layout starts landing: the Home destination drops the placeholder hero and renders a
+scrollable column of rails — one rail today, `GET /api/movies/latest` behind it. Other
+destinations keep the placeholder pane until their screens land. New primitives in §9.1:
+`IglooMediaRail`, `IglooPosterCard`, `IglooEmpty` (minimal only).
+
+- **§10's shimmer sentence lost to §7.2's loop rule.** A shimmer is a loop; only §11.1.0's
+  ambient drift may loop. Skeletons are static blocks at full motion too, not only under
+  reduced motion. Revisit only by authoring an explicit carve-out in §7.2.
+- **Loading and empty states are focusable anchors.** The content pane must always own exactly
+  one focus target or the shell's initial focus, d-pad-right from the spine, and the Back model
+  all break. So the skeleton's first cell and the empty state's frame take the §6.1 treatment
+  and carry the pane's entry requester; the skeleton cell announces the load politely. When
+  content replaces a focused skeleton, the rail re-requests focus onto the entry card — a
+  disposed focused node otherwise drops focus on the floor.
+- **§6.3's per-rail restore, implemented:** the remembered card is per rail, hoisted above the
+  destination switch, and saved across process death. A rail rebuilt on re-entry is *created
+  scrolled to* the remembered card, because a focus requester can only land on a composed node.
+- **§8.3's bleed-past-the-safe-area is deferred**, and the rail's horizontal extremes trim the
+  focus glow — the same accepted ≤1.5:1 artifact §6.1 records for the spine. The §8.2 peek
+  affordance falls out of the pane arithmetic unchanged.
+- **The poster proxy is authenticated, and the image loader now knows it.** `/api/tmdb/images/…`
+  requires the device bearer like every other endpoint, so the app installs a Coil interceptor
+  that attaches it — **scoped to the active server origin only**, because avatars are arbitrary
+  absolute URLs and the token must never travel to a foreign host. Poster fetches bypass the
+  Ktor client, so an image 401 renders the placeholder and can never sign a profile out.
 
 **2026-08-09 — Switch profiles, hardened: the PIN gate stops trusting a cached flag.**
 

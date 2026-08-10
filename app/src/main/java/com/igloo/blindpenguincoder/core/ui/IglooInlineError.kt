@@ -27,6 +27,7 @@ fun IglooInlineError(
     actionText: String? = null,
     actionSemanticLabel: String = actionText.orEmpty(),
     onAction: (() -> Unit)? = null,
+    actionModifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
 
@@ -55,7 +56,9 @@ fun IglooInlineError(
                 text = actionText,
                 onClick = onAction,
                 variant = IglooButtonVariant.Ghost,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(actionModifier),
                 semanticLabel = actionSemanticLabel,
             )
         }

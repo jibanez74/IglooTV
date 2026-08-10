@@ -35,6 +35,7 @@ import com.igloo.blindpenguincoder.feature.auth.SignInScreen
 import com.igloo.blindpenguincoder.feature.auth.ServerSetupViewModel
 import com.igloo.blindpenguincoder.feature.auth.WelcomeScreen
 import com.igloo.blindpenguincoder.feature.boot.SplashScreen
+import com.igloo.blindpenguincoder.feature.home.HomeViewModel
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutViewModel
 import kotlinx.coroutines.delay
@@ -162,9 +163,19 @@ fun IglooRoot(container: IglooAppContainer) {
                         SignOutViewModel(sessionManager)
                     }
                     val signOut by signOutViewModel.uiState.collectAsStateWithLifecycle()
+                    // Keyed by user: the Activity-scoped store outlives a sign-out, and an
+                    // unkeyed instance would serve one profile's library to the next.
+                    val homeViewModel = viewModel(key = "home-${state.user.id}") {
+                        HomeViewModel(container.movieRepository, container.serverUrlProvider)
+                    }
+                    val latestMovies by homeViewModel.latestMovies.collectAsStateWithLifecycle()
                     IglooApp(
                         user = state.user,
                         signOut = signOut,
+                        latestMovies = latestMovies,
+                        onRetryLatestMovies = homeViewModel::retry,
+                        // The details screen plugs in here; cards stay full focus targets meanwhile.
+                        onMovieSelected = {},
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },
                         onSignOut = signOutViewModel::request,
                         onSignOutConfirm = signOutViewModel::confirm,

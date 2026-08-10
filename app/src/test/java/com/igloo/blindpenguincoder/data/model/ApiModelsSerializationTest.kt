@@ -87,6 +87,40 @@ class ApiModelsSerializationTest {
     }
 
     @Test
+    fun decodesLatestMoviesEnvelope() {
+        val body = """
+            {
+              "error": false,
+              "message": "latest movies",
+              "data": {
+                "movies": [
+                  {
+                    "id": 5,
+                    "title": "Heat",
+                    "poster_path": {"String": "/heat.jpg", "Valid": true},
+                    "year": {"Int64": 1995, "Valid": true}
+                  },
+                  {
+                    "id": 6,
+                    "title": "Untitled",
+                    "poster_path": {"String": "", "Valid": false},
+                    "year": {"Int64": 0, "Valid": false}
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val envelope = json.decodeFromString<ApiEnvelope<LatestMoviesData>>(body)
+
+        val movies = envelope.data!!.movies
+        assertEquals("/heat.jpg", movies[0].posterPath.orNull())
+        assertEquals(1995L, movies[0].year.orNull())
+        assertNull(movies[1].posterPath.orNull())
+        assertNull(movies[1].year.orNull())
+    }
+
+    @Test
     fun decodesMovieWatchProgressWithNulls() {
         val body = """
             {

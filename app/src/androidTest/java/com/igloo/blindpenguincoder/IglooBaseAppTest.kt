@@ -32,6 +32,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.UiScale
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
@@ -78,6 +79,9 @@ class IglooBaseAppTest {
                 IglooApp(
                     user = user,
                     signOut = signOut,
+                    latestMovies = IglooRailState.Loaded(testHomeMovies),
+                    onRetryLatestMovies = {},
+                    onMovieSelected = {},
                     onSwitchProfile = onSwitchProfile,
                     onSignOut = { signOut = SignOutUiState(confirming = true) },
                     onSignOutConfirm = {
@@ -106,7 +110,7 @@ class IglooBaseAppTest {
         setShellContent()
 
         composeRule.onNodeWithTag("navigation_rail").assertIsDisplayed()
-        composeRule.onNodeWithText("Your library, ready").assertIsDisplayed()
+        composeRule.onNodeWithText("Recently Added Movies").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Home").assertIsSelected()
         composeRule.onAllNodes(isSelected()).assertCountEquals(1)
         composeRule.onNodeWithContentDescription("Signed in as Jose").assertIsDisplayed()

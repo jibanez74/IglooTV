@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +54,10 @@ import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooConfirmDialog
+import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
+import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooScrim
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
@@ -63,6 +69,9 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 fun IglooApp(
     user: AuthUser,
     signOut: SignOutUiState,
+    latestMovies: IglooRailState<HomeMovie>,
+    onRetryLatestMovies: () -> Unit,
+    onMovieSelected: (HomeMovie) -> Unit,
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
     onSignOutConfirm: () -> Unit,
@@ -95,6 +104,9 @@ fun IglooApp(
     IglooShell(
         user = user,
         currentDestination = currentDestination,
+        latestMovies = latestMovies,
+        onRetryLatestMovies = onRetryLatestMovies,
+        onMovieSelected = onMovieSelected,
         // The rail stays open behind the dialog: the row that opened it must still be legible, so
         // the focus it gets back on cancel is not a surprise.
         railExpanded = railHasFocus || signOut.confirming,
@@ -135,6 +147,9 @@ fun IglooApp(
 private fun IglooShell(
     user: AuthUser,
     currentDestination: IglooDestination,
+    latestMovies: IglooRailState<HomeMovie>,
+    onRetryLatestMovies: () -> Unit,
+    onMovieSelected: (HomeMovie) -> Unit,
     railExpanded: Boolean,
     scrimmed: Boolean,
     onRailFocusChanged: (Boolean) -> Unit,
@@ -189,8 +204,11 @@ private fun IglooShell(
                     },
                 ),
         ) {
-            HomeContent(
+            ContentPane(
                 currentDestination = currentDestination,
+                latestMovies = latestMovies,
+                onRetryLatestMovies = onRetryLatestMovies,
+                onMovieSelected = onMovieSelected,
                 contentStartRequester = contentStartRequester,
                 navigationRequesters = navigationRequesters,
                 onDestinationSelected = onDestinationSelected,
@@ -217,10 +235,17 @@ private fun IglooShell(
                 navigationRequesters = navigationRequesters,
                 // Activating a destination hands focus to the content it just chose — that focus
                 // move is also what collapses the rail. Cards in the pane keep the plain callback,
-                // so activating one never steals focus from it.
+                // so activating one never steals focus from it. The synchronous request is only
+                // safe while the pane keeps its current tree: during this callback the requester
+                // still points at the outgoing branch's node, and focusing a node the swap is
+                // about to dispose hands focus to the platform's fallback (the first rail row)
+                // instead of the new anchor. Cross-branch, focus stays on the rail row — which
+                // survives — and ContentPane claims the anchor once the new branch is composed.
                 onDestinationSelected = { destination ->
+                    val sameBranch =
+                        paneBranchIsHome(destination) == paneBranchIsHome(currentDestination)
                     onDestinationSelected(destination)
-                    contentStartRequester.requestFocus()
+                    if (sameBranch) contentStartRequester.requestFocus()
                 },
                 onSwitchProfile = onSwitchProfile,
                 onSignOut = onSignOut,
@@ -251,14 +276,20 @@ private fun IglooShell(
 }
 
 @Composable
-private fun HomeContent(
+private fun ContentPane(
     currentDestination: IglooDestination,
+    latestMovies: IglooRailState<HomeMovie>,
+    onRetryLatestMovies: () -> Unit,
+    onMovieSelected: (HomeMovie) -> Unit,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     onDestinationSelected: (IglooDestination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
+    // Hoisted above the destination branch so a Home -> Movies -> Home round trip still knows
+    // the card to restore (section 6.3), and saveable so process death does not forget it.
+    var lastFocusedLatestMovieId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     Column(
         // Rail and content are each a traversal group, so TalkBack reads one block at a
@@ -294,6 +325,94 @@ private fun HomeContent(
             StatusBadge()
         }
 
+        when (currentDestination) {
+            IglooDestination.Home -> HomeRails(
+                latestMovies = latestMovies,
+                onRetryLatestMovies = onRetryLatestMovies,
+                onMovieSelected = onMovieSelected,
+                contentStartRequester = contentStartRequester,
+                navigationRequester = navigationRequesters.getValue(IglooDestination.Home),
+                lastFocusedLatestMovieId = lastFocusedLatestMovieId,
+                onLatestMovieFocused = { lastFocusedLatestMovieId = it },
+            )
+
+            else -> PlaceholderContent(
+                currentDestination = currentDestination,
+                contentStartRequester = contentStartRequester,
+                navigationRequesters = navigationRequesters,
+                onDestinationSelected = onDestinationSelected,
+            )
+        }
+    }
+
+    // The two branches put contentStartRequester on different nodes, so on a cross-branch
+    // switch the shell leaves focus on the rail row (see IglooShell) and the pane claims the
+    // anchor here, once the incoming branch's node exists. Deliberately keyed on the branch
+    // and not the destination: within the placeholder branch the anchor persists, and
+    // activating a card there must keep focus where the user put it.
+    var paneOnHome by remember { mutableStateOf(paneBranchIsHome(currentDestination)) }
+    LaunchedEffect(currentDestination) {
+        val onHome = paneBranchIsHome(currentDestination)
+        if (onHome != paneOnHome) {
+            paneOnHome = onHome
+            contentStartRequester.requestFocus()
+        }
+    }
+}
+
+/** Which of ContentPane's two trees a destination renders; the focus anchor moves with it. */
+private fun paneBranchIsHome(destination: IglooDestination): Boolean =
+    destination == IglooDestination.Home
+
+@Composable
+private fun HomeRails(
+    latestMovies: IglooRailState<HomeMovie>,
+    onRetryLatestMovies: () -> Unit,
+    onMovieSelected: (HomeMovie) -> Unit,
+    contentStartRequester: FocusRequester,
+    navigationRequester: FocusRequester,
+    lastFocusedLatestMovieId: Long?,
+    onLatestMovieFocused: (Long) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
+    ) {
+        IglooMediaRail(
+            title = "Recently Added Movies",
+            state = latestMovies,
+            itemKey = { it.id },
+            entryRequester = contentStartRequester,
+            leftFocusRequester = navigationRequester,
+            lastFocusedKey = lastFocusedLatestMovieId,
+            onItemFocused = onLatestMovieFocused,
+            loadingLabel = "Loading recently added movies",
+            emptyIcon = IglooIcons.Movies,
+            emptyText = "No movies in your library yet. Add a movies folder on the server and run a scan.",
+            onRetry = onRetryLatestMovies,
+        ) { movie, itemModifier ->
+            IglooPosterCard(
+                title = movie.title,
+                subtitle = movie.year?.toString(),
+                imageUrl = movie.posterUrl,
+                onClick = { onMovieSelected(movie) },
+                modifier = itemModifier.testTag("poster_card_${movie.id}"),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaceholderContent(
+    currentDestination: IglooDestination,
+    contentStartRequester: FocusRequester,
+    navigationRequesters: Map<IglooDestination, FocusRequester>,
+    onDestinationSelected: (IglooDestination) -> Unit,
+) {
+    val colors = IglooTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg)) {
         HeroPanel()
 
         IglooText(
