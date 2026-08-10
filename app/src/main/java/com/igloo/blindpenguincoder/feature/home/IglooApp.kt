@@ -98,9 +98,9 @@ fun IglooApp(
         // The rail stays open behind the dialog: the row that opened it must still be legible, so
         // the focus it gets back on cancel is not a surprise.
         railExpanded = railHasFocus || signOut.confirming,
-        // ...but it yields its scrim, because the dialog is drawing one. Two of them composite to
-        // 0.84, which section 3.1 does not authorize.
-        scrimmed = railHasFocus && !signOut.confirming,
+        // Keep the hidden animation state at 0.60 so cancellation restores the rail scrim in the
+        // same frame; IglooShell unmounts its actual draw node for the modal's whole lifetime.
+        scrimmed = railHasFocus || signOut.confirming,
         onRailFocusChanged = { hasFocus ->
             if (!hasFocus) railOpenedByBack = false
             railHasFocus = hasFocus
@@ -203,7 +203,11 @@ private fun IglooShell(
                         bottom = layout.safeAreaVertical,
                     ),
             )
-            IglooScrim(alpha = scrimAlpha)
+            // The modal owns the only scrim while mounted. Removing this node immediately avoids
+            // compositing the rail's animated 0.60 layer under the dialog reveal.
+            if (!signOut.confirming) {
+                IglooScrim(alpha = scrimAlpha)
+            }
             NavigationRail(
                 user = user,
                 expanded = railExpanded,
@@ -352,6 +356,7 @@ private fun HeroPanel() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag("hero_panel")
             .iglooSurface(radius = IglooTheme.radius.xl, fill = colors.card)
             .padding(IglooTheme.spacing.xl),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),

@@ -100,14 +100,30 @@ class ProfileRepository(
         if (activeProfileId == null) setCredential(null)
     }
 
-    suspend fun remove(userId: Long) = mutex.withLock {
+    suspend fun remove(userId: Long): Unit = mutex.withLock {
+        removeLocked(userId)
+    }
+
+    /**
+     * Removes the profile that initiated sign-out and returns the credential that belonged to it.
+     * The returned token is used only as an explicit bearer for the best-effort server revoke.
+     */
+    internal suspend fun removeForSignOut(profileId: Long): ActiveCredential? = mutex.withLock {
+        removeLocked(profileId)
+    }
+
+    private suspend fun removeLocked(profileId: Long): ActiveCredential? {
+        var removed: ActiveCredential? = null
         store.update { vault ->
+            val profile = vault.profiles.firstOrNull { it.userId == profileId }
+            removed = profile?.let { ActiveCredential(it.userId, it.token) }
             vault.copy(
-                activeUserId = vault.activeUserId?.takeIf { it != userId },
-                profiles = vault.profiles.filterNot { it.userId == userId },
+                activeUserId = vault.activeUserId?.takeIf { it != profileId },
+                profiles = vault.profiles.filterNot { it.userId == profileId },
             )
         }
-        if (activeProfileId == userId) setCredential(null)
+        if (activeProfileId == profileId) setCredential(null)
+        return removed
     }
 
     /** Stops acting as the active profile without forgetting it. */

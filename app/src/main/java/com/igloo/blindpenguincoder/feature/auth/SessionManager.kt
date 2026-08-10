@@ -10,7 +10,9 @@ import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.model.ProfileSummary
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.ProfileRepository
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /** Outcome of exchanging the active device token for the signed-in user. */
 sealed interface SignInResult {
@@ -53,21 +56,17 @@ class SessionManager(
     init {
         scope.launch {
             authEvents.unauthorized.collect { profileId ->
-                // A slow request from a profile that is no longer active must not sign out
-                // whoever is watching now.
-                if (profileId != null && profileId == profiles.activeProfileId) {
-                    onActiveSessionRevoked()
-                }
+                profileId?.let { handleSessionRevoked(it) }
             }
         }
     }
 
     /** Called once at launch: restores the stored server and picks up where sign-in left off. */
-    suspend fun restore() {
+    suspend fun restore() = transitionMutex.withLock {
         val storedUrl = settings.serverUrl.first()
         if (storedUrl == null) {
             _state.value = AppAuthState.NeedsServer(firstRun = true)
-            return
+            return@withLock
         }
         val storedAddress = ServerAddress.fromApiBaseUrl(storedUrl)
         if (storedAddress == null) {
@@ -75,7 +74,7 @@ class SessionManager(
             profiles.clearAll()
             serverUrl.set(null)
             _state.value = AppAuthState.NeedsServer()
-            return
+            return@withLock
         }
         serverUrl.set(storedAddress)
 
@@ -84,8 +83,11 @@ class SessionManager(
             // A token minted but never bound to a user: finishing it is always right,
             // pairing again would mint a second device for one person.
             stored.hasPendingToken -> {
-                profiles.activatePending()
-                finishOrGate(revokedName = null)
+                if (profiles.activatePending()) {
+                    finishOrGateLocked(revokedName = null, expectedProfileId = null)
+                } else {
+                    gateLocked()
+                }
             }
 
             stored.profiles.isEmpty() -> _state.value = AppAuthState.NeedsLogin(storedAddress)
@@ -95,11 +97,14 @@ class SessionManager(
             stored.profiles.size == 1 -> {
                 val only = stored.profiles.single()
                 if (!profiles.activate(only.userId)) {
-                    gate()
+                    gateLocked()
                 } else if (only.hasPin) {
                     _state.value = AppAuthState.NeedsPin(storedAddress, only)
                 } else {
-                    finishOrGate(revokedName = only.name)
+                    finishOrGateLocked(
+                        revokedName = only.name,
+                        expectedProfileId = only.userId,
+                    )
                 }
             }
 
@@ -116,7 +121,11 @@ class SessionManager(
      * [AppAuthState.Authenticated]. Shared by every sign-in path, since pairing, password
      * login, profile selection and revalidation all finish the same way.
      */
-    suspend fun completeSignIn(): SignInResult =
+    suspend fun completeSignIn(): SignInResult = transitionMutex.withLock {
+        completeSignInLocked(expectedProfileId = profiles.activeProfileId)
+    }
+
+    private suspend fun completeSignInLocked(expectedProfileId: Long?): SignInResult =
         when (val result = authRepository.fetchCurrentUser()) {
             is ApiResult.Success -> {
                 val user = result.value
@@ -130,7 +139,7 @@ class SessionManager(
                 SignInResult.Authenticated
             }
             is ApiResult.Failure -> if (result.error == AppError.Unauthorized) {
-                forgetActiveCredential()
+                forgetExpectedCredentialLocked(expectedProfileId)
                 SignInResult.Revoked
             } else {
                 SignInResult.Failed(result.error)
@@ -138,80 +147,98 @@ class SessionManager(
         }
 
     /** Profile picker: sign in as [profile], which has no PIN to ask for. */
-    suspend fun signInAs(profile: ProfileSummary): SignInResult {
+    suspend fun signInAs(profile: ProfileSummary): SignInResult = transitionMutex.withLock {
         if (!profiles.activate(profile.userId)) {
-            gate()
-            return SignInResult.Revoked
+            gateLocked()
+            return@withLock SignInResult.Revoked
         }
-        val result = completeSignIn()
+        val result = completeSignInLocked(expectedProfileId = profile.userId)
         // A transient failure keeps the picker up so the tile can simply be retried.
-        if (result == SignInResult.Revoked) gate(notice = revokedNotice(profile.name))
-        return result
+        if (result == SignInResult.Revoked) {
+            gateLocked(notice = revokedNotice(profile.name))
+        }
+        result
     }
 
     /** Profile picker: [profile] is PIN-protected, so activate it and ask. */
-    suspend fun requirePin(profile: ProfileSummary) {
-        val address = serverUrl.current.value ?: return
+    suspend fun requirePin(profile: ProfileSummary) = transitionMutex.withLock {
+        val address = serverUrl.current.value ?: return@withLock
         if (profiles.activate(profile.userId)) {
             _state.value = AppAuthState.NeedsPin(address, profile)
         } else {
-            gate()
+            gateLocked()
         }
     }
 
     /** The server rejected the credential of whoever is signed in right now. */
-    suspend fun onActiveSessionRevoked() = transitionMutex.withLock {
-        val current = _state.value
-        if (current !is AppAuthState.Authenticated && current !is AppAuthState.NeedsPin) {
-            return@withLock
+    suspend fun onActiveSessionRevoked() {
+        val expectedProfileId = when (val current = _state.value) {
+            is AppAuthState.Authenticated -> current.user.id
+            is AppAuthState.NeedsPin -> current.profile.userId
+            else -> return
         }
-        val name = when (current) {
-            is AppAuthState.Authenticated -> current.user.name
-            is AppAuthState.NeedsPin -> current.profile.name
-        }
-        forgetActiveCredential()
-        gate(notice = name?.let(::revokedNotice))
+        handleSessionRevoked(expectedProfileId)
     }
 
+    private suspend fun handleSessionRevoked(expectedProfileId: Long) =
+        transitionMutex.withLock {
+            val current = _state.value
+            val currentProfileId = when (current) {
+                is AppAuthState.Authenticated -> current.user.id
+                is AppAuthState.NeedsPin -> current.profile.userId
+                else -> return@withLock
+            }
+            // A slow 401 from an earlier profile must never remove whoever is active now.
+            if (currentProfileId != expectedProfileId) return@withLock
+            val activeProfileId = profiles.activeProfileId
+            if (activeProfileId != null && activeProfileId != expectedProfileId) return@withLock
+
+            val name = when (current) {
+                is AppAuthState.Authenticated -> current.user.name
+                is AppAuthState.NeedsPin -> current.profile.name
+            }
+            if (activeProfileId == expectedProfileId) profiles.remove(expectedProfileId)
+            gateLocked(notice = revokedNotice(name))
+        }
+
     /** Re-checks the session after the app comes back to the foreground. */
-    suspend fun revalidateActive() {
-        if (_state.value !is AppAuthState.Authenticated) return
-        if (elapsed() - lastValidatedAt < REVALIDATE_INTERVAL_MILLIS) return
-        val name = (_state.value as AppAuthState.Authenticated).user.name
-        when (completeSignIn()) {
+    suspend fun revalidateActive() = transitionMutex.withLock {
+        val current = _state.value as? AppAuthState.Authenticated ?: return@withLock
+        if (elapsed() - lastValidatedAt < REVALIDATE_INTERVAL_MILLIS) return@withLock
+        when (completeSignInLocked(expectedProfileId = current.user.id)) {
             SignInResult.Authenticated -> Unit
-            SignInResult.Revoked -> gate(notice = revokedNotice(name))
+            SignInResult.Revoked -> gateLocked(notice = revokedNotice(current.user.name))
             // An offline TV keeps watching; only an outright rejection ends the session.
             is SignInResult.Failed -> Unit
         }
     }
 
     /** Pair or log in an additional user without disturbing the profiles already here. */
-    suspend fun addProfile() {
-        val address = serverUrl.current.value ?: return
+    suspend fun addProfile() = transitionMutex.withLock {
+        val address = serverUrl.current.value ?: return@withLock
         profiles.clearPending()
         profiles.deactivate()
         _state.value = AppAuthState.NeedsLogin(address, canCancel = true)
     }
 
     /** Back out of "add a user" without keeping a half-finished pairing. */
-    suspend fun cancelAddProfile() {
+    suspend fun cancelAddProfile() = transitionMutex.withLock {
         profiles.clearPending()
         profiles.deactivate()
-        gate()
+        gateLocked()
     }
 
     /** Hand the TV to someone else; this profile stays paired. */
-    suspend fun switchProfile() {
+    suspend fun switchProfile() = transitionMutex.withLock {
         profiles.deactivate()
-        gate()
+        gateLocked()
     }
 
     /**
      * Sign out for real: revoke this device token server-side and drop the profile from this TV.
      *
-     * Only the profile signing out is affected — the request carries its token and no other, and
-     * [forgetActiveCredential] removes that one row. Everyone else on this TV keeps their token.
+     * Only the profile signing out is affected — the request carries its captured token and no
+     * other. Everyone else on this TV keeps their token.
      *
      * Under [transitionMutex] like every other transition, so a queued revocation cannot interleave
      * with it. The local half is unconditional: a revoke that could not be delivered must not leave
@@ -219,16 +246,43 @@ class SessionManager(
      * server did not hear. A 401 is *success* — the token it would have revoked is already gone,
      * which is exactly what this call wanted.
      */
-    suspend fun logout() = transitionMutex.withLock {
-        // Only the shell can ask, and only while it is up: a request arriving after the session
-        // has already ended must not publish a second gate over the first.
-        if (_state.value !is AppAuthState.Authenticated) return@withLock
-        val revoked = when (val result = authRepository.logout()) {
-            is ApiResult.Success -> true
-            is ApiResult.Failure -> result.error == AppError.Unauthorized
+    suspend fun logout() {
+        val expectedProfileId =
+            (_state.value as? AppAuthState.Authenticated)?.user?.id ?: return
+
+        // This child belongs to the application, not the Activity or ViewModel waiting below.
+        // UNDISPATCHED makes an uncontended local cleanup begin before another UI transition can
+        // race ahead; join remains cancellable without propagating that cancellation to the work.
+        val operation = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            transitionMutex.withLock {
+                logoutLocked(expectedProfileId)
+            }
         }
-        forgetActiveCredential()
-        gate(notice = if (revoked) null else UNDELIVERED_REVOKE_NOTICE)
+        operation.join()
+    }
+
+    private suspend fun logoutLocked(expectedProfileId: Long) {
+        val current = _state.value as? AppAuthState.Authenticated ?: return
+        if (current.user.id != expectedProfileId) return
+        val activeProfileId = profiles.activeProfileId
+        if (activeProfileId != null && activeProfileId != expectedProfileId) return
+
+        // Persistence is the security boundary. It finishes even if the waiting screen is torn
+        // down, and it happens before a network request that may take the full timeout.
+        val credential = withContext(NonCancellable) {
+            profiles.removeForSignOut(expectedProfileId)
+        }
+        val revoked = if (credential == null) {
+            true
+        } else {
+            when (
+                val result = authRepository.logout(bearerOverride = credential.token)
+            ) {
+                is ApiResult.Success -> true
+                is ApiResult.Failure -> result.error == AppError.Unauthorized
+            }
+        }
+        gateLocked(notice = if (revoked) null else UNDELIVERED_REVOKE_NOTICE)
     }
 
     /** Server setup finished successfully; move on to sign-in. */
@@ -241,22 +295,26 @@ class SessionManager(
         _state.value = AppAuthState.NeedsServer(serverUrl.current.value?.origin.orEmpty())
     }
 
-    private suspend fun finishOrGate(revokedName: String?) {
-        when (val result = completeSignIn()) {
+    private suspend fun finishOrGateLocked(revokedName: String?, expectedProfileId: Long?) {
+        when (val result = completeSignInLocked(expectedProfileId)) {
             SignInResult.Authenticated -> Unit
-            SignInResult.Revoked -> gate(notice = revokedName?.let(::revokedNotice))
+            SignInResult.Revoked -> gateLocked(notice = revokedName?.let(::revokedNotice))
             // The token survives, so the gate offers a retry rather than pairing again.
-            is SignInResult.Failed -> gate(restoreError = result.error)
+            is SignInResult.Failed -> gateLocked(restoreError = result.error)
         }
     }
 
-    private suspend fun forgetActiveCredential() {
-        val activeId = profiles.activeProfileId
-        if (activeId != null) profiles.remove(activeId) else profiles.clearPending()
+    private suspend fun forgetExpectedCredentialLocked(expectedProfileId: Long?) {
+        if (profiles.activeProfileId != expectedProfileId) return
+        if (expectedProfileId == null) {
+            profiles.clearPending()
+        } else {
+            profiles.remove(expectedProfileId)
+        }
     }
 
     /** Publishes the picker, or the sign-in screen when no profile is left to pick. */
-    private suspend fun gate(notice: String? = null, restoreError: AppError? = null) {
+    private suspend fun gateLocked(notice: String? = null, restoreError: AppError? = null) {
         val address = serverUrl.current.value
         if (address == null) {
             _state.value = AppAuthState.NeedsServer()

@@ -64,11 +64,11 @@ class NavigationRailBehaviorTest {
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
 
-    private fun setShellContent() {
+    private fun setShellContent(initialSignOut: SignOutUiState = SignOutUiState()) {
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
-            var signOut by remember { mutableStateOf(SignOutUiState()) }
+            var signOut by remember { mutableStateOf(initialSignOut) }
             IglooTheme {
                 collapsedWidth = IglooTheme.layout.navRailCollapsedWidth
                 expandedWidth = IglooTheme.layout.navRailExpandedWidth
@@ -205,6 +205,20 @@ class NavigationRailBehaviorTest {
             checkNotNull(hostActivity).let { !it.isFinishing && !it.isDestroyed },
         )
         // The rail stays open behind the dialog, so cancelling lands the user back in it.
+        rail().assertWidthIsEqualTo(expandedWidth)
+    }
+
+    @Test
+    fun backWhileSignOutIsPendingClosesTheModalAndRestoresFocus() {
+        setShellContent(
+            initialSignOut = SignOutUiState(confirming = true, pending = true),
+        )
+        composeRule.onNodeWithContentDescription("Signing out…").assertIsFocused()
+
+        pressBack()
+
+        composeRule.onAllNodesWithText("Sign out of Igloo?").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("Sign out").assertIsFocused()
         rail().assertWidthIsEqualTo(expandedWidth)
     }
 }

@@ -163,6 +163,39 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun `sign-out removal returns the requested profile token and preserves the active profile`() =
+        runTest {
+            repository.setPending("igd_one")
+            repository.commitSignIn(user(id = 1, name = "Jose"))
+            repository.setPending("igd_two")
+            repository.commitSignIn(user(id = 2, name = "Ana"))
+
+            val removed = repository.removeForSignOut(1)
+
+            assertEquals(ActiveCredential(1, "igd_one"), removed)
+            assertEquals(listOf("Ana"), store.vault.profiles.map { it.name })
+            assertEquals(2L, store.vault.activeUserId)
+            assertEquals(ActiveCredential(2, "igd_two"), credentials.current())
+            assertEquals(2L, repository.activeProfileId)
+        }
+
+    @Test
+    fun `sign-out removal clears only the requested active credential`() = runTest {
+        repository.setPending("igd_one")
+        repository.commitSignIn(user(id = 1, name = "Jose"))
+        repository.setPending("igd_two")
+        repository.commitSignIn(user(id = 2, name = "Ana"))
+
+        val removed = repository.removeForSignOut(2)
+
+        assertEquals(ActiveCredential(2, "igd_two"), removed)
+        assertEquals(listOf("Jose"), store.vault.profiles.map { it.name })
+        assertNull(store.vault.activeUserId)
+        assertNull(credentials.current())
+        assertNull(repository.activeProfileId)
+    }
+
+    @Test
     fun `deactivating keeps the profile paired`() = runTest {
         repository.setPending("igd_one")
         repository.commitSignIn(user(id = 1))

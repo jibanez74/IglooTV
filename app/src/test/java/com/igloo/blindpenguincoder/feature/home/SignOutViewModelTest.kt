@@ -1,5 +1,9 @@
 package com.igloo.blindpenguincoder.feature.home
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
@@ -225,5 +229,44 @@ class SignOutViewModelTest {
         assertEquals(1, fixture.logoutRequests)
         assertTrue(fixture.sessionManager.state.value is AppAuthState.ChooseProfile)
         assertNull(fixture.http.credentials.current())
+    }
+
+    @Test
+    fun `clearing the ViewModel stops waiting without cancelling sign-out cleanup`() = runTest {
+        val revokeStarted = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val fixture = fixture {
+            revokeStarted.complete(Unit)
+            release.await()
+            accepted()
+        }
+        val store = ViewModelStore()
+        val owner = object : ViewModelStoreOwner {
+            override val viewModelStore: ViewModelStore = store
+        }
+        val viewModel = ViewModelProvider(
+            owner,
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                    SignOutViewModel(fixture.sessionManager) as T
+            },
+        )[SignOutViewModel::class.java]
+        viewModel.request()
+
+        viewModel.confirm()
+        revokeStarted.await()
+
+        // Local persistence has already crossed the security boundary before the delayed request.
+        assertEquals(listOf("Ana"), fixture.http.profileStore.vault.profiles.map { it.name })
+        assertNull(fixture.http.credentials.current())
+
+        store.clear()
+        release.complete(Unit)
+        yield()
+
+        assertEquals(1, fixture.logoutRequests)
+        val state = fixture.sessionManager.state.value as AppAuthState.ChooseProfile
+        assertEquals(listOf("Ana"), state.profiles.map { it.name })
     }
 }

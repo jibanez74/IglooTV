@@ -19,10 +19,9 @@ data class SignOutUiState(
 /**
  * Owns the sign-out confirmation (docs/design-system.md section 9.3).
  *
- * A ViewModel rather than shell state for one reason beyond the layering rule: the revoke runs in
- * [viewModelScope], which outlives the `Authenticated` arm of the composition. A session that ends
- * from elsewhere mid-request — another 401 arriving — would otherwise cancel the coroutine partway
- * and leave the credential on the TV, which is precisely the outcome signing out exists to prevent.
+ * A ViewModel rather than shell state keeps duplicate confirmation and pending behavior stable
+ * across recomposition. [SessionManager.logout] moves the security-sensitive work to application
+ * scope, so clearing this ViewModel only stops waiting for that work; it cannot retain a credential.
  */
 class SignOutViewModel(
     private val sessionManager: SessionManager,
@@ -47,7 +46,7 @@ class SignOutViewModel(
             try {
                 sessionManager.logout()
             } finally {
-                // Reset even if the scope is cancelled: this instance is reused when the same
+                // Reset even if the scope is cancelled: this instance can be reused when the same
                 // Activity signs back in, and a stale flag would resurrect the dialog.
                 _uiState.value = SignOutUiState()
             }

@@ -13,7 +13,12 @@ import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
@@ -35,10 +40,22 @@ class SessionManagerTest {
         storedServerUrl: String?,
         scope: CoroutineScope,
         handler: MockRequestHandler,
+    ): Fixture = fixture(
+        storedServerUrl = storedServerUrl,
+        scope = scope,
+        engineDispatcher = null,
+        handler = handler,
+    )
+
+    private suspend fun fixture(
+        storedServerUrl: String?,
+        scope: CoroutineScope,
+        engineDispatcher: CoroutineDispatcher?,
+        handler: MockRequestHandler,
     ): Fixture {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
         lateinit var fixture: Fixture
-        val http = TestHttp { request ->
+        val http = TestHttp(engineDispatcher = engineDispatcher) { request ->
             fixture.requestCount += 1
             handler(request)
         }
@@ -261,15 +278,21 @@ class SessionManagerTest {
      */
     private suspend fun signedInWithASecondProfile(
         scope: CoroutineScope,
+        engineDispatcher: CoroutineDispatcher? = null,
         logout: MockRequestHandler,
     ): Fixture {
-        val fixture = fixture(TEST_SERVER, scope) { request ->
-            if (request.url.encodedPath.endsWith("/logout")) {
-                logout(request)
-            } else {
-                jsonResponse(authUserJson())
-            }
-        }
+        val fixture = fixture(
+            storedServerUrl = TEST_SERVER,
+            scope = scope,
+            handler = { request ->
+                if (request.url.encodedPath.endsWith("/logout")) {
+                    logout(request)
+                } else {
+                    jsonResponse(authUserJson())
+                }
+            },
+            engineDispatcher = engineDispatcher,
+        )
         fixture.http.seedVault(
             testStoredProfile(userId = 1, name = "Jose"),
             testStoredProfile(userId = 2, name = "Ana"),
@@ -342,6 +365,128 @@ class SessionManagerTest {
         // request, whose 401 would then sign that innocent profile out.
         assertNull(fixture.http.credentials.current())
         assertNull(fixture.http.profiles.activeProfileId)
+    }
+
+    @Test
+    fun `signing out removes the local credential before a delayed revoke finishes`() = runTest {
+        val revokeStarted = CompletableDeferred<String?>()
+        val releaseRevoke = CompletableDeferred<Unit>()
+        val fixture = signedInWithASecondProfile(
+            scope = backgroundScope,
+            engineDispatcher = Dispatchers.Unconfined,
+        ) { request ->
+            revokeStarted.complete(request.headers[HttpHeaders.Authorization])
+            releaseRevoke.await()
+            logoutAccepted()
+        }
+
+        val waiter = launch { fixture.manager.logout() }
+        assertEquals("Bearer igd_1", revokeStarted.await())
+
+        assertEquals(listOf("Ana"), fixture.http.profileStore.vault.profiles.map { it.name })
+        assertNull(fixture.http.credentials.current())
+        assertNull(fixture.http.profiles.activeProfileId)
+        // The request is still pending, so the modal may keep reporting progress even though the
+        // security boundary has already completed locally.
+        assertTrue(fixture.manager.state.value is AppAuthState.Authenticated)
+
+        releaseRevoke.complete(Unit)
+        waiter.join()
+        assertTrue(fixture.manager.state.value is AppAuthState.ChooseProfile)
+    }
+
+    @Test
+    fun `cancelling a logout waiter cannot retain the credential or cancel cleanup`() = runTest {
+        val revokeStarted = CompletableDeferred<Unit>()
+        val releaseRevoke = CompletableDeferred<Unit>()
+        val fixture = signedInWithASecondProfile(
+            scope = backgroundScope,
+            engineDispatcher = Dispatchers.Unconfined,
+        ) {
+            revokeStarted.complete(Unit)
+            releaseRevoke.await()
+            logoutAccepted()
+        }
+
+        val waiter = launch { fixture.manager.logout() }
+        revokeStarted.await()
+        waiter.cancelAndJoin()
+
+        assertEquals(listOf("Ana"), fixture.http.profileStore.vault.profiles.map { it.name })
+        assertNull(fixture.http.credentials.current())
+
+        releaseRevoke.complete(Unit)
+        yield()
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
+        assertEquals(listOf("Ana"), state.profiles.map { it.name })
+    }
+
+    @Test
+    fun `a queued switch and sign-in cannot redirect sign-out to the next profile`() = runTest {
+        val revokeStarted = CompletableDeferred<String?>()
+        val releaseRevoke = CompletableDeferred<Unit>()
+        val fixture = fixture(
+            storedServerUrl = TEST_SERVER,
+            scope = backgroundScope,
+            engineDispatcher = Dispatchers.Unconfined,
+            handler = { request ->
+                val bearer = request.headers[HttpHeaders.Authorization]
+                when {
+                    request.url.encodedPath.endsWith("/logout") -> {
+                        revokeStarted.complete(bearer)
+                        releaseRevoke.await()
+                        logoutAccepted()
+                    }
+                    bearer == "Bearer igd_2" -> jsonResponse(authUserJson(id = 2, name = "Ana"))
+                    else -> jsonResponse(authUserJson(id = 1, name = "Jose"))
+                }
+            },
+        )
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose", token = "igd_1"),
+            testStoredProfile(userId = 2, name = "Ana", token = "igd_2"),
+        )
+        fixture.manager.restore()
+        val picker = fixture.manager.state.value as AppAuthState.ChooseProfile
+        val jose = picker.profiles.first { it.userId == 1L }
+        val ana = picker.profiles.first { it.userId == 2L }
+        fixture.manager.signInAs(jose)
+
+        val logout = launch { fixture.manager.logout() }
+        assertEquals("Bearer igd_1", revokeStarted.await())
+        val switch = launch { fixture.manager.switchProfile() }
+        val signIn = async { fixture.manager.signInAs(ana) }
+        yield()
+
+        assertFalse(switch.isCompleted)
+        assertFalse(signIn.isCompleted)
+        assertEquals(listOf("Ana"), fixture.http.profileStore.vault.profiles.map { it.name })
+
+        releaseRevoke.complete(Unit)
+        logout.join()
+        switch.join()
+        assertEquals(SignInResult.Authenticated, signIn.await())
+        val state = fixture.manager.state.value as AppAuthState.Authenticated
+        assertEquals(2L, state.user.id)
+        assertEquals(listOf("Ana"), fixture.http.profileStore.vault.profiles.map { it.name })
+        assertEquals("igd_2", fixture.http.credentials.current()?.token)
+    }
+
+    @Test
+    fun `a missing initiating profile skips revoke but still exits authenticated state`() = runTest {
+        val fixture = signedInWithASecondProfile(backgroundScope) { logoutAccepted() }
+        fixture.http.profileStore.vault = fixture.http.profileStore.vault.copy(
+            profiles = fixture.http.profileStore.vault.profiles.filterNot { it.userId == 1L },
+        )
+        val beforeLogout = fixture.requestCount
+
+        fixture.manager.logout()
+
+        assertEquals(beforeLogout, fixture.requestCount)
+        assertNull(fixture.http.credentials.current())
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
+        assertEquals(listOf("Ana"), state.profiles.map { it.name })
+        assertNull(state.notice)
     }
 
     @Test

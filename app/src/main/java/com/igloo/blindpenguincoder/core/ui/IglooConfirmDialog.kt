@@ -75,11 +75,13 @@ fun IglooConfirmDialog(
     // One overlay reveal at `standard` (section 7.2); no exit animation, so the focus ring the
     // host restores is never drawn under a fading scrim. The focus requests below do not wait
     // on it.
+    var visible by remember { mutableStateOf(false) }
     val reveal by animateFloatAsState(
-        targetValue = 1f,
+        targetValue = if (visible) 1f else 0f,
         animationSpec = iglooTween(IglooMotion.STANDARD_MS),
         label = "dialogReveal",
     )
+    LaunchedEffect(Unit) { visible = true }
 
     IglooScrim(
         modifier = modifier.graphicsLayer { alpha = reveal },
