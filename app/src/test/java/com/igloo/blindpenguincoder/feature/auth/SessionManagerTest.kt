@@ -120,14 +120,109 @@ class SessionManagerTest {
 
     @Test
     fun `a single profile with a PIN stops at the PIN gate`() = runTest {
-        val fixture = fixture(TEST_SERVER, backgroundScope, noRequests())
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            jsonResponse(authUserJson(hasPin = true))
+        }
         fixture.http.seedVault(testStoredProfile(hasPin = true))
 
         fixture.manager.restore()
 
         val state = fixture.manager.state.value as AppAuthState.NeedsPin
         assertEquals("Jose", state.profile.name)
-        assertEquals(0, fixture.requestCount)
+        assertTrue(state.profile.hasPin)
+    }
+
+    @Test
+    fun `a PIN set elsewhere since the last sign-in is still asked for`() = runTest {
+        // The vault says no PIN because that was true when this TV last signed Jose in.
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            jsonResponse(authUserJson(hasPin = true))
+        }
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose", hasPin = false),
+            testStoredProfile(userId = 2, name = "Ana"),
+        )
+        fixture.manager.restore()
+        val picker = fixture.manager.state.value as AppAuthState.ChooseProfile
+
+        val result = fixture.manager.signInAs(picker.profiles.first { it.userId == 1L })
+
+        assertEquals(SignInResult.PinRequired, result)
+        val state = fixture.manager.state.value as AppAuthState.NeedsPin
+        assertEquals("Jose", state.profile.name)
+    }
+
+    @Test
+    fun `nothing is committed while the PIN gate is open`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            jsonResponse(authUserJson(hasPin = true))
+        }
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose", hasPin = false),
+            testStoredProfile(userId = 2, name = "Ana"),
+            activeUserId = 2,
+        )
+        fixture.manager.restore()
+        val picker = fixture.manager.state.value as AppAuthState.ChooseProfile
+
+        fixture.manager.signInAs(picker.profiles.first { it.userId == 1L })
+
+        // A kill at the keypad must come back to the gate, not into Jose's library.
+        assertEquals(2L, fixture.http.profileStore.vault.activeUserId)
+        assertFalse(fixture.http.profileStore.vault.profiles.single { it.userId == 1L }.hasPin)
+    }
+
+    @Test
+    fun `a PIN removed elsewhere is not asked for`() = runTest {
+        // The mirror case: the keypad would be a dead end, since the server answers a verify
+        // against a user with no PIN with 400 rather than letting anyone through.
+        val fixture = fixture(TEST_SERVER, backgroundScope) { jsonResponse(authUserJson()) }
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose", hasPin = true),
+            testStoredProfile(userId = 2, name = "Ana"),
+        )
+        fixture.manager.restore()
+        val picker = fixture.manager.state.value as AppAuthState.ChooseProfile
+
+        val result = fixture.manager.signInAs(picker.profiles.first { it.userId == 1L })
+
+        assertEquals(SignInResult.Authenticated, result)
+        assertTrue(fixture.manager.state.value is AppAuthState.Authenticated)
+        // The stale badge heals on the way through.
+        assertFalse(fixture.http.profileStore.vault.profiles.single { it.userId == 1L }.hasPin)
+    }
+
+    @Test
+    fun `the sign-in behind a verified PIN does not ask for it again`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            jsonResponse(authUserJson(hasPin = true))
+        }
+        fixture.http.seedVault(testStoredProfile(hasPin = true))
+        fixture.manager.restore()
+        assertTrue(fixture.manager.state.value is AppAuthState.NeedsPin)
+
+        // What PinEntryViewModel calls once the server has accepted the digits.
+        val result = fixture.manager.completeSignIn()
+
+        assertEquals(SignInResult.Authenticated, result)
+        assertTrue(fixture.manager.state.value is AppAuthState.Authenticated)
+    }
+
+    @Test
+    fun `a PIN set mid-session does not eject whoever is watching`() = runTest {
+        var hasPin = false
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            jsonResponse(authUserJson(hasPin = hasPin))
+        }
+        fixture.http.seedVault(testStoredProfile())
+        fixture.manager.restore()
+        assertTrue(fixture.manager.state.value is AppAuthState.Authenticated)
+
+        hasPin = true
+        fixture.elapsed += 10 * 60 * 1000L
+        fixture.manager.revalidateActive()
+
+        assertTrue(fixture.manager.state.value is AppAuthState.Authenticated)
     }
 
     @Test
@@ -273,6 +368,79 @@ class SessionManagerTest {
         assertEquals(1, fixture.http.profileStore.vault.profiles.size)
         assertNull(fixture.http.profiles.activeProfileId)
         assertTrue(fixture.manager.state.value is AppAuthState.ChooseProfile)
+    }
+
+    @Test
+    fun `switching profile focuses the profile handing the remote over`() = runTest {
+        // The last-used tile, per docs/design-system.md section 11.1.1 — which right after a
+        // switch is whoever just stepped away, so picking someone else is one press either way.
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            jsonResponse(authUserJson(id = 1, name = "Jose"))
+        }
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose", lastUsedAtEpochMillis = 10),
+            testStoredProfile(userId = 2, name = "Ana", lastUsedAtEpochMillis = 20),
+            activeUserId = 2,
+        )
+        fixture.manager.restore()
+        fixture.manager.signInAs(
+            (fixture.manager.state.value as AppAuthState.ChooseProfile)
+                .profiles.first { it.userId == 1L },
+        )
+
+        fixture.manager.switchProfile()
+
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
+        assertEquals(1L, state.initialFocusUserId)
+        assertEquals(setOf("Jose", "Ana"), state.profiles.map { it.name }.toSet())
+    }
+
+    @Test
+    fun `cancelling a switch waiter cannot strand the session without a credential`() = runTest {
+        // The credential is dropped before the gate is published. An Activity recreated in
+        // between must not leave the app authenticated with nothing to authenticate with — the
+        // next 401 would take the profile off this TV, which a switch must never do.
+        val revalidateStarted = CompletableDeferred<Unit>()
+        val releaseRevalidate = CompletableDeferred<Unit>()
+        var holdTheMutex = false
+        val fixture = fixture(
+            storedServerUrl = TEST_SERVER,
+            scope = backgroundScope,
+            engineDispatcher = Dispatchers.Unconfined,
+        ) {
+            if (holdTheMutex) {
+                revalidateStarted.complete(Unit)
+                releaseRevalidate.await()
+            }
+            jsonResponse(authUserJson())
+        }
+        fixture.http.seedVault(
+            testStoredProfile(userId = 1, name = "Jose"),
+            testStoredProfile(userId = 2, name = "Ana"),
+        )
+        fixture.manager.restore()
+        fixture.manager.signInAs(
+            (fixture.manager.state.value as AppAuthState.ChooseProfile)
+                .profiles.first { it.userId == 1L },
+        )
+
+        // Revalidation holds the transition mutex, so the switch behind it is genuinely parked
+        // at the moment its caller goes away.
+        holdTheMutex = true
+        fixture.elapsed += 10 * 60 * 1000L
+        val revalidate = launch { fixture.manager.revalidateActive() }
+        revalidateStarted.await()
+        val waiter = launch { fixture.manager.switchProfile() }
+        yield()
+        waiter.cancelAndJoin()
+
+        releaseRevalidate.complete(Unit)
+        revalidate.join()
+        yield()
+
+        val state = fixture.manager.state.value as AppAuthState.ChooseProfile
+        assertEquals(setOf("Jose", "Ana"), state.profiles.map { it.name }.toSet())
+        assertNull(fixture.http.credentials.current())
     }
 
     /**

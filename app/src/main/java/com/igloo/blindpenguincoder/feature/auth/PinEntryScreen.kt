@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.auth
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -64,6 +65,12 @@ fun PinEntryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val keyFocus = remember { List(KEYPAD.size) { FocusRequester() } }
     val backFocus = remember { FocusRequester() }
+
+    // This gate sits *below* the picker rather than at the top of the app, so Back belongs to the
+    // screen: without this it reaches the Activity and closes Igloo, stranding whoever was simply
+    // handed the wrong profile. Left enabled while verifying — a request in flight is exactly when
+    // someone wants out, and the profile stays paired either way.
+    BackHandler(onBack = viewModel::back)
     // Coming back up from the footer, and recovering from a rejected PIN, both land on the key
     // the user actually left rather than the top-left corner of the pad.
     var lastFocusedKey by remember { mutableStateOf<FocusRequester?>(null) }

@@ -52,10 +52,21 @@ class PinEntryViewModelTest {
         val http: TestHttp,
     )
 
+    /**
+     * Opens the keypad the way the picker does, and routes only `/user/pin/verify` to [handler] —
+     * the gate itself needs `/auth/user` to keep answering, since the server's `has_pin` is what
+     * puts this screen up and the sign-in behind a verified PIN asks again.
+     */
     private suspend fun fixture(handler: MockRequestHandler): Fixture {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
         settings.save(TEST_SERVER)
-        val http = TestHttp(handler = handler)
+        val http = TestHttp { request ->
+            if (request.url.encodedPath.endsWith("/user/pin/verify")) {
+                handler(request)
+            } else {
+                jsonResponse(authUserJson(name = "Jose", hasPin = true))
+            }
+        }
         val sessionManager = SessionManager(
             authRepository = http.authRepository,
             profiles = http.profiles,
@@ -70,6 +81,10 @@ class PinEntryViewModelTest {
             testStoredProfile(userId = 2, name = "Ana"),
         )
         sessionManager.restore()
+        sessionManager.signInAs(
+            (sessionManager.state.value as AppAuthState.ChooseProfile)
+                .profiles.first { it.userId == 1L },
+        )
         return Fixture(
             PinEntryViewModel(http.authRepository, sessionManager),
             sessionManager,
@@ -81,30 +96,29 @@ class PinEntryViewModelTest {
 
     @Test
     fun `a correct PIN signs the profile in`() = runTest {
-        val fixture = fixture { request ->
-            if (request.url.encodedPath.endsWith("/user/pin/verify")) {
-                jsonResponse("""{"error":false,"data":{"valid":true}}""")
-            } else {
-                jsonResponse(authUserJson(name = "Jose", hasPin = true))
-            }
-        }
-        fixture.sessionManager.requirePin(
-            (fixture.sessionManager.state.value as AppAuthState.ChooseProfile)
-                .profiles.first { it.userId == 1L },
-        )
+        val fixture = fixture { jsonResponse("""{"error":false,"data":{"valid":true}}""") }
 
         fixture.viewModel.enter("1234")
 
+        // Signing in behind the verified PIN must not bounce back to the keypad, even though
+        // the user still has a PIN.
         assertTrue(fixture.sessionManager.state.first { it is AppAuthState.Authenticated } != null)
+    }
+
+    @Test
+    fun `reset clears a rejection left by an earlier visit to the keypad`() = runTest {
+        val fixture = fixture { jsonResponse("""{"error":false,"data":{"valid":false}}""") }
+        fixture.viewModel.enter("9999")
+        fixture.viewModel.uiState.first { it.error != null }
+
+        fixture.viewModel.reset()
+
+        assertEquals(PinEntryUiState(), fixture.viewModel.uiState.value)
     }
 
     @Test
     fun `a wrong PIN clears the digits and keeps the profile`() = runTest {
         val fixture = fixture { jsonResponse("""{"error":false,"data":{"valid":false}}""") }
-        fixture.sessionManager.requirePin(
-            (fixture.sessionManager.state.value as AppAuthState.ChooseProfile)
-                .profiles.first { it.userId == 1L },
-        )
 
         fixture.viewModel.enter("9999")
 
@@ -121,10 +135,6 @@ class PinEntryViewModelTest {
         val fixture = fixture {
             jsonResponse("""{"error":true,"message":"gone"}""", HttpStatusCode.Unauthorized)
         }
-        fixture.sessionManager.requirePin(
-            (fixture.sessionManager.state.value as AppAuthState.ChooseProfile)
-                .profiles.first { it.userId == 1L },
-        )
 
         fixture.viewModel.enter("1234")
 
@@ -141,10 +151,6 @@ class PinEntryViewModelTest {
                 HttpStatusCode.TooManyRequests,
             )
         }
-        fixture.sessionManager.requirePin(
-            (fixture.sessionManager.state.value as AppAuthState.ChooseProfile)
-                .profiles.first { it.userId == 1L },
-        )
 
         fixture.viewModel.enter("1234")
 
@@ -178,10 +184,6 @@ class PinEntryViewModelTest {
             verifications += 1
             jsonResponse("""{"error":false,"data":{"valid":false}}""")
         }
-        fixture.sessionManager.requirePin(
-            (fixture.sessionManager.state.value as AppAuthState.ChooseProfile)
-                .profiles.first { it.userId == 1L },
-        )
 
         fixture.viewModel.enter("1234")
         fixture.viewModel.uiState.first { it.error != null }

@@ -75,7 +75,10 @@ class LoginViewModel(
                 _uiState.update { it.copy(password = "", awaitingUser = true) }
             }
             when (val result = sessionManager.completeSignIn()) {
-                SignInResult.Authenticated ->
+                // Either way the session has moved off this screen. Logging in with a password
+                // proves who you are, so completeSignIn does not gate on the PIN and
+                // PinRequired cannot actually arrive here.
+                SignInResult.Authenticated, SignInResult.PinRequired ->
                     _uiState.update {
                         it.copy(
                             isSubmitting = false,

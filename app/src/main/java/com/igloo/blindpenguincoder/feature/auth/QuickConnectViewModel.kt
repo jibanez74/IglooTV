@@ -144,7 +144,9 @@ class QuickConnectViewModel(
         var attemptsLeft = MAX_USER_FETCH_ATTEMPTS
         while (true) {
             when (val result = sessionManager.completeSignIn()) {
-                SignInResult.Authenticated -> return true
+                // A fresh pairing proves who you are, so completeSignIn does not gate on the
+                // PIN and PinRequired cannot actually arrive here; both mean pairing is done.
+                SignInResult.Authenticated, SignInResult.PinRequired -> return true
                 SignInResult.Revoked -> {
                     fail(AppError.Unauthorized)
                     return true

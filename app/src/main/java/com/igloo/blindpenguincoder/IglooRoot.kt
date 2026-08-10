@@ -111,6 +111,11 @@ fun IglooRoot(container: IglooAppContainer) {
                     val pickerViewModel = viewModel(key = "profile-picker") {
                         ProfilePickerViewModel(sessionManager)
                     }
+                    // Both gates keep Activity-scoped ViewModels, so an attempt from an earlier
+                    // visit has to be cleared as the gate opens. Keyed on the ViewModel and not
+                    // on the state: a re-published gate carrying a notice must not wipe an error
+                    // the user has not read yet.
+                    LaunchedEffect(pickerViewModel) { pickerViewModel.reset() }
                     ProfilePickerScreen(viewModel = pickerViewModel, state = state)
                 }
 
@@ -118,6 +123,7 @@ fun IglooRoot(container: IglooAppContainer) {
                     val pinViewModel = viewModel(key = "pin-entry-${state.profile.userId}") {
                         PinEntryViewModel(container.authRepository, sessionManager)
                     }
+                    LaunchedEffect(pinViewModel) { pinViewModel.reset() }
                     PinEntryScreen(viewModel = pinViewModel, state = state)
                 }
 

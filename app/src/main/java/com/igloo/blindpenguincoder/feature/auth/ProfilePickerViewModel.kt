@@ -30,16 +30,14 @@ class ProfilePickerViewModel(
     private val _uiState = MutableStateFlow(ProfilePickerUiState())
     val uiState: StateFlow<ProfilePickerUiState> = _uiState.asStateFlow()
 
+    /**
+     * The tile's PIN badge comes from the vault and can be a sign-in out of date, so it decides
+     * nothing here: [SessionManager.signInAs] asks the server and routes to the keypad itself.
+     */
     fun select(profile: ProfileSummary) {
         if (_uiState.value.signingInUserId != null) return
         _uiState.update { it.copy(signingInUserId = profile.userId, error = null) }
         viewModelScope.launch {
-            if (profile.hasPin) {
-                // The PIN screen asks before any network call; the token is only activated.
-                sessionManager.requirePin(profile)
-                _uiState.update { it.copy(signingInUserId = null) }
-                return@launch
-            }
             val result = sessionManager.signInAs(profile)
             _uiState.update {
                 it.copy(
@@ -73,5 +71,13 @@ class ProfilePickerViewModel(
 
     fun retryRestore() {
         viewModelScope.launch { sessionManager.restore() }
+    }
+
+    /**
+     * This ViewModel is scoped to the Activity, so it outlives the picker and would otherwise
+     * show a failure from an earlier visit over a freshly opened gate.
+     */
+    fun reset() {
+        _uiState.value = ProfilePickerUiState()
     }
 }

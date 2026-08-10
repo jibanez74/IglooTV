@@ -27,6 +27,12 @@ import kotlinx.coroutines.withContext
 sealed interface SignInResult {
     data object Authenticated : SignInResult
 
+    /**
+     * The server says this user has a PIN, so [AppAuthState.NeedsPin] has been published instead.
+     * The token is valid and still active; only the gate is left.
+     */
+    data object PinRequired : SignInResult
+
     /** The token was rejected and has been forgotten; the user must pair or log in again. */
     data object Revoked : SignInResult
 
@@ -95,13 +101,12 @@ class SessionManager(
             stored.profiles.isEmpty() -> _state.value = AppAuthState.NeedsLogin(storedAddress)
 
             // One profile with nothing to ask: launching straight into it beats a
-            // single-item picker.
+            // single-item picker. Whether there is a PIN to ask for is the server's answer,
+            // not the stored flag's, so it comes out of the sign-in itself.
             stored.profiles.size == 1 -> {
                 val only = stored.profiles.single()
                 if (!profiles.activate(only.userId)) {
                     gateLocked()
-                } else if (only.hasPin) {
-                    _state.value = AppAuthState.NeedsPin(storedAddress, only)
                 } else {
                     finishOrGateLocked(
                         revokedName = only.name,
@@ -120,25 +125,63 @@ class SessionManager(
 
     /**
      * Exchanges the active device token for its owner and publishes
-     * [AppAuthState.Authenticated]. Shared by every sign-in path, since pairing, password
-     * login, profile selection and revalidation all finish the same way.
+     * [AppAuthState.Authenticated].
+     *
+     * For the paths where the user has just proved who they are — a password login, a fresh
+     * pairing, a PIN that has this moment been verified — so it never gates on the PIN again.
+     * Resuming a stored token goes through [signInAs] or [restore] instead.
      */
     suspend fun completeSignIn(): SignInResult = transitionMutex.withLock {
-        completeSignInLocked(expectedProfileId = profiles.activeProfileId)
+        completeSignInLocked(
+            expectedProfileId = profiles.activeProfileId,
+            enforcePin = false,
+        )
     }
 
-    private suspend fun completeSignInLocked(expectedProfileId: Long?): SignInResult =
+    /**
+     * [enforcePin] asks the *server* whether this user has a PIN, rather than trusting
+     * [ProfileSummary.hasPin], which is only as fresh as the last completed sign-in. A PIN set
+     * elsewhere after this TV was paired would otherwise be skipped on the next switch, and one
+     * removed elsewhere would strand the user on a keypad the backend answers with "no PIN is set".
+     */
+    private suspend fun completeSignInLocked(
+        expectedProfileId: Long?,
+        enforcePin: Boolean,
+    ): SignInResult =
         when (val result = authRepository.fetchCurrentUser()) {
             is ApiResult.Success -> {
                 val user = result.value
-                val commit = profiles.commitSignIn(user)
-                // A re-pairing leaves the old device registered; tidying it up is best effort.
-                commit.replacedToken?.let { replaced ->
-                    scope.launch { authRepository.logout(bearerOverride = replaced) }
+                if (enforcePin && user.hasPin) {
+                    // gateLocked resolves a missing address to server setup rather than signing in
+                    // anyway. Unreachable in practice — the screen that got here needed an address
+                    // to render — but the fallback is not the one to skip a gate on.
+                    val address = serverUrl.current.value
+                    if (address == null) {
+                        gateLocked()
+                    } else {
+                        // Nothing is committed yet: the vault's active user must not advance until
+                        // the sign-in completes, so a kill at the keypad returns to the gate.
+                        _state.value = AppAuthState.NeedsPin(
+                            serverAddress = address,
+                            profile = ProfileSummary(
+                                userId = user.id,
+                                name = user.name,
+                                avatarUrl = user.avatar?.orNull(),
+                                hasPin = true,
+                            ),
+                        )
+                    }
+                    SignInResult.PinRequired
+                } else {
+                    val commit = profiles.commitSignIn(user)
+                    // A re-pairing leaves the old device registered; tidying it up is best effort.
+                    commit.replacedToken?.let { replaced ->
+                        scope.launch { authRepository.logout(bearerOverride = replaced) }
+                    }
+                    lastValidatedAt = elapsed()
+                    _state.value = AppAuthState.Authenticated(user)
+                    SignInResult.Authenticated
                 }
-                lastValidatedAt = elapsed()
-                _state.value = AppAuthState.Authenticated(user)
-                SignInResult.Authenticated
             }
             is ApiResult.Failure -> if (result.error == AppError.Unauthorized) {
                 forgetExpectedCredentialLocked(expectedProfileId)
@@ -148,28 +191,24 @@ class SessionManager(
             }
         }
 
-    /** Profile picker: sign in as [profile], which has no PIN to ask for. */
+    /**
+     * Profile picker: resume [profile]'s stored token. Ends at the library, or at the PIN gate
+     * when the server says this user has one.
+     */
     suspend fun signInAs(profile: ProfileSummary): SignInResult = transitionMutex.withLock {
         if (!profiles.activate(profile.userId)) {
             gateLocked()
             return@withLock SignInResult.Revoked
         }
-        val result = completeSignInLocked(expectedProfileId = profile.userId)
+        val result = completeSignInLocked(
+            expectedProfileId = profile.userId,
+            enforcePin = true,
+        )
         // A transient failure keeps the picker up so the tile can simply be retried.
         if (result == SignInResult.Revoked) {
             gateLocked(notice = revokedNotice(profile.name))
         }
         result
-    }
-
-    /** Profile picker: [profile] is PIN-protected, so activate it and ask. */
-    suspend fun requirePin(profile: ProfileSummary) = transitionMutex.withLock {
-        val address = serverUrl.current.value ?: return@withLock
-        if (profiles.activate(profile.userId)) {
-            _state.value = AppAuthState.NeedsPin(address, profile)
-        } else {
-            gateLocked()
-        }
     }
 
     /** The server rejected the credential of whoever is signed in right now. */
@@ -207,8 +246,14 @@ class SessionManager(
     suspend fun revalidateActive() = transitionMutex.withLock {
         val current = _state.value as? AppAuthState.Authenticated ?: return@withLock
         if (elapsed() - lastValidatedAt < REVALIDATE_INTERVAL_MILLIS) return@withLock
-        when (completeSignInLocked(expectedProfileId = current.user.id)) {
-            SignInResult.Authenticated -> Unit
+        // Not gated on the PIN: a PIN set while this profile is watching must not eject it
+        // mid-session. The gate belongs to picking a profile, not to holding one.
+        val result = completeSignInLocked(
+            expectedProfileId = current.user.id,
+            enforcePin = false,
+        )
+        when (result) {
+            SignInResult.Authenticated, SignInResult.PinRequired -> Unit
             SignInResult.Revoked -> gateLocked(notice = revokedNotice(current.user.name))
             // An offline TV keeps watching; only an outright rejection ends the session.
             is SignInResult.Failed -> Unit
@@ -230,10 +275,23 @@ class SessionManager(
         gateLocked()
     }
 
-    /** Hand the TV to someone else; this profile stays paired. */
-    suspend fun switchProfile() = transitionMutex.withLock {
-        profiles.deactivate()
-        gateLocked()
+    /**
+     * Hand the TV to someone else; this profile stays paired.
+     *
+     * On the application scope for the same reason [logout] is: the credential is dropped before
+     * the gate is published, so a caller torn down in between — an Activity recreated by a UI
+     * scale change while this waits on the mutex — would leave the app authenticated with no
+     * token. The next request would 401 and take the profile off this TV, which is the one thing
+     * a switch must never do.
+     */
+    suspend fun switchProfile() {
+        val operation = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            transitionMutex.withLock {
+                profiles.deactivate()
+                gateLocked()
+            }
+        }
+        operation.join()
     }
 
     /**
@@ -300,9 +358,12 @@ class SessionManager(
         _state.value = AppAuthState.NeedsServer(serverUrl.current.value?.origin.orEmpty())
     }
 
+    /** Launch only, which is a resumed token either way, so the PIN gate applies. */
     private suspend fun finishOrGateLocked(revokedName: String?, expectedProfileId: Long?) {
-        when (val result = completeSignInLocked(expectedProfileId)) {
-            SignInResult.Authenticated -> Unit
+        val result = completeSignInLocked(expectedProfileId, enforcePin = true)
+        when (result) {
+            // PinRequired has already published the gate it wants.
+            SignInResult.Authenticated, SignInResult.PinRequired -> Unit
             SignInResult.Revoked -> gateLocked(notice = revokedName?.let(::revokedNotice))
             // The token survives, so the gate offers a retry rather than pairing again.
             is SignInResult.Failed -> gateLocked(restoreError = result.error)

@@ -95,15 +95,37 @@ class ProfilePickerViewModelTest {
     }
 
     @Test
-    fun `selecting a PIN-protected profile asks before touching the network`() = runTest {
-        val fixture = fixture(hasPin = true) { error("no request expected") }
-        val before = fixture.requestCount
+    fun `the server decides the PIN gate, not the tile's badge`() = runTest {
+        // Stored without a PIN, because that was true when this TV last signed User1 in.
+        val fixture = fixture { jsonResponse(authUserJson(id = 1, name = "User1", hasPin = true)) }
 
         fixture.viewModel.select(fixture.picker.profiles.first { it.userId == 1L })
 
-        val state = fixture.sessionManager.state.value as AppAuthState.NeedsPin
+        val state = fixture.sessionManager.state
+            .first { it is AppAuthState.NeedsPin } as AppAuthState.NeedsPin
         assertEquals(1L, state.profile.userId)
-        assertEquals(before, fixture.requestCount)
+    }
+
+    @Test
+    fun `a stale PIN badge does not strand a profile whose PIN was removed`() = runTest {
+        val fixture = fixture(hasPin = true) {
+            jsonResponse(authUserJson(id = 1, name = "User1"))
+        }
+
+        fixture.viewModel.select(fixture.picker.profiles.first { it.userId == 1L })
+
+        assertTrue(fixture.sessionManager.state.first { it is AppAuthState.Authenticated } != null)
+    }
+
+    @Test
+    fun `reset clears a failure left by an earlier visit to the gate`() = runTest {
+        val fixture = fixture { throw java.io.IOException("offline") }
+        fixture.viewModel.select(fixture.picker.profiles.first())
+        assertNotNull(fixture.viewModel.uiState.first { it.error != null }.error)
+
+        fixture.viewModel.reset()
+
+        assertEquals(ProfilePickerUiState(), fixture.viewModel.uiState.value)
     }
 
     @Test

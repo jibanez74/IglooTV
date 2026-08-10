@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.auth
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +21,11 @@ fun SignInScreen(
     notice: String? = null,
 ) {
     var mode by rememberSaveable { mutableStateOf(SignInMode.QuickConnect) }
+
+    // Reached by adding a user, this screen sits below the picker, so Back belongs to it — the
+    // same reason the PIN gate handles its own. Left unhandled during first setup and after the
+    // last profile signs out, where there is nothing behind it and exiting the app is right.
+    BackHandler(enabled = canCancel, onBack = loginViewModel::cancel)
 
     when (mode) {
         SignInMode.QuickConnect -> QuickConnectScreen(

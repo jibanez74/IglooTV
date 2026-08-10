@@ -60,6 +60,15 @@ class PinEntryViewModel(
         viewModelScope.launch { sessionManager.switchProfile() }
     }
 
+    /**
+     * This ViewModel is scoped to the Activity and keyed by profile, so leaving the keypad and
+     * coming back to the same profile would otherwise reopen it on the last "Incorrect PIN."
+     */
+    fun reset() {
+        pin = ""
+        _uiState.value = PinEntryUiState()
+    }
+
     private fun verify() {
         val submitted = pin
         _uiState.update { it.copy(isVerifying = true, error = null) }
@@ -80,7 +89,9 @@ class PinEntryViewModel(
     private suspend fun finishSignIn() {
         pin = ""
         when (val result = sessionManager.completeSignIn()) {
-            SignInResult.Authenticated -> Unit
+            // The PIN has just been verified, so completeSignIn does not gate on it again and
+            // PinRequired cannot arrive here; both mean this screen is done.
+            SignInResult.Authenticated, SignInResult.PinRequired -> Unit
             SignInResult.Revoked -> sessionManager.onActiveSessionRevoked()
             is SignInResult.Failed -> reject(result.error.toDisplayMessage())
         }

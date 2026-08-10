@@ -890,7 +890,10 @@ horizontal row of circular tiles, most recently used first, then an **Add profil
 is always visible and never focus-gated (§6.2). Below the row, a ghost **Change server** row.
 
 Tiles render from stored profiles alone, so the picker appears instantly and works with the
-server unreachable. Cap the row at **6 profiles** so it never scrolls at any `UiScale`; past
+server unreachable. The stored copy is only as fresh as that profile's last completed sign-in,
+so it decides **appearance and nothing else** — the PIN badge below may lag by one sign-in, and
+whether a PIN is actually asked for is settled by the server (§11.1.2). Cap the row at
+**6 profiles** so it never scrolls at any `UiScale`; past
 that, "Add profile" explains itself instead of starting another pairing — and it explains only
 what the app can actually do. Only the *active* profile can be signed out (§11.2), so the full-TV
 message points at that, and must not instruct the user to sign out a tile the picker gives them no
@@ -922,6 +925,18 @@ A convenience gate over a token that is already authenticated — never a second
 server verifies it (`POST /api/user/pin/verify`), and a wrong PIN comes back as a success with
 `valid = false`, so only a genuinely dead token ends the session.
 
+**Whether this screen opens at all is the server's answer, not the vault's.** Selecting a tile
+activates its token and fetches the user; `has_pin` on that response decides between the keypad
+and the library. The stored flag is refreshed only when a sign-in completes, so trusting it would
+skip the PIN once for anyone who set one after this TV was paired, and would strand anyone who
+removed one on a keypad the backend answers with a 400 "no PIN is set". The cost is one
+round-trip before the keypad appears, which the tile already covers with its "Signing in as
+{name}" live region; the benefit is that the gate cannot be one sign-in out of date in either
+direction. It is asked for wherever a **stored token is being resumed** — the picker and launch —
+and not where the user has just proved who they are: a password login, a fresh pairing, the
+sign-in behind a PIN this moment verified, or the periodic revalidation of a session already
+running. A PIN set while someone is watching must not eject them mid-session.
+
 **Remotes have no number keys.** This is the constraint the screen is designed around: a 3×4
 on-screen keypad (1–9, delete, 0) plus four masked indicator cells on the 480dp card. Hardware
 digits are accepted where they exist. An `IglooTextField` is wrong here — it would summon the
@@ -934,7 +949,10 @@ IME, which §11.6 reserves for search and login.
 - A wrong PIN clears the cells and shows an assertive `IglooInlineError`; **focus stays put** —
   yanking it back to "1" after every miss is hostile with a remote.
 - A rate limit surfaces the backend's own message; the app invents no cooldown of its own.
-- Back returns to the picker with the profile still paired.
+- Back returns to the picker with the profile still paired, and is **handled by this screen** —
+  unhandled it reaches the Activity and closes Igloo, which is right for a top-level gate and
+  wrong for one sitting below the picker. It stays live while a verify is in flight: a request the
+  user no longer wants is exactly when they reach for Back, and the profile survives either way.
 
 #### 11.1.3 Sign in
 
@@ -943,7 +961,9 @@ the fallback.
 
 When this screen is reached by adding a user rather than by first-time setup, the "Change
 server" slot becomes **Back to profiles** — changing the server wipes every stored profile, so
-offering it mid-add is a trap.
+offering it mid-add is a trap. **Back takes that same slot's action**, and only then: during
+first-time setup, and after the last profile signs out, there is nothing behind this screen and
+Back correctly exits the app.
 
 The quick-connect card **fits 960×540 without scrolling in its resting state** at Standard and
 font scale 1.0 — measured, with the header at 38dp. That matters because focus lands on a bottom
@@ -969,6 +989,12 @@ remote.
 
 **Sign out asks first** (§9.3) — it is destructive, one press away, and reachable by whoever is
 holding the remote. Switch profile does not ask: it loses nothing.
+
+**Switch profile is not cancellable either**, for the same reason sign-out is not. It drops the
+in-memory credential before it publishes the picker, so a caller torn down in between — an
+Activity recreated by a `UiScale` change while the transition waits its turn — would leave the app
+authenticated with no token, and the next 401 would take that profile off the TV. It runs on the
+application scope and only the *waiting* is cancellable.
 
 Three rules the sign-out flow follows, all of them consequences of this being a *shared* TV:
 
@@ -1172,6 +1198,25 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-09 — Switch profiles, hardened: the PIN gate stops trusting a cached flag.**
+
+- **§11.1.2 gains "whether this screen opens at all is the server's answer".** The vault's `hasPin`
+  is only refreshed when a sign-in completes, so it was a sign-in out of date in both directions: a
+  PIN set elsewhere after pairing was skipped once, and a PIN removed elsewhere left the keypad up
+  in front of a backend that answers that verify with a 400. `has_pin` now comes off the
+  `GET /api/auth/user` response the sign-in already makes, which costs no extra request. Records
+  where the gate applies (a resumed token) and where it must not (credentials just proved, and
+  revalidation of a live session).
+- **§11.1.1**: the stored copy of a profile decides appearance and nothing else, so the PIN badge
+  is allowed to lag by one sign-in.
+- **§11.2**: switch profile joins sign-out in being uncancellable — it drops the credential before
+  it publishes the picker, and a caller disposed in between would strand the session.
+- **§11.1.2 / §11.1.3 spell out who owns Back.** Found on the emulator: Back on the PIN gate closed
+  Igloo instead of returning to the picker, and did the same on the add-a-profile sign-in. §11.1.2
+  had always said Back returns to the picker; nothing handled it. Both screens sit *below* the
+  picker and now handle their own, while every gate that is genuinely top-level still inherits the
+  exit.
 
 **2026-08-09 — Sign out, reviewed on hardware: what the modal owes a revoke it can no longer stop.**
 

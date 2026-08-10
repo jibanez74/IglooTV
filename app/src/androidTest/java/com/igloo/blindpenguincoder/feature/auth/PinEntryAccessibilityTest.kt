@@ -20,24 +20,32 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.IglooApplication
+import com.igloo.blindpenguincoder.LocalApiServer
 import com.igloo.blindpenguincoder.MainActivity
 import com.igloo.blindpenguincoder.awaitScreen
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * A single PIN-protected profile lands straight on the gate with no network call, so
- * these assertions never depend on the seeded TEST-NET address answering.
+ * A single PIN-protected profile lands straight on the gate. Whether there is a PIN to ask for
+ * is the server's answer (design-system section 11.1.2), so these run against a canned local API
+ * rather than a seeded flag.
  */
 @RunWith(AndroidJUnit4::class)
 class PinEntryAccessibilityTest {
 
     @get:Rule
     val composeRule = createEmptyComposeRule()
+
+    private val server = LocalApiServer(hasPin = true)
+
+    @After
+    fun tearDown() = server.close()
 
     @Test
     fun theGateOpensOnTheKeypadWithAnEmptyIndicator() {
@@ -190,9 +198,8 @@ class PinEntryAccessibilityTest {
      * once at composition and never again — so a rejected PIN left the screen with nothing
      * focused and no way back onto the pad.
      *
-     * The seeded address is TEST-NET, so the verification fails on connect rather than on a
-     * wrong PIN. Either way it is the `isVerifying` false edge that has to hand focus back, which
-     * is the thing under test.
+     * The local API answers `valid = false`, so this is a genuinely wrong PIN rather than a
+     * failure to connect — the same `isVerifying` false edge, on the path a user actually hits.
      */
     @Test
     fun aRejectedPinHandsFocusBackToTheKeypad() {
@@ -208,6 +215,7 @@ class PinEntryAccessibilityTest {
                 composeRule.onAllNodesWithContentDescription("PIN, 0 of 4 digits entered")
                     .fetchSemanticsNodes().isNotEmpty()
             }
+            composeRule.onNodeWithText("Incorrect PIN.").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("1").assertIsFocused()
         }
     }
@@ -216,7 +224,7 @@ class PinEntryAccessibilityTest {
         val app = InstrumentationRegistry.getInstrumentation()
             .targetContext.applicationContext as IglooApplication
         runBlocking {
-            app.container.serverSettingsStore.save("http://192.0.2.1:8080/api")
+            app.container.serverSettingsStore.save(server.apiBaseUrl)
             app.container.profileRepository.clearAll()
             app.container.profileRepository.setPending("igd_jose")
             app.container.profileRepository.commitSignIn(
@@ -237,4 +245,4 @@ class PinEntryAccessibilityTest {
     }
 }
 
-private const val VERIFY_TIMEOUT_MILLIS = 25_000L
+private const val VERIFY_TIMEOUT_MILLIS = 5_000L
