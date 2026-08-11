@@ -34,6 +34,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
@@ -80,7 +81,11 @@ class IglooBaseAppTest {
                 IglooApp(
                     user = user,
                     signOut = signOut,
+                    // Hero hidden — a legitimate 11.3.1 state — so both rail headings fit the
+                    // viewport at once for the order assertion; the hero-visible shell is
+                    // NavigationRailBehaviorTest's and HomeHeroFocusTest's subject.
                     home = HomeUiState(
+                        hero = HomeHeroState.Hidden,
                         continueWatching = IglooRailState.Loaded(testContinueMovies),
                         latestMovies = IglooRailState.Loaded(testHomeMovies),
                     ),

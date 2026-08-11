@@ -167,4 +167,61 @@ class MovieRepositoryTest {
 
         assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
     }
+
+    @Test
+    fun `movie details hits the contract path with the bearer token`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(movieDetailsJson(id = 5, title = "Heat"))
+        }
+        http.profiles.setPending("igd_test")
+
+        val result = http.movieRepository.movieDetails(5)
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/movies/details/5", captured.url.encodedPath)
+        assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+        val details = (result as ApiResult.Success).value
+        assertEquals(5L, details.movie.id)
+        assertEquals("Heat", details.movie.title)
+        assertEquals("/heat-backdrop.jpg", details.movie.backdropPath?.orNull())
+        assertEquals(170L, details.movie.runTime?.orNull())
+        assertEquals(8.2, requireNotNull(details.movie.criticRating?.orNull()), 0.0)
+        assertTrue(details.cast.isEmpty())
+    }
+
+    @Test
+    fun `movie details wire nulls decode to absent values`() = runTest {
+        val http = TestHttp {
+            jsonResponse(
+                movieDetailsJson(
+                    backdropPath = null,
+                    overview = null,
+                    year = null,
+                    certification = null,
+                    runTimeMinutes = null,
+                    criticRating = null,
+                ),
+            )
+        }
+
+        val movie = (http.movieRepository.movieDetails(1) as ApiResult.Success).value.movie
+
+        assertNull(movie.backdropPath?.orNull())
+        assertNull(movie.overview?.orNull())
+        assertNull(movie.year?.orNull())
+        assertNull(movie.certification?.orNull())
+        assertNull(movie.runTime?.orNull())
+        assertNull(movie.criticRating?.orNull())
+    }
+
+    @Test
+    fun `a movie details success envelope with no data is Unexpected`() = runTest {
+        val http = TestHttp { jsonResponse("""{"error":false,"message":"ok"}""") }
+
+        val result = http.movieRepository.movieDetails(1)
+
+        assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
+    }
 }

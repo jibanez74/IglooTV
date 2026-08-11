@@ -114,25 +114,24 @@ fun MockRequestHandleScope.jsonResponse(
     headers = headersOf(HttpHeaders.ContentType, "application/json"),
 )
 
+/** Go `sql.NullString` wire shape; null renders the invalid wrapper, not JSON null. */
+fun sqlNullStringJson(value: String?): String =
+    if (value != null) """{"String":"$value","Valid":true}""" else """{"String":"","Valid":false}"""
+
+fun sqlNullInt64Json(value: Long?): String =
+    if (value != null) """{"Int64":$value,"Valid":true}""" else """{"Int64":0,"Valid":false}"""
+
+fun sqlNullFloat64Json(value: Double?): String =
+    if (value != null) """{"Float64":$value,"Valid":true}""" else """{"Float64":0,"Valid":false}"""
+
 /** One `GET /movies/latest` list entry in the Go `sql.Null*` wire shapes. */
 fun latestMovieJson(
     id: Long = 1,
     title: String = "Heat",
     posterPath: String? = "/heat.jpg",
     year: Long? = 1995,
-): String {
-    val poster = if (posterPath != null) {
-        """{"String":"$posterPath","Valid":true}"""
-    } else {
-        """{"String":"","Valid":false}"""
-    }
-    val yearField = if (year != null) {
-        """{"Int64":$year,"Valid":true}"""
-    } else {
-        """{"Int64":0,"Valid":false}"""
-    }
-    return """{"id":$id,"title":"$title","poster_path":$poster,"year":$yearField}"""
-}
+): String = """{"id":$id,"title":"$title","poster_path":${sqlNullStringJson(posterPath)},""" +
+    """"year":${sqlNullInt64Json(year)}}"""
 
 fun latestMoviesJson(vararg movies: String): String =
     """{"error":false,"message":"latest movies","data":{"movies":[${movies.joinToString(",")}]}}"""
@@ -152,6 +151,36 @@ fun continueWatchingMovieJson(
 
 fun continueWatchingMoviesJson(vararg movies: String): String =
     """{"error":false,"message":"continue watching","data":{"movies":[${movies.joinToString(",")}]}}"""
+
+/**
+ * `GET /movies/details/{id}` payload: the full movie plus its related lists, which the spec
+ * leaves untyped and these tests leave empty. Only hero-relevant nullables are parameterized.
+ */
+fun movieDetailsJson(
+    id: Long = 1,
+    title: String = "Heat",
+    backdropPath: String? = "/heat-backdrop.jpg",
+    overview: String? = "Obsessive master thief Neil McCauley leads a top-notch crew.",
+    year: Long? = 1995,
+    certification: String? = "R",
+    runTimeMinutes: Long? = 170,
+    criticRating: Double? = 8.2,
+): String = """
+    {"error":false,"message":"movie details","data":{
+      "movie":{
+        "id":$id,"title":"$title","file_path":"/media/heat.mkv","file_name":"heat.mkv",
+        "size":4000000000,"container":"mkv","mime_type":"video/x-matroska","adult":false,
+        "backdrop_path":${sqlNullStringJson(backdropPath)},
+        "overview":${sqlNullStringJson(overview)},
+        "year":${sqlNullInt64Json(year)},
+        "certification":${sqlNullStringJson(certification)},
+        "run_time":${sqlNullInt64Json(runTimeMinutes)},
+        "critic_rating":${sqlNullFloat64Json(criticRating)},
+        "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
+      },
+      "cast":[],"crew":[],"genres":[],"production_companies":[],"extra_videos":[]
+    }}
+""".trimIndent()
 
 /** `GET /auth/user` payload; `has_pin` is required by the contract. */
 fun authUserJson(

@@ -381,19 +381,46 @@ private fun HomeRails(
     lastFocusedLatestMovieId: Long?,
     onLatestMovieFocused: (Long) -> Unit,
 ) {
+    // The hero owns the pane's entry anchor whenever it is visible; the Continue Watching rail
+    // takes it back when the hero hides (section 11.3.1). heroVisible gates both attachment
+    // sites in the same composition, so the requester is never on two nodes at once.
+    val heroVisible = home.hero !is HomeHeroState.Hidden
+    // The hero's d-pad down target: attached to the Continue rail's entry anchor in every rail
+    // state, so down always lands where spine re-entry would.
+    val continueEntryRequester = remember { FocusRequester() }
+    var heroHasFocus by remember { mutableStateOf(false) }
+    // Captured during the composition that swaps hero states — the same trap IglooMediaRail
+    // documents: the outgoing node only detaches once the composition applies, so this still
+    // sees whether the hero owned focus going in. By the time the effect runs the requester
+    // already sits on the incoming hero node, or on the Continue rail's anchor if the hero hid.
+    val heroHadFocusAtSwap = remember(home.hero) { heroHasFocus }
+    LaunchedEffect(home.hero) {
+        if (heroHadFocusAtSwap) {
+            contentStartRequester.requestFocus()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
     ) {
-        // First rail owns the pane's entry anchor, in every state — the rail never hides on
-        // empty, so the anchor never moves between rails at runtime.
+        if (heroVisible) {
+            HomeHero(
+                state = home.hero,
+                entryRequester = contentStartRequester,
+                leftFocusRequester = navigationRequester,
+                downFocusRequester = continueEntryRequester,
+                modifier = Modifier.onFocusChanged { heroHasFocus = it.hasFocus },
+            )
+        }
+
         IglooMediaRail(
             title = "Continue Watching",
             state = home.continueWatching,
             itemKey = { it.movie.id },
-            entryRequester = contentStartRequester,
+            entryRequester = if (heroVisible) continueEntryRequester else contentStartRequester,
             leftFocusRequester = navigationRequester,
             lastFocusedKey = lastFocusedContinueMovieId,
             onItemFocused = onContinueMovieFocused,

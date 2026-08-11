@@ -281,7 +281,15 @@ not track the theme — a poster looks the same in light and dark mode. Use lite
 
 - Poster dim overlay on focus: `Color.Black.copy(alpha = 0.30f)` (video) / `0.40f` (album art)
 - Title gradient over poster: `Brush.verticalGradient` to `Color.Black.copy(alpha = 0.90f)`
+- Hero side gradient (§11.3.1): `Brush.horizontalGradient`, `Color.Black.copy(alpha = 0.70f)` →
+  `0.35f` → transparent, left to right — web parity with the detail hero's side scrim. The web's
+  third, theme-tracking fade into the page background is deliberately **not** ported: it blends an
+  unclipped hero into the canvas, and our hero is a clipped card — a theme-tracking brush over
+  media would contradict this section.
 - Text over media: `Color.White`, with a shadow for legibility
+
+These literals are licensed **only by media actually behind them**. A surface that would carry
+them but has no image (a hero with no backdrop) falls back to token colors on a `card` fill.
 
 ---
 
@@ -331,8 +339,11 @@ intended, say so explicitly with `maxLines`:
 
 - Card titles: `maxLines = 2`
 - Nav labels, list rows: `maxLines = 1`
-- Hero copy, the pairing code, error messages: **never truncate** — pass
-  `overflow = TextOverflow.Visible` and let the container grow.
+- Home hero (§11.3.1): title `maxLines = 2`, overview `maxLines = 3` — it is a card, so it takes
+  card clamps
+- Display-on-canvas hero copy (§11.1.0), the pairing code, error messages: **never truncate** —
+  pass `overflow = TextOverflow.Visible` and let the container grow. The never-truncate rule is
+  scoped to the full-bleed canvas, where the container can grow; a clamped card cannot.
 
 Truncation is a **visual** defect only — `BasicText` still exposes the full string to TalkBack.
 It is still a defect.
@@ -1040,10 +1051,56 @@ so re-verify it at `UiScale.Large` after any spine change.
 
 ### 11.3 Home
 
-Stacked horizontal rails — continue watching, latest movies, latest albums, watch rooms — over
-an optional hero. This is the most TV-native layout in the product and the model for other
+Stacked horizontal rails — continue watching, latest movies, latest albums, watch rooms — under
+the hero (§11.3.1). This is the most TV-native layout in the product and the model for other
 index screens. Vertical d-pad moves between rails; horizontal moves within one; focus is
 restored per-rail on return.
+
+#### 11.3.1 The hero
+
+The hero features the **single most recently added movie**: the first item of the Recently Added
+data, enriched with `GET /api/movies/details/{id}` for its backdrop, overview, and metadata. The
+two requests chain inside the rail's own load job, so the rail's Retry re-runs the hero and a
+foreground refresh cancels both together. It does not rotate — §7.2 permits no looping surface,
+and a hero carousel fails that rule twice (it carries information; it moves geometry under text).
+
+**Geometry.** A pane-width rounded card *inside* the content pane's padding — deliberately not
+full-bleed. The pane header sits above it, so the hero could never reach the top edge; what §2.5's
+opt-out exists for (backdrops that touch the physical edge) does not apply to a card sitting below
+chrome. Radius `xl`, `heightIn(min = 280dp)` (scaled; a one-off literal per §2.8 — it contains
+text, so §2.6 requires min, not fixed). At Standard on the reference viewport this leaves the
+Continue Watching heading and the top of its posters visible below — the §8.2 scroll affordance.
+The hero scrolls away with the rails; no pinning, no collapse choreography.
+
+**Backdrop.** `w1280` via the TMDB proxy, `ContentScale.Crop`. Over it, two static gradients
+(over-media literals, §3.2): the bottom title gradient, and the side gradient left-to-right so the
+text column reads against busy art. When the movie has **no backdrop** (or the image fails), the
+hero renders as an ordinary card surface — `card` fill, token text colors, **no gradients** —
+because §3.2's white-on-black literals are licensed only by media behind them; keeping them over a
+`muted` fill fails contrast in light mode.
+
+**Text.** Bottom-left column, max width ~420dp (readable measure), `spacing.xl` inset. Over
+media: `Color.White` with a shadow (§3.2). Title `titleLarge`, `maxLines = 2` — **not `display`**,
+which §4 reserves for a canvas with no card. Metadata line in `label`: year · certification ·
+runtime · rating, every field nullable, separator-joined, the whole line omitted when empty.
+Overview `bodyMedium`, `maxLines = 3` (§4.1).
+
+**Focus and semantics.** The hero is **one focus target** and owns the pane's entry anchor
+(`contentStartRequester`) whenever it is visible; the Continue Watching rail takes the anchor back
+when it is not — the two must never hold it in the same composition. `focusRing` with
+`scaleOnFocus = false` (1.05× on a pane-width surface overflows the pane; ring, separator,
+fill-contract, and glow still carry the signal). D-pad left exits to the spine, right is
+cancelled, and down is hand-wired to the first rail's entry anchor — spatial resolution from a
+pane-wide surface is heuristic, and the wire means the rail's focus memory applies, the same as
+spine re-entry. Like the poster cards, the hero announces **no action** until the
+details screen lands: one `clearAndSetSemantics` node reading "Featured", title, metadata, and the
+full overview (the visual clamp is not an accessibility clamp).
+
+**States.** Loading is a static geometry-matched skeleton (§10) that is focusable and carries the
+entry anchor, with a polite "Loading featured movie". There is no hero error card: an empty
+library, a failed latest fetch, or a failed details fetch **hides the hero** — the rail below
+already owns the error and its Retry. A background refresh that fails keeps a previously loaded
+hero, exactly the rails' rule; an empty library hides it unconditionally.
 
 ### 11.4 Movies
 
@@ -1206,6 +1263,21 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-10 — Home gets its hero.**
+
+§11.3.1 lands: a featured banner above the rails showing the most recently added movie, enriched
+via `GET /api/movies/details/{id}` chained inside the Recently Added load. A pane-width rounded
+card (not full-bleed), `w1280` backdrop under the §3.2 bottom + side gradients, one focus target
+with `scaleOnFocus = false`, no action until the details screen lands.
+
+- **The pane's entry anchor moves from the Continue Watching rail to the hero** whenever the hero
+  is visible; the rail keeps it when the hero is hidden. Test tag: `home_hero`.
+- **The hero hides rather than erroring**: empty library, failed latest fetch, or failed details
+  fetch all hide it — the rail's error card owns Retry for this data. Background-refresh failures
+  keep a loaded hero (the rails' rule).
+- §3.2 gains the hero side gradient literal; §4.1 scopes "never truncate" to the display-on-canvas
+  hero and records the Home hero's clamps (title 2 / overview 3).
 
 **2026-08-10 — Home gets its rails: Continue Watching over Recently Added Movies.**
 

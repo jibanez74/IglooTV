@@ -91,7 +91,11 @@ class HomeRailBehaviorTest {
                 IglooApp(
                     user = user,
                     signOut = SignOutUiState(),
+                    // Hero hidden: this suite pins the rails' own focus contract, where the
+                    // first rail legitimately owns the pane's entry anchor (section 11.3.1).
+                    // The hero's focus behavior is HomeHeroFocusTest's subject.
                     home = HomeUiState(
+                        hero = HomeHeroState.Hidden,
                         continueWatching = continueState,
                         latestMovies = latestState,
                     ),

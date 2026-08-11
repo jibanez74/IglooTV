@@ -16,4 +16,8 @@ class MovieApi(
     /** Movies in progress for the current user, most recently watched first; capped at 12. */
     suspend fun continueWatchingMovies(): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/movies/continue-watching")
+
+    /** Full stored metadata for one movie; backs the Home hero and the future details screen. */
+    suspend fun movieDetails(id: Long): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/movies/details/$id")
 }

@@ -5,12 +5,15 @@ import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.data.model.LatestMovie
+import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
+import java.util.Locale
 import kotlin.math.ceil
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,8 +40,28 @@ data class HomeContinueMovie(
 /** The rails Home renders, in the order it renders them (docs/design-system.md section 11.3). */
 enum class HomeRail { ContinueWatching, LatestMovies }
 
+/** The featured movie, render-ready (section 11.3.1). Every field but id and title may be absent. */
+data class HomeHero(
+    val id: Long,
+    val title: String,
+    val backdropUrl: String?,
+    val overview: String?,
+    val metadataLine: String?,
+)
+
+/**
+ * No Error member on purpose: the hero's data is the Recently Added rail's data, and that rail
+ * already owns the error card and its Retry. A hero that cannot load hides instead.
+ */
+sealed interface HomeHeroState {
+    data object Loading : HomeHeroState
+    data object Hidden : HomeHeroState
+    data class Loaded(val hero: HomeHero) : HomeHeroState
+}
+
 /** Everything Home draws. One object, so a new rail does not re-thread every composable. */
 data class HomeUiState(
+    val hero: HomeHeroState = HomeHeroState.Loading,
     val continueWatching: IglooRailState<HomeContinueMovie> = IglooRailState.Loading,
     val latestMovies: IglooRailState<HomeMovie> = IglooRailState.Loading,
 )
@@ -100,10 +123,13 @@ class HomeViewModel(
 
     private fun loadLatestMovies(userInitiated: Boolean) {
         if (userInitiated) {
-            _uiState.update { it.copy(latestMovies = IglooRailState.Loading) }
+            _uiState.update {
+                it.copy(latestMovies = IglooRailState.Loading, hero = HomeHeroState.Loading)
+            }
         }
         launchLoad(HomeRail.LatestMovies) {
-            val next = movies.latestMovies().toRailState { latest ->
+            val result = movies.latestMovies()
+            val next = result.toRailState { latest ->
                 val apiBaseUrl = serverUrl.require().apiBaseUrl
                 latest.map { movie ->
                     toHomeMovie(
@@ -115,8 +141,50 @@ class HomeViewModel(
                     )
                 }
             }
+            // Rail first, so the list is on screen while the hero's details request runs.
             _uiState.update {
                 it.copy(latestMovies = next.orKeep(it.latestMovies, userInitiated))
+            }
+            loadHero(result, userInitiated)
+        }
+    }
+
+    /**
+     * The hero features the newest addition (section 11.3.1), so its subject comes out of the
+     * rail's own response — one source, and the rail's Retry re-runs the hero for free. Only the
+     * backdrop, overview, and metadata need the second, per-movie request.
+     */
+    private suspend fun loadHero(latest: ApiResult<List<LatestMovie>>, userInitiated: Boolean) {
+        val newest = when (latest) {
+            is ApiResult.Failure -> {
+                hideHeroOrKeep(userInitiated)
+                return
+            }
+            is ApiResult.Success -> latest.value.firstOrNull() ?: run {
+                // An empty library has no hero to protect: hide unconditionally.
+                _uiState.update { it.copy(hero = HomeHeroState.Hidden) }
+                return
+            }
+        }
+        when (val details = movies.movieDetails(newest.id)) {
+            is ApiResult.Success -> _uiState.update {
+                it.copy(
+                    hero = HomeHeroState.Loaded(
+                        toHomeHero(details.value.movie, serverUrl.require().apiBaseUrl),
+                    ),
+                )
+            }
+            is ApiResult.Failure -> hideHeroOrKeep(userInitiated)
+        }
+    }
+
+    /** The hero's [orKeep]: a background refresh that fails leaves a loaded hero alone. */
+    private fun hideHeroOrKeep(userInitiated: Boolean) {
+        _uiState.update {
+            if (!userInitiated && it.hero is HomeHeroState.Loaded) {
+                it
+            } else {
+                it.copy(hero = HomeHeroState.Hidden)
             }
         }
     }
@@ -169,6 +237,38 @@ class HomeViewModel(
             path = posterPath.orNull(),
         ),
     )
+
+    private fun toHomeHero(movie: Movie, apiBaseUrl: String): HomeHero = HomeHero(
+        id = movie.id,
+        title = movie.title,
+        // w1280 for a pane-width backdrop (section 11.3.1); w500 would upscale visibly at 10ft.
+        backdropUrl = tmdbImageUrl(
+            apiBaseUrl = apiBaseUrl,
+            size = TmdbImageSize.W1280,
+            path = movie.backdropPath?.orNull(),
+        ),
+        overview = movie.overview?.orNull()?.takeUnless { it.isBlank() },
+        metadataLine = heroMetadataLine(movie),
+    )
+
+    private fun heroMetadataLine(movie: Movie): String? = listOfNotNull(
+        movie.year?.orNull()?.toString(),
+        movie.certification?.orNull()?.takeUnless { it.isBlank() },
+        movie.runTime?.orNull()?.takeIf { it > 0 }?.let(::formatRuntime),
+        movie.criticRating?.orNull()?.let { String.format(Locale.US, "%.1f", it) },
+    )
+        .joinToString(" · ")
+        .ifEmpty { null }
+
+    private fun formatRuntime(minutes: Long): String {
+        val hours = minutes / 60
+        val rest = minutes % 60
+        return when {
+            hours == 0L -> "${rest}m"
+            rest == 0L -> "${hours}h"
+            else -> "${hours}h ${rest}m"
+        }
+    }
 
     private fun progressFraction(progressSec: Double, durationSec: Double): Float =
         if (durationSec > 0) (progressSec / durationSec).toFloat().coerceIn(0f, 1f) else 0f

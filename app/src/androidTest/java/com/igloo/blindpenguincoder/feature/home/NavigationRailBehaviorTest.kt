@@ -30,6 +30,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.testContinueMovies
+import com.igloo.blindpenguincoder.testHero
 import com.igloo.blindpenguincoder.testHomeMovies
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -78,9 +79,11 @@ class NavigationRailBehaviorTest {
                 IglooApp(
                     user = user,
                     signOut = signOut,
-                    // Loaded with poster-less movies: the placeholder path renders with no
-                    // network or image loading, so the shell tests stay hermetic.
+                    // Loaded with poster-less movies and a backdrop-less hero: the placeholder
+                    // paths render with no network or image loading, so the shell tests stay
+                    // hermetic while exercising the shipped entry anchor — the hero.
                     home = HomeUiState(
+                        hero = HomeHeroState.Loaded(testHero),
                         continueWatching = IglooRailState.Loaded(testContinueMovies),
                         latestMovies = IglooRailState.Loaded(testHomeMovies),
                     ),
@@ -96,8 +99,8 @@ class NavigationRailBehaviorTest {
         composeRule.waitForIdle()
     }
 
-    /** The content anchor on Home: the first card of the Continue Watching rail. */
-    private fun contentStartCard() = composeRule.onNodeWithTag("continue_card_1")
+    /** The content anchor on Home: the hero, whenever it is visible (section 11.3.1). */
+    private fun contentStartCard() = composeRule.onNodeWithTag("home_hero")
 
     /** The content anchor on every other destination: the placeholder's Movies card. */
     private fun placeholderStartCard() = composeRule.onNodeWithContentDescription(

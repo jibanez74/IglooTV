@@ -8,6 +8,7 @@ import com.igloo.blindpenguincoder.data.model.ContinueWatchingMovie
 import com.igloo.blindpenguincoder.data.model.ContinueWatchingMoviesData
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.LatestMoviesData
+import com.igloo.blindpenguincoder.data.model.MovieDetailsData
 import io.ktor.client.call.body
 
 class MovieRepository(
@@ -26,6 +27,14 @@ class MovieRepository(
         decode = { response ->
             response.body<ApiEnvelope<ContinueWatchingMoviesData>>().data?.movies
                 ?: error("Missing movies in continue watching response")
+        },
+    )
+
+    suspend fun movieDetails(id: Long): ApiResult<MovieDetailsData> = safeApiCall(
+        request = { api.movieDetails(id) },
+        decode = { response ->
+            response.body<ApiEnvelope<MovieDetailsData>>().data
+                ?: error("Missing data in movie details response")
         },
     )
 }

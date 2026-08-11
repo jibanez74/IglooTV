@@ -7,6 +7,7 @@ import com.igloo.blindpenguincoder.data.repository.continueWatchingMoviesJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.latestMovieJson
 import com.igloo.blindpenguincoder.data.repository.latestMoviesJson
+import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -44,16 +45,21 @@ class HomeViewModelTest {
     private fun viewModel(http: TestHttp) =
         HomeViewModel(http.movieRepository, http.serverUrl).also { it.refresh() }
 
-    /** A refresh fires both rails' requests, so every handler routes by path. */
+    /** A refresh fires both rails' requests plus the hero's, so every handler routes by path. */
     private fun routedHttp(
         engineDispatcher: CoroutineDispatcher? = null,
         continueWatching: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(continueWatchingMoviesJson()) },
         latest: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(latestMoviesJson()) },
+        details: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+            { jsonResponse(movieDetailsJson()) },
     ) = TestHttp(engineDispatcher) { request ->
-        when (request.url.encodedPath) {
-            "/api/movies/continue-watching" -> continueWatching(request)
+        val path = request.url.encodedPath
+        when {
+            path == "/api/movies/continue-watching" -> continueWatching(request)
+            // Before the catch-all: the details call must never silently get a latest-shaped body.
+            path.startsWith("/api/movies/details/") -> details(request)
             else -> latest(request)
         }
     }
@@ -65,6 +71,13 @@ class HomeViewModelTest {
     private suspend fun HomeViewModel.awaitContinue(): IglooRailState.Loaded<HomeContinueMovie> =
         uiState.first { it.continueWatching is IglooRailState.Loaded }
             .continueWatching as IglooRailState.Loaded
+
+    private suspend fun HomeViewModel.awaitHero(): HomeHero =
+        (uiState.first { it.hero is HomeHeroState.Loaded }.hero as HomeHeroState.Loaded).hero
+
+    private suspend fun HomeViewModel.awaitHiddenHero() {
+        uiState.first { it.hero is HomeHeroState.Hidden }
+    }
 
     private suspend fun HomeViewModel.awaitLatestError(): IglooRailState.Error =
         uiState.first { it.latestMovies is IglooRailState.Error }
@@ -346,6 +359,193 @@ class HomeViewModelTest {
 
         assertEquals("scan in progress", continueState.message)
         assertEquals(listOf("Ran"), latestState.items.map { it.title })
+    }
+
+    @Test
+    fun `the hero features the newest movie, enriched by one details request`() = runTest {
+        var detailsRequests = 0
+        val http = routedHttp(
+            latest = {
+                jsonResponse(
+                    latestMoviesJson(
+                        latestMovieJson(id = 7, title = "Heat"),
+                        latestMovieJson(id = 2, title = "Arrival"),
+                        latestMovieJson(id = 3, title = "Ran"),
+                    ),
+                )
+            },
+            details = { request ->
+                detailsRequests++
+                assertEquals("/api/movies/details/7", request.url.encodedPath)
+                jsonResponse(
+                    movieDetailsJson(
+                        id = 7,
+                        title = "Heat",
+                        backdropPath = "/heat-backdrop.jpg",
+                        overview = "Neil McCauley leads a top-notch crew.",
+                        year = 1995,
+                        certification = "R",
+                        runTimeMinutes = 170,
+                        criticRating = 8.2,
+                    ),
+                )
+            },
+        )
+
+        val hero = viewModel(http).awaitHero()
+
+        assertEquals(
+            HomeHero(
+                id = 7,
+                title = "Heat",
+                backdropUrl = "http://igloo.test:8080/api/tmdb/images/w1280/heat-backdrop.jpg",
+                overview = "Neil McCauley leads a top-notch crew.",
+                metadataLine = "1995 · R · 2h 50m · 8.2",
+            ),
+            hero,
+        )
+        assertEquals(1, detailsRequests)
+    }
+
+    @Test
+    fun `an empty library hides the hero`() = runTest {
+        var detailsRequests = 0
+        val http = routedHttp(details = { detailsRequests++; jsonResponse(movieDetailsJson()) })
+
+        viewModel(http).awaitHiddenHero()
+
+        assertEquals(0, detailsRequests)
+    }
+
+    @Test
+    fun `a failed latest fetch hides the hero`() = runTest {
+        val http = routedHttp(
+            latest = {
+                jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+            },
+        )
+
+        viewModel(http).awaitHiddenHero()
+    }
+
+    @Test
+    fun `a failed details fetch hides the hero but leaves the rail standing`() = runTest {
+        val http = routedHttp(
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 1, title = "Heat"))) },
+            details = {
+                jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+            },
+        )
+        val viewModel = viewModel(http)
+
+        viewModel.awaitHiddenHero()
+
+        assertEquals(listOf("Heat"), viewModel.awaitLatest().items.map { it.title })
+    }
+
+    @Test
+    fun `a refresh whose details fetch fails keeps the loaded hero`() = runTest {
+        var detailsRequests = 0
+        val http = routedHttp(
+            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 1, title = "Heat"))) },
+            details = {
+                detailsRequests += 1
+                if (detailsRequests == 1) {
+                    jsonResponse(movieDetailsJson(id = 1, title = "Heat"))
+                } else {
+                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                }
+            },
+        )
+        val viewModel = viewModel(http)
+        assertEquals("Heat", viewModel.awaitHero().title)
+
+        viewModel.refresh()
+
+        // The same bad-wifi rule as the rails: a background failure must not blank the hero.
+        assertEquals(2, detailsRequests)
+        assertEquals("Heat", viewModel.awaitHero().title)
+
+        // A Retry the user asked for still tells the truth.
+        viewModel.retry(HomeRail.LatestMovies)
+        viewModel.awaitHiddenHero()
+    }
+
+    @Test
+    fun `retrying the latest rail re-enters the hero's loading state`() = runTest {
+        var failed = false
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            latest = {
+                if (!failed) {
+                    failed = true
+                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                } else {
+                    gate.await()
+                    jsonResponse(latestMoviesJson(latestMovieJson(id = 3, title = "Ran")))
+                }
+            },
+            details = { jsonResponse(movieDetailsJson(id = 3, title = "Ran")) },
+        )
+        val viewModel = viewModel(http)
+        viewModel.awaitHiddenHero()
+
+        viewModel.retry(HomeRail.LatestMovies)
+
+        assertEquals(HomeHeroState.Loading, viewModel.uiState.value.hero)
+        gate.complete(Unit)
+        assertEquals("Ran", viewModel.awaitHero().title)
+    }
+
+    @Test
+    fun `hero fields absent on the wire map to nulls`() = runTest {
+        val http = routedHttp(
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 1, title = "Heat"))) },
+            details = {
+                jsonResponse(
+                    movieDetailsJson(
+                        id = 1,
+                        title = "Heat",
+                        backdropPath = null,
+                        overview = null,
+                        year = null,
+                        certification = null,
+                        runTimeMinutes = null,
+                        criticRating = null,
+                    ),
+                )
+            },
+        )
+
+        val hero = viewModel(http).awaitHero()
+
+        assertEquals(HomeHero(1, "Heat", null, null, null), hero)
+    }
+
+    @Test
+    fun `runtimes format as hours and minutes`() = runTest {
+        suspend fun metadataLine(runTimeMinutes: Long): String? {
+            val http = routedHttp(
+                latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 1))) },
+                details = {
+                    jsonResponse(
+                        movieDetailsJson(
+                            id = 1,
+                            year = null,
+                            certification = null,
+                            criticRating = null,
+                            runTimeMinutes = runTimeMinutes,
+                        ),
+                    )
+                },
+            )
+            return viewModel(http).awaitHero().metadataLine
+        }
+
+        assertEquals("45m", metadataLine(45))
+        assertEquals("2h", metadataLine(120))
+        assertEquals("2h 50m", metadataLine(170))
     }
 
     @Test

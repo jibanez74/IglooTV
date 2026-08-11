@@ -34,6 +34,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
+import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeMovie
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
@@ -122,7 +123,10 @@ class IglooConfirmDialogMotionTest {
                     IglooApp(
                         user = user,
                         signOut = signOut,
+                        // Hero hidden — a legitimate 11.3.1 state — so the sampled rail-card
+                        // bounds stay on the 540dp viewport; this test's subject is the scrim.
                         home = HomeUiState(
+                            hero = HomeHeroState.Hidden,
                             continueWatching = IglooRailState.Loaded(continueMovies),
                             latestMovies = IglooRailState.Loaded(testHomeMovies),
                         ),

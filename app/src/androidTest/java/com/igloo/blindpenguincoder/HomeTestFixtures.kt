@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder
 
 import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
+import com.igloo.blindpenguincoder.feature.home.HomeHero
 import com.igloo.blindpenguincoder.feature.home.HomeMovie
 
 /**
@@ -17,4 +18,13 @@ internal val testContinueMovies = listOf(
     HomeContinueMovie(testHomeMovies[0], progressFraction = 0.25f, progressLabel = "127 min left"),
     HomeContinueMovie(testHomeMovies[1], progressFraction = 0.5f, progressLabel = "58 min left"),
     HomeContinueMovie(testHomeMovies[2], progressFraction = 0.9f, progressLabel = "16 min left"),
+)
+
+/** Backdrop-less on purpose: the card-surface fallback renders with no image loading. */
+internal val testHero = HomeHero(
+    id = 1,
+    title = "Heat",
+    backdropUrl = null,
+    overview = "Obsessive master thief Neil McCauley leads a top-notch crew.",
+    metadataLine = "1995 · R · 2h 50m · 8.2",
 )
