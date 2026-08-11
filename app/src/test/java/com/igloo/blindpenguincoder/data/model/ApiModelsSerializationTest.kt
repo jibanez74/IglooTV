@@ -352,4 +352,43 @@ class ApiModelsSerializationTest {
 
         assertTrue(envelope.data!!.isLiked)
     }
+
+    /** `GET /music/albums/latest`: a SimpleAlbum list under `albums`, no pagination envelope. */
+    @Test
+    fun decodesLatestAlbumsEnvelope() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "albums": [
+                  {
+                    "id": 211,
+                    "title": "You Get What You Give (Deluxe Version)",
+                    "cover": {"String": "https://i.scdn.co/image/ab67.jpg", "Valid": true},
+                    "musician": {"String": "Zac Brown Band", "Valid": true},
+                    "year": {"Int64": 2010, "Valid": true}
+                  },
+                  {
+                    "id": 42,
+                    "title": "Untagged",
+                    "cover": {"String": "", "Valid": false},
+                    "musician": {"String": "", "Valid": false},
+                    "year": {"Int64": 0, "Valid": false}
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val albums = json.decodeFromString<ApiEnvelope<LatestAlbumsData>>(body).data!!.albums
+
+        assertEquals(listOf(211L, 42L), albums.map { it.id })
+        assertEquals("https://i.scdn.co/image/ab67.jpg", albums[0].cover.orNull())
+        assertEquals("Zac Brown Band", albums[0].musician.orNull())
+        assertEquals(2010L, albums[0].year.orNull())
+        // A `Valid: false` wrapper is absence, not the empty string the server pads it with.
+        assertNull(albums[1].cover.orNull())
+        assertNull(albums[1].musician.orNull())
+        assertNull(albums[1].year.orNull())
+    }
 }

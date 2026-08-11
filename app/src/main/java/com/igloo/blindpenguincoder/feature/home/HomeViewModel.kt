@@ -10,6 +10,7 @@ import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
+import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
@@ -37,8 +38,16 @@ data class HomeContinueMovie(
     val progressLabel: String,
 )
 
+/** An album ready to render: nullable wire fields resolved, cover taken as the backend sends it. */
+data class HomeAlbum(
+    val id: Long,
+    val title: String,
+    val musician: String?,
+    val coverUrl: String?,
+)
+
 /** The rails Home renders, in the order it renders them (docs/design-system.md section 11.3). */
-enum class HomeRail { ContinueWatching, LatestMovies }
+enum class HomeRail { ContinueWatching, LatestMovies, LatestAlbums }
 
 /** The featured movie, render-ready (section 11.3.1). Every field but id and title may be absent. */
 data class HomeHero(
@@ -64,10 +73,12 @@ data class HomeUiState(
     val hero: HomeHeroState = HomeHeroState.Loading,
     val continueWatching: IglooRailState<HomeContinueMovie> = IglooRailState.Loading,
     val latestMovies: IglooRailState<HomeMovie> = IglooRailState.Loading,
+    val latestAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loading,
 )
 
 class HomeViewModel(
     private val movies: MovieRepository,
+    private val music: MusicRepository,
     private val serverUrl: ServerUrlProvider,
 ) : ViewModel() {
 
@@ -83,6 +94,7 @@ class HomeViewModel(
     fun refresh() {
         loadContinueWatching(userInitiated = false)
         loadLatestMovies(userInitiated = false)
+        loadLatestAlbums(userInitiated = false)
     }
 
     /** The Retry the error state offers. Unlike [refresh] there is no content to protect. */
@@ -90,6 +102,7 @@ class HomeViewModel(
         when (rail) {
             HomeRail.ContinueWatching -> loadContinueWatching(userInitiated = true)
             HomeRail.LatestMovies -> loadLatestMovies(userInitiated = true)
+            HomeRail.LatestAlbums -> loadLatestAlbums(userInitiated = true)
         }
     }
 
@@ -146,6 +159,31 @@ class HomeViewModel(
                 it.copy(latestMovies = next.orKeep(it.latestMovies, userInitiated))
             }
             loadHero(result, userInitiated)
+        }
+    }
+
+    private fun loadLatestAlbums(userInitiated: Boolean) {
+        if (userInitiated) {
+            _uiState.update { it.copy(latestAlbums = IglooRailState.Loading) }
+        }
+        launchLoad(HomeRail.LatestAlbums) {
+            // Server order is the contract (newest first) — do not re-sort. SimpleAlbum carries
+            // no timestamp, so the route's own order is the only recency the client can show.
+            val next = music.latestAlbums().toRailState { albums ->
+                albums.map { album ->
+                    HomeAlbum(
+                        id = album.id,
+                        title = album.title,
+                        musician = album.musician.orNull()?.takeUnless { it.isBlank() },
+                        // Used verbatim: the scanner stores an absolute Spotify URL or nothing,
+                        // and there is no music image proxy to route it through.
+                        coverUrl = album.cover.orNull()?.takeUnless { it.isBlank() },
+                    )
+                }
+            }
+            _uiState.update {
+                it.copy(latestAlbums = next.orKeep(it.latestAlbums, userInitiated))
+            }
         }
     }
 

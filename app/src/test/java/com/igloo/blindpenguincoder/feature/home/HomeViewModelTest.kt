@@ -5,9 +5,11 @@ import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.continueWatchingMovieJson
 import com.igloo.blindpenguincoder.data.repository.continueWatchingMoviesJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
+import com.igloo.blindpenguincoder.data.repository.latestAlbumsJson
 import com.igloo.blindpenguincoder.data.repository.latestMovieJson
 import com.igloo.blindpenguincoder.data.repository.latestMoviesJson
 import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
+import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -43,9 +45,10 @@ class HomeViewModelTest {
 
     /** The host's start effect is what fires the first load; there is no fetch in `init`. */
     private fun viewModel(http: TestHttp) =
-        HomeViewModel(http.movieRepository, http.serverUrl).also { it.refresh() }
+        HomeViewModel(http.movieRepository, http.musicRepository, http.serverUrl)
+            .also { it.refresh() }
 
-    /** A refresh fires both rails' requests plus the hero's, so every handler routes by path. */
+    /** A refresh fires all three rails' requests plus the hero's, so handlers route by path. */
     private fun routedHttp(
         engineDispatcher: CoroutineDispatcher? = null,
         continueWatching: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
@@ -54,10 +57,13 @@ class HomeViewModelTest {
             { jsonResponse(latestMoviesJson()) },
         details: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(movieDetailsJson()) },
+        albums: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+            { jsonResponse(latestAlbumsJson()) },
     ) = TestHttp(engineDispatcher) { request ->
         val path = request.url.encodedPath
         when {
             path == "/api/movies/continue-watching" -> continueWatching(request)
+            path == "/api/music/albums/latest" -> albums(request)
             // Before the catch-all: the details call must never silently get a latest-shaped body.
             path.startsWith("/api/movies/details/") -> details(request)
             else -> latest(request)
@@ -87,19 +93,29 @@ class HomeViewModelTest {
         uiState.first { it.continueWatching is IglooRailState.Error }
             .continueWatching as IglooRailState.Error
 
+    private suspend fun HomeViewModel.awaitAlbums(): IglooRailState.Loaded<HomeAlbum> =
+        uiState.first { it.latestAlbums is IglooRailState.Loaded }
+            .latestAlbums as IglooRailState.Loaded
+
+    private suspend fun HomeViewModel.awaitAlbumsError(): IglooRailState.Error =
+        uiState.first { it.latestAlbums is IglooRailState.Error }
+            .latestAlbums as IglooRailState.Error
+
     @Test
     fun `nothing loads until the host asks for it`() = runTest {
         var requests = 0
         val http = routedHttp(
             continueWatching = { requests++; jsonResponse(continueWatchingMoviesJson()) },
             latest = { requests++; jsonResponse(latestMoviesJson()) },
+            albums = { requests++; jsonResponse(latestAlbumsJson()) },
         )
 
-        val viewModel = HomeViewModel(http.movieRepository, http.serverUrl)
+        val viewModel = HomeViewModel(http.movieRepository, http.musicRepository, http.serverUrl)
 
         assertEquals(0, requests)
         assertEquals(IglooRailState.Loading, viewModel.uiState.value.continueWatching)
         assertEquals(IglooRailState.Loading, viewModel.uiState.value.latestMovies)
+        assertEquals(IglooRailState.Loading, viewModel.uiState.value.latestAlbums)
     }
 
     @Test
@@ -602,5 +618,160 @@ class HomeViewModelTest {
         gate.complete(Unit)
         assertEquals(listOf("Ran"), viewModel.awaitContinue().items.map { it.movie.title })
         assertEquals(1, latestRequests)
+    }
+
+    @Test
+    fun `albums map to cards keeping the cover URL the backend sent`() = runTest {
+        val http = routedHttp(
+            albums = {
+                jsonResponse(
+                    latestAlbumsJson(
+                        simpleAlbumJson(
+                            id = 211,
+                            title = "The Foundation",
+                            cover = "https://i.scdn.co/image/foundation.jpg",
+                            musician = "Zac Brown Band",
+                        ),
+                    ),
+                )
+            },
+        )
+
+        val album = viewModel(http).awaitAlbums().items.single()
+
+        assertEquals(211L, album.id)
+        assertEquals("The Foundation", album.title)
+        assertEquals("Zac Brown Band", album.musician)
+        // Verbatim: there is no music image proxy to rewrite a Spotify URL through.
+        assertEquals("https://i.scdn.co/image/foundation.jpg", album.coverUrl)
+    }
+
+    @Test
+    fun `absent cover and musician map to nulls`() = runTest {
+        val http = routedHttp(
+            albums = { jsonResponse(latestAlbumsJson(simpleAlbumJson(cover = null, musician = null))) },
+        )
+
+        val album = viewModel(http).awaitAlbums().items.single()
+
+        assertNull(album.coverUrl)
+        assertNull(album.musician)
+    }
+
+    @Test
+    fun `a blank cover or musician is absent, not an empty line under the title`() = runTest {
+        val http = routedHttp(
+            albums = { jsonResponse(latestAlbumsJson(simpleAlbumJson(cover = " ", musician = ""))) },
+        )
+
+        val album = viewModel(http).awaitAlbums().items.single()
+
+        assertNull(album.coverUrl)
+        assertNull(album.musician)
+    }
+
+    @Test
+    fun `the albums rail keeps the server's order`() = runTest {
+        val http = routedHttp(
+            albums = {
+                jsonResponse(
+                    latestAlbumsJson(
+                        simpleAlbumJson(id = 3, title = "Zenyatta Mondatta"),
+                        simpleAlbumJson(id = 1, title = "Help!"),
+                        simpleAlbumJson(id = 2, title = "1984"),
+                    ),
+                )
+            },
+        )
+
+        val titles = viewModel(http).awaitAlbums().items.map { it.title }
+
+        assertEquals(listOf("Zenyatta Mondatta", "Help!", "1984"), titles)
+    }
+
+    @Test
+    fun `an empty music library loads as an empty rail, not an error`() = runTest {
+        val http = routedHttp(albums = { jsonResponse(latestAlbumsJson()) })
+
+        assertTrue(viewModel(http).awaitAlbums().items.isEmpty())
+    }
+
+    @Test
+    fun `an albums failure leaves the movie rails standing`() = runTest {
+        val http = routedHttp(
+            albums = {
+                jsonResponse(
+                    """{"error":true,"message":"music scan in progress"}""",
+                    HttpStatusCode.InternalServerError,
+                )
+            },
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 3, title = "Ran"))) },
+        )
+        val viewModel = viewModel(http)
+
+        assertEquals("music scan in progress", viewModel.awaitAlbumsError().message)
+        assertEquals(listOf("Ran"), viewModel.awaitLatest().items.map { it.title })
+    }
+
+    @Test
+    fun `retrying the albums rail reloads only that rail`() = runTest {
+        var failed = false
+        val gate = CompletableDeferred<Unit>()
+        var latestRequests = 0
+        val http = routedHttp(
+            albums = {
+                if (!failed) {
+                    failed = true
+                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                } else {
+                    gate.await()
+                    jsonResponse(latestAlbumsJson(simpleAlbumJson(id = 4, title = "Tribalistas")))
+                }
+            },
+            latest = {
+                latestRequests++
+                jsonResponse(latestMoviesJson(latestMovieJson(id = 9, title = "Alien")))
+            },
+        )
+        val viewModel = viewModel(http)
+        viewModel.awaitAlbumsError()
+        viewModel.awaitLatest()
+
+        viewModel.retry(HomeRail.LatestAlbums)
+
+        assertEquals(IglooRailState.Loading, viewModel.uiState.value.latestAlbums)
+        assertTrue(viewModel.uiState.value.latestMovies is IglooRailState.Loaded)
+        gate.complete(Unit)
+        assertEquals(listOf("Tribalistas"), viewModel.awaitAlbums().items.map { it.title })
+        assertEquals(1, latestRequests)
+    }
+
+    @Test
+    fun `a refresh that fails leaves the loaded albums alone`() = runTest {
+        var requests = 0
+        val http = routedHttp(
+            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
+            albums = {
+                requests += 1
+                if (requests == 1) {
+                    jsonResponse(latestAlbumsJson(simpleAlbumJson(id = 1, title = "Help!")))
+                } else {
+                    jsonResponse(
+                        """{"error":true,"message":"music scan in progress"}""",
+                        HttpStatusCode.InternalServerError,
+                    )
+                }
+            },
+        )
+        val viewModel = viewModel(http)
+        assertEquals(listOf("Help!"), viewModel.awaitAlbums().items.map { it.title })
+
+        viewModel.refresh()
+
+        assertEquals(2, requests)
+        assertEquals(listOf("Help!"), viewModel.awaitAlbums().items.map { it.title })
+
+        viewModel.retry(HomeRail.LatestAlbums)
+        assertEquals("music scan in progress", viewModel.awaitAlbumsError().message)
     }
 }

@@ -64,6 +64,7 @@ class IglooDimensTest {
             assertEquals(264.dp, wideCardWidth)
             assertEquals(2f / 3f, posterAspect, 0.0001f)
             assertEquals(16f / 9f, wideAspect, 0.0001f)
+            assertEquals(1f, albumAspect, 0.0001f)
         }
     }
 

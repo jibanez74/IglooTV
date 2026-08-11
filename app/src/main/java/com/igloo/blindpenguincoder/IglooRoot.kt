@@ -165,7 +165,11 @@ fun IglooRoot(container: IglooAppContainer) {
                         viewModelStoreOwner = authenticatedSessionOwner,
                         key = "home",
                     ) {
-                        HomeViewModel(container.movieRepository, container.serverUrlProvider)
+                        HomeViewModel(
+                            container.movieRepository,
+                            container.musicRepository,
+                            container.serverUrlProvider,
+                        )
                     }
                     // Device tokens are revoked server-side after long disuse, so a session
                     // resumed from the background is re-checked before it is trusted — and the

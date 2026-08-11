@@ -15,6 +15,7 @@ import com.igloo.blindpenguincoder.core.storage.ProfileVault
 import com.igloo.blindpenguincoder.core.storage.StoredProfile
 import com.igloo.blindpenguincoder.data.api.AuthApi
 import com.igloo.blindpenguincoder.data.api.MovieApi
+import com.igloo.blindpenguincoder.data.api.MusicApi
 import com.igloo.blindpenguincoder.data.api.UserApi
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -64,6 +65,8 @@ class TestHttp(
     val authRepository = AuthRepository(api, userApi, profiles, testDeviceIdentity)
     val movieApi = MovieApi(client, serverUrl)
     val movieRepository = MovieRepository(movieApi)
+    val musicApi = MusicApi(client, serverUrl)
+    val musicRepository = MusicRepository(musicApi)
 
     /** Puts profiles in the vault without going through a sign-in. */
     fun seedVault(
@@ -151,6 +154,19 @@ fun continueWatchingMovieJson(
 
 fun continueWatchingMoviesJson(vararg movies: String): String =
     """{"error":false,"message":"continue watching","data":{"movies":[${movies.joinToString(",")}]}}"""
+
+/** One `GET /music/albums/latest` list entry; covers arrive as absolute Spotify URLs. */
+fun simpleAlbumJson(
+    id: Long = 1,
+    title: String = "Help!",
+    cover: String? = "https://i.scdn.co/image/help.jpg",
+    musician: String? = "The Beatles",
+    year: Long? = 1965,
+): String = """{"id":$id,"title":"$title","cover":${sqlNullStringJson(cover)},""" +
+    """"musician":${sqlNullStringJson(musician)},"year":${sqlNullInt64Json(year)}}"""
+
+fun latestAlbumsJson(vararg albums: String): String =
+    """{"error":false,"message":"latest albums","data":{"albums":[${albums.joinToString(",")}]}}"""
 
 /**
  * `GET /movies/details/{id}` payload: the full movie plus its related lists, which the spec

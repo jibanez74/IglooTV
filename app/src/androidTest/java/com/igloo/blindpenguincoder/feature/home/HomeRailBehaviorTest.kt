@@ -29,6 +29,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHomeMovies
 import org.junit.Assert.assertEquals
@@ -63,12 +64,15 @@ class HomeRailBehaviorTest {
 
     private val continueMovies = testContinueMovies
     private val movies = testHomeMovies
+    private val albums = testAlbums
 
     private var continueState by
         mutableStateOf<IglooRailState<HomeContinueMovie>>(IglooRailState.Loading)
     private var latestState by mutableStateOf<IglooRailState<HomeMovie>>(IglooRailState.Loading)
+    private var albumsState by mutableStateOf<IglooRailState<HomeAlbum>>(IglooRailState.Loading)
     private var continueRetries = 0
     private var latestRetries = 0
+    private var albumRetries = 0
     private val opened = mutableListOf<HomeMovie>()
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
@@ -76,12 +80,15 @@ class HomeRailBehaviorTest {
     private fun setShellContent(
         initialContinue: IglooRailState<HomeContinueMovie>,
         initialLatest: IglooRailState<HomeMovie> = IglooRailState.Loaded(movies),
+        initialAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loaded(albums),
         onMovieSelected: ((HomeMovie) -> Unit)? = { opened += it },
     ) {
         continueState = initialContinue
         latestState = initialLatest
+        albumsState = initialAlbums
         continueRetries = 0
         latestRetries = 0
+        albumRetries = 0
         opened.clear()
         composeRule.setContent {
             val context = LocalContext.current
@@ -98,11 +105,13 @@ class HomeRailBehaviorTest {
                         hero = HomeHeroState.Hidden,
                         continueWatching = continueState,
                         latestMovies = latestState,
+                        latestAlbums = albumsState,
                     ),
                     onRetryRail = { rail ->
                         when (rail) {
                             HomeRail.ContinueWatching -> continueRetries += 1
                             HomeRail.LatestMovies -> latestRetries += 1
+                            HomeRail.LatestAlbums -> albumRetries += 1
                         }
                     },
                     onMovieSelected = onMovieSelected,
@@ -119,6 +128,8 @@ class HomeRailBehaviorTest {
     private fun continueCard(id: Long) = composeRule.onNodeWithTag("continue_card_$id")
 
     private fun latestCard(id: Long) = composeRule.onNodeWithTag("poster_card_$id")
+
+    private fun albumCard(id: Long) = composeRule.onNodeWithTag("album_card_$id")
 
     private fun pressBack() {
         composeRule.runOnUiThread {
@@ -313,5 +324,86 @@ class HomeRailBehaviorTest {
         continueCard(1).assertIsFocused()
         continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
         continueCard(2).assertIsFocused()
+    }
+
+    @Test
+    fun dpadDownReachesTheAlbumsRailAndItKeepsItsOwnFocusMemory() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+
+        continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        latestCard(1).assertIsFocused()
+        latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        albumCard(11).assertIsFocused()
+
+        albumCard(11).performKeyInput { pressKey(Key.DirectionRight) }
+        albumCard(12).assertIsFocused()
+
+        // Left walks back through the rail and only the first card opens the spine; re-entry then
+        // lands on the *first* rail's memory — the albums rail keeps its own, untouched by the trip.
+        albumCard(12).performKeyInput { pressKey(Key.DirectionLeft) }
+        albumCard(11).performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.onNodeWithContentDescription("Home").assertIsFocused()
+        composeRule.onNodeWithContentDescription("Home")
+            .performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(1).assertIsFocused()
+    }
+
+    @Test
+    fun theLastAlbumPinsTheRightEdge() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+        continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        albumCard(11).performKeyInput { pressKey(Key.DirectionRight) }
+        albumCard(12).performKeyInput { pressKey(Key.DirectionRight) }
+        albumCard(13).assertIsFocused()
+
+        albumCard(13).performKeyInput { pressKey(Key.DirectionRight) }
+
+        albumCard(13).assertIsFocused()
+    }
+
+    @Test
+    fun albumsRailRetryLeavesTheOtherRailsAlone() {
+        setShellContent(
+            initialContinue = IglooRailState.Loaded(continueMovies),
+            initialAlbums = IglooRailState.Error("music scan in progress"),
+        )
+
+        composeRule.onNodeWithContentDescription("Retry loading Recently Added Albums")
+            .performScrollTo()
+            .performClick()
+
+        assertEquals(1, albumRetries)
+        assertEquals(0, latestRetries)
+        assertEquals(0, continueRetries)
+    }
+
+    @Test
+    fun anEmptyMusicLibraryIsFocusableAndAnnounced() {
+        setShellContent(
+            initialContinue = IglooRailState.Loaded(continueMovies),
+            initialAlbums = IglooRailState.Loaded(emptyList()),
+        )
+
+        // The empty rail must still be a landing site, or d-pad down would stop at the rail above.
+        continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+
+        composeRule.onNodeWithContentDescription(
+            "No albums in your library yet. Add a music folder on the server and run a scan.",
+        ).assertIsFocused()
+    }
+
+    @Test
+    fun albumCardsAnnounceTitleAndMusicianWithNoAction() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+
+        // One cleared node: the cover image and the two captions are not separate announceable
+        // nodes. No action either — album detail has no destination yet.
+        albumCard(11)
+            .performScrollTo()
+            .assertContentDescriptionEquals("Help!, The Beatles")
+            .assertHasNoClickAction()
+        composeRule.onAllNodesWithText("The Beatles").assertCountEquals(0)
     }
 }

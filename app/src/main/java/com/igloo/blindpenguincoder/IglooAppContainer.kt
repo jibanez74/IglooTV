@@ -19,9 +19,11 @@ import com.igloo.blindpenguincoder.core.storage.sessionDataStore
 import com.igloo.blindpenguincoder.core.storage.settingsDataStore
 import com.igloo.blindpenguincoder.data.api.AuthApi
 import com.igloo.blindpenguincoder.data.api.MovieApi
+import com.igloo.blindpenguincoder.data.api.MusicApi
 import com.igloo.blindpenguincoder.data.api.UserApi
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
+import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.data.repository.ProfileRepository
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
 import com.igloo.blindpenguincoder.feature.auth.SessionManager
@@ -53,6 +55,8 @@ class IglooAppContainer(context: Context) {
     private val userApi by lazy { UserApi(httpClient, serverUrlProvider) }
     private val movieApi by lazy { MovieApi(httpClient, serverUrlProvider) }
     val movieRepository by lazy { MovieRepository(movieApi) }
+    private val musicApi by lazy { MusicApi(httpClient, serverUrlProvider) }
+    val musicRepository by lazy { MusicRepository(musicApi) }
     val authRepository by lazy {
         AuthRepository(authApi, userApi, profileRepository, identity)
     }

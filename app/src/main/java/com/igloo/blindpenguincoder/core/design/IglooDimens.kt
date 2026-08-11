@@ -73,6 +73,8 @@ data class IglooLayout(
     val wideCardWidth: Dp,
     val posterAspect: Float,
     val wideAspect: Float,
+    /** Album art and musician thumbs are square, on [posterWidth] like every other card. */
+    val albumAspect: Float,
     /** Unscaled and inverse: a larger UI shows fewer columns. */
     val gridColumns: Int,
 )
@@ -156,6 +158,7 @@ private fun iglooDimens(
         wideCardWidth = 264.dp.at(scale),
         posterAspect = 2f / 3f,
         wideAspect = 16f / 9f,
+        albumAspect = 1f,
         gridColumns = when (uiScale) {
             UiScale.Compact -> 6
             UiScale.Standard -> 5

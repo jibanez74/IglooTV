@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -47,13 +48,14 @@ data class PosterCardProgress(
 )
 
 /**
- * A 2:3 poster with its title and one optional line of context below. The poster carries the
- * focus treatment — ring, scale, and glow stay on the artwork while the text keeps still —
- * but the whole card is one focus target and one TalkBack node.
+ * Artwork with its title and one optional line of context below. The artwork carries the focus
+ * treatment — ring, scale, and glow stay on it while the text keeps still — but the whole card
+ * is one focus target and one TalkBack node.
  *
- * A null or failed image falls back to the film glyph on the muted fill; the text below is
+ * [aspect] defaults to the 2:3 movie poster; album art passes `albumAspect` (section 8.2). A
+ * null or failed image falls back to [fallbackIcon] on the muted fill; the text below is
  * unchanged, so the card loses nothing but the artwork. An optional progress bar sits on the
- * poster's bottom edge and is announced through [PosterCardProgress.description].
+ * artwork's bottom edge and is announced through [PosterCardProgress.description].
  *
  * A null [onClick] still renders a focusable card — the rails' focus model needs every card to
  * be a landing site — but it drops the button role and the "Open …" action, because announcing
@@ -67,6 +69,8 @@ fun IglooPosterCard(
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     progress: PosterCardProgress? = null,
+    aspect: Float = IglooTheme.layout.posterAspect,
+    fallbackIcon: ImageVector = IglooIcons.Movies,
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
@@ -103,7 +107,7 @@ fun IglooPosterCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(IglooTheme.layout.posterAspect)
+                .aspectRatio(aspect)
                 // focusRing owns the clip, so the muted fill doubles as the image backdrop and
                 // nothing here may clip over it.
                 .focusRing(
@@ -125,7 +129,7 @@ fun IglooPosterCard(
                 )
             } else {
                 Image(
-                    imageVector = IglooIcons.Movies,
+                    imageVector = fallbackIcon,
                     contentDescription = null,
                     colorFilter = ColorFilter.tint(colors.mutedForeground),
                     modifier = Modifier.size(IglooTheme.icons.lg),

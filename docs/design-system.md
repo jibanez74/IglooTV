@@ -599,10 +599,15 @@ no drawer, no hamburger, and no fully-hidden mode.
 | `posterAspect` | 2:3 | `Modifier.aspectRatio(2f / 3f)` |
 | `wideCardWidth` | 264dp | Backdrop / episode cards |
 | `wideAspect` | 16:9 | |
+| `albumAspect` | 1:1 | Album art is square |
 | `gridColumns` | 6 / 5 / 4 ⚑ | Compact / Standard / Large — *unscaled, and inverse* |
 
-Album art is square (`aspectRatio(1f)`); musician thumbnails are circular. Both use
-`posterWidth` as their base width.
+Album art is square and musician thumbnails are circular. Both use `posterWidth` as their base
+width, so an album card is a movie poster's width and a movie poster's width tall.
+
+`IglooPosterCard` takes the aspect as a parameter (`posterAspect` by default, `albumAspect` for
+album art) rather than owning it, and `IglooMediaRail` takes the same value for its skeleton —
+§10's grid-matching rule is only true if the placeholder is the shape of the card replacing it.
 
 **A partially-visible next card is a feature.** It is the only affordance telling a remote user
 the rail continues.
@@ -1102,6 +1107,30 @@ library, a failed latest fetch, or a failed details fetch **hides the hero** —
 already owns the error and its Retry. A background refresh that fails keeps a previously loaded
 hero, exactly the rails' rule; an empty library hides it unconditionally.
 
+#### 11.3.2 The rails
+
+Each rail is one `IglooMediaRail` over one endpoint, loaded by its own cancellable job so the
+rails fail, retry, and refresh independently (§12's polite live regions depend on that).
+
+| Rail | Endpoint | Card | Empty copy |
+|---|---|---|---|
+| Continue Watching | `GET /api/movies/continue-watching` | poster + progress bar | "Nothing in progress yet. Movies you start watching appear here." |
+| Recently Added Movies | `GET /api/movies/latest` | poster, year below | "No movies in your library yet. Add a movies folder on the server and run a scan." |
+| Recently Added Albums | `GET /api/music/albums/latest` | `albumAspect` cover, musician below, `Music` glyph fallback | "No albums in your library yet. Add a music folder on the server and run a scan." |
+
+**Server order is the contract.** None of the three routes takes a sort, and
+`GET /api/music/albums/latest` takes no parameters at all — not even a limit; the backend owns
+both the order and the cap of 12. Nothing is re-sorted or re-sliced client-side.
+
+**Album covers are used verbatim.** The music scanner stores an absolute Spotify image URL or
+nothing, so a cover is not run through the TMDB proxy helper and there is no music proxy to
+build. The image loader already withholds the bearer token from foreign origins, which is what
+makes loading straight from the CDN correct rather than merely convenient.
+
+Only the first section on the pane holds the entry anchor — the hero when it is visible,
+Continue Watching otherwise — so every rail below passes `entryRequester = null`. Vertical d-pad
+between rails resolves spatially in the scrolling column; only the hero hand-wires its `down`.
+
 ### 11.4 Movies
 
 - **Index** — heading, stats, tab control (All / Genres / Playlists), then a poster grid at
@@ -1263,6 +1292,22 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-11 — Home gets its third rail: Recently Added Albums.**
+
+§11.3's rail order reaches the albums entry (`GET /api/music/albums/latest`), and §11.3.2 now
+records all three rails' endpoints and empty copy in one table instead of leaving them to the code.
+
+- **§8.2 gains `albumAspect` (1:1).** The square-album sentence had no token behind it, so both
+  the card and its skeleton would have carried a bare `1f`. `IglooPosterCard` now takes the
+  aspect and the fallback glyph as parameters instead of hard-coding the 2:3 poster and the film
+  icon, and `IglooMediaRail` takes the same aspect for its skeleton — §10's grid-matching rule is
+  only true if the placeholder is the shape of the card that replaces it.
+- **Album covers bypass the image helpers.** The scanner stores an absolute Spotify URL or
+  nothing; there is no music image proxy, so the cover is used verbatim and the loader's
+  existing origin check is what keeps the bearer token off a foreign CDN.
+- Album cards follow the poster cards' precedent: focusable, announcing title and musician, with
+  **no** action until album detail lands.
 
 **2026-08-10 — Home gets its hero.**
 

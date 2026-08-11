@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder
 
+import com.igloo.blindpenguincoder.feature.home.HomeAlbum
 import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeHero
 import com.igloo.blindpenguincoder.feature.home.HomeMovie
@@ -18,6 +19,13 @@ internal val testContinueMovies = listOf(
     HomeContinueMovie(testHomeMovies[0], progressFraction = 0.25f, progressLabel = "127 min left"),
     HomeContinueMovie(testHomeMovies[1], progressFraction = 0.5f, progressLabel = "58 min left"),
     HomeContinueMovie(testHomeMovies[2], progressFraction = 0.9f, progressLabel = "16 min left"),
+)
+
+/** Cover-less for the same reason: the Music glyph fallback needs no network. */
+internal val testAlbums = listOf(
+    HomeAlbum(id = 11, title = "Help!", musician = "The Beatles", coverUrl = null),
+    HomeAlbum(id = 12, title = "1984", musician = "Van Halen", coverUrl = null),
+    HomeAlbum(id = 13, title = "Tribalistas", musician = "Tribalistas", coverUrl = null),
 )
 
 /** Backdrop-less on purpose: the card-surface fallback renders with no image loading. */

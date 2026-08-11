@@ -78,6 +78,7 @@ fun <T> IglooMediaRail(
     emptyText: String,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    cardAspect: Float = IglooTheme.layout.posterAspect,
     itemContent: @Composable (item: T, itemModifier: Modifier) -> Unit,
 ) {
     val localAnchor = remember { FocusRequester() }
@@ -127,6 +128,7 @@ fun <T> IglooMediaRail(
             is IglooRailState.Loading -> RailSkeleton(
                 anchorModifier = anchorModifier,
                 loadingLabel = loadingLabel,
+                cardAspect = cardAspect,
             )
 
             // Rail-shaped, not form-shaped: the card is bounded to the cards it replaces so a
@@ -194,14 +196,16 @@ fun <T> IglooMediaRail(
 }
 
 /**
- * Poster-geometry placeholders, so focus taken while loading sits exactly where the first
- * card will land. Only the first cell is real to focus and TalkBack; the rest are texture.
- * Static on purpose — nothing in the product loops (design-system.md section 7.2).
+ * Card-geometry placeholders, so focus taken while loading sits exactly where the first card
+ * will land — which is why [cardAspect] must match the rail's real card (section 10). Only the
+ * first cell is real to focus and TalkBack; the rest are texture. Static on purpose — nothing
+ * in the product loops (design-system.md section 7.2).
  */
 @Composable
 private fun RailSkeleton(
     anchorModifier: Modifier,
     loadingLabel: String,
+    cardAspect: Float,
 ) {
     var focused by remember { mutableStateOf(false) }
     Row(
@@ -210,6 +214,7 @@ private fun RailSkeleton(
     ) {
         SkeletonCell(
             focused = focused,
+            cardAspect = cardAspect,
             modifier = anchorModifier
                 .onFocusChanged { focused = it.isFocused }
                 .focusable()
@@ -221,6 +226,7 @@ private fun RailSkeleton(
         repeat(SKELETON_CELLS - 1) {
             SkeletonCell(
                 focused = false,
+                cardAspect = cardAspect,
                 modifier = Modifier.semantics { hideFromAccessibility() },
             )
         }
@@ -230,6 +236,7 @@ private fun RailSkeleton(
 @Composable
 private fun SkeletonCell(
     focused: Boolean,
+    cardAspect: Float,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
@@ -241,7 +248,7 @@ private fun SkeletonCell(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(IglooTheme.layout.posterAspect)
+                .aspectRatio(cardAspect)
                 .focusRing(
                     focused = focused,
                     radius = IglooTheme.radius.lg,

@@ -49,6 +49,7 @@ class LocalApiServer(private val hasPin: Boolean = true) {
             // cleanest true state for tests that only assert on the shell.
             path.endsWith("/movies/latest") -> """{"error":false,"data":{"movies":[]}}"""
             path.endsWith("/movies/continue-watching") -> """{"error":false,"data":{"movies":[]}}"""
+            path.endsWith("/music/albums/latest") -> """{"error":false,"data":{"albums":[]}}"""
             else -> null
         }
         val status = if (body == null) "404 Not Found" else "200 OK"

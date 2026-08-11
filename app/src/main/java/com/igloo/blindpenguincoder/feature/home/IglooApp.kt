@@ -293,6 +293,7 @@ private fun ContentPane(
     // One per rail: each rail keeps its own focus memory.
     var lastFocusedContinueMovieId by rememberSaveable { mutableStateOf<Long?>(null) }
     var lastFocusedLatestMovieId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var lastFocusedAlbumId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     Column(
         // Rail and content are each a traversal group, so TalkBack reads one block at a
@@ -339,6 +340,8 @@ private fun ContentPane(
                 onContinueMovieFocused = { lastFocusedContinueMovieId = it },
                 lastFocusedLatestMovieId = lastFocusedLatestMovieId,
                 onLatestMovieFocused = { lastFocusedLatestMovieId = it },
+                lastFocusedAlbumId = lastFocusedAlbumId,
+                onAlbumFocused = { lastFocusedAlbumId = it },
             )
 
             else -> PlaceholderContent(
@@ -380,6 +383,8 @@ private fun HomeRails(
     onContinueMovieFocused: (Long) -> Unit,
     lastFocusedLatestMovieId: Long?,
     onLatestMovieFocused: (Long) -> Unit,
+    lastFocusedAlbumId: Long?,
+    onAlbumFocused: (Long) -> Unit,
 ) {
     // The hero owns the pane's entry anchor whenever it is visible; the Continue Watching rail
     // takes it back when the hero hides (section 11.3.1). heroVisible gates both attachment
@@ -458,6 +463,33 @@ private fun HomeRails(
                 imageUrl = movie.posterUrl,
                 onClick = onMovieSelected?.let { select -> { select(movie) } },
                 modifier = itemModifier.testTag("poster_card_${movie.id}"),
+            )
+        }
+
+        IglooMediaRail(
+            title = "Recently Added Albums",
+            state = home.latestAlbums,
+            itemKey = { it.id },
+            entryRequester = null,
+            leftFocusRequester = navigationRequester,
+            lastFocusedKey = lastFocusedAlbumId,
+            onItemFocused = onAlbumFocused,
+            loadingLabel = "Loading recently added albums",
+            emptyIcon = IglooIcons.Music,
+            emptyText = "No albums in your library yet. Add a music folder on the server and run a scan.",
+            onRetry = { onRetryRail(HomeRail.LatestAlbums) },
+            cardAspect = IglooTheme.layout.albumAspect,
+        ) { album, itemModifier ->
+            IglooPosterCard(
+                title = album.title,
+                subtitle = album.musician,
+                imageUrl = album.coverUrl,
+                // Focusable but inert: album detail has no destination yet, and a card that
+                // announces "Open …" and then does nothing is worse than one that announces none.
+                onClick = null,
+                aspect = IglooTheme.layout.albumAspect,
+                fallbackIcon = IglooIcons.Music,
+                modifier = itemModifier.testTag("album_card_${album.id}"),
             )
         }
     }
