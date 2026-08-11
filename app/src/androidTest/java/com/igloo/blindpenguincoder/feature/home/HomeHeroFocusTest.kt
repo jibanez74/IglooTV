@@ -122,6 +122,26 @@ class HomeHeroFocusTest {
     }
 
     @Test
+    fun aHeroThatComesBackDoesNotStealFocusFromTheRails() {
+        // The hero owned focus before it hid, so whatever remembers that must not still be armed
+        // when it returns: by then the user has moved on and the rail owns focus for real.
+        setShellContent(HomeHeroState.Loading)
+        hero().assertIsFocused()
+
+        heroState = HomeHeroState.Hidden
+        composeRule.waitForIdle()
+        val firstCard = composeRule.onNodeWithTag("continue_card_1")
+        firstCard.assertIsFocused()
+        firstCard.performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.onNodeWithTag("continue_card_2").assertIsFocused()
+
+        heroState = HomeHeroState.Loaded(testHero)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("continue_card_2").assertIsFocused()
+    }
+
+    @Test
     fun dpadLeftFromTheHeroOpensTheSpine() {
         setShellContent(HomeHeroState.Loaded(testHero))
 

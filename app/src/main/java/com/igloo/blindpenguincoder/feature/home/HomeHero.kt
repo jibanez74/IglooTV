@@ -5,7 +5,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -136,6 +135,10 @@ private fun HeroContent(
             )
             // Over-media literals per section 3.2: the side gradient carries the text column
             // against busy art, the bottom gradient carries the title. Both static.
+            //
+            // Both size with matchParentSize, and the bottom one puts its fade in the stops
+            // rather than in a 0.6 height fraction: the hero sits in a verticalScroll, so its
+            // incoming maxHeight is unbounded and a fractional fill would measure to zero.
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -149,12 +152,10 @@ private fun HeroContent(
             )
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.6f)
+                    .matchParentSize()
                     .background(
                         Brush.verticalGradient(
-                            0f to Color.Transparent,
+                            0.4f to Color.Transparent,
                             1f to Color.Black.copy(alpha = 0.90f),
                         ),
                     ),

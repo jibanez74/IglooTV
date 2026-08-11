@@ -251,11 +251,14 @@ class HomeViewModel(
         metadataLine = heroMetadataLine(movie),
     )
 
+    // Every numeric field is guarded against zero, not just null: the scraper writes TMDB's
+    // "no data" as a valid 0 — an unrated movie would otherwise read "· 0.0".
     private fun heroMetadataLine(movie: Movie): String? = listOfNotNull(
-        movie.year?.orNull()?.toString(),
+        movie.year?.orNull()?.takeIf { it > 0 }?.toString(),
         movie.certification?.orNull()?.takeUnless { it.isBlank() },
         movie.runTime?.orNull()?.takeIf { it > 0 }?.let(::formatRuntime),
-        movie.criticRating?.orNull()?.let { String.format(Locale.US, "%.1f", it) },
+        movie.criticRating?.orNull()?.takeIf { it > 0 }
+            ?.let { String.format(Locale.US, "%.1f", it) },
     )
         .joinToString(" · ")
         .ifEmpty { null }

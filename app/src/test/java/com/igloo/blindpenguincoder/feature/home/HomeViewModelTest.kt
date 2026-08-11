@@ -524,6 +524,29 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `hero fields the scraper wrote as a valid zero are dropped, not rendered`() = runTest {
+        // TMDB's "no data" reaches us as Valid = true with a zero payload; treating that as a
+        // real value puts "· 0.0" on every unrated movie.
+        val http = routedHttp(
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 1, title = "Heat"))) },
+            details = {
+                jsonResponse(
+                    movieDetailsJson(
+                        id = 1,
+                        title = "Heat",
+                        year = 0,
+                        certification = "R",
+                        runTimeMinutes = 0,
+                        criticRating = 0.0,
+                    ),
+                )
+            },
+        )
+
+        assertEquals("R", viewModel(http).awaitHero().metadataLine)
+    }
+
+    @Test
     fun `runtimes format as hours and minutes`() = runTest {
         suspend fun metadataLine(runTimeMinutes: Long): String? {
             val http = routedHttp(
