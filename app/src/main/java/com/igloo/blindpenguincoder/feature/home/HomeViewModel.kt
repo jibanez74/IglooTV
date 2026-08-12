@@ -173,11 +173,13 @@ class HomeViewModel(
                 albums.map { album ->
                     HomeAlbum(
                         id = album.id,
-                        title = album.title,
-                        musician = album.musician.orNull()?.takeUnless { it.isBlank() },
+                        // The contract requires a title but not a non-blank one; an untagged rip
+                        // must not render an empty title line or a nameless announcement.
+                        title = album.title.ifBlank { "Untitled album" },
+                        musician = album.musician.orNullIfBlank(),
                         // Used verbatim: the scanner stores an absolute Spotify URL or nothing,
                         // and there is no music image proxy to route it through.
-                        coverUrl = album.cover.orNull()?.takeUnless { it.isBlank() },
+                        coverUrl = album.cover.orNullIfBlank(),
                     )
                 }
             }
@@ -285,7 +287,7 @@ class HomeViewModel(
             size = TmdbImageSize.W1280,
             path = movie.backdropPath?.orNull(),
         ),
-        overview = movie.overview?.orNull()?.takeUnless { it.isBlank() },
+        overview = movie.overview?.orNullIfBlank(),
         metadataLine = heroMetadataLine(movie),
     )
 
@@ -293,7 +295,7 @@ class HomeViewModel(
     // "no data" as a valid 0 — an unrated movie would otherwise read "· 0.0".
     private fun heroMetadataLine(movie: Movie): String? = listOfNotNull(
         movie.year?.orNull()?.takeIf { it > 0 }?.toString(),
-        movie.certification?.orNull()?.takeUnless { it.isBlank() },
+        movie.certification?.orNullIfBlank(),
         movie.runTime?.orNull()?.takeIf { it > 0 }?.let(::formatRuntime),
         movie.criticRating?.orNull()?.takeIf { it > 0 }
             ?.let { String.format(Locale.US, "%.1f", it) },

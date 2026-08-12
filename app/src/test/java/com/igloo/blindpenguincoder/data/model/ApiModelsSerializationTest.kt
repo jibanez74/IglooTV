@@ -391,4 +391,11 @@ class ApiModelsSerializationTest {
         assertNull(albums[1].musician.orNull())
         assertNull(albums[1].year.orNull())
     }
+
+    @Test
+    fun orNullIfBlankTreatsBlankAndInvalidAlikeAndKeepsText() {
+        assertNull(SqlNullString(value = "   ", valid = true).orNullIfBlank())
+        assertNull(SqlNullString(value = "hidden", valid = false).orNullIfBlank())
+        assertEquals("PG-13", SqlNullString(value = "PG-13", valid = true).orNullIfBlank())
+    }
 }

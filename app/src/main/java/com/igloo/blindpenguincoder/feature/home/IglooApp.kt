@@ -21,10 +21,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -290,10 +293,20 @@ private fun ContentPane(
     val colors = IglooTheme.colors
     // Hoisted above the destination branch so a Home -> Movies -> Home round trip still knows
     // the card to restore (section 6.3), and saveable so process death does not forget it.
-    // One per rail: each rail keeps its own focus memory.
-    var lastFocusedContinueMovieId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var lastFocusedLatestMovieId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var lastFocusedAlbumId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // One map keyed by rail: each rail keeps its own focus memory, and a new rail is one entry
+    // instead of another var/callback pair threaded through every signature.
+    val lastFocusedByRail = rememberSaveable(
+        saver = listSaver<SnapshotStateMap<HomeRail, Long>, Any>(
+            save = { map -> map.flatMap { (rail, id) -> listOf(rail.name, id) } },
+            restore = { saved ->
+                mutableStateMapOf<HomeRail, Long>().apply {
+                    saved.chunked(2).forEach { (rail, id) ->
+                        put(HomeRail.valueOf(rail as String), id as Long)
+                    }
+                }
+            },
+        ),
+    ) { mutableStateMapOf() }
 
     Column(
         // Rail and content are each a traversal group, so TalkBack reads one block at a
@@ -336,12 +349,7 @@ private fun ContentPane(
                 onMovieSelected = onMovieSelected,
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequesters.getValue(IglooDestination.Home),
-                lastFocusedContinueMovieId = lastFocusedContinueMovieId,
-                onContinueMovieFocused = { lastFocusedContinueMovieId = it },
-                lastFocusedLatestMovieId = lastFocusedLatestMovieId,
-                onLatestMovieFocused = { lastFocusedLatestMovieId = it },
-                lastFocusedAlbumId = lastFocusedAlbumId,
-                onAlbumFocused = { lastFocusedAlbumId = it },
+                lastFocusedByRail = lastFocusedByRail,
             )
 
             else -> PlaceholderContent(
@@ -379,12 +387,7 @@ private fun HomeRails(
     onMovieSelected: ((HomeMovie) -> Unit)?,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
-    lastFocusedContinueMovieId: Long?,
-    onContinueMovieFocused: (Long) -> Unit,
-    lastFocusedLatestMovieId: Long?,
-    onLatestMovieFocused: (Long) -> Unit,
-    lastFocusedAlbumId: Long?,
-    onAlbumFocused: (Long) -> Unit,
+    lastFocusedByRail: MutableMap<HomeRail, Long>,
 ) {
     // The hero owns the pane's entry anchor whenever it is visible; the Continue Watching rail
     // takes it back when the hero hides (section 11.3.1). heroVisible gates both attachment
@@ -427,19 +430,20 @@ private fun HomeRails(
             itemKey = { it.movie.id },
             entryRequester = if (heroVisible) continueEntryRequester else contentStartRequester,
             leftFocusRequester = navigationRequester,
-            lastFocusedKey = lastFocusedContinueMovieId,
-            onItemFocused = onContinueMovieFocused,
+            lastFocusedKey = lastFocusedByRail[HomeRail.ContinueWatching],
+            onItemFocused = { lastFocusedByRail[HomeRail.ContinueWatching] = it },
             loadingLabel = "Loading continue watching",
             emptyIcon = IglooIcons.Movies,
             emptyText = "Nothing in progress yet. Movies you start watching appear here.",
             onRetry = { onRetryRail(HomeRail.ContinueWatching) },
-        ) { item, itemModifier ->
+        ) { item, itemModifier, cardAspect ->
             IglooPosterCard(
                 title = item.movie.title,
                 subtitle = item.movie.year?.toString(),
                 imageUrl = item.movie.posterUrl,
                 onClick = onMovieSelected?.let { select -> { select(item.movie) } },
                 progress = PosterCardProgress(item.progressFraction, item.progressLabel),
+                aspect = cardAspect,
                 modifier = itemModifier.testTag("continue_card_${item.movie.id}"),
             )
         }
@@ -450,18 +454,19 @@ private fun HomeRails(
             itemKey = { it.id },
             entryRequester = null,
             leftFocusRequester = navigationRequester,
-            lastFocusedKey = lastFocusedLatestMovieId,
-            onItemFocused = onLatestMovieFocused,
+            lastFocusedKey = lastFocusedByRail[HomeRail.LatestMovies],
+            onItemFocused = { lastFocusedByRail[HomeRail.LatestMovies] = it },
             loadingLabel = "Loading recently added movies",
             emptyIcon = IglooIcons.Movies,
             emptyText = "No movies in your library yet. Add a movies folder on the server and run a scan.",
             onRetry = { onRetryRail(HomeRail.LatestMovies) },
-        ) { movie, itemModifier ->
+        ) { movie, itemModifier, cardAspect ->
             IglooPosterCard(
                 title = movie.title,
                 subtitle = movie.year?.toString(),
                 imageUrl = movie.posterUrl,
                 onClick = onMovieSelected?.let { select -> { select(movie) } },
+                aspect = cardAspect,
                 modifier = itemModifier.testTag("poster_card_${movie.id}"),
             )
         }
@@ -472,14 +477,14 @@ private fun HomeRails(
             itemKey = { it.id },
             entryRequester = null,
             leftFocusRequester = navigationRequester,
-            lastFocusedKey = lastFocusedAlbumId,
-            onItemFocused = onAlbumFocused,
+            lastFocusedKey = lastFocusedByRail[HomeRail.LatestAlbums],
+            onItemFocused = { lastFocusedByRail[HomeRail.LatestAlbums] = it },
             loadingLabel = "Loading recently added albums",
             emptyIcon = IglooIcons.Music,
             emptyText = "No albums in your library yet. Add a music folder on the server and run a scan.",
             onRetry = { onRetryRail(HomeRail.LatestAlbums) },
             cardAspect = IglooTheme.layout.albumAspect,
-        ) { album, itemModifier ->
+        ) { album, itemModifier, cardAspect ->
             IglooPosterCard(
                 title = album.title,
                 subtitle = album.musician,
@@ -487,7 +492,7 @@ private fun HomeRails(
                 // Focusable but inert: album detail has no destination yet, and a card that
                 // announces "Open …" and then does nothing is worse than one that announces none.
                 onClick = null,
-                aspect = IglooTheme.layout.albumAspect,
+                aspect = cardAspect,
                 fallbackIcon = IglooIcons.Music,
                 modifier = itemModifier.testTag("album_card_${album.id}"),
             )

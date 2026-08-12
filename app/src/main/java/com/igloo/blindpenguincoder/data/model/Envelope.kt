@@ -30,6 +30,9 @@ data class SqlNullString(
     @SerialName("Valid") val valid: Boolean,
 ) {
     fun orNull(): String? = if (valid) value else null
+
+    /** Absent when the backend sends null *or* whitespace — a blank is never worth rendering. */
+    fun orNullIfBlank(): String? = orNull()?.takeUnless { it.isBlank() }
 }
 
 @Serializable

@@ -338,6 +338,15 @@ class HomeRailBehaviorTest {
         albumCard(11).performKeyInput { pressKey(Key.DirectionRight) }
         albumCard(12).assertIsFocused()
 
+        // A reload swaps the focused rail's state twice; focus must come back to the albums
+        // rail's *own* remembered card. A memory cross-wired to another rail (whose ids these
+        // requesters don't know) would fall back to the first album instead.
+        albumsState = IglooRailState.Loading
+        composeRule.waitForIdle()
+        albumsState = IglooRailState.Loaded(albums)
+        composeRule.waitForIdle()
+        albumCard(12).assertIsFocused()
+
         // Left walks back through the rail and only the first card opens the spine; re-entry then
         // lands on the *first* rail's memory — the albums rail keeps its own, untouched by the trip.
         albumCard(12).performKeyInput { pressKey(Key.DirectionLeft) }

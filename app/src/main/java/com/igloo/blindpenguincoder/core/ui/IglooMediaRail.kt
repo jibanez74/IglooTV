@@ -79,7 +79,9 @@ fun <T> IglooMediaRail(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     cardAspect: Float = IglooTheme.layout.posterAspect,
-    itemContent: @Composable (item: T, itemModifier: Modifier) -> Unit,
+    // Receives [cardAspect] so the card is shaped by the same value as the skeleton — the
+    // grid-matching rule (section 8.2) holds structurally instead of by convention.
+    itemContent: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
 ) {
     val localAnchor = remember { FocusRequester() }
     val items = (state as? IglooRailState.Loaded)?.items
@@ -187,6 +189,7 @@ fun <T> IglooMediaRail(
                                     if (index == state.items.lastIndex) right = FocusRequester.Cancel
                                 }
                                 .onFocusChanged { if (it.isFocused) onItemFocused(key) },
+                            cardAspect,
                         )
                     }
                 }

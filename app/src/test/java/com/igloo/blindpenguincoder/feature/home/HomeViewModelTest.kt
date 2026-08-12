@@ -671,6 +671,17 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `a blank album title renders as Untitled album`() = runTest {
+        val http = routedHttp(
+            albums = { jsonResponse(latestAlbumsJson(simpleAlbumJson(title = "   "))) },
+        )
+
+        val album = viewModel(http).awaitAlbums().items.single()
+
+        assertEquals("Untitled album", album.title)
+    }
+
+    @Test
     fun `the albums rail keeps the server's order`() = runTest {
         val http = routedHttp(
             albums = {
