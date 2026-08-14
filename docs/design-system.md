@@ -293,10 +293,12 @@ not track the theme — a poster looks the same in light and dark mode. Use lite
   5–7 `aurora.copy(alpha = 0.80f)` / `auroraForeground`; < 5 `Color.Black.copy(alpha = 0.60f)` /
   `Color.White`. Aurora is licensed over media because §3.1 pins it identical in both themes;
   the web's `muted` low tier tracks the theme and is deliberately **not** ported — the black
-  literal is its dark-mode equivalent.
+  literal is its dark-mode equivalent. The badge paints its own ground, so it holds on the
+  no-poster fallback too and is the one item here that survives it.
 
 These literals are licensed **only by media actually behind them**. A surface that would carry
-them but has no image (a hero with no backdrop) falls back to token colors on a `card` fill.
+them but has no image — a hero with no backdrop, a theater card with no poster or one that failed
+to load — drops its scrim and falls back to token colors on its `card` or `muted` fill.
 
 ---
 

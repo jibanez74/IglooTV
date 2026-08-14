@@ -23,33 +23,33 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import java.util.Locale
+import kotlin.math.round
 
 /**
  * The In Theaters rail's card (section 11.3.2): unlike [com.igloo.blindpenguincoder.core.ui.IglooPosterCard],
  * the title and year sit on the poster over a bottom scrim, with a critic-rating badge in the
  * top-right corner — TMDB content the library does not hold, so it looks deliberately different.
  *
- * Every color painted over the poster is a literal or a theme-invariant token (section 3.2):
- * the scrim and low-tier badge are black literals, and aurora/auroraForeground are pinned to
- * the same values in both themes (section 3.1), so nothing here shifts with the theme.
+ * Section 3.2 licenses those literals only where a poster is actually behind them: the scrim and
+ * low-tier badge are black literals, and aurora/auroraForeground are pinned to the same values in
+ * both themes (section 3.1), so nothing shifts with the theme. With no poster to load — or one
+ * that failed — the card drops the scrim and paints its text in theme tokens instead.
  *
  * Focusable but inert, like the albums rail's cards: there is no TMDB detail screen yet, and a
  * card that announces "Open …" and then does nothing is worse than one that announces none.
@@ -63,7 +63,8 @@ fun InTheatersCard(
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
     var imageFailed by remember(movie.posterUrl) { mutableStateOf(false) }
-    val ratingLabel = movie.rating?.let { String.format(Locale.US, "%.1f", it) }
+    val overMedia = movie.posterUrl != null && !imageFailed
+    val ratingBadge = movie.rating?.let { ratingBadgeSpec(it) }
 
     Box(
         modifier = modifier
@@ -75,7 +76,7 @@ fun InTheatersCard(
                 contentDescription = listOfNotNull(
                     movie.title,
                     movie.year,
-                    ratingLabel?.let { "rated $it out of 10" },
+                    ratingBadge?.let { "rated ${it.label} out of 10" },
                 ).joinToString(", ")
             }
             // focusRing owns the clip, so the muted fill doubles as the image backdrop and
@@ -87,7 +88,7 @@ fun InTheatersCard(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        if (movie.posterUrl != null && !imageFailed) {
+        if (overMedia) {
             AsyncImage(
                 model = movie.posterUrl,
                 contentDescription = null,
@@ -96,6 +97,20 @@ fun InTheatersCard(
                     if (state is AsyncImagePainter.State.Error) imageFailed = true
                 },
                 modifier = Modifier.fillMaxSize(),
+            )
+            // Scrim under the text, lower third of the poster.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.38f)
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.5f to Color.Black.copy(alpha = 0.50f),
+                            1f to Color.Black.copy(alpha = 0.90f),
+                        ),
+                    ),
             )
         } else {
             Image(
@@ -106,21 +121,6 @@ fun InTheatersCard(
             )
         }
 
-        // Scrim under the text, lower third of the poster.
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.38f)
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        0.5f to Color.Black.copy(alpha = 0.50f),
-                        1f to Color.Black.copy(alpha = 0.90f),
-                    ),
-                ),
-        )
-
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -128,24 +128,23 @@ fun InTheatersCard(
         ) {
             IglooText(
                 text = movie.title,
-                style = IglooTheme.typography.bodyMedium.overMedia(),
-                color = Color.White,
+                style = IglooTheme.typography.bodyMedium.overMedia(overMedia),
+                color = if (overMedia) Color.White else colors.cardForeground,
                 maxLines = 2,
             )
             if (movie.year != null) {
                 IglooText(
                     text = movie.year,
-                    style = IglooTheme.typography.label.overMedia(),
-                    color = Color.White.copy(alpha = 0.85f),
+                    style = IglooTheme.typography.label.overMedia(overMedia),
+                    color = if (overMedia) Color.White.copy(alpha = 0.85f) else colors.mutedForeground,
                     maxLines = 1,
                 )
             }
         }
 
-        if (movie.rating != null && ratingLabel != null) {
+        if (ratingBadge != null) {
             RatingBadge(
-                rating = movie.rating,
-                label = ratingLabel,
+                spec = ratingBadge,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(IglooTheme.spacing.sm),
@@ -154,20 +153,43 @@ fun InTheatersCard(
     }
 }
 
+/** The critic-score tiers of section 3.2, strongest first. */
+internal enum class RatingTier { Strong, Fair, Weak }
+
+/** What the badge paints: its number and the tier that colors it. */
+internal data class RatingBadgeSpec(val label: String, val tier: RatingTier)
+
+/**
+ * TMDB scores carry three decimals and the badge shows one, so the tier is read off the rounded
+ * value: taking it off the raw score would paint 6.951 in the middle tier under a "7.0" label.
+ * Both come from here so they cannot disagree.
+ */
+internal fun ratingBadgeSpec(rating: Double): RatingBadgeSpec {
+    val rounded = round(rating * 10) / 10
+    return RatingBadgeSpec(
+        label = String.format(Locale.US, "%.1f", rounded),
+        tier = when {
+            rounded >= 7.0 -> RatingTier.Strong
+            rounded >= 5.0 -> RatingTier.Fair
+            else -> RatingTier.Weak
+        },
+    )
+}
+
 /** Critic score tiers on the warm aurora accent (section 3.2), one badge per card. */
 @Composable
 private fun RatingBadge(
-    rating: Double,
-    label: String,
+    spec: RatingBadgeSpec,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
-    val (background, foreground) = when {
-        rating >= 7.0 -> colors.aurora to colors.auroraForeground
-        rating >= 5.0 -> colors.aurora.copy(alpha = 0.80f) to colors.auroraForeground
+    val (background, foreground) = when (spec.tier) {
+        RatingTier.Strong -> colors.aurora to colors.auroraForeground
+        RatingTier.Fair -> colors.aurora.copy(alpha = 0.80f) to colors.auroraForeground
         // The web's muted tier tracks the theme; over media that is not allowed (section 3.2),
-        // so the low tier is the equivalent literal instead.
-        else -> Color.Black.copy(alpha = 0.60f) to Color.White
+        // so the low tier is the equivalent literal instead. The badge paints its own ground,
+        // so it reads the same on the no-poster fallback fill.
+        RatingTier.Weak -> Color.Black.copy(alpha = 0.60f) to Color.White
     }
     Row(
         modifier = modifier
@@ -183,19 +205,10 @@ private fun RatingBadge(
             modifier = Modifier.size(10.dp.scaled()),
         )
         IglooText(
-            text = label,
+            text = spec.label,
             style = IglooTheme.typography.label,
             color = foreground,
             maxLines = 1,
         )
     }
 }
-
-/** Section 3.2's "text over media carries a shadow" — same treatment as the hero's. */
-private fun TextStyle.overMedia(): TextStyle = copy(
-    shadow = Shadow(
-        color = Color.Black.copy(alpha = 0.60f),
-        offset = Offset(0f, 2f),
-        blurRadius = 8f,
-    ),
-)

@@ -1,6 +1,9 @@
 package com.igloo.blindpenguincoder.core.design
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -23,6 +26,24 @@ data class IglooTypography(
     /** Short non-prose strings only — nav labels, chips, metadata. Never a sentence. */
     val label: TextStyle,
 )
+
+/**
+ * Section 3.2's "text over media carries a shadow"; token text on a plain card does not. Pass the
+ * same flag that decides whether the text is painted in a literal or in a theme token, so a
+ * surface whose image is missing or failed loses the shadow with it.
+ */
+fun TextStyle.overMedia(overMedia: Boolean): TextStyle =
+    if (overMedia) {
+        copy(
+            shadow = Shadow(
+                color = Color.Black.copy(alpha = 0.60f),
+                offset = Offset(0f, 2f),
+                blurRadius = 8f,
+            ),
+        )
+    } else {
+        this
+    }
 
 private fun TextStyle.at(scale: Float) = copy(
     fontSize = fontSize * scale,

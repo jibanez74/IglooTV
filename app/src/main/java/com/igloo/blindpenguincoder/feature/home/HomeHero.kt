@@ -22,10 +22,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -33,11 +31,11 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
@@ -222,20 +220,6 @@ private fun HeroSkeleton(modifier: Modifier = Modifier) {
         }
     }
 }
-
-/** Section 3.2's "text over media carries a shadow"; token text on a plain card does not. */
-private fun TextStyle.overMedia(overMedia: Boolean): TextStyle =
-    if (overMedia) {
-        copy(
-            shadow = Shadow(
-                color = Color.Black.copy(alpha = 0.60f),
-                offset = Offset(0f, 2f),
-                blurRadius = 8f,
-            ),
-        )
-    } else {
-        this
-    }
 
 /** Contains text, so a minimum, not a fixed height (section 2.6); one-off per section 2.8. */
 private val HERO_MIN_HEIGHT = 280.dp
