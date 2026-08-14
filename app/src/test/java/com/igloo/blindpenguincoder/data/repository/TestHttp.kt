@@ -169,6 +169,25 @@ fun latestAlbumsJson(vararg albums: String): String =
     """{"error":false,"message":"latest albums","data":{"albums":[${albums.joinToString(",")}]}}"""
 
 /**
+ * One `GET /tmdb/movies/in-theaters` list entry. TMDB fields are plain values, not `sql.Null*`
+ * wrappers; every field the contract requires is emitted even though the model maps a subset.
+ */
+fun theaterMovieJson(
+    id: Int = 1,
+    title: String = "Heat 2",
+    releaseDate: String = "2026-08-01",
+    posterPath: String = "/heat2.jpg",
+    voteAverage: Double = 7.9,
+): String = """{"id":$id,"title":"$title","original_title":"$title",""" +
+    """"overview":"A prequel and sequel.","release_date":"$releaseDate",""" +
+    """"poster_path":"$posterPath","backdrop_path":"/heat2-backdrop.jpg",""" +
+    """"popularity":100.5,"vote_average":$voteAverage,"vote_count":1000,"adult":false,""" +
+    """"original_language":"en","genre_ids":[80,18],"video":false}"""
+
+fun theaterMoviesJson(vararg movies: String): String =
+    """{"error":false,"message":"movies in theaters","data":{"movies":[${movies.joinToString(",")}]}}"""
+
+/**
  * `GET /movies/details/{id}` payload: the full movie plus its related lists, which the spec
  * leaves untyped and these tests leave empty. Only hero-relevant nullables are parameterized.
  */

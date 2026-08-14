@@ -32,6 +32,7 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHomeMovies
+import com.igloo.blindpenguincoder.testTheaterMovies
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -65,14 +66,18 @@ class HomeRailBehaviorTest {
     private val continueMovies = testContinueMovies
     private val movies = testHomeMovies
     private val albums = testAlbums
+    private val theaterMovies = testTheaterMovies
 
     private var continueState by
         mutableStateOf<IglooRailState<HomeContinueMovie>>(IglooRailState.Loading)
     private var latestState by mutableStateOf<IglooRailState<HomeMovie>>(IglooRailState.Loading)
     private var albumsState by mutableStateOf<IglooRailState<HomeAlbum>>(IglooRailState.Loading)
+    private var theatersState by
+        mutableStateOf<IglooRailState<HomeTheaterMovie>>(IglooRailState.Loading)
     private var continueRetries = 0
     private var latestRetries = 0
     private var albumRetries = 0
+    private var theaterRetries = 0
     private val opened = mutableListOf<HomeMovie>()
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
@@ -81,14 +86,17 @@ class HomeRailBehaviorTest {
         initialContinue: IglooRailState<HomeContinueMovie>,
         initialLatest: IglooRailState<HomeMovie> = IglooRailState.Loaded(movies),
         initialAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loaded(albums),
+        initialTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loaded(theaterMovies),
         onMovieSelected: ((HomeMovie) -> Unit)? = { opened += it },
     ) {
         continueState = initialContinue
         latestState = initialLatest
         albumsState = initialAlbums
+        theatersState = initialTheaters
         continueRetries = 0
         latestRetries = 0
         albumRetries = 0
+        theaterRetries = 0
         opened.clear()
         composeRule.setContent {
             val context = LocalContext.current
@@ -106,12 +114,14 @@ class HomeRailBehaviorTest {
                         continueWatching = continueState,
                         latestMovies = latestState,
                         latestAlbums = albumsState,
+                        inTheaters = theatersState,
                     ),
                     onRetryRail = { rail ->
                         when (rail) {
                             HomeRail.ContinueWatching -> continueRetries += 1
                             HomeRail.LatestMovies -> latestRetries += 1
                             HomeRail.LatestAlbums -> albumRetries += 1
+                            HomeRail.InTheaters -> theaterRetries += 1
                         }
                     },
                     onMovieSelected = onMovieSelected,
@@ -130,6 +140,8 @@ class HomeRailBehaviorTest {
     private fun latestCard(id: Long) = composeRule.onNodeWithTag("poster_card_$id")
 
     private fun albumCard(id: Long) = composeRule.onNodeWithTag("album_card_$id")
+
+    private fun theaterCard(id: Long) = composeRule.onNodeWithTag("theater_card_$id")
 
     private fun pressBack() {
         composeRule.runOnUiThread {
@@ -414,5 +426,98 @@ class HomeRailBehaviorTest {
             .assertContentDescriptionEquals("Help!, The Beatles")
             .assertHasNoClickAction()
         composeRule.onAllNodesWithText("The Beatles").assertCountEquals(0)
+    }
+
+    @Test
+    fun dpadDownReachesTheTheatersRailAndItKeepsItsOwnFocusMemory() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+
+        continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        albumCard(11).performKeyInput { pressKey(Key.DirectionDown) }
+        theaterCard(21).assertIsFocused()
+
+        theaterCard(21).performKeyInput { pressKey(Key.DirectionRight) }
+        theaterCard(22).assertIsFocused()
+
+        // A reload swaps the focused rail's state twice; focus must come back to the theaters
+        // rail's *own* remembered card, not another rail's.
+        theatersState = IglooRailState.Loading
+        composeRule.waitForIdle()
+        theatersState = IglooRailState.Loaded(theaterMovies)
+        composeRule.waitForIdle()
+        theaterCard(22).assertIsFocused()
+    }
+
+    @Test
+    fun theLastTheaterCardPinsTheRightEdge() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+        continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        albumCard(11).performKeyInput { pressKey(Key.DirectionDown) }
+        theaterCard(21).performKeyInput { pressKey(Key.DirectionRight) }
+        theaterCard(22).performKeyInput { pressKey(Key.DirectionRight) }
+        theaterCard(23).assertIsFocused()
+
+        theaterCard(23).performKeyInput { pressKey(Key.DirectionRight) }
+
+        theaterCard(23).assertIsFocused()
+    }
+
+    @Test
+    fun theatersRailRetryLeavesTheOtherRailsAlone() {
+        setShellContent(
+            initialContinue = IglooRailState.Loaded(continueMovies),
+            initialTheaters = IglooRailState.Error("tmdb unavailable"),
+        )
+
+        composeRule.onNodeWithContentDescription("Retry loading Now Playing in Theaters")
+            .performScrollTo()
+            .performClick()
+
+        assertEquals(1, theaterRetries)
+        assertEquals(0, albumRetries)
+        assertEquals(0, latestRetries)
+        assertEquals(0, continueRetries)
+    }
+
+    @Test
+    fun noTheaterMoviesIsFocusableAndAnnounced() {
+        setShellContent(
+            initialContinue = IglooRailState.Loaded(continueMovies),
+            initialTheaters = IglooRailState.Loaded(emptyList()),
+        )
+
+        // The empty rail must still be a landing site, or d-pad down would stop at the rail above.
+        continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        albumCard(11).performKeyInput { pressKey(Key.DirectionDown) }
+
+        composeRule.onNodeWithContentDescription(
+            "No movies are playing in theaters right now. Check back later.",
+        ).assertIsFocused()
+    }
+
+    @Test
+    fun theaterCardsAnnounceTitleYearAndRatingWithNoAction() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+
+        // One cleared node per card: poster, badge, and overlay texts are not separate
+        // announceable nodes. No action — there is no TMDB detail screen to open.
+        theaterCard(21)
+            .performScrollTo()
+            .assertContentDescriptionEquals("Heat 2, 2026, rated 7.9 out of 10")
+            .assertHasNoClickAction()
+        composeRule.onAllNodesWithText("Heat 2").assertCountEquals(0)
+    }
+
+    @Test
+    fun anUnratedTheaterCardAnnouncesNoRating() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+
+        theaterCard(23)
+            .performScrollTo()
+            .assertContentDescriptionEquals("Unrated")
+            .assertHasNoClickAction()
     }
 }

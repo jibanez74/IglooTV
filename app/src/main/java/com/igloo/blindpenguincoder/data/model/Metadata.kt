@@ -18,6 +18,7 @@ data class TheaterMovie(
     @SerialName("release_date") val releaseDate: String,
     @SerialName("poster_path") val posterPath: String,
     @SerialName("backdrop_path") val backdropPath: String,
+    @SerialName("vote_average") val voteAverage: Double,
 )
 
 /** Payload of `TmdbTheaterMoviesEnvelope.data`. */

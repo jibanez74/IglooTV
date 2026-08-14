@@ -9,6 +9,8 @@ import com.igloo.blindpenguincoder.data.model.ContinueWatchingMoviesData
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.LatestMoviesData
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
+import com.igloo.blindpenguincoder.data.model.TheaterMovie
+import com.igloo.blindpenguincoder.data.model.TheaterMoviesData
 import io.ktor.client.call.body
 
 class MovieRepository(
@@ -27,6 +29,14 @@ class MovieRepository(
         decode = { response ->
             response.body<ApiEnvelope<ContinueWatchingMoviesData>>().data?.movies
                 ?: error("Missing movies in continue watching response")
+        },
+    )
+
+    suspend fun moviesInTheaters(): ApiResult<List<TheaterMovie>> = safeApiCall(
+        request = { api.moviesInTheaters() },
+        decode = { response ->
+            response.body<ApiEnvelope<TheaterMoviesData>>().data?.movies
+                ?: error("Missing movies in in-theaters response")
         },
     )
 

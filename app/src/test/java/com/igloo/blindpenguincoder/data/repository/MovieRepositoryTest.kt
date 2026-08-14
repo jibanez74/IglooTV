@@ -169,6 +169,66 @@ class MovieRepositoryTest {
     }
 
     @Test
+    fun `movies in theaters hits the contract path with the bearer token`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(
+                theaterMoviesJson(
+                    theaterMovieJson(id = 5, title = "Heat 2", voteAverage = 7.9),
+                ),
+            )
+        }
+        http.profiles.setPending("igd_test")
+
+        val result = http.movieRepository.moviesInTheaters()
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/tmdb/movies/in-theaters", captured.url.encodedPath)
+        assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+        val movie = (result as ApiResult.Success).value.single()
+        assertEquals(5, movie.id)
+        assertEquals("Heat 2", movie.title)
+        assertEquals("2026-08-01", movie.releaseDate)
+        assertEquals("/heat2.jpg", movie.posterPath)
+        assertEquals(7.9, movie.voteAverage, 0.0)
+    }
+
+    @Test
+    fun `no movies in theaters is a success with no movies`() = runTest {
+        val http = TestHttp { jsonResponse(theaterMoviesJson()) }
+
+        val result = http.movieRepository.moviesInTheaters()
+
+        assertTrue((result as ApiResult.Success).value.isEmpty())
+    }
+
+    @Test
+    fun `an in-theaters server failure preserves the backend message`() = runTest {
+        val http = TestHttp {
+            jsonResponse(
+                """{"error":true,"message":"tmdb unavailable"}""",
+                HttpStatusCode.InternalServerError,
+            )
+        }
+
+        val result = http.movieRepository.moviesInTheaters()
+
+        val error = (result as ApiResult.Failure).error as AppError.Api
+        assertEquals("tmdb unavailable", error.message)
+        assertEquals(500, error.status)
+    }
+
+    @Test
+    fun `an in-theaters success envelope with no data is Unexpected`() = runTest {
+        val http = TestHttp { jsonResponse("""{"error":false,"message":"ok"}""") }
+
+        val result = http.movieRepository.moviesInTheaters()
+
+        assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
+    }
+
+    @Test
     fun `movie details hits the contract path with the bearer token`() = runTest {
         var request: HttpRequestData? = null
         val http = TestHttp {

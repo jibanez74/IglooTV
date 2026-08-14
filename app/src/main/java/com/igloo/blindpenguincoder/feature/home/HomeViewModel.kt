@@ -46,8 +46,17 @@ data class HomeAlbum(
     val coverUrl: String?,
 )
 
+/** A theater movie ready to render (section 11.3.2) — TMDB content, not library content. */
+data class HomeTheaterMovie(
+    val id: Long,
+    val title: String,
+    val year: String?,
+    val posterUrl: String?,
+    val rating: Double?,
+)
+
 /** The rails Home renders, in the order it renders them (docs/design-system.md section 11.3). */
-enum class HomeRail { ContinueWatching, LatestMovies, LatestAlbums }
+enum class HomeRail { ContinueWatching, LatestMovies, LatestAlbums, InTheaters }
 
 /** The featured movie, render-ready (section 11.3.1). Every field but id and title may be absent. */
 data class HomeHero(
@@ -74,6 +83,7 @@ data class HomeUiState(
     val continueWatching: IglooRailState<HomeContinueMovie> = IglooRailState.Loading,
     val latestMovies: IglooRailState<HomeMovie> = IglooRailState.Loading,
     val latestAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loading,
+    val inTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loading,
 )
 
 class HomeViewModel(
@@ -95,6 +105,7 @@ class HomeViewModel(
         loadContinueWatching(userInitiated = false)
         loadLatestMovies(userInitiated = false)
         loadLatestAlbums(userInitiated = false)
+        loadInTheaters(userInitiated = false)
     }
 
     /** The Retry the error state offers. Unlike [refresh] there is no content to protect. */
@@ -103,6 +114,7 @@ class HomeViewModel(
             HomeRail.ContinueWatching -> loadContinueWatching(userInitiated = true)
             HomeRail.LatestMovies -> loadLatestMovies(userInitiated = true)
             HomeRail.LatestAlbums -> loadLatestAlbums(userInitiated = true)
+            HomeRail.InTheaters -> loadInTheaters(userInitiated = true)
         }
     }
 
@@ -185,6 +197,39 @@ class HomeViewModel(
             }
             _uiState.update {
                 it.copy(latestAlbums = next.orKeep(it.latestAlbums, userInitiated))
+            }
+        }
+    }
+
+    private fun loadInTheaters(userInitiated: Boolean) {
+        if (userInitiated) {
+            _uiState.update { it.copy(inTheaters = IglooRailState.Loading) }
+        }
+        launchLoad(HomeRail.InTheaters) {
+            val next = movies.moviesInTheaters().toRailState { theater ->
+                val apiBaseUrl = serverUrl.require().apiBaseUrl
+                theater
+                    // The TMDB route's order is not a contract the way the library rails' is;
+                    // newest release first, matching the web client's own client-side sort.
+                    // "YYYY-MM-DD" dates sort correctly as strings.
+                    .sortedByDescending { it.releaseDate }
+                    .map { movie ->
+                        HomeTheaterMovie(
+                            id = movie.id.toLong(),
+                            title = movie.title,
+                            year = movie.releaseDate.take(4).takeIf { it.length == 4 },
+                            posterUrl = tmdbImageUrl(
+                                apiBaseUrl = apiBaseUrl,
+                                size = TmdbImageSize.W500,
+                                path = movie.posterPath,
+                            ),
+                            // TMDB sends 0 for an unrated movie; the card must not badge "0.0".
+                            rating = movie.voteAverage.takeIf { it > 0 },
+                        )
+                    }
+            }
+            _uiState.update {
+                it.copy(inTheaters = next.orKeep(it.inTheaters, userInitiated))
             }
         }
     }

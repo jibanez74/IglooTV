@@ -20,4 +20,8 @@ class MovieApi(
     /** Full stored metadata for one movie; backs the Home hero and the future details screen. */
     suspend fun movieDetails(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/movies/details/$id")
+
+    /** TMDB movies now playing in theaters — not library content; capped at 12. */
+    suspend fun moviesInTheaters(): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/tmdb/movies/in-theaters")
 }

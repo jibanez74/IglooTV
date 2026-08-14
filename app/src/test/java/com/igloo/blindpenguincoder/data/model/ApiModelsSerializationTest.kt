@@ -353,6 +353,46 @@ class ApiModelsSerializationTest {
         assertTrue(envelope.data!!.isLiked)
     }
 
+    /** `GET /tmdb/movies/in-theaters`: TMDB fields are plain values, not `sql.Null*` wrappers. */
+    @Test
+    fun decodesTheaterMoviesEnvelope() {
+        val body = """
+            {
+              "error": false,
+              "message": "movies in theaters",
+              "data": {
+                "movies": [
+                  {
+                    "id": 969681,
+                    "title": "Spider-Man: Brand New Day",
+                    "original_title": "Spider-Man: Brand New Day",
+                    "overview": "Fighting crime full-time as Spider-Man.",
+                    "release_date": "2026-07-31",
+                    "poster_path": "/spidey.jpg",
+                    "backdrop_path": "/spidey-backdrop.jpg",
+                    "popularity": 1065.0058,
+                    "vote_average": 7.869,
+                    "vote_count": 1643,
+                    "adult": false,
+                    "original_language": "en",
+                    "genre_ids": [878, 28, 12],
+                    "video": false
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val movie = json.decodeFromString<ApiEnvelope<TheaterMoviesData>>(body).data!!.movies.single()
+
+        assertEquals(969681, movie.id)
+        assertEquals("Spider-Man: Brand New Day", movie.title)
+        assertEquals("2026-07-31", movie.releaseDate)
+        assertEquals("/spidey.jpg", movie.posterPath)
+        assertEquals("/spidey-backdrop.jpg", movie.backdropPath)
+        assertEquals(7.869, movie.voteAverage, 0.0)
+    }
+
     /** `GET /music/albums/latest`: a SimpleAlbum list under `albums`, no pagination envelope. */
     @Test
     fun decodesLatestAlbumsEnvelope() {

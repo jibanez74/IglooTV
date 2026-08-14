@@ -497,6 +497,26 @@ private fun HomeRails(
                 modifier = itemModifier.testTag("album_card_${album.id}"),
             )
         }
+
+        IglooMediaRail(
+            title = "Now Playing in Theaters",
+            state = home.inTheaters,
+            itemKey = { it.id },
+            entryRequester = null,
+            leftFocusRequester = navigationRequester,
+            lastFocusedKey = lastFocusedByRail[HomeRail.InTheaters],
+            onItemFocused = { lastFocusedByRail[HomeRail.InTheaters] = it },
+            loadingLabel = "Loading movies in theaters",
+            emptyIcon = IglooIcons.Movies,
+            emptyText = "No movies are playing in theaters right now. Check back later.",
+            onRetry = { onRetryRail(HomeRail.InTheaters) },
+        ) { movie, itemModifier, cardAspect ->
+            InTheatersCard(
+                movie = movie,
+                aspect = cardAspect,
+                modifier = itemModifier.testTag("theater_card_${movie.id}"),
+            )
+        }
     }
 }
 

@@ -287,6 +287,13 @@ not track the theme — a poster looks the same in light and dark mode. Use lite
   unclipped hero into the canvas, and our hero is a clipped card — a theme-tracking brush over
   media would contradict this section.
 - Text over media: `Color.White`, with a shadow for legibility
+- Theater-card scrim (§11.3.2): `Brush.verticalGradient`, transparent → `Color.Black.copy(alpha
+  = 0.50f)` → `0.90f`, over the poster's lower third.
+- Theater-card rating badge (§11.3.2), critic-score tiers: ≥ 7 `aurora` / `auroraForeground`;
+  5–7 `aurora.copy(alpha = 0.80f)` / `auroraForeground`; < 5 `Color.Black.copy(alpha = 0.60f)` /
+  `Color.White`. Aurora is licensed over media because §3.1 pins it identical in both themes;
+  the web's `muted` low tier tracks the theme and is deliberately **not** ported — the black
+  literal is its dark-mode equivalent.
 
 These literals are licensed **only by media actually behind them**. A surface that would carry
 them but has no image (a hero with no backdrop) falls back to token colors on a `card` fill.
@@ -1056,8 +1063,8 @@ so re-verify it at `UiScale.Large` after any spine change.
 
 ### 11.3 Home
 
-Stacked horizontal rails — continue watching, latest movies, latest albums, watch rooms — under
-the hero (§11.3.1). This is the most TV-native layout in the product and the model for other
+Stacked horizontal rails — continue watching, latest movies, latest albums, movies in theaters,
+watch rooms — under the hero (§11.3.1). This is the most TV-native layout in the product and the model for other
 index screens. Vertical d-pad moves between rails; horizontal moves within one; focus is
 restored per-rail on return.
 
@@ -1117,10 +1124,24 @@ rails fail, retry, and refresh independently (§12's polite live regions depend 
 | Continue Watching | `GET /api/movies/continue-watching` | poster + progress bar | "Nothing in progress yet. Movies you start watching appear here." |
 | Recently Added Movies | `GET /api/movies/latest` | poster, year below | "No movies in your library yet. Add a movies folder on the server and run a scan." |
 | Recently Added Albums | `GET /api/music/albums/latest` | `albumAspect` cover, musician below, `Music` glyph fallback | "No albums in your library yet. Add a music folder on the server and run a scan." |
+| Now Playing in Theaters | `GET /api/tmdb/movies/in-theaters` | 2:3 poster, title + year over a bottom scrim, rating badge top-right (§3.2) | "No movies are playing in theaters right now. Check back later." |
 
-**Server order is the contract.** None of the three routes takes a sort, and
-`GET /api/music/albums/latest` takes no parameters at all — not even a limit; the backend owns
-both the order and the cap of 12. Nothing is re-sorted or re-sliced client-side.
+**Server order is the contract — for the library rails.** None of the three library routes takes
+a sort, and `GET /api/music/albums/latest` takes no parameters at all — not even a limit; the
+backend owns both the order and the cap of 12. Nothing is re-sorted or re-sliced client-side.
+The theaters rail is the one exception: the TMDB route's order carries no meaning of its own, so
+the client sorts by `release_date` descending — the same client-side sort the web client applies.
+
+**The theaters rail is TMDB content, not library content**, which is why its card looks
+deliberately different: the title and year sit *on* the poster over a bottom scrim, with a
+critic-rating badge (star + one-decimal score) in the top-right corner. It renders last because
+these are movies the user cannot play. The cards are focusable but announce no action — there is
+no TMDB detail screen yet — and the whole card is one cleared semantics node reading title, year,
+and "rated X.X out of 10". A rating of 0 is TMDB's "unrated" and drops the badge (and the
+announcement fragment) rather than badging "0.0". Empty copy describes the successful-but-empty
+case; a failed fetch shows the shared error card instead — the web's error-flavored empty copy is
+deliberately not ported. On a server with no TMDB key the rail sits in its error state with
+Retry, like any other failed rail.
 
 **Album covers are used verbatim.** The music scanner stores an absolute Spotify image URL or
 nothing, so a cover is not run through the TMDB proxy helper and there is no music proxy to
@@ -1292,6 +1313,24 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-13 — Home gets its fourth rail: Now Playing in Theaters.**
+
+§11.3's rail order reaches the theaters entry (`GET /api/tmdb/movies/in-theaters`), rendered
+last because it is TMDB content the user cannot play. §11.3.2 records the rail, its distinctive
+card, and the sort exception; §3.2 gains the theater-card scrim and rating-badge literals.
+
+- **A new card shape, feature-local.** `InTheatersCard` overlays title and year on the poster
+  and badges the critic score — structurally unlike `IglooPosterCard`'s text-below layout, so it
+  is its own composable in `feature/home/` rather than an overlay slot bolted onto the shared
+  card. Promote it to §9 only if a second screen needs it. The shared skeleton's below-poster
+  text stubs don't match this card's geometry — accepted; the poster cell itself matches.
+- **"Server order is the contract" is now scoped to the library rails.** The TMDB route's order
+  carries no meaning, so the client sorts by `release_date` descending, matching the web client.
+- **The rating badge's tiers ride on `aurora`**, licensed over media because §3.1 pins it
+  theme-invariant; the < 5 tier swaps the web's theme-tracking `muted` for the equivalent black
+  literal. A zero score is TMDB's "unrated" and drops the badge entirely.
+- `IglooIcons` gains `Star` for the badge glyph.
 
 **2026-08-11 — Home gets its third rail: Recently Added Albums.**
 

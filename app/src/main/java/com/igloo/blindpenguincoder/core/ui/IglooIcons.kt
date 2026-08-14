@@ -74,6 +74,25 @@ object IglooIcons {
         }
     }
 
+    val Star: ImageVector by lazy {
+        icon("Star") {
+            // Five-point star: outer radius 9.5, inner 4, centered on the 24-grid.
+            path(fill = SolidColor(Color.White)) {
+                moveTo(12f, 2.5f)
+                lineTo(14.4f, 8.8f)
+                lineTo(21f, 9.1f)
+                lineTo(15.8f, 13.2f)
+                lineTo(17.6f, 19.7f)
+                lineTo(12f, 16f)
+                lineTo(6.4f, 19.7f)
+                lineTo(8.2f, 13.2f)
+                lineTo(3f, 9.1f)
+                lineTo(9.6f, 8.8f)
+                close()
+            }
+        }
+    }
+
     val TvShows: ImageVector by lazy {
         icon("TvShows") {
             path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {

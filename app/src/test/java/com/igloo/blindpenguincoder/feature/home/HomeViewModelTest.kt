@@ -10,6 +10,8 @@ import com.igloo.blindpenguincoder.data.repository.latestMovieJson
 import com.igloo.blindpenguincoder.data.repository.latestMoviesJson
 import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
 import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
+import com.igloo.blindpenguincoder.data.repository.theaterMovieJson
+import com.igloo.blindpenguincoder.data.repository.theaterMoviesJson
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -48,7 +50,7 @@ class HomeViewModelTest {
         HomeViewModel(http.movieRepository, http.musicRepository, http.serverUrl)
             .also { it.refresh() }
 
-    /** A refresh fires all three rails' requests plus the hero's, so handlers route by path. */
+    /** A refresh fires all four rails' requests plus the hero's, so handlers route by path. */
     private fun routedHttp(
         engineDispatcher: CoroutineDispatcher? = null,
         continueWatching: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
@@ -59,11 +61,14 @@ class HomeViewModelTest {
             { jsonResponse(movieDetailsJson()) },
         albums: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(latestAlbumsJson()) },
+        theaters: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+            { jsonResponse(theaterMoviesJson()) },
     ) = TestHttp(engineDispatcher) { request ->
         val path = request.url.encodedPath
         when {
             path == "/api/movies/continue-watching" -> continueWatching(request)
             path == "/api/music/albums/latest" -> albums(request)
+            path == "/api/tmdb/movies/in-theaters" -> theaters(request)
             // Before the catch-all: the details call must never silently get a latest-shaped body.
             path.startsWith("/api/movies/details/") -> details(request)
             else -> latest(request)
@@ -101,6 +106,14 @@ class HomeViewModelTest {
         uiState.first { it.latestAlbums is IglooRailState.Error }
             .latestAlbums as IglooRailState.Error
 
+    private suspend fun HomeViewModel.awaitTheaters(): IglooRailState.Loaded<HomeTheaterMovie> =
+        uiState.first { it.inTheaters is IglooRailState.Loaded }
+            .inTheaters as IglooRailState.Loaded
+
+    private suspend fun HomeViewModel.awaitTheatersError(): IglooRailState.Error =
+        uiState.first { it.inTheaters is IglooRailState.Error }
+            .inTheaters as IglooRailState.Error
+
     @Test
     fun `nothing loads until the host asks for it`() = runTest {
         var requests = 0
@@ -108,6 +121,7 @@ class HomeViewModelTest {
             continueWatching = { requests++; jsonResponse(continueWatchingMoviesJson()) },
             latest = { requests++; jsonResponse(latestMoviesJson()) },
             albums = { requests++; jsonResponse(latestAlbumsJson()) },
+            theaters = { requests++; jsonResponse(theaterMoviesJson()) },
         )
 
         val viewModel = HomeViewModel(http.movieRepository, http.musicRepository, http.serverUrl)
@@ -116,6 +130,7 @@ class HomeViewModelTest {
         assertEquals(IglooRailState.Loading, viewModel.uiState.value.continueWatching)
         assertEquals(IglooRailState.Loading, viewModel.uiState.value.latestMovies)
         assertEquals(IglooRailState.Loading, viewModel.uiState.value.latestAlbums)
+        assertEquals(IglooRailState.Loading, viewModel.uiState.value.inTheaters)
     }
 
     @Test
@@ -755,6 +770,153 @@ class HomeViewModelTest {
         gate.complete(Unit)
         assertEquals(listOf("Tribalistas"), viewModel.awaitAlbums().items.map { it.title })
         assertEquals(1, latestRequests)
+    }
+
+    @Test
+    fun `theater movies map to render-ready cards sorted by release date descending`() = runTest {
+        val http = routedHttp(
+            theaters = {
+                jsonResponse(
+                    theaterMoviesJson(
+                        theaterMovieJson(id = 1, title = "Older", releaseDate = "2026-06-15", voteAverage = 5.1),
+                        theaterMovieJson(id = 2, title = "Newest", releaseDate = "2026-08-01", voteAverage = 7.9),
+                        theaterMovieJson(id = 3, title = "Middle", releaseDate = "2026-07-10", voteAverage = 9.3),
+                    ),
+                )
+            },
+        )
+
+        val state = viewModel(http).awaitTheaters()
+
+        // The TMDB route's order is not a contract; newest release first, like the web client.
+        assertEquals(
+            listOf(
+                HomeTheaterMovie(
+                    id = 2,
+                    title = "Newest",
+                    year = "2026",
+                    posterUrl = "http://igloo.test:8080/api/tmdb/images/w500/heat2.jpg",
+                    rating = 7.9,
+                ),
+                HomeTheaterMovie(
+                    id = 3,
+                    title = "Middle",
+                    year = "2026",
+                    posterUrl = "http://igloo.test:8080/api/tmdb/images/w500/heat2.jpg",
+                    rating = 9.3,
+                ),
+                HomeTheaterMovie(
+                    id = 1,
+                    title = "Older",
+                    year = "2026",
+                    posterUrl = "http://igloo.test:8080/api/tmdb/images/w500/heat2.jpg",
+                    rating = 5.1,
+                ),
+            ),
+            state.items,
+        )
+    }
+
+    @Test
+    fun `an unrated theater movie maps to a null rating, not zero`() = runTest {
+        val http = routedHttp(
+            theaters = { jsonResponse(theaterMoviesJson(theaterMovieJson(voteAverage = 0.0))) },
+        )
+
+        assertNull(viewModel(http).awaitTheaters().items.single().rating)
+    }
+
+    @Test
+    fun `a blank theater release date maps to a null year`() = runTest {
+        val http = routedHttp(
+            theaters = { jsonResponse(theaterMoviesJson(theaterMovieJson(releaseDate = ""))) },
+        )
+
+        assertNull(viewModel(http).awaitTheaters().items.single().year)
+    }
+
+    @Test
+    fun `no theater movies loads as an empty rail, not an error`() = runTest {
+        assertTrue(viewModel(routedHttp()).awaitTheaters().items.isEmpty())
+    }
+
+    @Test
+    fun `a theaters failure leaves the library rails standing`() = runTest {
+        val http = routedHttp(
+            theaters = {
+                jsonResponse(
+                    """{"error":true,"message":"tmdb unavailable"}""",
+                    HttpStatusCode.InternalServerError,
+                )
+            },
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 3, title = "Ran"))) },
+        )
+        val viewModel = viewModel(http)
+
+        assertEquals("tmdb unavailable", viewModel.awaitTheatersError().message)
+        assertEquals(listOf("Ran"), viewModel.awaitLatest().items.map { it.title })
+    }
+
+    @Test
+    fun `retrying the theaters rail reloads only that rail`() = runTest {
+        var failed = false
+        val gate = CompletableDeferred<Unit>()
+        var latestRequests = 0
+        val http = routedHttp(
+            theaters = {
+                if (!failed) {
+                    failed = true
+                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                } else {
+                    gate.await()
+                    jsonResponse(theaterMoviesJson(theaterMovieJson(id = 4, title = "Heat 2")))
+                }
+            },
+            latest = {
+                latestRequests++
+                jsonResponse(latestMoviesJson(latestMovieJson(id = 9, title = "Alien")))
+            },
+        )
+        val viewModel = viewModel(http)
+        viewModel.awaitTheatersError()
+        viewModel.awaitLatest()
+
+        viewModel.retry(HomeRail.InTheaters)
+
+        assertEquals(IglooRailState.Loading, viewModel.uiState.value.inTheaters)
+        assertTrue(viewModel.uiState.value.latestMovies is IglooRailState.Loaded)
+        gate.complete(Unit)
+        assertEquals(listOf("Heat 2"), viewModel.awaitTheaters().items.map { it.title })
+        assertEquals(1, latestRequests)
+    }
+
+    @Test
+    fun `a refresh that fails leaves the loaded theaters rail alone`() = runTest {
+        var requests = 0
+        val http = routedHttp(
+            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
+            theaters = {
+                requests += 1
+                if (requests == 1) {
+                    jsonResponse(theaterMoviesJson(theaterMovieJson(id = 1, title = "Heat 2")))
+                } else {
+                    jsonResponse(
+                        """{"error":true,"message":"tmdb unavailable"}""",
+                        HttpStatusCode.InternalServerError,
+                    )
+                }
+            },
+        )
+        val viewModel = viewModel(http)
+        assertEquals(listOf("Heat 2"), viewModel.awaitTheaters().items.map { it.title })
+
+        viewModel.refresh()
+
+        assertEquals(2, requests)
+        assertEquals(listOf("Heat 2"), viewModel.awaitTheaters().items.map { it.title })
+
+        viewModel.retry(HomeRail.InTheaters)
+        assertEquals("tmdb unavailable", viewModel.awaitTheatersError().message)
     }
 
     @Test

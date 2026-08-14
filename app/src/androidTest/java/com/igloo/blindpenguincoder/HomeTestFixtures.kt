@@ -4,6 +4,7 @@ import com.igloo.blindpenguincoder.feature.home.HomeAlbum
 import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeHero
 import com.igloo.blindpenguincoder.feature.home.HomeMovie
+import com.igloo.blindpenguincoder.feature.home.HomeTheaterMovie
 
 /**
  * Poster-less movies for shell-level tests: the placeholder path renders deterministically
@@ -26,6 +27,13 @@ internal val testAlbums = listOf(
     HomeAlbum(id = 11, title = "Help!", musician = "The Beatles", coverUrl = null),
     HomeAlbum(id = 12, title = "1984", musician = "Van Halen", coverUrl = null),
     HomeAlbum(id = 13, title = "Tribalistas", musician = "Tribalistas", coverUrl = null),
+)
+
+/** Poster-less for the same reason; ratings span the badge's three tiers. */
+internal val testTheaterMovies = listOf(
+    HomeTheaterMovie(id = 21, title = "Heat 2", year = "2026", posterUrl = null, rating = 7.9),
+    HomeTheaterMovie(id = 22, title = "The Odyssey", year = "2026", posterUrl = null, rating = 5.1),
+    HomeTheaterMovie(id = 23, title = "Unrated", year = null, posterUrl = null, rating = null),
 )
 
 /** Backdrop-less on purpose: the card-surface fallback renders with no image loading. */
