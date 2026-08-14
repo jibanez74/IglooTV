@@ -1,7 +1,7 @@
 package com.igloo.blindpenguincoder.data.model
 
+import com.igloo.blindpenguincoder.core.network.IglooJson
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -9,7 +9,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ApiModelsSerializationTest {
-    private val json = Json { ignoreUnknownKeys = true }
+    // The production decoder, so a payload that passes here is one the app can really decode.
+    private val json = IglooJson
 
     @Test
     fun decodesAuthUserEnvelope() {
@@ -206,9 +207,18 @@ class ApiModelsSerializationTest {
         assertEquals("\"direct\"", json.encodeToString(PlaybackMode.Direct))
 
         val progress = json.encodeToString(
-            UpdateMovieWatchProgressRequest(progressSec = 30.0, durationSec = 7200.0),
+            UpdateMovieWatchProgressRequest(
+                progressSec = 30.0,
+                durationSec = 7200.0,
+                saveSessionId = "11111111-1111-4111-8111-111111111111",
+                saveSequence = 1,
+            ),
         )
-        assertEquals("""{"progress_sec":30.0,"duration_sec":7200.0}""", progress)
+        assertEquals(
+            """{"progress_sec":30.0,"duration_sec":7200.0,""" +
+                """"save_session_id":"11111111-1111-4111-8111-111111111111","save_sequence":1}""",
+            progress,
+        )
     }
 
     @Test
@@ -430,6 +440,236 @@ class ApiModelsSerializationTest {
         assertNull(albums[1].cover.orNull())
         assertNull(albums[1].musician.orNull())
         assertNull(albums[1].year.orNull())
+    }
+
+    // The models below were generated from an older openapi.json and kept fields the contract has
+    // since dropped or moved. Each payload carries exactly the current schema's required keys and
+    // nothing else, so a future spec sync that drops a field fails here instead of shipping.
+
+    /** `GET /movie-playlists/{id}`: no `folder_id` — the column is gone from the backend schema. */
+    @Test
+    fun decodesMoviePlaylistDetailWithoutFolderId() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "playlist": {
+                  "id": 3,
+                  "user_id": 7,
+                  "name": "Saturday night",
+                  "description": {"String": "", "Valid": false},
+                  "cover_image": {"String": "/api/static/playlists/3.jpg", "Valid": true},
+                  "is_public": true,
+                  "movie_id": {"Int64": 0, "Valid": false},
+                  "content_type": "movie",
+                  "created_at": "2026-01-01T00:00:00Z",
+                  "updated_at": "2026-01-02T00:00:00Z"
+                },
+                "movie_count": 12,
+                "is_owner": true,
+                "can_edit": true,
+                "collaborators": []
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<MoviePlaylistDetailData>>(body).data!!
+
+        assertEquals(3L, data.playlist.id)
+        assertEquals("movie", data.playlist.contentType)
+        assertNull(data.playlist.description.orNull())
+        assertEquals("/api/static/playlists/3.jpg", data.playlist.coverImage.orNull())
+        assertEquals(12L, data.movieCount)
+    }
+
+    /** `GET /movie-playlists`: summaries carry list metadata but still no `folder_id`. */
+    @Test
+    fun decodesMoviePlaylistSummariesWithoutFolderId() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "playlists": [
+                  {
+                    "id": 3,
+                    "user_id": 7,
+                    "name": "Saturday night",
+                    "description": {"String": "Popcorn films", "Valid": true},
+                    "cover_image": {"String": "", "Valid": false},
+                    "is_public": false,
+                    "movie_id": {"Int64": 55, "Valid": true},
+                    "content_type": "movie",
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "updated_at": "2026-01-02T00:00:00Z",
+                    "movie_count": 4,
+                    "is_owner": true,
+                    "can_edit": true
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val playlist = json.decodeFromString<ApiEnvelope<MoviePlaylistsData>>(body).data!!.playlists.single()
+
+        assertEquals("Popcorn films", playlist.description.orNull())
+        assertEquals(55L, playlist.movieId.orNull())
+        assertEquals(4L, playlist.movieCount)
+    }
+
+    /** `POST /notifications`: the response has no `user_id`; the backend never emitted one. */
+    @Test
+    fun decodesCreatedNotificationWithoutUserId() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "notification": {
+                  "id": 11,
+                  "created_by_user_id": 7,
+                  "title": "movie_request",
+                  "message": "Please add Heat",
+                  "is_admin": true,
+                  "created_at": "2026-01-01T00:00:00Z",
+                  "updated_at": "2026-01-01T00:00:00Z"
+                }
+              }
+            }
+        """.trimIndent()
+
+        val notification = json.decodeFromString<ApiEnvelope<CreateNotificationData>>(body).data!!.notification
+
+        assertEquals(11L, notification.id)
+        assertEquals(NotificationTitle.MovieRequest, notification.title)
+        assertTrue(notification.isAdmin)
+    }
+
+    /** `GET /notifications`: list items are keyed by `created_by_name`, not `user_id`. */
+    @Test
+    fun decodesNotificationListWithoutUserId() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "notifications": [
+                  {
+                    "id": 11,
+                    "title": "album_request",
+                    "message": "Please add Rumours",
+                    "is_admin": false,
+                    "is_read": false,
+                    "created_by_name": "Jose",
+                    "created_at": "2026-01-01T00:00:00Z"
+                  }
+                ],
+                "unread_count": 1
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<NotificationsListData>>(body).data!!
+
+        assertEquals(1L, data.unreadCount)
+        val item = data.notifications.single()
+        assertEquals(NotificationTitle.AlbumRequest, item.title)
+        assertEquals("Jose", item.createdByName)
+        assertFalse(item.isRead)
+    }
+
+    /** `GET /settings/general`: hardware acceleration and upload cap moved to the playback routes. */
+    @Test
+    fun decodesGeneralSettingsWithoutPlaybackOnlyFields() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "settings": {
+                  "tmdb_key": "key",
+                  "immich_base_url": null,
+                  "immich_api_key": null,
+                  "jellyfin_base_url": null,
+                  "jellyfin_api_key": null,
+                  "spotify_client_id": "spotify-id",
+                  "spotify_client_secret": null,
+                  "enable_watcher": true,
+                  "download_images": false,
+                  "static_dir": "/srv/igloo/static",
+                  "transcode_dir": "/srv/igloo/transcode"
+                }
+              }
+            }
+        """.trimIndent()
+
+        val settings = json.decodeFromString<ApiEnvelope<GeneralSettingsData>>(body).data!!.settings
+
+        assertEquals("key", settings.tmdbKey)
+        assertNull(settings.immichBaseUrl)
+        assertTrue(settings.enableWatcher)
+        assertEquals("/srv/igloo/transcode", settings.transcodeDir)
+        // Absent from the contract, so absent from the request the app would send back.
+        assertEquals(
+            """{"tmdb_key":"key","immich_base_url":"","immich_api_key":"","jellyfin_base_url":"",""" +
+                """"jellyfin_api_key":"","spotify_client_id":"spotify-id","spotify_client_secret":"",""" +
+                """"enable_watcher":true,"download_images":false,"static_dir":"/srv/igloo/static",""" +
+                """"transcode_dir":"/srv/igloo/transcode"}""",
+            json.encodeToString(
+                UpdateGeneralSettingsRequest(
+                    tmdbKey = "key",
+                    immichBaseUrl = "",
+                    immichApiKey = "",
+                    jellyfinBaseUrl = "",
+                    jellyfinApiKey = "",
+                    spotifyClientId = "spotify-id",
+                    spotifyClientSecret = "",
+                    enableWatcher = true,
+                    downloadImages = false,
+                    staticDir = "/srv/igloo/static",
+                    transcodeDir = "/srv/igloo/transcode",
+                ),
+            ),
+        )
+    }
+
+    /** `GET /settings/playback`: this is where `hardware_acceleration_device` now lives. */
+    @Test
+    fun decodesPlaybackSettingsWithHardwareAccelerationDevice() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "settings": {
+                  "profiles": [
+                    {"id": "1080p", "label": "1080p", "height": 1080, "video_mbps": 8}
+                  ],
+                  "preferred_profile": null,
+                  "download_mbps": 50.5,
+                  "server_upload_mbps": null,
+                  "hardware_acceleration_device": "nvidia",
+                  "is_admin": true,
+                  "preferred_audio_language": "eng",
+                  "preferred_subtitle_language": "off"
+                }
+              }
+            }
+        """.trimIndent()
+
+        val settings = json.decodeFromString<ApiEnvelope<PlaybackSettingsData>>(body).data!!.settings
+
+        assertEquals(HardwareAccelerationDevice.Nvidia, settings.hardwareAccelerationDevice)
+        assertEquals(1080, settings.profiles.single().height)
+        assertNull(settings.preferredProfile)
+        assertNull(settings.serverUploadMbps)
+        assertEquals(50.5, settings.downloadMbps!!, 0.0)
+    }
+
+    /** A partial playback update sends only the keys the user actually changed. */
+    @Test
+    fun encodesPlaybackSettingsUpdateWithoutUntouchedFields() {
+        val request = json.encodeToString(
+            UpdatePlaybackSettingsRequest(hardwareAccelerationDevice = HardwareAccelerationDevice.Intel),
+        )
+
+        assertEquals("""{"hardware_acceleration_device":"intel"}""", request)
     }
 
     @Test

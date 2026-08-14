@@ -23,7 +23,6 @@ data class CreateNotificationRequest(
 data class Notification(
     val id: Long,
     @SerialName("created_by_user_id") val createdByUserId: Long,
-    @SerialName("user_id") val userId: SqlNullInt64,
     val title: NotificationTitle,
     val message: String,
     @SerialName("is_admin") val isAdmin: Boolean,
@@ -45,7 +44,6 @@ data class NotificationListItem(
     @SerialName("is_admin") val isAdmin: Boolean,
     @SerialName("is_read") val isRead: Boolean,
     @SerialName("created_by_name") val createdByName: String,
-    @SerialName("user_id") val userId: Long?,
     @SerialName("created_at") val createdAt: String,
 )
 

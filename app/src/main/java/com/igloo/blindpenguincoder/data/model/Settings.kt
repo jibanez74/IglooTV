@@ -41,12 +41,10 @@ data class GeneralSettings(
     @SerialName("jellyfin_api_key") val jellyfinApiKey: String?,
     @SerialName("spotify_client_id") val spotifyClientId: String?,
     @SerialName("spotify_client_secret") val spotifyClientSecret: String?,
-    @SerialName("hardware_acceleration_device") val hardwareAccelerationDevice: HardwareAccelerationDevice,
     @SerialName("enable_watcher") val enableWatcher: Boolean,
     @SerialName("download_images") val downloadImages: Boolean,
     @SerialName("static_dir") val staticDir: String,
     @SerialName("transcode_dir") val transcodeDir: String,
-    @SerialName("server_upload_mbps") val serverUploadMbps: Double?,
     @SerialName("restart_required") val restartRequired: Boolean? = null,
 )
 
@@ -59,12 +57,10 @@ data class UpdateGeneralSettingsRequest(
     @SerialName("jellyfin_api_key") val jellyfinApiKey: String,
     @SerialName("spotify_client_id") val spotifyClientId: String,
     @SerialName("spotify_client_secret") val spotifyClientSecret: String,
-    @SerialName("hardware_acceleration_device") val hardwareAccelerationDevice: HardwareAccelerationDevice,
     @SerialName("enable_watcher") val enableWatcher: Boolean,
     @SerialName("download_images") val downloadImages: Boolean,
     @SerialName("static_dir") val staticDir: String,
     @SerialName("transcode_dir") val transcodeDir: String,
-    @SerialName("server_upload_mbps") val serverUploadMbps: Double?,
 )
 
 /** Payload of `GeneralSettingsEnvelope.data`. */
@@ -94,6 +90,7 @@ data class PlaybackSettings(
     @SerialName("preferred_profile") val preferredProfile: String?,
     @SerialName("download_mbps") val downloadMbps: Double?,
     @SerialName("server_upload_mbps") val serverUploadMbps: Double?,
+    @SerialName("hardware_acceleration_device") val hardwareAccelerationDevice: HardwareAccelerationDevice,
     @SerialName("is_admin") val isAdmin: Boolean,
     @SerialName("preferred_audio_language") val preferredAudioLanguage: String?,
     @SerialName("preferred_subtitle_language") val preferredSubtitleLanguage: String?,
@@ -106,6 +103,8 @@ data class UpdatePlaybackSettingsRequest(
     @SerialName("preferred_audio_language") val preferredAudioLanguage: String? = null,
     @SerialName("preferred_subtitle_language") val preferredSubtitleLanguage: String? = null,
     @SerialName("server_upload_mbps") val serverUploadMbps: Double? = null,
+    // Admin-only. Lives here rather than on the general settings routes, as does server_upload_mbps.
+    @SerialName("hardware_acceleration_device") val hardwareAccelerationDevice: HardwareAccelerationDevice? = null,
 )
 
 /** Playback settings as returned after an update. */

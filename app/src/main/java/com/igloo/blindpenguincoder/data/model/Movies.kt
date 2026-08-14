@@ -143,6 +143,10 @@ data class MovieTechnicalDetailsData(
 data class UpdateMovieWatchProgressRequest(
     @SerialName("progress_sec") val progressSec: Double,
     @SerialName("duration_sec") val durationSec: Double,
+    // The backend rejects out-of-order saves: the session id is a UUID minted once per
+    // playback, and the sequence counts up from 1 across that session's saves.
+    @SerialName("save_session_id") val saveSessionId: String,
+    @SerialName("save_sequence") val saveSequence: Long,
 )
 
 @Serializable
