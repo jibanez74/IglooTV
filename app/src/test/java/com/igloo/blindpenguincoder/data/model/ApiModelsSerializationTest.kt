@@ -606,6 +606,74 @@ class ApiModelsSerializationTest {
         assertFalse(item.isRead)
     }
 
+    /**
+     * `POST /{music,movies}/playlists/{id}/collaborators`: the mutation echo has no user join,
+     * so it carries neither `username` nor `email`. Decoding it as the list-shaped
+     * `PlaylistCollaborator` threw `MissingFieldException` outright.
+     */
+    @Test
+    fun decodesCollaboratorMutationWithoutTheUserJoin() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "collaborator": {
+                  "id": 9,
+                  "playlist_id": 3,
+                  "user_id": 7,
+                  "can_edit": true,
+                  "created_at": "2026-01-01T00:00:00Z",
+                  "updated_at": "2026-01-02T00:00:00Z"
+                }
+              }
+            }
+        """.trimIndent()
+
+        val collaborator =
+            json.decodeFromString<ApiEnvelope<PlaylistCollaboratorMutationData>>(body)
+                .data!!
+                .collaborator
+
+        assertEquals(9L, collaborator.id)
+        assertEquals(3L, collaborator.playlistId)
+        assertEquals(7L, collaborator.userId)
+        assertTrue(collaborator.canEdit)
+    }
+
+    /** `GET /{music,movies}/playlists/{id}/collaborators`: the list shape does join the user. */
+    @Test
+    fun decodesCollaboratorListWithTheUserJoin() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "collaborators": [
+                  {
+                    "id": 9,
+                    "playlist_id": 3,
+                    "user_id": 7,
+                    "can_edit": false,
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "updated_at": "2026-01-02T00:00:00Z",
+                    "username": "Jose",
+                    "email": "jose@example.com"
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val collaborator =
+            json.decodeFromString<ApiEnvelope<PlaylistCollaboratorsData>>(body)
+                .data!!
+                .collaborators
+                .single()
+
+        assertEquals("Jose", collaborator.username)
+        assertEquals("jose@example.com", collaborator.email)
+        assertFalse(collaborator.canEdit)
+    }
+
     /** `GET /settings/general`: hardware acceleration and upload cap moved to the playback routes. */
     @Test
     fun decodesGeneralSettingsWithoutPlaybackOnlyFields() {

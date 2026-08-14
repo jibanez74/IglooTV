@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
+/** A collaborator as the list endpoints return it, joined against the user row. */
 @Serializable
 data class PlaylistCollaborator(
     val id: Long,
@@ -15,6 +16,21 @@ data class PlaylistCollaborator(
     @SerialName("updated_at") val updatedAt: String,
     val username: String,
     val email: String,
+)
+
+/**
+ * The row a collaborator mutation echoes back: the same record without the user join, so it
+ * carries no `username` or `email`. A separate type because it has to be — reusing
+ * [PlaylistCollaborator] here cannot decode the response at all.
+ */
+@Serializable
+data class PlaylistCollaboratorMutation(
+    val id: Long,
+    @SerialName("playlist_id") val playlistId: Long,
+    @SerialName("user_id") val userId: Long,
+    @SerialName("can_edit") val canEdit: Boolean,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
 )
 
 @Serializable
@@ -87,5 +103,5 @@ data class PlaylistCollaboratorsData(
 /** Payload of `PlaylistCollaboratorMutationEnvelope.data`. */
 @Serializable
 data class PlaylistCollaboratorMutationData(
-    val collaborator: PlaylistCollaborator,
+    val collaborator: PlaylistCollaboratorMutation,
 )

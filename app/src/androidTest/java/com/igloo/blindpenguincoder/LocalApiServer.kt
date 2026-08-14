@@ -152,11 +152,15 @@ class LocalApiServer(private val hasPin: Boolean = true) {
         return line.toString()
     }
 
-    /** `avatar` is a Go `sql.NullString`, not the plain string docs/openapi.json describes. */
+    /**
+     * `avatar` carries an uploaded relative path rather than null, so the gates that sign in
+     * exercise the shape that used to fail: it is what the server actually stores, and what
+     * `avatarImageUrl` has to resolve before the rail can render it.
+     */
     private fun authUserJson() = """
         {"error":false,"data":{"user":{
             "id":1,"name":"Jose","email":"jose@example.com","is_admin":false,
-            "avatar":{"String":"","Valid":false},"has_pin":$hasPin,
+            "avatar":"/api/static/avatars/1-1735689600.jpg","has_pin":$hasPin,
             "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
         }}}
     """.trimIndent()

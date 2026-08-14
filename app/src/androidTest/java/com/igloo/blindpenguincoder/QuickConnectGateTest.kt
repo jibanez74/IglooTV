@@ -10,7 +10,9 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -182,17 +184,34 @@ class QuickConnectGateTest {
         }
     }
 
+    /**
+     * An issued code renders as one of two different trees, and which one is the device's
+     * business, not the test's: with a screen reader listening the characters become
+     * individually focusable and the first deliberately takes focus, and without one the code
+     * is a single node that must not disturb the focused button. Asserting only the latter is
+     * what made this fail on the Shield, which runs with TalkBack on — the exact device
+     * AGENTS.md asks us to validate against. PairingCodeAccessibilityTest pins the spoken
+     * variant's character-by-character behaviour; here it is only the arrival that matters.
+     */
     @Test
-    fun issuedPairingCodeIsDisplayedWithoutStealingFocus() {
+    fun issuedPairingCodeIsPresentedForTheDevicesAccessibilityState() {
         server.quickConnectInitiate = QuickConnectInitiate.Code("WXYZ42")
         seedServerWithoutToken()
 
         ActivityScenario.launch(MainActivity::class.java).use {
-            composeRule.awaitContentDescription("Pairing code: W X Y Z 4 2")
-            composeRule.onNodeWithText("WXYZ42").assertIsDisplayed()
-            composeRule
-                .onNodeWithContentDescription("Use email and password instead")
-                .assertIsFocused()
+            if (spokenFeedbackEnabled()) {
+                composeRule.awaitTestTag("pairing_code_character_0")
+                composeRule.onNodeWithTag("pairing_code_character_0").assertIsFocused()
+                composeRule.onAllNodesWithTag("pairing_code_character_5")
+                    .fetchSemanticsNodes()
+                    .let { assertTrue("Every character should be its own node", it.isNotEmpty()) }
+            } else {
+                composeRule.awaitContentDescription("Pairing code: W X Y Z 4 2")
+                composeRule.onNodeWithText("WXYZ42").assertIsDisplayed()
+                composeRule
+                    .onNodeWithContentDescription("Use email and password instead")
+                    .assertIsFocused()
+            }
         }
     }
 

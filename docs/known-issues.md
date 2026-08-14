@@ -17,45 +17,81 @@ The models were generated once (`05ec605`, "Add API models generated from docs/o
 `docs/openapi.json` has since been re-synced **six times** — `9852401`, `047499e`, `de5d43a`,
 `647001a`, `fa906c2`, `5e3a176` — with no regeneration and no check. A reviewer spotting two
 dropped fields by eye is what surfaced this; a full manual sweep then found three more, and the
-`AuthUser.avatar` decode bug (fixed 2026-08-13) was a sixth that a presence-only sweep still
-misses, because the field was present and only its *type* was wrong. Any check worth adding has
-to compare types, not just field names.
+`AuthUser.avatar` decode bug (fixed 2026-08-14) was a sixth that a presence-only sweep still
+misses, because the field was present and only its *type* was wrong.
 
-Most of these models have no call sites at all, so the drift stays invisible until someone wires
-up the endpoint and it fails at runtime. `MoviePlaylist*`, `Notification*`, and the settings models
-are all currently unreferenced outside their own files.
+A second full sweep on 2026-08-14 found a seventh, `PlaylistCollaboratorMutationData` (fixed the
+same day), which misses in a third direction again: the field was present *and* correctly named,
+and only the schema it referenced was wrong. `PlaylistCollaboratorMutationEnvelope.data
+.collaborator` refs `PlaylistCollaboratorMutation` — the row without the user join, so no
+`username` and no `email` — while the model reused the list-shaped `PlaylistCollaborator`, whose
+copies of both are non-nullable. Worth noting because it is the first instance that *cannot*
+decode at all rather than being absorbed by `ignoreUnknownKeys`.
+
+Most of these models have no call sites, so drift stays invisible until someone wires up the
+endpoint and it fails at runtime. Of 143 declared types, **29** are referenced in production, 17
+only by the serialization test, and **97 nowhere at all** — so roughly two thirds of the wire
+surface is unexercised. The doc used to name `MoviePlaylist*`, `Notification*` and the settings
+models; the dead set also covers every admin-user, watch-room, search, Spotify/TMDB and
+user-stats model.
 
 ### What the fix looks like
 
 Either regenerate the models from the spec as part of each sync, or add a test that walks
 `components.schemas` and asserts each model's required fields match — presence *and* type. The
-serialization tests added alongside this entry pin the contract shape for the models touched so
-far, but only those, and only by hand-written fixture.
+serialization tests pin the contract shape for the models touched so far, but only those, and
+only by hand-written fixture.
+
+Three things a check has to handle before it is worth having, all learned from doing the sweep
+by hand:
+
+- **`docs/openapi.json` is not on the JVM test classpath.** `app/build.gradle.kts` has no
+  `sourceSets` or `testOptions` block and `app/src/test/` has no `resources/` directory, so the
+  check needs a `sourceSets["test"].resources.srcDir(...)` entry pointing at `docs/` (or a copy
+  task). Reading it via a relative `File(...)` path would depend on Gradle's working directory.
+- **`allOf` has to be flattened.** Every `*Envelope`, plus `MoviePlaylistSummary`,
+  `MovieLibraryItem`, `ContinueWatchingMovie` and `AdminUser`, composes with `allOf` and has an
+  empty top-level `properties`. A naive walk reports every one of their fields as missing.
+- **OpenAPI 3.1 type unions have to be understood.** `"type": ["string", "null"]` is exactly the
+  shape the `AuthUser.avatar` bug hid in, so a checker that reads `type` as a string misses the
+  whole class of bug it exists to catch.
 
 ### Related, smaller
 
-- `MoviePlaylistSummary` duplicates nine fields from `MoviePlaylist` instead of composing it,
-  which is why both copies carried the stale `folder_id` and drifted identically. Worth collapsing.
-- `TheaterMovie`, `AdminUser` (`has_pin`), and `DeviceTokenData` (`device`) each omit response
-  fields their schema marks required. Harmless under `ignoreUnknownKeys = true` and left alone
-  deliberately — recorded so the next sweep does not re-flag them as new.
+- `MoviePlaylistSummary` duplicates **ten** fields from `MoviePlaylist` instead of composing it,
+  which is why both copies carried the stale `folder_id` and drifted identically. The same
+  flatten-instead-of-compose shape appears in three more models the spec composes with `allOf`:
+  `MovieLibraryItem` and `ContinueWatchingMovie` both restate `LatestMovie`, and `AdminUser`
+  restates `AuthUser` where the schema is literally `allOf: [$ref AuthUser]`. Worth collapsing —
+  and note this is the *cause* of two of the three omissions below, not a separate problem.
+- `TheaterMovie` (7 fields), `AdminUser` (`has_pin`), and `DeviceTokenData` (`device`) each omit
+  response fields their schema marks required. Harmless under `ignoreUnknownKeys = true` and left
+  alone deliberately — recorded so the next sweep does not re-flag them as new. Confirmed still
+  the case on 2026-08-14, with nothing new in that category.
+- `UpdatePlaybackSettingsData.settings` is typed `UpdatedPlaybackSettings` where the schema says
+  `UpdatePlaybackSettings`. The fields match exactly; only the Kotlin class name differs. Not a
+  bug, but it will trip any check that matches models to schemas by name.
 
 ---
 
 ## Watch progress: the player still has to own the save session identity
 
 **Found:** 2026-08-10, seeding watch progress by hand to verify the Home rails.
-**Status:** partly landed. `UpdateMovieWatchProgressRequest` now carries all four fields
+**Status:** partly landed. `UpdateMovieWatchProgressRequest` matches the schema exactly
 (2026-08-13); the caller-side rules below are still unimplemented because nothing sends it yet.
 **Files:** the future playback/progress caller
 
 ### What remains
 
-The model is correct now, but the two fields it gained only work if the caller manages them.
-From `../Igloo/server/cmd/api/watch_progress_handler.go` and the `UpsertMovieWatchProgress` query:
+The model is correct now, but the two fields it gained only work if the caller manages them. The
+movie is identified by the path — `PUT /api/movies/{id}/watch-progress` — so the body carries
+four fields and no id. From `../Igloo/server/cmd/api/watch_progress_handler.go` and the
+`UpsertMovieWatchProgress` query:
 
 | Field | Type | Rule |
 | --- | --- | --- |
+| `progress_sec` | number | Clamped server-side to `[0, duration_sec]`. |
+| `duration_sec` | number | Must be `> 0`; both values must be finite (NaN/Inf are rejected). |
 | `save_session_id` | UUID string | Identifies one continuous playback session. Validated as a real UUID (36 chars, correct dashes, hex). |
 | `save_sequence` | int64 | Monotonically increasing counter **within** a session. Must be `> 0`. |
 
@@ -75,13 +111,14 @@ the sequence must keep increasing across retries of the *same* save, or a retrie
 dropped by the `<` comparison. AGENTS.md sets the cadence — save every 15 seconds, first save only
 after ~15s of real playback, so in practice around 30s.
 
-Other server-side behaviour worth knowing before wiring this up:
+One more server-side behaviour worth knowing before wiring this up: at
+`progress_sec / duration_sec >= 0.98` the server marks the movie **watched** instead of storing
+progress, and responds `{"watched": true}`. The app's `MovieWatchProgressUpdateData` already
+models that response correctly.
 
-- `progress_sec` is clamped server-side to `[0, duration_sec]`.
-- `duration_sec` must be `> 0`; both values must be finite (NaN/Inf are rejected).
-- At `progress_sec / duration_sec >= 0.98` the server marks the movie **watched** instead of
-  storing progress, and responds `{"watched": true}`. The app's `MovieWatchProgressUpdateData`
-  already models that response correctly.
+Nothing in the app touches this yet. There is no playback code at all: Media3 is declared in
+`app/build.gradle.kts` but referenced by zero Kotlin sources, and neither `MovieApi` nor
+`MovieRepository` exposes a watch-progress method.
 
 ---
 
@@ -113,4 +150,4 @@ URL and says nothing about what the field contains.
 If the scanner ever starts storing artwork locally this becomes real, but `IglooPosterCard` already
 degrades to the music placeholder on a load error rather than showing a broken card. The genuine
 relative-path bug was on avatars, where uploads really are stored as `/api/static/...`; that one
-was fixed on 2026-08-13 by `avatarImageUrl` and does not apply here.
+was fixed on 2026-08-14 by `avatarImageUrl` and does not apply here.

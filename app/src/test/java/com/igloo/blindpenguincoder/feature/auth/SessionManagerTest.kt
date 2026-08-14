@@ -116,6 +116,26 @@ class SessionManagerTest {
         assertEquals("Jose", state.user.name)
         assertEquals(1, fixture.requestCount)
         assertEquals(TEST_SERVER, fixture.http.serverUrl.current.value?.apiBaseUrl)
+        // Carried on the state itself: the rail resolves avatars against it rather than
+        // reaching for a provider from composition.
+        assertEquals(TEST_SERVER, state.serverAddress.apiBaseUrl)
+    }
+
+    /**
+     * Without an address there is no session, and the http client refuses to build the request
+     * before `completeSignIn` ever gets to look — so the address-missing branch inside it is
+     * defence in depth rather than a reachable path. What matters either way is asserted here:
+     * a sign-in that cannot name its server publishes no session.
+     */
+    @Test
+    fun `a sign-in with no server address publishes no session`() = runTest {
+        val fixture = fixture(null, backgroundScope) { jsonResponse(authUserJson()) }
+        fixture.http.seedVault(testStoredProfile(), activeUserId = 1)
+
+        val result = fixture.manager.completeSignIn()
+
+        assertTrue(result is SignInResult.Failed)
+        assertEquals(AppAuthState.Loading, fixture.manager.state.value)
     }
 
     @Test

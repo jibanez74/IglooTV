@@ -1318,7 +1318,7 @@ forgot to change the code.**
 
 ## Changelog
 
-**2026-08-13 — Uploaded avatars actually render.**
+**2026-08-14 — Uploaded avatars actually render.**
 
 §11.1.1's avatar rule mandated behaviour that rejected every avatar the server produces. Two
 faults, and either one alone kept the initials fallback on screen.
