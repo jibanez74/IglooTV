@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder
 
 import androidx.compose.ui.test.junit4.ComposeTestRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 
 /**
@@ -17,6 +18,20 @@ import androidx.compose.ui.test.onAllNodesWithText
 fun ComposeTestRule.awaitScreen(title: String) {
     waitUntil(WAIT_TIMEOUT_MILLIS) {
         onAllNodesWithText(title).fetchSemanticsNodes().any { !it.boundsInWindow.isEmpty }
+    }
+}
+
+/**
+ * Waits on a control instead of the screen title, for screens whose resting state may scroll
+ * the header out of the viewport — a banner over the auth card does exactly that (design
+ * system section 11.1.3), taking the title's window bounds with it. The same real-bounds
+ * requirement as [awaitScreen] applies, for the same stale-hierarchy reason.
+ */
+fun ComposeTestRule.awaitContentDescription(description: String) {
+    waitUntil(WAIT_TIMEOUT_MILLIS) {
+        onAllNodesWithContentDescription(description)
+            .fetchSemanticsNodes()
+            .any { !it.boundsInWindow.isEmpty }
     }
 }
 

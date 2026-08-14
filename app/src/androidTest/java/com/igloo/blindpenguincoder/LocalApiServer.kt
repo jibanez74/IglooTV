@@ -4,23 +4,48 @@ import java.io.BufferedInputStream
 import java.io.InputStream
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CountDownLatch
 import kotlin.concurrent.thread
+
+/** What `POST /quick-connect/initiate` does, switchable mid-test. */
+sealed interface QuickConnectInitiate {
+    /** Holds the connection open so the pairing phase rests at `RequestingCode`. */
+    data object Hang : QuickConnectInitiate
+
+    /** Answers 500, which the pairing loop treats as non-retryable: `Failed` immediately. */
+    data object Fail : QuickConnectInitiate
+
+    /** Issues [code] with a 1s poll interval so redeem outcomes land fast. */
+    data class Code(val code: String) : QuickConnectInitiate
+}
 
 /**
  * A canned Igloo API on the device's loopback, for gates that cannot be reached without one.
  *
- * The PIN gate is published from the server's `has_pin` rather than the vault's copy, so no
- * amount of seeding puts the keypad on screen with the server unreachable — which is the point of
- * that design, and inconvenient here. Only the two routes those screens call are implemented;
- * anything else answers 404 loudly rather than pretending.
+ * The PIN gate is published from the server's `has_pin` rather than the vault's copy, and the
+ * quick-connect phase is the server's answer to `initiate` — so no amount of seeding puts those
+ * screens in a chosen state with the server unreachable. Which is the point of those designs,
+ * and inconvenient here. Only the routes the tested screens call are implemented; anything else
+ * answers 404 loudly rather than pretending.
+ *
+ * Each connection is handled on its own thread so a deliberately hanging route (see
+ * [QuickConnectInitiate.Hang]) never stalls the requests behind it.
  */
 class LocalApiServer(private val hasPin: Boolean = true) {
 
     private val socket = ServerSocket(0)
+    private val closed = CountDownLatch(1)
 
     /** Whether the next `POST /user/pin/verify` accepts the digits. */
     @Volatile
     var pinValid: Boolean = false
+
+    @Volatile
+    var quickConnectInitiate: QuickConnectInitiate = QuickConnectInitiate.Hang
+
+    /** Whether `POST /quick-connect/redeem` approves (with a token) or stays pending. */
+    @Volatile
+    var quickConnectRedeemApproved: Boolean = false
 
     val apiBaseUrl: String get() = "http://127.0.0.1:${socket.localPort}/api"
 
@@ -32,12 +57,17 @@ class LocalApiServer(private val hasPin: Boolean = true) {
                 } catch (_: Exception) {
                     return@thread
                 }
-                client.use(::respond)
+                thread(isDaemon = true, name = "LocalApiServer-connection") {
+                    client.use(::respond)
+                }
             }
         }
     }
 
-    fun close() = socket.close()
+    fun close() {
+        closed.countDown()
+        socket.close()
+    }
 
     private fun respond(client: Socket) {
         val input = BufferedInputStream(client.getInputStream())
@@ -45,15 +75,40 @@ class LocalApiServer(private val hasPin: Boolean = true) {
         val body = when {
             path.endsWith("/auth/user") -> authUserJson()
             path.endsWith("/user/pin/verify") -> """{"error":false,"data":{"valid":$pinValid}}"""
+            path.endsWith("/quick-connect/initiate") -> when (val behavior = quickConnectInitiate) {
+                // Held open until the server closes; the client sees no response at all, so the
+                // screen rests at "Requesting pairing code" for the whole test.
+                QuickConnectInitiate.Hang -> {
+                    closed.await()
+                    return
+                }
+                QuickConnectInitiate.Fail -> {
+                    respondWith(client, "500 Internal Server Error", """{"error":true,"message":"initiate failed"}""")
+                    return
+                }
+                is QuickConnectInitiate.Code -> """{"error":false,"data":{
+                    "code":"${behavior.code}","secret":"igqc_test_secret",
+                    "expires_in_seconds":600,"poll_interval_seconds":1}}"""
+            }
+            path.endsWith("/quick-connect/redeem") -> if (quickConnectRedeemApproved) {
+                """{"error":false,"data":{"status":"approved","token":"igd_quick_connect"}}"""
+            } else {
+                """{"error":false,"data":{"status":"pending"}}"""
+            }
             // The home rails load behind every authenticated gate; an empty library is the
             // cleanest true state for tests that only assert on the shell.
             path.endsWith("/movies/latest") -> """{"error":false,"data":{"movies":[]}}"""
             path.endsWith("/movies/continue-watching") -> """{"error":false,"data":{"movies":[]}}"""
+            path.endsWith("/tmdb/movies/in-theaters") -> """{"error":false,"data":{"movies":[]}}"""
             path.endsWith("/music/albums/latest") -> """{"error":false,"data":{"albums":[]}}"""
             else -> null
         }
         val status = if (body == null) "404 Not Found" else "200 OK"
         val payload = body ?: """{"error":true,"message":"no test route for $path"}"""
+        respondWith(client, status, payload)
+    }
+
+    private fun respondWith(client: Socket, status: String, payload: String) {
         client.getOutputStream().apply {
             write(
                 (
