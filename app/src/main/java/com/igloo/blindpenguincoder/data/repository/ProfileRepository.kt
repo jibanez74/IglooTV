@@ -80,7 +80,8 @@ class ProfileRepository(
                 userId = user.id,
                 token = token,
                 name = user.name,
-                avatarUrl = user.avatar?.orNull(),
+                // Stored raw: resolution is against the current origin, which can change.
+                avatarUrl = user.avatar,
                 hasPin = user.hasPin,
                 lastUsedAtEpochMillis = clock(),
             )

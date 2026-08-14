@@ -80,6 +80,7 @@ class IglooBaseAppTest {
             IglooTheme(uiScale = uiScale) {
                 IglooApp(
                     user = user,
+                    serverOrigin = "http://igloo.test:8080",
                     signOut = signOut,
                     // Hero hidden — a legitimate 11.3.1 state — so both rail headings fit the
                     // viewport at once for the order assertion; the hero-visible shell is

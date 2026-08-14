@@ -69,7 +69,7 @@ class QuickConnectViewModelTest {
     private val userJson = """
         {"error":false,"message":"user found","data":{"user":{
             "id":1,"name":"Jose","email":"jose@example.com","is_admin":false,"has_pin":false,
-            "avatar":{"String":"","Valid":false},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
+            "avatar":null,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
         }}}
     """.trimIndent()
 

@@ -5,7 +5,6 @@ import com.igloo.blindpenguincoder.core.network.BearerTokenProvider
 import com.igloo.blindpenguincoder.core.storage.FakeProfileStore
 import com.igloo.blindpenguincoder.core.storage.ProfileVault
 import com.igloo.blindpenguincoder.data.model.AuthUser
-import com.igloo.blindpenguincoder.data.model.SqlNullString
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,7 +29,7 @@ class ProfileRepositoryTest {
         name = name,
         email = "$name@example.com",
         isAdmin = false,
-        avatar = avatar?.let { SqlNullString(it, valid = true) },
+        avatar = avatar,
         hasPin = hasPin,
         createdAt = "2026-01-01T00:00:00Z",
         updatedAt = "2026-01-01T00:00:00Z",
@@ -53,6 +52,19 @@ class ProfileRepositoryTest {
         assertNull(store.vault.pendingToken)
         assertEquals(ActiveCredential(7, "igd_new"), credentials.current())
         assertEquals(7L, repository.activeProfileId)
+    }
+
+    /**
+     * The vault keeps what the server sent. Resolution happens at render against the origin in
+     * use then, so a profile survives the TV being pointed at a different address.
+     */
+    @Test
+    fun `an uploaded avatar path is stored unresolved`() = runTest {
+        repository.setPending("igd_new")
+
+        repository.commitSignIn(user(id = 7, avatar = "/api/static/avatars/7.jpg"))
+
+        assertEquals("/api/static/avatars/7.jpg", store.vault.profiles.single().avatarUrl)
     }
 
     @Test

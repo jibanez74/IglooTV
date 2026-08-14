@@ -17,14 +17,18 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import java.io.IOException
 import javax.net.ssl.SSLHandshakeException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ServerRepositoryTest {
 
     private class Fixture(
@@ -34,7 +38,7 @@ class ServerRepositoryTest {
         val profileStore: FakeProfileStore,
     )
 
-    private suspend fun fixture(
+    private suspend fun TestScope.fixture(
         active: ServerAddress? = null,
         timeoutMillis: Long = 10_000,
         handler: MockRequestHandler,
@@ -44,7 +48,11 @@ class ServerRepositoryTest {
         val serverUrl = ServerUrlProvider().apply { set(active) }
         val profileStore = FakeProfileStore()
         val repository = ServerRepository(
-            probe = testServerHealthProbe(handler, timeoutMillis),
+            probe = testServerHealthProbe(
+                handler,
+                timeoutMillis,
+                dispatcher = UnconfinedTestDispatcher(testScheduler),
+            ),
             settings = settings,
             serverUrl = serverUrl,
             profiles = ProfileRepository(profileStore, BearerTokenProvider()),

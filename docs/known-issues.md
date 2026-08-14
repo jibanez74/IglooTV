@@ -5,114 +5,6 @@ without rediscovering them. Delete an entry when it lands.
 
 ---
 
-## `AuthUser.avatar` decodes the wrong wire shape and breaks sign-in for users with an avatar
-
-**Found:** 2026-08-13, while sweeping the wire models against `docs/openapi.json`.
-**Status:** open. Live on every signed-in path, not latent.
-**Files:** `app/src/main/java/com/igloo/blindpenguincoder/data/model/Auth.kt`
-
-### The gap
-
-`AuthUser` models `avatar` as a Go `sql.NullString` object, and says so in a comment that names
-the backend function as its evidence:
-
-```kotlin
-// Auth.kt
-// The backend serializes this as a Go sql.NullString object, not a plain
-// string (docs/openapi.json is outdated here; see userResponseMap in ../Igloo).
-val avatar: SqlNullString? = null,
-```
-
-That comment is now the stale part. `userResponseMap` — the function it cites — unwraps the
-value before writing it (`../Igloo/server/cmd/api/user_handler.go:22-38`):
-
-```go
-var avatarValue any
-if avatar.Valid {
-	avatarValue = avatar.String
-}
-// ...
-"avatar": avatarValue,
-```
-
-So the wire value is a **plain string or `null`**, never an object. `docs/openapi.json` agrees —
-`AuthUser.avatar` is `{"type": ["string", "null"]}` — and so does the other endpoint that returns
-users, whose `adminUserSummary.Avatar` is a `*string` (`admin_user_handler.go:15-23`). No endpoint
-emits the object form. The backend commit that made this change is `1760fdbb`.
-
-### Why it breaks
-
-`explicitNulls = false` covers the `null` case, so a user **without** an avatar decodes fine —
-which is why this has not been noticed. A user **with** one sends:
-
-```json
-"avatar": "/api/static/avatars/7-1735689600.jpg"
-```
-
-kotlinx then tries to read a JSON string as an object and throws `SerializationException`
-("Expected start of the object '{'"). `AuthUser` is decoded by `AuthRepository.fetchCurrentUser`
-and flows into `ProfileRepository.commitSignIn`, `AppAuthState.Authenticated`, the navigation
-rail, and the app shell — so this is sign-in failing outright, not a cosmetic gap.
-
-Note the sibling model already has it right: `AdminUser.avatar` is `String?` (`Users.kt:16`).
-
-### What the fix looks like
-
-1. Change `AuthUser.avatar` to `String?` and delete the comment.
-2. Drop the now-dead `SqlNullString` unwrapping at `ProfileRepository.kt:83`
-   (`user.avatar?.orNull()` becomes `user.avatar`).
-3. Update `ApiModelsSerializationTest.decodesAuthUserEnvelope`, whose fixture currently pins the
-   wrong shape (`"avatar": {"String": "", "Valid": false}`) and so cannot catch this.
-4. Fix the avatar rendering issue below at the same time — together they are what makes an
-   uploaded avatar actually appear on TV.
-
----
-
-## `IglooAvatar` drops backend-relative avatar paths, so uploaded avatars never render
-
-**Found:** 2026-08-13, while investigating the album-artwork review comment.
-**Status:** open. Every uploaded avatar silently falls back to initials.
-**Files:** `app/src/main/java/com/igloo/blindpenguincoder/core/ui/IglooAvatar.kt`,
-`docs/design-system.md:938-939`
-
-### The gap
-
-`IglooAvatar` fetches a remote image only when the stored value is absolute:
-
-```kotlin
-val url = avatarUrl?.takeIf {
-    it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true)
-}
-```
-
-Both the code comment and `design-system.md:938-939` justify this the same way — *"`openapi.json`
-does not define how a relative avatar path resolves"*. That premise is false. Avatar upload writes
-a relative path and persists it as the user's avatar (`../Igloo/server/cmd/api/user_handler.go:383`):
-
-```go
-avatarURL := fmt.Sprintf("/api/static/avatars/%s", filename)
-```
-
-`/api/static/{path}` is a documented route. So every avatar the server actually produces is
-exactly the shape this guard rejects, and the user sees initials instead.
-
-This is the genuine relative-path bug that the home-screen review's album-artwork comment was
-reaching for — it is on avatars, not album covers (see the rejected entry below).
-
-### What the fix looks like
-
-Resolve `/api`-relative values against the configured server origin and keep passing absolute URLs
-through, mirroring `getMediaImageUrl()` in the web client — but note the web client is same-origin,
-so its `/api` branch returns the path unchanged and the TV app must actually prepend the origin.
-`isIglooImageUrl` (`core/image/IglooImageLoader.kt:41`) then attaches the bearer token, which is
-required: `/api/static` is authenticated. Update the design-system rule at :938-939 in the same
-change, since it currently mandates the broken behaviour.
-
-Blocked in practice by the `AuthUser.avatar` decode bug above — fix that first or avatars never
-arrive to be rendered.
-
----
-
 ## Wire models drift from `docs/openapi.json` with nothing to catch it
 
 **Found:** 2026-08-13, resolving the home-screen review's two contract comments.
@@ -125,8 +17,9 @@ The models were generated once (`05ec605`, "Add API models generated from docs/o
 `docs/openapi.json` has since been re-synced **six times** — `9852401`, `047499e`, `de5d43a`,
 `647001a`, `fa906c2`, `5e3a176` — with no regeneration and no check. A reviewer spotting two
 dropped fields by eye is what surfaced this; a full manual sweep then found three more, and the
-`AuthUser.avatar` bug above is a sixth that a presence-only sweep still misses because the field
-is present and only its *type* is wrong.
+`AuthUser.avatar` decode bug (fixed 2026-08-13) was a sixth that a presence-only sweep still
+misses, because the field was present and only its *type* was wrong. Any check worth adding has
+to compare types, not just field names.
 
 Most of these models have no call sites at all, so the drift stays invisible until someone wires
 up the endpoint and it fails at runtime. `MoviePlaylist*`, `Notification*`, and the settings models
@@ -219,4 +112,5 @@ URL and says nothing about what the field contains.
 
 If the scanner ever starts storing artwork locally this becomes real, but `IglooPosterCard` already
 degrades to the music placeholder on a load error rather than showing a broken card. The genuine
-relative-path bug is on avatars — see the `IglooAvatar` entry above.
+relative-path bug was on avatars, where uploads really are stored as `/api/static/...`; that one
+was fixed on 2026-08-13 by `avatarImageUrl` and does not apply here.

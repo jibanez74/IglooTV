@@ -14,9 +14,12 @@ import coil3.compose.AsyncImage
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 
 /**
- * The one avatar rendering rule (design-system.md section 11.1.1): remote images are only
- * fetched when the backend gave an absolute URL — `openapi.json` does not define how a
- * relative avatar path resolves — and initials on the primary color cover everything else.
+ * The one avatar rendering rule (design-system.md section 11.1.1): initials on the primary
+ * color cover everything a remote image cannot.
+ *
+ * [avatarUrl] is expected to be already resolved against the server origin by
+ * `avatarImageUrl`, since URL construction belongs outside UI components. The absolute-URL
+ * check is only the backstop that keeps an unresolved relative path from reaching Coil.
  *
  * No content description: identity is announced by whichever labelled node contains the
  * avatar (a profile tile, the rail's footer), never by the image itself.

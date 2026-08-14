@@ -113,7 +113,7 @@ class AuthRepositoryTest {
                 body = """
                     {"error":false,"message":"user found","data":{"user":{
                         "id":1,"name":"Jose","email":"jose@example.com","is_admin":true,
-                        "avatar":{"String":"","Valid":false},"has_pin":false,
+                        "avatar":"/api/static/avatars/1-1735689600.jpg","has_pin":false,
                         "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
                     }}}
                 """.trimIndent(),
@@ -126,6 +126,8 @@ class AuthRepositoryTest {
         val user = (result as ApiResult.Success).value
         assertEquals("Jose", user.name)
         assertTrue(user.isAdmin)
+        // An uploaded avatar is a bare string; modelling it as an object failed the whole decode.
+        assertEquals("/api/static/avatars/1-1735689600.jpg", user.avatar)
     }
 
     @Test

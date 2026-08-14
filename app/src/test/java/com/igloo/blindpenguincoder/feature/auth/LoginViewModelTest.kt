@@ -50,7 +50,7 @@ class LoginViewModelTest {
     private val userJson = """
         {"error":false,"message":"user found","data":{"user":{
             "id":1,"name":"Jose","email":"jose@example.com","is_admin":false,
-            "avatar":{"String":"","Valid":false},"has_pin":false,
+            "avatar":null,"has_pin":false,
             "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
         }}}
     """.trimIndent()

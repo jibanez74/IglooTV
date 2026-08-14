@@ -50,6 +50,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.images.avatarImageUrl
 
 /**
  * The collapsible navigation rail. The caller owns the expansion state (it is a pure
@@ -61,6 +62,7 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 @Composable
 fun NavigationRail(
     user: AuthUser,
+    serverOrigin: String,
     expanded: Boolean,
     currentDestination: IglooDestination,
     contentStartRequester: FocusRequester,
@@ -158,7 +160,7 @@ fun NavigationRail(
         ) {
             IglooAvatar(
                 name = user.name,
-                avatarUrl = user.avatar?.orNull(),
+                avatarUrl = avatarImageUrl(serverOrigin, user.avatar),
                 size = IglooTheme.icons.lg,
                 textStyle = IglooTheme.typography.label,
             )

@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -54,7 +55,7 @@ class ServerSetupViewModelTest {
         val http: TestHttp,
     )
 
-    private fun fixture(
+    private fun TestScope.fixture(
         initialOrigin: String = "",
         handler: MockRequestHandler,
     ): Fixture {
@@ -63,7 +64,7 @@ class ServerSetupViewModelTest {
         http.serverUrl.set(null)
         val authRepository = http.authRepository
         val serverRepository = ServerRepository(
-            testServerHealthProbe(handler),
+            testServerHealthProbe(handler, dispatcher = UnconfinedTestDispatcher(testScheduler)),
             settings,
             http.serverUrl,
             http.profiles,

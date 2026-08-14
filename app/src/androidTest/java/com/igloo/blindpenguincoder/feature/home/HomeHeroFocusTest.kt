@@ -59,6 +59,7 @@ class HomeHeroFocusTest {
             IglooTheme {
                 IglooApp(
                     user = user,
+                    serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),
                     home = HomeUiState(
                         hero = heroState,

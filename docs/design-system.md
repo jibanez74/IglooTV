@@ -935,9 +935,11 @@ way to sign out.
 This screen is also where a sign-out lands, so it carries the `IglooNotice` slot for anything the
 gate has to say about the action that just happened (§10) — above the row, announced.
 
-- Avatar: 96dp circle. A remote avatar is fetched only when the stored value is an absolute
-  `http(s)` URL — `openapi.json` does not define how a relative avatar path resolves — and
-  falls back to the initial on `primary`.
+- Avatar: 96dp circle. The stored value is resolved against the server origin by
+  `avatarImageUrl` before it reaches the composable: an absolute `http(s)` URL passes through,
+  and an uploaded `/api/static/avatars/...` path gets the origin prepended so the image loader
+  recognises it as ours and attaches the bearer that route requires. A missing or
+  unresolvable value falls back to the initial on `primary`.
 - Focus ring: the one treatment (§6.1) at `radius.pill`, which on a square box reads as the
   circle it wraps. The tile's own `card @ 0.72` fill sits on the caption column and **rounds
   without clipping** (`background(color, shape)`, not `clip` + `background`) — a clip there
@@ -1315,6 +1317,28 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-13 — Uploaded avatars actually render.**
+
+§11.1.1's avatar rule mandated behaviour that rejected every avatar the server produces. Two
+faults, and either one alone kept the initials fallback on screen.
+
+- **The wire shape was wrong, and it broke sign-in outright.** `AuthUser.avatar` was modelled as
+  a Go `sql.NullString` object on the strength of a backend function that in fact unwraps the
+  value before writing it. The field is a plain string or `null`, exactly as `openapi.json`
+  says. Users *without* an avatar decoded fine — `explicitNulls = false` covered the null — so
+  the fault stayed invisible until an account had one, and then the whole authenticated session
+  failed to decode. A contract-shaped fixture now pins the string case.
+- **Relative paths are resolved, not discarded.** Uploads are stored as
+  `/api/static/avatars/…`, which the old absolute-URL-only guard dropped. `avatarImageUrl`
+  now prepends the server origin — the web client's same-origin helper returns the path
+  unchanged, which is exactly what the TV app must not do — and that is also what makes the
+  loader's origin scope recognise the URL and attach the bearer `/api/static` requires.
+  `PUT /users/avatar` still accepts an arbitrary absolute URL, so both shapes pass.
+- **The composable stopped owning URL construction.** `IglooAvatar` takes a resolved URL; its
+  absolute-URL check is now a backstop against an unresolved path reaching Coil, not the rule.
+  `AppAuthState.Authenticated` gained its `ServerAddress` — it was the only auth state without
+  one — so the rail can resolve without reaching for a provider from composition.
 
 **2026-08-13 — Home gets its fourth rail: Now Playing in Theaters.**
 

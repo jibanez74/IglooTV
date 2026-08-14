@@ -105,6 +105,7 @@ class HomeRailBehaviorTest {
                 expandedWidth = IglooTheme.layout.navRailExpandedWidth
                 IglooApp(
                     user = user,
+                    serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),
                     // Hero hidden: this suite pins the rails' own focus contract, where the
                     // first rail legitimately owns the pane's entry anchor (section 11.3.1).

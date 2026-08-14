@@ -183,6 +183,7 @@ fun IglooRoot(container: IglooAppContainer) {
                     val home by homeViewModel.uiState.collectAsStateWithLifecycle()
                     IglooApp(
                         user = state.user,
+                        serverOrigin = state.serverAddress.origin,
                         signOut = signOut,
                         home = home,
                         onRetryRail = homeViewModel::retry,

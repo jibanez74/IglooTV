@@ -78,6 +78,7 @@ class NavigationRailBehaviorTest {
                 expandedWidth = IglooTheme.layout.navRailExpandedWidth
                 IglooApp(
                     user = user,
+                    serverOrigin = "http://igloo.test:8080",
                     signOut = signOut,
                     // Loaded with poster-less movies and a backdrop-less hero: the placeholder
                     // paths render with no network or image loading, so the shell tests stay

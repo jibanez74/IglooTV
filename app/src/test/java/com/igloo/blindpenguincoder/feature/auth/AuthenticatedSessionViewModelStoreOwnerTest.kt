@@ -70,11 +70,7 @@ class AuthenticatedSessionViewModelStoreOwnerTest {
         val owner = sessionOwner(parentStore, state)
         val first = sessionViewModel(owner)
 
-        val otherServer = when (val parsed = parseServerAddress("https://other.example.com")) {
-            is ServerAddressParseResult.Valid -> parsed.address
-            is ServerAddressParseResult.Invalid -> error(parsed.message)
-        }
-        state.value = AppAuthState.NeedsLogin(otherServer)
+        state.value = AppAuthState.NeedsLogin(address("https://other.example.com"))
         state.value = authenticated(userId = 7L)
         val second = sessionViewModel(owner)
 
@@ -148,10 +144,16 @@ class AuthenticatedSessionViewModelStoreOwnerTest {
         },
     )["home", TrackingViewModel::class.java]
 
+    private fun address(url: String) = when (val parsed = parseServerAddress(url)) {
+        is ServerAddressParseResult.Valid -> parsed.address
+        is ServerAddressParseResult.Invalid -> error(parsed.message)
+    }
+
     private fun authenticated(
         userId: Long = 1L,
         name: String = "Jose",
     ) = AppAuthState.Authenticated(
+        address("http://igloo.test:8080"),
         AuthUser(
             id = userId,
             name = name,

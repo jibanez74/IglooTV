@@ -151,26 +151,26 @@ class SessionManager(
         when (val result = authRepository.fetchCurrentUser()) {
             is ApiResult.Success -> {
                 val user = result.value
-                if (enforcePin && user.hasPin) {
-                    // gateLocked resolves a missing address to server setup rather than signing in
-                    // anyway. Unreachable in practice — the screen that got here needed an address
-                    // to render — but the fallback is not the one to skip a gate on.
-                    val address = serverUrl.current.value
-                    if (address == null) {
-                        gateLocked()
-                    } else {
-                        // Nothing is committed yet: the vault's active user must not advance until
-                        // the sign-in completes, so a kill at the keypad returns to the gate.
-                        _state.value = AppAuthState.NeedsPin(
-                            serverAddress = address,
-                            profile = ProfileSummary(
-                                userId = user.id,
-                                name = user.name,
-                                avatarUrl = user.avatar?.orNull(),
-                                hasPin = true,
-                            ),
-                        )
-                    }
+                // Both outcomes carry the address: the PIN gate shows it, and Authenticated needs
+                // it to resolve avatars. gateLocked resolves a missing one to server setup rather
+                // than signing in anyway. Unreachable in practice — the screen that got here
+                // needed an address to render — but neither a gate nor a session is safe to fake.
+                val address = serverUrl.current.value
+                if (address == null) {
+                    gateLocked()
+                    SignInResult.Failed(AppError.Unexpected("no server address"))
+                } else if (enforcePin && user.hasPin) {
+                    // Nothing is committed yet: the vault's active user must not advance until
+                    // the sign-in completes, so a kill at the keypad returns to the gate.
+                    _state.value = AppAuthState.NeedsPin(
+                        serverAddress = address,
+                        profile = ProfileSummary(
+                            userId = user.id,
+                            name = user.name,
+                            avatarUrl = user.avatar,
+                            hasPin = true,
+                        ),
+                    )
                     SignInResult.PinRequired
                 } else {
                     val commit = profiles.commitSignIn(user)
@@ -179,7 +179,7 @@ class SessionManager(
                         scope.launch { authRepository.logout(bearerOverride = replaced) }
                     }
                     lastValidatedAt = elapsed()
-                    _state.value = AppAuthState.Authenticated(user)
+                    _state.value = AppAuthState.Authenticated(address, user)
                     SignInResult.Authenticated
                 }
             }

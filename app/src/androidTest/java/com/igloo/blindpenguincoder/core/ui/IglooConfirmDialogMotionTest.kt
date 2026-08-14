@@ -122,6 +122,7 @@ class IglooConfirmDialogMotionTest {
                 CompositionLocalProvider(LocalIglooReducedMotion provides false) {
                     IglooApp(
                         user = user,
+                        serverOrigin = "http://igloo.test:8080",
                         signOut = signOut,
                         // Hero hidden — a legitimate 11.3.1 state — so the sampled rail-card
                         // bounds stay on the 540dp viewport; this test's subject is the scrim.

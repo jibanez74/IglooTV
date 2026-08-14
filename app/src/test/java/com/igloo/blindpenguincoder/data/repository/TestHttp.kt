@@ -100,12 +100,28 @@ fun testStoredProfile(
 fun testServerAddress(origin: String = "http://igloo.test:8080"): ServerAddress =
     (parseServerAddress(origin) as ServerAddressParseResult.Valid).address
 
+/**
+ * [dispatcher] must be backed by the caller's test scheduler, and the mock engine is put on it
+ * too so the probe's `withTimeout` and the response it is waiting for share one clock. The
+ * probe's production default is `Dispatchers.IO`, and a real thread hop escapes `runTest`: the
+ * probe can resume after the test has finished and, for a caller on `Dispatchers.Main`, after
+ * `resetMain()` has run — which then fails whichever unrelated test is running by then.
+ */
 fun testServerHealthProbe(
     handler: MockRequestHandler,
     timeoutMillis: Long = 10_000,
+    dispatcher: CoroutineDispatcher,
 ): ServerHealthProbe = ServerHealthProbe(
-    client = createServerProbeHttpClient(MockEngine(handler)),
+    client = createServerProbeHttpClient(
+        MockEngine(
+            MockEngineConfig().apply {
+                this.dispatcher = dispatcher
+                addHandler(handler)
+            },
+        ),
+    ),
     timeoutMillis = timeoutMillis,
+    dispatcher = dispatcher,
 )
 
 fun MockRequestHandleScope.jsonResponse(
@@ -225,7 +241,7 @@ fun authUserJson(
 ): String = """
     {"error":false,"message":"user found","data":{"user":{
         "id":$id,"name":"$name","email":"${name.lowercase()}@example.com","is_admin":false,
-        "avatar":{"String":"","Valid":false},"has_pin":$hasPin,
+        "avatar":null,"has_pin":$hasPin,
         "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
     }}}
 """.trimIndent()

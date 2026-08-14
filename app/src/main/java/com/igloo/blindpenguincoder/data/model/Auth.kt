@@ -9,9 +9,9 @@ data class AuthUser(
     val name: String,
     val email: String,
     @SerialName("is_admin") val isAdmin: Boolean,
-    // The backend serializes this as a Go sql.NullString object, not a plain
-    // string (docs/openapi.json is outdated here; see userResponseMap in ../Igloo).
-    val avatar: SqlNullString? = null,
+    // Either a backend-relative `/api/static/avatars/...` path or an absolute URL; resolve
+    // with avatarImageUrl() before rendering.
+    val avatar: String? = null,
     @SerialName("has_pin") val hasPin: Boolean,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,

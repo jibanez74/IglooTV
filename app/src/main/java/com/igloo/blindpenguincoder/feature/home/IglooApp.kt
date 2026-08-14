@@ -72,6 +72,7 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 @Composable
 fun IglooApp(
     user: AuthUser,
+    serverOrigin: String,
     signOut: SignOutUiState,
     home: HomeUiState,
     onRetryRail: (HomeRail) -> Unit,
@@ -107,6 +108,7 @@ fun IglooApp(
 
     IglooShell(
         user = user,
+        serverOrigin = serverOrigin,
         currentDestination = currentDestination,
         home = home,
         onRetryRail = onRetryRail,
@@ -150,6 +152,7 @@ fun IglooApp(
 @Composable
 private fun IglooShell(
     user: AuthUser,
+    serverOrigin: String,
     currentDestination: IglooDestination,
     home: HomeUiState,
     onRetryRail: (HomeRail) -> Unit,
@@ -232,6 +235,7 @@ private fun IglooShell(
             }
             NavigationRail(
                 user = user,
+                serverOrigin = serverOrigin,
                 expanded = railExpanded,
                 currentDestination = currentDestination,
                 contentStartRequester = contentStartRequester,

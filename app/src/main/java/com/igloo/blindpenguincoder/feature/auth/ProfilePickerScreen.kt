@@ -54,6 +54,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.data.model.ProfileSummary
+import com.igloo.blindpenguincoder.images.avatarImageUrl
 
 /**
  * "Who's watching?" — rendered entirely from stored profiles, so it appears instantly
@@ -104,6 +105,7 @@ fun ProfilePickerScreen(
                 val tileFocus = tileRequesters.getValue(profile.userId)
                 ProfileTile(
                     profile = profile,
+                    serverOrigin = state.serverAddress.origin,
                     signingIn = uiState.signingInUserId == profile.userId,
                     enabled = uiState.signingInUserId == null,
                     onClick = { viewModel.select(profile) },
@@ -163,6 +165,7 @@ fun ProfilePickerScreen(
 @Composable
 private fun ProfileTile(
     profile: ProfileSummary,
+    serverOrigin: String,
     signingIn: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
@@ -181,7 +184,7 @@ private fun ProfileTile(
     ) {
         IglooAvatar(
             name = profile.name,
-            avatarUrl = profile.avatarUrl,
+            avatarUrl = avatarImageUrl(serverOrigin, profile.avatarUrl),
             size = AVATAR_SIZE.scaled(),
         )
     }

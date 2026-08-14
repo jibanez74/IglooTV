@@ -12,35 +12,65 @@ class ApiModelsSerializationTest {
     // The production decoder, so a payload that passes here is one the app can really decode.
     private val json = IglooJson
 
+    /** `GET /auth/user`: exactly AuthUser's required keys. `avatar` is a string or null. */
     @Test
     fun decodesAuthUserEnvelope() {
-        val body = """
-            {
-              "error": false,
-              "message": "user found",
-              "data": {
-                "user": {
-                  "id": 7,
-                  "name": "Jose",
-                  "email": "jose@example.com",
-                  "is_admin": true,
-                  "has_pin": true,
-                  "avatar": {"String": "", "Valid": false},
-                  "created_at": "2026-01-01T00:00:00Z",
-                  "updated_at": "2026-01-02T00:00:00Z"
-                }
-              }
-            }
-        """.trimIndent()
+        val body = authUserBody("null")
 
         val envelope = json.decodeFromString<ApiEnvelope<AuthUserData>>(body)
 
         assertFalse(envelope.error)
         val user = envelope.data!!.user
         assertEquals(7L, user.id)
+        assertEquals("Jose", user.name)
+        assertEquals("jose@example.com", user.email)
         assertTrue(user.isAdmin)
-        assertNull(user.avatar?.orNull())
+        assertTrue(user.hasPin)
+        assertNull(user.avatar)
     }
+
+    /**
+     * The case that broke sign-in: `avatar` was modelled as a Go `sql.NullString` object, but
+     * userResponseMap unwraps it, so a user with an uploaded avatar sends a bare string and
+     * the whole authenticated session failed to decode.
+     */
+    @Test
+    fun decodesAuthUserWithUploadedAvatarPath() {
+        val body = authUserBody("\"/api/static/avatars/7-1735689600.jpg\"")
+
+        val user = json.decodeFromString<ApiEnvelope<AuthUserData>>(body).data!!.user
+
+        assertEquals("/api/static/avatars/7-1735689600.jpg", user.avatar)
+    }
+
+    /** `PUT /users/avatar` takes an arbitrary string, so an absolute URL is equally valid. */
+    @Test
+    fun decodesAuthUserWithAbsoluteAvatarUrl() {
+        val body = authUserBody("\"https://cdn.example.com/a.png\"")
+
+        val user = json.decodeFromString<ApiEnvelope<AuthUserData>>(body).data!!.user
+
+        assertEquals("https://cdn.example.com/a.png", user.avatar)
+    }
+
+    private fun authUserBody(avatar: String) = """
+        {
+          "error": false,
+          "message": "user found",
+          "data": {
+            "user": {
+              "id": 7,
+              "name": "Jose",
+              "email": "jose@example.com",
+              "is_admin": true,
+              "has_pin": true,
+              "avatar": $avatar,
+              "created_at": "2026-01-01T00:00:00Z",
+              "updated_at": "2026-01-02T00:00:00Z"
+            }
+          }
+        }
+    """.trimIndent()
 
     @Test
     fun decodesErrorEnvelopeWithoutData() {

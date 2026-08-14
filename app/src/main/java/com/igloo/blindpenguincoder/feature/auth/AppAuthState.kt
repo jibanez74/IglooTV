@@ -46,5 +46,8 @@ sealed interface AppAuthState {
         val notice: String? = null,
     ) : AppAuthState
 
-    data class Authenticated(val user: AuthUser) : AppAuthState
+    data class Authenticated(
+        val serverAddress: ServerAddress,
+        val user: AuthUser,
+    ) : AppAuthState
 }
