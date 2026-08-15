@@ -25,6 +25,8 @@ import com.igloo.blindpenguincoder.testHomeMovies
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.igloo.blindpenguincoder.inertDetailsActions
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 
 /**
  * The hero's focus contract (design-system.md section 11.3.1): it owns the pane's entry anchor
@@ -68,6 +70,9 @@ class HomeHeroFocusTest {
                     ),
                     onRetryRail = {},
                     onMovieSelected = null,
+                    onCloseDetails = {},
+                    details = MovieDetailsUiState(),
+                    detailsActions = inertDetailsActions,
                     onSwitchProfile = {},
                     onSignOut = {},
                     onSignOutConfirm = {},

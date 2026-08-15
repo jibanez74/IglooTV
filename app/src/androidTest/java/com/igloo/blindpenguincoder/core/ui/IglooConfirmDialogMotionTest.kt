@@ -46,6 +46,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
+import com.igloo.blindpenguincoder.inertDetailsActions
 
 /** Pixel assertions for the modal's authored alpha reveal and single-scrim contract. */
 @RunWith(AndroidJUnit4::class)
@@ -133,6 +135,9 @@ class IglooConfirmDialogMotionTest {
                         ),
                         onRetryRail = {},
                         onMovieSelected = null,
+                        onCloseDetails = {},
+                        details = MovieDetailsUiState(),
+                        detailsActions = inertDetailsActions,
                         onSwitchProfile = {},
                         onSignOut = { signOut = SignOutUiState(confirming = true) },
                         onSignOutConfirm = { signOut = SignOutUiState() },

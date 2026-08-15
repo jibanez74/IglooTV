@@ -55,6 +55,12 @@ by hand:
 - **OpenAPI 3.1 type unions have to be understood.** `"type": ["string", "null"]` is exactly the
   shape the `AuthUser.avatar` bug hid in, so a checker that reads `type` as a string misses the
   whole class of bug it exists to catch.
+- **The spec itself can be the wrong side of the drift.** An eighth instance, found 2026-08-15
+  wiring the movie detail screen: `Chapter.movie_id` is declared `SqlNullInt64` and the server
+  sends a plain number. So a checker that trusts `openapi.json` as truth would have called the
+  correct-looking model correct, and a spec-shaped fixture did — the hand-written serialization
+  test passed against the object shape while the real payload could not decode at all. Whatever
+  the check ends up being, it has to run against a live response, not only the document.
 
 ### Related, smaller
 
@@ -71,6 +77,10 @@ by hand:
 - `UpdatePlaybackSettingsData.settings` is typed `UpdatedPlaybackSettings` where the schema says
   `UpdatePlaybackSettings`. The fields match exactly; only the Kotlin class name differs. Not a
   bug, but it will trip any check that matches models to schemas by name.
+- The five `MovieDetailsData` lists (`cast`, `crew`, `genres`, `production_companies`,
+  `extra_videos`) are `additionalProperties: true` in the spec — genuinely untyped, not drifted.
+  They were typed on 2026-08-15 against live responses instead; a spec-driven check has nothing
+  to compare them to and should skip rather than flag them.
 
 ---
 

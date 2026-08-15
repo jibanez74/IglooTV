@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.core.ui.formatRuntime
+import com.igloo.blindpenguincoder.core.ui.progressFraction
+import com.igloo.blindpenguincoder.core.ui.progressLabel
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
@@ -15,7 +18,6 @@ import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import java.util.Locale
-import kotlin.math.ceil
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -348,25 +350,4 @@ class HomeViewModel(
         .joinToString(" · ")
         .ifEmpty { null }
 
-    private fun formatRuntime(minutes: Long): String {
-        val hours = minutes / 60
-        val rest = minutes % 60
-        return when {
-            hours == 0L -> "${rest}m"
-            rest == 0L -> "${hours}h"
-            else -> "${hours}h ${rest}m"
-        }
-    }
-
-    private fun progressFraction(progressSec: Double, durationSec: Double): Float =
-        if (durationSec > 0) (progressSec / durationSec).toFloat().coerceIn(0f, 1f) else 0f
-
-    // The contract always sends a positive duration; the fallback is defensive only.
-    private fun progressLabel(progressSec: Double, durationSec: Double): String {
-        if (durationSec <= 0) return "In progress"
-        val minutesLeft = ceil((durationSec - progressSec).coerceAtLeast(0.0) / 60.0)
-            .toInt()
-            .coerceAtLeast(1)
-        return "$minutesLeft min left"
-    }
 }

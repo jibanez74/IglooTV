@@ -5,6 +5,13 @@ import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeHero
 import com.igloo.blindpenguincoder.feature.home.HomeMovie
 import com.igloo.blindpenguincoder.feature.home.HomeTheaterMovie
+import com.igloo.blindpenguincoder.feature.movies.AboutUi
+import com.igloo.blindpenguincoder.feature.movies.CastMemberUi
+import com.igloo.blindpenguincoder.feature.movies.CrewEntry
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
+import com.igloo.blindpenguincoder.feature.movies.ProgressUi
+import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 
 /**
  * Poster-less movies for shell-level tests: the placeholder path renders deterministically
@@ -43,4 +50,54 @@ internal val testHero = HomeHero(
     backdropUrl = null,
     overview = "Obsessive master thief Neil McCauley leads a top-notch crew.",
     metadataLine = "1995 · R · 2h 50m · 8.2",
+)
+
+/** No-op actions for shells whose details overlay is closed. */
+internal val inertDetailsActions = MovieDetailsActions(
+    onPlay = {},
+    onToggleWatched = {},
+    onToggleLike = {},
+    onRetry = {},
+)
+
+/** Image-less again: every artwork path falls back to a glyph, so nothing hits the network. */
+internal fun testMovieDetails(
+    id: Long = 1,
+    title: String = "Heat",
+    watched: Boolean? = false,
+    liked: Boolean? = false,
+    progress: ProgressUi? = ProgressUi(fraction = 0.25f, minutesLeftLabel = "127 min left"),
+    cast: List<CastMemberUi> = testCast,
+) = MovieDetailsUi(
+    id = id,
+    title = title,
+    tagline = "A Los Angeles crime saga.",
+    backdropUrl = null,
+    posterUrl = null,
+    ratingBadge = ratingBadgeSpec(8.2),
+    certification = "R",
+    mediaBadges = listOf("4K", "HDR10", "5.1", "CC"),
+    runtimeText = "2h 50m",
+    releaseDateText = "December 15, 1995",
+    genresLine = "Crime · Drama",
+    overview = "Obsessive master thief Neil McCauley leads a top-notch crew.",
+    keyCrew = listOf(CrewEntry("Director", "Michael Mann")),
+    cast = cast,
+    about = AboutUi(
+        production = "Regency Enterprises",
+        language = "EN",
+        budget = "$60,000,000",
+        revenue = "$187,436,818",
+    ),
+    progress = progress,
+    watched = watched,
+    liked = liked,
+    metadataDescription = "Rated 8.2 out of 10, R, 4K, HDR10, 5.1 surround sound, " +
+        "subtitles available, 2 hours 50 minutes, released December 15, 1995",
+)
+
+internal val testCast = listOf(
+    CastMemberUi(id = 101, name = "Al Pacino", character = "Vincent Hanna", photoUrl = null),
+    CastMemberUi(id = 102, name = "Robert De Niro", character = "Neil McCauley", photoUrl = null),
+    CastMemberUi(id = 103, name = "Val Kilmer", character = "Chris Shiherlis", photoUrl = null),
 )

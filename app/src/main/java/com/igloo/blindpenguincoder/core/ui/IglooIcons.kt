@@ -224,6 +224,75 @@ object IglooIcons {
         }
     }
 
+    val Play: ImageVector by lazy {
+        icon("Play") {
+            path(fill = SolidColor(Color.White)) {
+                // Right-pointing triangle, nudged right of center so it reads optically centered.
+                moveTo(8.2f, 4.8f)
+                lineTo(19.8f, 12f)
+                lineTo(8.2f, 19.2f)
+                close()
+            }
+        }
+    }
+
+    val Check: ImageVector by lazy {
+        icon("Check") {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(9.8f, 17.9f)
+                lineTo(3.8f, 11.9f)
+                lineTo(5.5f, 10.2f)
+                lineTo(9.8f, 14.5f)
+                lineTo(18.5f, 5.8f)
+                lineTo(20.2f, 7.5f)
+                close()
+            }
+        }
+    }
+
+    val Heart: ImageVector by lazy {
+        icon("Heart") {
+            // Outline: the filled silhouette with an inset heart cut out.
+            path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {
+                heart(bottomY = 20.8f, topY = 3.8f, sideX = 3.4f, dipY = 5.7f, lobeR = 5.1f)
+                heart(bottomY = 18.3f, topY = 5.8f, sideX = 5.5f, dipY = 7.9f, lobeR = 3.1f)
+            }
+        }
+    }
+
+    val HeartFilled: ImageVector by lazy {
+        icon("HeartFilled") {
+            path(fill = SolidColor(Color.White)) {
+                heart(bottomY = 20.8f, topY = 3.8f, sideX = 3.4f, dipY = 5.7f, lobeR = 5.1f)
+            }
+        }
+    }
+
+    val Person: ImageVector by lazy {
+        icon("Person") {
+            path(fill = SolidColor(Color.White)) {
+                circle(12f, 7.6f, 3.6f)
+                moveTo(12f, 13.4f)
+                curveTo(16.6f, 13.4f, 19.2f, 15.8f, 19.2f, 19.6f)
+                lineTo(19.2f, 20.6f)
+                lineTo(4.8f, 20.6f)
+                lineTo(4.8f, 19.6f)
+                curveTo(4.8f, 15.8f, 7.4f, 13.4f, 12f, 13.4f)
+                close()
+            }
+        }
+    }
+
+    val MoreVertical: ImageVector by lazy {
+        icon("MoreVertical") {
+            path(fill = SolidColor(Color.White)) {
+                circle(12f, 5f, 2f)
+                circle(12f, 12f, 2f)
+                circle(12f, 19f, 2f)
+            }
+        }
+    }
+
     private inline fun icon(name: String, block: ImageVector.Builder.() -> Unit): ImageVector =
         ImageVector.Builder(
             name = "Igloo.$name",
@@ -237,6 +306,23 @@ object IglooIcons {
         moveTo(cx - r, cy)
         arcTo(r, r, 0f, isMoreThanHalf = false, isPositiveArc = true, x1 = cx + r, y1 = cy)
         arcTo(r, r, 0f, isMoreThanHalf = false, isPositiveArc = true, x1 = cx - r, y1 = cy)
+        close()
+    }
+
+    /**
+     * Symmetric two-lobe heart about x = 12: bottom point, up the left side to the lobes,
+     * a center dip at [dipY], and back down the right. Both Heart variants share it so the
+     * outline's cutout stays concentric with the filled silhouette.
+     */
+    private fun PathBuilder.heart(bottomY: Float, topY: Float, sideX: Float, dipY: Float, lobeR: Float) {
+        val lobeCx = (12f + sideX) / 2f
+        moveTo(12f, bottomY)
+        curveTo(12f, bottomY, sideX, bottomY - 6.6f, sideX, topY + lobeR)
+        curveTo(sideX, topY + lobeR * 0.42f, sideX + lobeR * 0.42f, topY, lobeCx, topY)
+        curveTo(lobeCx + lobeR * 0.55f, topY, 12f - lobeR * 0.25f, topY + 0.7f, 12f, dipY)
+        curveTo(12f + lobeR * 0.25f, topY + 0.7f, 24f - lobeCx - lobeR * 0.55f, topY, 24f - lobeCx, topY)
+        curveTo(24f - sideX - lobeR * 0.42f, topY, 24f - sideX, topY + lobeR * 0.42f, 24f - sideX, topY + lobeR)
+        curveTo(24f - sideX, bottomY - 6.6f, 12f, bottomY, 12f, bottomY)
         close()
     }
 

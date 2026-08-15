@@ -36,6 +36,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
+import com.igloo.blindpenguincoder.inertDetailsActions
 
 /**
  * The rail's expand/collapse contract and the three-state Back model. Animations are off via
@@ -90,6 +92,9 @@ class NavigationRailBehaviorTest {
                     ),
                     onRetryRail = {},
                     onMovieSelected = null,
+                    onCloseDetails = {},
+                    details = MovieDetailsUiState(),
+                    detailsActions = inertDetailsActions,
                     onSwitchProfile = {},
                     onSignOut = { signOut = SignOutUiState(confirming = true) },
                     onSignOutConfirm = { signOut = SignOutUiState() },

@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -68,6 +69,42 @@ import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsScreen
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
+
+/** Which surface opened the details overlay, so Back can put focus back where it came from. */
+private sealed interface DetailsOrigin {
+    data object Hero : DetailsOrigin
+    data class Rail(val rail: HomeRail) : DetailsOrigin
+
+    companion object {
+        /** One string, because the overlay outlives activity recreation but `remember` does not. */
+        val Saver: Saver<DetailsOrigin?, String> = Saver(
+            save = { origin ->
+                when (origin) {
+                    is Rail -> origin.rail.name
+                    Hero -> HERO
+                    null -> NONE
+                }
+            },
+            restore = { saved ->
+                when (saved) {
+                    NONE -> null
+                    HERO -> Hero
+                    else -> Rail(HomeRail.valueOf(saved))
+                }
+            },
+        )
+
+        private const val HERO = "hero"
+        private const val NONE = "none"
+    }
+}
+
+/** Requests focus unless the requester has no node attached; reports whether it landed. */
+private fun FocusRequester.requestFocusSafely(): Boolean =
+    runCatching { requestFocus() }.isSuccess
 
 @Composable
 fun IglooApp(
@@ -75,8 +112,11 @@ fun IglooApp(
     serverOrigin: String,
     signOut: SignOutUiState,
     home: HomeUiState,
+    details: MovieDetailsUiState,
+    detailsActions: MovieDetailsActions,
     onRetryRail: (HomeRail) -> Unit,
-    onMovieSelected: ((HomeMovie) -> Unit)?,
+    onMovieSelected: ((Long) -> Unit)?,
+    onCloseDetails: () -> Unit,
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
     onSignOutConfirm: () -> Unit,
@@ -89,63 +129,113 @@ fun IglooApp(
     val navigationRequesters = remember {
         PrimaryIglooDestinations.associateWith { FocusRequester() }
     }
+    // One per rail, pinned to whichever node that rail's focus memory points at, in every rail
+    // state. Back out of the details overlay lands on the card that opened it (section 6.3).
+    val railReturnRequesters = remember {
+        HomeRail.entries.associateWith { FocusRequester() }
+    }
     // The rail expands exactly while d-pad focus is inside it; railOpenedByBack remembers
     // whether the rail was entered with the Back button, so Back can mean "step outward":
     // content -> rail -> exit, but a rail entered by d-pad steps back into content instead.
     var railHasFocus by remember { mutableStateOf(false) }
     var railOpenedByBack by remember { mutableStateOf(false) }
+    var detailsOrigin by rememberSaveable(stateSaver = DetailsOrigin.Saver) {
+        mutableStateOf<DetailsOrigin?>(null)
+    }
+    val detailsOpen = details.openMovieId != null
 
-    // Both are gated while the dialog is up, so Back reaches its own handler rather than winning
-    // on registration order — design-system.md section 9.3 requires the host to be explicit.
-    BackHandler(enabled = !signOut.confirming && !railHasFocus) {
+    val openMovie: ((DetailsOrigin, Long) -> Unit)? = onMovieSelected?.let { select ->
+        { origin, movieId ->
+            detailsOrigin = origin
+            select(movieId)
+        }
+    }
+
+    // Every handler is gated explicitly rather than left to win on registration order —
+    // design-system.md section 9.3 requires the host to be deliberate about Back.
+    BackHandler(enabled = detailsOpen && !signOut.confirming) {
+        val origin = detailsOrigin
+        detailsOrigin = null
+        onCloseDetails()
+        // In the callback, not an effect: the overlay's nodes are disposed in the same frame,
+        // and a late effect would request focus on a detached requester (section 9.3).
+        val returnRequester = (origin as? DetailsOrigin.Rail)
+            ?.takeIf { currentDestination == IglooDestination.Home }
+            ?.let { railReturnRequesters.getValue(it.rail) }
+        // A rail whose list changed while the overlay was open — a refresh that dropped the
+        // movie — can leave its anchor uncomposed, and requesting an unattached requester
+        // throws. Landing on the pane's anchor is a worse restore than the card, and a far
+        // better outcome than crashing on Back.
+        if (returnRequester == null || !returnRequester.requestFocusSafely()) {
+            contentStartRequester.requestFocusSafely()
+        }
+    }
+    BackHandler(enabled = !detailsOpen && !signOut.confirming && !railHasFocus) {
         railOpenedByBack = true
         navigationRequesters.getValue(currentDestination).requestFocus()
     }
-    BackHandler(enabled = !signOut.confirming && railHasFocus && !railOpenedByBack) {
+    BackHandler(enabled = !detailsOpen && !signOut.confirming && railHasFocus && !railOpenedByBack) {
         contentStartRequester.requestFocus()
     }
     // railHasFocus && railOpenedByBack: no handler enabled, so Back exits the app.
 
-    IglooShell(
-        user = user,
-        serverOrigin = serverOrigin,
-        currentDestination = currentDestination,
-        home = home,
-        onRetryRail = onRetryRail,
-        onMovieSelected = onMovieSelected,
-        // The rail stays open behind the dialog: the row that opened it must still be legible, so
-        // the focus it gets back on cancel is not a surprise.
-        railExpanded = railHasFocus || signOut.confirming,
-        // Keep the hidden animation state at 0.60 so cancellation restores the rail scrim in the
-        // same frame; IglooShell unmounts its actual draw node for the modal's whole lifetime.
-        scrimmed = railHasFocus || signOut.confirming,
-        onRailFocusChanged = { hasFocus ->
-            if (!hasFocus) railOpenedByBack = false
-            railHasFocus = hasFocus
-        },
-        contentStartRequester = contentStartRequester,
-        signOutRequester = signOutRequester,
-        navigationRequesters = navigationRequesters,
-        onDestinationSelected = { currentDestinationName = it.name },
-        onSwitchProfile = onSwitchProfile,
-        onSignOut = onSignOut,
-        signOut = signOut,
-        onSignOutConfirm = onSignOutConfirm,
-        // Restoring focus is the invoker's job and belongs in the callback, not an effect: on the
-        // success path `confirming` clears in the same frame this whole arm is disposed, and a late
-        // effect would call requestFocus() on a detached requester. See section 9.3.
-        onSignOutDismiss = {
-            onSignOutDismiss()
-            signOutRequester.requestFocus()
-        },
-    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        IglooShell(
+            user = user,
+            serverOrigin = serverOrigin,
+            currentDestination = currentDestination,
+            home = home,
+            onRetryRail = onRetryRail,
+            openMovie = openMovie,
+            railReturnRequesters = railReturnRequesters,
+            // The rail stays open behind the dialog: the row that opened it must still be legible,
+            // so the focus it gets back on cancel is not a surprise.
+            railExpanded = railHasFocus || signOut.confirming,
+            // Keep the hidden animation state at 0.60 so cancellation restores the rail scrim in
+            // the same frame; IglooShell unmounts its actual draw node for the modal's lifetime.
+            scrimmed = railHasFocus || signOut.confirming,
+            // The overlay covers the shell completely, so the whole thing leaves TalkBack's
+            // traversal while it is up — the same treatment the confirm dialog gets.
+            hiddenFromAccessibility = signOut.confirming || detailsOpen,
+            onRailFocusChanged = { hasFocus ->
+                if (!hasFocus) railOpenedByBack = false
+                railHasFocus = hasFocus
+            },
+            contentStartRequester = contentStartRequester,
+            signOutRequester = signOutRequester,
+            navigationRequesters = navigationRequesters,
+            onDestinationSelected = { currentDestinationName = it.name },
+            onSwitchProfile = onSwitchProfile,
+            onSignOut = onSignOut,
+            signOut = signOut,
+            onSignOutConfirm = onSignOutConfirm,
+            // Restoring focus is the invoker's job and belongs in the callback, not an effect: on
+            // the success path `confirming` clears in the same frame this whole arm is disposed,
+            // and a late effect would call requestFocus() on a detached requester. See section 9.3.
+            onSignOutDismiss = {
+                onSignOutDismiss()
+                signOutRequester.requestFocus()
+            },
+        )
+
+        // Last child, so it draws over the rail and nothing clips its focus glow. The shell stays
+        // composed underneath: its rails keep their scroll and focus memory, which is what Back
+        // restores onto.
+        if (detailsOpen) {
+            MovieDetailsScreen(
+                state = details.details,
+                actions = detailsActions,
+            )
+        }
+    }
 
     // Land in the content pane with the rail at rest: the library is the first thing seen
     // and the first D-pad press moves focus instead of creating it. Once only: the content
     // pane outlives a destination change, so re-anchoring here would steal focus from the
-    // card the user had just activated.
+    // card the user had just activated. Skipped entirely when something is already over the
+    // shell — this effect runs after the overlay's own, so it would take focus off it.
     LaunchedEffect(Unit) {
-        contentStartRequester.requestFocus()
+        if (!detailsOpen) contentStartRequester.requestFocus()
     }
 }
 
@@ -156,9 +246,11 @@ private fun IglooShell(
     currentDestination: IglooDestination,
     home: HomeUiState,
     onRetryRail: (HomeRail) -> Unit,
-    onMovieSelected: ((HomeMovie) -> Unit)?,
+    openMovie: ((DetailsOrigin, Long) -> Unit)?,
+    railReturnRequesters: Map<HomeRail, FocusRequester>,
     railExpanded: Boolean,
     scrimmed: Boolean,
+    hiddenFromAccessibility: Boolean,
     onRailFocusChanged: (Boolean) -> Unit,
     contentStartRequester: FocusRequester,
     signOutRequester: FocusRequester,
@@ -196,15 +288,15 @@ private fun IglooShell(
             .fillMaxSize()
             .background(colors.background),
     ) {
-        // One group so the dialog can hide the entire shell from TalkBack traversal at once.
+        // One group so an overlay can hide the entire shell from TalkBack traversal at once.
         // hideFromAccessibility, not clearAndSetSemantics: the nodes stay in the semantics tree,
-        // so a test can still assert the rail is not focused while the dialog is open.
+        // so a test can still assert the rail is not focused while the overlay is open.
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("shell_content")
                 .then(
-                    if (signOut.confirming) {
+                    if (hiddenFromAccessibility) {
                         Modifier.semantics { hideFromAccessibility() }
                     } else {
                         Modifier
@@ -215,7 +307,8 @@ private fun IglooShell(
                 currentDestination = currentDestination,
                 home = home,
                 onRetryRail = onRetryRail,
-                onMovieSelected = onMovieSelected,
+                openMovie = openMovie,
+                railReturnRequesters = railReturnRequesters,
                 contentStartRequester = contentStartRequester,
                 navigationRequesters = navigationRequesters,
                 onDestinationSelected = onDestinationSelected,
@@ -288,7 +381,8 @@ private fun ContentPane(
     currentDestination: IglooDestination,
     home: HomeUiState,
     onRetryRail: (HomeRail) -> Unit,
-    onMovieSelected: ((HomeMovie) -> Unit)?,
+    openMovie: ((DetailsOrigin, Long) -> Unit)?,
+    railReturnRequesters: Map<HomeRail, FocusRequester>,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     onDestinationSelected: (IglooDestination) -> Unit,
@@ -350,7 +444,8 @@ private fun ContentPane(
             IglooDestination.Home -> HomeRails(
                 home = home,
                 onRetryRail = onRetryRail,
-                onMovieSelected = onMovieSelected,
+                openMovie = openMovie,
+                railReturnRequesters = railReturnRequesters,
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequesters.getValue(IglooDestination.Home),
                 lastFocusedByRail = lastFocusedByRail,
@@ -388,7 +483,8 @@ private fun paneBranchIsHome(destination: IglooDestination): Boolean =
 private fun HomeRails(
     home: HomeUiState,
     onRetryRail: (HomeRail) -> Unit,
-    onMovieSelected: ((HomeMovie) -> Unit)?,
+    openMovie: ((DetailsOrigin, Long) -> Unit)?,
+    railReturnRequesters: Map<HomeRail, FocusRequester>,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
     lastFocusedByRail: MutableMap<HomeRail, Long>,
@@ -424,6 +520,9 @@ private fun HomeRails(
                 entryRequester = contentStartRequester,
                 leftFocusRequester = navigationRequester,
                 downFocusRequester = continueEntryRequester,
+                onSelect = openMovie?.let { open ->
+                    { movieId -> open(DetailsOrigin.Hero, movieId) }
+                },
                 modifier = Modifier.onFocusChanged { heroHasFocus = it.hasFocus },
             )
         }
@@ -440,12 +539,15 @@ private fun HomeRails(
             emptyIcon = IglooIcons.Movies,
             emptyText = "Nothing in progress yet. Movies you start watching appear here.",
             onRetry = { onRetryRail(HomeRail.ContinueWatching) },
+            returnRequester = railReturnRequesters.getValue(HomeRail.ContinueWatching),
         ) { item, itemModifier, cardAspect ->
             IglooPosterCard(
                 title = item.movie.title,
                 subtitle = item.movie.year?.toString(),
                 imageUrl = item.movie.posterUrl,
-                onClick = onMovieSelected?.let { select -> { select(item.movie) } },
+                onClick = openMovie?.let { open ->
+                    { open(DetailsOrigin.Rail(HomeRail.ContinueWatching), item.movie.id) }
+                },
                 progress = PosterCardProgress(item.progressFraction, item.progressLabel),
                 aspect = cardAspect,
                 modifier = itemModifier.testTag("continue_card_${item.movie.id}"),
@@ -464,12 +566,15 @@ private fun HomeRails(
             emptyIcon = IglooIcons.Movies,
             emptyText = "No movies in your library yet. Add a movies folder on the server and run a scan.",
             onRetry = { onRetryRail(HomeRail.LatestMovies) },
+            returnRequester = railReturnRequesters.getValue(HomeRail.LatestMovies),
         ) { movie, itemModifier, cardAspect ->
             IglooPosterCard(
                 title = movie.title,
                 subtitle = movie.year?.toString(),
                 imageUrl = movie.posterUrl,
-                onClick = onMovieSelected?.let { select -> { select(movie) } },
+                onClick = openMovie?.let { open ->
+                    { open(DetailsOrigin.Rail(HomeRail.LatestMovies), movie.id) }
+                },
                 aspect = cardAspect,
                 modifier = itemModifier.testTag("poster_card_${movie.id}"),
             )

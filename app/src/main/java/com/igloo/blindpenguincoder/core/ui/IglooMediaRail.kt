@@ -63,6 +63,10 @@ sealed interface IglooRailState<out T> {
  * remembered card is composed and can take focus. It is snapshot state on purpose — the
  * recomposition it triggers is what moves [entryRequester] onto the remembered card, so spine
  * re-entry lands there without the rail being rebuilt.
+ *
+ * [returnRequester] rides the same anchor in every state: an overlay opened from this rail
+ * requests it on close, so Back lands on the card that led away (section 6.3) — or on the
+ * rail's surviving anchor when the list changed underneath.
  */
 @Composable
 fun <T> IglooMediaRail(
@@ -78,6 +82,7 @@ fun <T> IglooMediaRail(
     emptyText: String,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    returnRequester: FocusRequester? = null,
     cardAspect: Float = IglooTheme.layout.posterAspect,
     // Receives [cardAspect] so the card is shaped by the same value as the skeleton — the
     // grid-matching rule (section 8.2) holds structurally instead of by convention.
@@ -109,7 +114,8 @@ fun <T> IglooMediaRail(
 
     val anchorModifier = Modifier
         .focusRequester(localAnchor)
-        .then(if (entryRequester != null) Modifier.focusRequester(entryRequester) else Modifier)
+        .withRequester(entryRequester)
+        .withRequester(returnRequester)
         .focusProperties {
             left = leftFocusRequester
             right = FocusRequester.Cancel
@@ -177,13 +183,8 @@ fun <T> IglooMediaRail(
                             item,
                             Modifier
                                 .focusRequester(itemRequesters.getValue(key))
-                                .then(
-                                    if (key == entryKey && entryRequester != null) {
-                                        Modifier.focusRequester(entryRequester)
-                                    } else {
-                                        Modifier
-                                    },
-                                )
+                                .withRequester(entryRequester.takeIf { key == entryKey })
+                                .withRequester(returnRequester.takeIf { key == entryKey })
                                 .focusProperties {
                                     if (index == 0) left = leftFocusRequester
                                     if (index == state.items.lastIndex) right = FocusRequester.Cancel
@@ -297,6 +298,10 @@ private fun RailEmpty(
         IglooEmpty(icon = emptyIcon, message = emptyText)
     }
 }
+
+/** A rail anchor carries up to three requesters; absent ones chain to nothing. */
+private fun Modifier.withRequester(requester: FocusRequester?): Modifier =
+    if (requester != null) focusRequester(requester) else this
 
 /** Three cards and their gaps: wide enough for a sentence, still visibly one rail's worth. */
 @Composable

@@ -9,6 +9,12 @@ import com.igloo.blindpenguincoder.data.model.ContinueWatchingMoviesData
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.LatestMoviesData
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
+import com.igloo.blindpenguincoder.data.model.MovieLikeStatusData
+import com.igloo.blindpenguincoder.data.model.MovieLikeToggleData
+import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
+import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
+import com.igloo.blindpenguincoder.data.model.MovieWatchedData
+import com.igloo.blindpenguincoder.data.model.SetMovieWatchedRequest
 import com.igloo.blindpenguincoder.data.model.TheaterMovie
 import com.igloo.blindpenguincoder.data.model.TheaterMoviesData
 import io.ktor.client.call.body
@@ -45,6 +51,46 @@ class MovieRepository(
         decode = { response ->
             response.body<ApiEnvelope<MovieDetailsData>>().data
                 ?: error("Missing data in movie details response")
+        },
+    )
+
+    suspend fun movieTechnicalDetails(id: Long): ApiResult<MovieTechnicalDetailsData> = safeApiCall(
+        request = { api.movieTechnicalDetails(id) },
+        decode = { response ->
+            response.body<ApiEnvelope<MovieTechnicalDetailsData>>().data
+                ?: error("Missing data in technical details response")
+        },
+    )
+
+    suspend fun movieWatchProgress(id: Long): ApiResult<MovieWatchProgress> = safeApiCall(
+        request = { api.movieWatchProgress(id) },
+        decode = { response ->
+            response.body<ApiEnvelope<MovieWatchProgress>>().data
+                ?: error("Missing data in watch progress response")
+        },
+    )
+
+    suspend fun setMovieWatched(id: Long, watched: Boolean): ApiResult<MovieWatchedData> = safeApiCall(
+        request = { api.setMovieWatched(id, SetMovieWatchedRequest(watched)) },
+        decode = { response ->
+            response.body<ApiEnvelope<MovieWatchedData>>().data
+                ?: error("Missing data in set watched response")
+        },
+    )
+
+    suspend fun movieLikeStatus(id: Long): ApiResult<MovieLikeStatusData> = safeApiCall(
+        request = { api.movieLikeStatus(id) },
+        decode = { response ->
+            response.body<ApiEnvelope<MovieLikeStatusData>>().data
+                ?: error("Missing data in like status response")
+        },
+    )
+
+    suspend fun toggleMovieLike(id: Long): ApiResult<MovieLikeToggleData> = safeApiCall(
+        request = { api.toggleMovieLike(id) },
+        decode = { response ->
+            response.body<ApiEnvelope<MovieLikeToggleData>>().data
+                ?: error("Missing data in like toggle response")
         },
     )
 }

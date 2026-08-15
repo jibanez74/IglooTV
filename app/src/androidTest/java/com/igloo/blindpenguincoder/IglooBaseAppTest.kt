@@ -42,6 +42,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 
 @RunWith(AndroidJUnit4::class)
 class IglooBaseAppTest {
@@ -92,6 +93,9 @@ class IglooBaseAppTest {
                     ),
                     onRetryRail = {},
                     onMovieSelected = null,
+                    onCloseDetails = {},
+                    details = MovieDetailsUiState(),
+                    detailsActions = inertDetailsActions,
                     onSwitchProfile = onSwitchProfile,
                     onSignOut = { signOut = SignOutUiState(confirming = true) },
                     onSignOutConfirm = {

@@ -776,4 +776,142 @@ class ApiModelsSerializationTest {
         assertNull(SqlNullString(value = "hidden", valid = false).orNullIfBlank())
         assertEquals("PG-13", SqlNullString(value = "PG-13", valid = true).orNullIfBlank())
     }
+
+    /**
+     * `GET /movies/details/{id}` related lists: the spec leaves them `additionalProperties:
+     * true`, so the typed models were pinned against live responses and must tolerate keys
+     * they do not map (`unexpected` below).
+     */
+    @Test
+    fun decodesMovieDetailsRelatedLists() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "movie": {
+                  "id": 406, "title": "The Prestige", "file_path": "/m/p.mkv",
+                  "file_name": "p.mkv", "size": 1, "container": "mkv",
+                  "mime_type": "video/x-matroska", "adult": false,
+                  "created_at": "2026-01-01", "updated_at": "2026-01-01"
+                },
+                "cast": [
+                  {"id": 24147, "movie_id": 406, "artist_id": 1230, "character": "Robert Angier",
+                   "cast_order": 0, "artist_name": "Hugh Jackman",
+                   "artist_profile": {"String": "/hj.jpg", "Valid": true}, "unexpected": 1}
+                ],
+                "crew": [
+                  {"id": 68444, "movie_id": 406, "artist_id": 16036, "job": "Director",
+                   "department": "Directing", "artist_name": "Christopher Nolan",
+                   "artist_profile": {"String": "", "Valid": false}}
+                ],
+                "genres": [{"id": 5, "tag": "Drama"}],
+                "production_companies": [
+                  {"id": 266, "name": "Syncopy", "tmdb_id": 9996,
+                   "logo": {"String": "/s.png", "Valid": true},
+                   "country": {"String": "GB", "Valid": true}}
+                ],
+                "extra_videos": [
+                  {"id": 6390, "title": "The Prestige - Trailer",
+                   "external_id": {"String": "58f6", "Valid": true}, "key": "ijXruSzfGEc",
+                   "type": "trailer", "site": "youtube", "official": true,
+                   "created_at": "2026-08-14 00:52:18", "updated_at": "2026-08-14 00:52:18"}
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<MovieDetailsData>>(body).data!!
+
+        val cast = data.cast.single()
+        assertEquals("Hugh Jackman", cast.artistName)
+        assertEquals("Robert Angier", cast.character)
+        assertEquals(0L, cast.castOrder)
+        assertEquals("/hj.jpg", cast.artistProfile?.orNull())
+        val crew = data.crew.single()
+        assertEquals("Director", crew.job)
+        assertEquals("Directing", crew.department)
+        assertNull(crew.artistProfile?.orNull())
+        assertEquals("Drama", data.genres.single().tag)
+        assertEquals("Syncopy", data.productionCompanies.single().name)
+        assertEquals("GB", data.productionCompanies.single().country?.orNull())
+        val video = data.extraVideos.single()
+        assertEquals("ijXruSzfGEc", video.key)
+        assertEquals("youtube", video.site)
+        assertTrue(video.official)
+    }
+
+    /** `GET /movies/{id}/technical-details`: streams and chapters are typed in the spec. */
+    @Test
+    fun decodesTechnicalDetailsStreams() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "movie": {"id": 406},
+                "video_streams": [
+                  {"id": 406, "movie_id": 406, "stream_index": 0, "codec": "hevc",
+                   "codec_profile": {"String": "Main 10", "Valid": true},
+                   "codec_level": {"Int64": 153, "Valid": true}, "bit_rate": 0,
+                   "width": 3840, "height": 1600,
+                   "coded_width": {"Int64": 3840, "Valid": true},
+                   "coded_height": {"Int64": 1600, "Valid": true},
+                   "aspect_ratio": {"String": "12:5", "Valid": true}, "frame_rate": 23.976,
+                   "avg_frame_rate": {"String": "24000/1001", "Valid": true},
+                   "bit_depth": {"Int64": 0, "Valid": false},
+                   "pixel_format": {"String": "yuv420p10le", "Valid": true},
+                   "color_range": {"String": "tv", "Valid": true},
+                   "color_space": {"String": "bt2020nc", "Valid": true},
+                   "color_primaries": {"String": "bt2020", "Valid": true},
+                   "color_transfer": {"String": "smpte2084", "Valid": true},
+                   "field_order": {"String": "", "Valid": false},
+                   "rotation": {"Int64": 0, "Valid": false},
+                   "language": {"String": "", "Valid": false},
+                   "title": {"String": "", "Valid": false},
+                   "created_at": "2026-08-14", "updated_at": "2026-08-14"}
+                ],
+                "audio_streams": [
+                  {"id": 636, "movie_id": 406, "stream_index": 1, "codec": "dts",
+                   "codec_profile": {"String": "DTS-HD MA", "Valid": true}, "bit_rate": 0,
+                   "sample_rate": {"Int64": 48000, "Valid": true}, "channels": 6,
+                   "channel_layout": {"String": "5.1(side)", "Valid": true},
+                   "language": {"String": "eng", "Valid": true},
+                   "title": {"String": "", "Valid": false}, "is_default": true,
+                   "created_at": "2026-08-14", "updated_at": "2026-08-14"}
+                ],
+                "subtitles": [
+                  {"id": 2351, "movie_id": 406, "stream_index": 2, "codec": "subrip",
+                   "language": {"String": "eng", "Valid": true},
+                   "title": {"String": "Stripped SRT", "Valid": true},
+                   "is_forced": false, "is_default": false,
+                   "created_at": "2026-08-14", "updated_at": "2026-08-14"}
+                ],
+                "chapters": [
+                  {"id": 6675, "title": "00:03:13.026", "start_time": 193,
+                   "thumb": {"String": "", "Valid": false},
+                   "movie_id": 406}
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<MovieTechnicalDetailsData>>(body).data!!
+
+        val video = data.videoStreams.single()
+        assertEquals(3840L, video.width)
+        assertEquals(1600L, video.height)
+        assertEquals("smpte2084", video.colorTransfer?.orNull())
+        assertNull(video.bitDepth?.orNull())
+        val audio = data.audioStreams.single()
+        assertEquals(6L, audio.channels)
+        assertEquals("5.1(side)", audio.channelLayout?.orNull())
+        assertTrue(audio.isDefault)
+        val subtitle = data.subtitles.single()
+        assertEquals("subrip", subtitle.codec)
+        assertFalse(subtitle.isForced)
+        val chapter = data.chapters.single()
+        assertEquals(193L, chapter.startTime)
+        assertNull(chapter.thumb?.orNull())
+        // The payload's `movie_id` is a plain number where the spec promises a SqlNullInt64
+        // object; the model leaves it unmapped, so the mismatch cannot fail the decode.
+    }
 }

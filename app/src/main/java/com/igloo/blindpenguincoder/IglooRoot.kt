@@ -39,6 +39,8 @@ import com.igloo.blindpenguincoder.feature.boot.SplashScreen
 import com.igloo.blindpenguincoder.feature.home.HomeViewModel
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutViewModel
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -171,25 +173,45 @@ fun IglooRoot(container: IglooAppContainer) {
                             container.serverUrlProvider,
                         )
                     }
+                    val detailsViewModel = viewModel(
+                        viewModelStoreOwner = authenticatedSessionOwner,
+                        key = "movie-details",
+                    ) {
+                        MovieDetailsViewModel(
+                            container.movieRepository,
+                            container.serverUrlProvider,
+                        )
+                    }
                     // Device tokens are revoked server-side after long disuse, so a session
                     // resumed from the background is re-checked before it is trusted — and the
                     // library is re-read, because a TV can sit on this screen for days. The
-                    // first START is also the first load; the view model has no init fetch.
-                    LifecycleStartEffect(homeViewModel) {
+                    // first START is also the first load; the view models have no init fetch,
+                    // and the details refresh is a no-op unless the overlay is open.
+                    LifecycleStartEffect(homeViewModel, detailsViewModel) {
                         scope.launch { sessionManager.revalidateActive() }
                         homeViewModel.refresh()
+                        detailsViewModel.refresh()
                         onStopOrDispose { }
                     }
                     val home by homeViewModel.uiState.collectAsStateWithLifecycle()
+                    val details by detailsViewModel.uiState.collectAsStateWithLifecycle()
                     IglooApp(
                         user = state.user,
                         serverOrigin = state.serverAddress.origin,
                         signOut = signOut,
                         home = home,
+                        details = details,
+                        detailsActions = MovieDetailsActions(
+                            // The details screen's primary action, wired to nothing until the
+                            // player lands. It is the page's contract, so it announces normally.
+                            onPlay = {},
+                            onToggleWatched = detailsViewModel::toggleWatched,
+                            onToggleLike = detailsViewModel::toggleLike,
+                            onRetry = detailsViewModel::retry,
+                        ),
                         onRetryRail = homeViewModel::retry,
-                        // Null until the details screen lands: the cards stay focus targets, but
-                        // must not announce an action nothing implements.
-                        onMovieSelected = null,
+                        onMovieSelected = detailsViewModel::open,
+                        onCloseDetails = detailsViewModel::close,
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },
                         onSignOut = signOutViewModel::request,
                         onSignOutConfirm = signOutViewModel::confirm,

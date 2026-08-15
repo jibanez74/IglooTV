@@ -1,12 +1,12 @@
-package com.igloo.blindpenguincoder.feature.home
+package com.igloo.blindpenguincoder.core.ui
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-class InTheatersCardTest {
+class RatingBadgeSpecTest {
 
     @Test
-    fun `rounds the TMDB score to the one decimal the badge shows`() {
+    fun `rounds the score to the one decimal the badge shows`() {
         assertEquals("7.9", ratingBadgeSpec(7.869).label)
         assertEquals("6.0", ratingBadgeSpec(6.0).label)
         assertEquals("10.0", ratingBadgeSpec(10.0).label)

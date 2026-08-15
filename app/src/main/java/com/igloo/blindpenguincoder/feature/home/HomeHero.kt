@@ -1,7 +1,9 @@
 package com.igloo.blindpenguincoder.feature.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,9 +29,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -49,6 +54,9 @@ import com.igloo.blindpenguincoder.core.ui.focusRing
  * The Loading card holds the final geometry so entry focus taken during the load sits exactly
  * where the loaded hero lands. A backdrop that is missing or fails to fetch drops the section
  * 3.2 over-media treatment entirely: token colors on the card fill, no gradients.
+ *
+ * A null [onSelect] keeps the hero a focus target but drops the button role and the "Open …"
+ * action, the same contract as an inert poster card.
  */
 @Composable
 fun HomeHero(
@@ -56,11 +64,16 @@ fun HomeHero(
     entryRequester: FocusRequester,
     leftFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester,
+    onSelect: ((Long) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     if (state is HomeHeroState.Hidden) return
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
+    // Only a loaded hero has a movie to open; the skeleton stays a plain focus target.
+    val openHero = (state as? HomeHeroState.Loaded)?.let { loaded ->
+        onSelect?.let { select -> { select(loaded.hero.id) } }
+    }
 
     val heroModifier = modifier
         .fillMaxWidth()
@@ -82,8 +95,19 @@ fun HomeHero(
             // so the rail's focus memory applies, same as spine re-entry.
             down = downFocusRequester
         }
+        // Focus observation outside the clickable, per section 6.3's ordering rule.
         .onFocusChanged { focused = it.isFocused }
-        .focusable()
+        .then(
+            if (openHero != null) {
+                Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = openHero,
+                )
+            } else {
+                Modifier.focusable()
+            },
+        )
         .testTag("home_hero")
 
     when (state) {
@@ -106,6 +130,13 @@ fun HomeHero(
                     // TalkBack reads the whole thing (section 11.3.1).
                     state.hero.overview,
                 ).joinToString(". ")
+                if (openHero != null) {
+                    role = Role.Button
+                    onClick(label = "Open ${state.hero.title}") {
+                        openHero()
+                        true
+                    }
+                }
             },
         )
     }

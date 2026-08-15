@@ -289,12 +289,19 @@ not track the theme — a poster looks the same in light and dark mode. Use lite
 - Text over media: `Color.White`, with a shadow for legibility
 - Theater-card scrim (§11.3.2): `Brush.verticalGradient`, transparent → `Color.Black.copy(alpha
   = 0.50f)` → `0.90f`, over the poster's lower third.
-- Theater-card rating badge (§11.3.2), critic-score tiers: ≥ 7 `aurora` / `auroraForeground`;
+- Rating badge (`core/ui/RatingBadge`), critic-score tiers: ≥ 7 `aurora` / `auroraForeground`;
   5–7 `aurora.copy(alpha = 0.80f)` / `auroraForeground`; < 5 `Color.Black.copy(alpha = 0.60f)` /
   `Color.White`. Aurora is licensed over media because §3.1 pins it identical in both themes;
   the web's `muted` low tier tracks the theme and is deliberately **not** ported — the black
   literal is its dark-mode equivalent. The badge paints its own ground, so it holds on the
   no-poster fallback too and is the one item here that survives it.
+- Chip and control ground over media (§11.4): fill `Color.Black.copy(alpha = 0.45f)`, border
+  `Color.White.copy(alpha = 0.25f)`, label `Color.White.copy(alpha = 0.90f)`. Used by the
+  certification and media-info chips, and by the detail hero's `Ghost` buttons — a Ghost
+  button's transparent ground and token label are licensed only on a token canvas, and its
+  `card @ 0.72` focus fill tracks the theme, which over media this section forbids. While a
+  control carries this ground it keeps it through focus: the ring, glow, and scale carry the
+  focus signal instead. Off media, all of it falls back to `muted` / `border` / `foreground`.
 
 These literals are licensed **only by media actually behind them**. A surface that would carry
 them but has no image — a hero with no backdrop, a theater card with no poster or one that failed
@@ -644,7 +651,10 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | Composable | Notes |
 |---|---|
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
-| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). |
+| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `restingFill` / `contentColor` carry the §3.2 over-media ground where the button sits on a backdrop. |
+| `IglooIconButton` | Icon-only control for row ends (the §11.4 More trigger): square at `sizes.controlHeight`, radius `lg`, same focus treatment. The glyph says nothing to a screen reader, so `semanticLabel` is **required**; a null `onClick` keeps it focusable but announces no action, matching `IglooPosterCard`. |
+| `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
+| `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, `progressLabel` ("43 min left", rounded up, floored at one minute). Called from view models, never from composables. |
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
 | `IglooNotice` | One announced line — `bodyMedium` / `mutedForeground`, `liveRegion = Polite`. For a message the user did not ask for and cannot act on: what a gate says after an action that already happened (§10, §11.1.1). Not an error card; no Retry. |
@@ -654,7 +664,7 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
 | `IglooPosterCard` | The 2:3 media card (§8.2): poster at `layout.posterWidth` / `layout.posterAspect`, radius `lg`, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose description joins the cleared node ("Title, Year, N min left", §12) so the bar can never render unannounced. |
-| `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons, minimal `IglooEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. |
+| `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons, minimal `IglooEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). |
 | `IglooEmpty` | §10 empty state, minimal variant only: faded icon + one announced line. The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
 
 The app deliberately does **not** use Material theming. `IglooTheme` is the only source of
@@ -1166,6 +1176,69 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   **Play**, **Watched** toggle, **Like**, **More**. Below: cast, chapters, extra details.
   Play must be the first focused element on entry.
 
+#### 11.4.1 The detail screen, as built
+
+**Shape.** A full-screen in-tree overlay above the shell, on an opaque `background` fill — the
+§9.3 dialog's mechanics at screen scale, and for the same reasons. The shell stays composed
+underneath so its rails keep their scroll and focus memory, and it leaves TalkBack traversal
+via `hideFromAccessibility` while the overlay is up. The host owns Back and focus restoration;
+the screen owns only its entry anchor.
+
+**Hero.** The backdrop is full-bleed (§2.5) at `w1280`, `ContentScale.Crop`, fading in at
+`page` once it decodes. Two scrims with two different jobs: the §3.2 black side gradient
+licenses the white text column against busy art, and a **vertical fade to the `background`
+token** blends the backdrop into the canvas the sections sit on. That token fade is the case
+§3.2's home-hero note carves out — the detail backdrop is unclipped and really does meet the
+page. Alpha-zero stops are written `color.copy(alpha = 0f)`, never `Color.Transparent`, which
+is black at zero and greys the fade. Chrome and text keep the safe-area inset.
+
+Poster at `posterWidth` / `posterAspect`; title `titleLarge` at 2 lines (**not** `display`,
+per §11.3.1); tagline `bodyLarge` italic in quotes; then the metadata row, genres joined by
+`·`, the action row, and the resume strip. With no backdrop — or one that fails — every §3.2
+literal is dropped for token colors, exactly as the home hero does.
+
+**Metadata row.** Rating badge, certification, media-info chips, then runtime and release date
+as plain `label` text. Chips are `label` on the §3.2 chip ground. Media chips are derived from
+the probed streams, in this order: `4K`|`HD` → `HDR10`|`HLG` → `7.1`|`5.1`|`Surround` → `CC`.
+Web parity on every threshold: 4K at `width ≥ 3200 || height ≥ 2100` and HD at `≥ 1800 ||
+≥ 1000` (width first, so a scope master is not demoted by its height), HDR off `color_transfer`
+alone, a named channel layout only when ffprobe reported one, and `CC` for any subtitle track.
+The whole row is **one** cleared semantics node speaking a sentence the view model composes,
+with the abbreviations spelled out — eight two-character stops would be noise (§12).
+
+**Resume.** The Play button is always labelled "Play"; the resume decision belongs to the
+player, not this screen. A partially watched movie shows a 4dp strip (`primary` on the §3.2
+`Black @ 0.40` track) and an "N min left" caption, from 30 seconds in until the position stops
+meaning anything — the server flips to watched at 98% — and never once the movie is watched.
+
+**Focus.** Play takes entry focus, including through the loading→loaded swap, where the
+skeleton's Play-slot stub holds the anchor. The vertical chain — actions → cast → about — is
+**hand-wired end to end**, and every edge that would leave the screen is pinned to
+`FocusRequester.Cancel`: the shell underneath is still composed, and an unpinned edge lets a
+spatial search land on a card the user cannot see. Back closes the overlay and restores focus
+to the card that opened it, via the rail's `returnRequester` (§6.3).
+
+**Toggles.** Watched and Like flip optimistically and flip back if the server disagrees. Two
+rules follow from that, and both are easy to get wrong: leaving the screen cancels the screen's
+*reads* but never a mutation — a press followed immediately by Back is still a change the user
+made — and a status read only applies its value if no mutation started or settled while it was
+in flight, because a read issued mid-write is answered from before that write commits. Until
+the status arrives the toggle carries no `stateDescription` at all: it has to look like
+something, but announcing "Not watched" for a movie that is watched states a fact the app does
+not have yet.
+
+**Reachability.** Overview and Key Crew are prose between the hero and the cast rail, so moving
+down scrolls them into view on the way. The About block is a **focus target** even though it
+carries no action: it sits below the last rail, and content a d-pad can never scroll to may as
+well not be on the page. It announces its rows as one node.
+
+**Motion.** The header does **not** stagger. It holds the entry focus, and the rise moves the
+focused button's visual bounds while the scroll container is bringing it into view — the column
+ends up parked 12dp down, with the hero pushed into the overscan margin. The backdrop's fade
+carries the entrance there; the sections below stagger normally, because nothing in them has
+focus yet. This refines §7.2's "give the focused element index 0": inside a scroll container,
+give it no stagger at all.
+
 ### 11.5 Music
 
 Four tabs: **Musicians** (circular cards), **Albums** (square cards), **Tracks** (flat list with
@@ -1317,6 +1390,38 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-15 — The movie detail screen lands, and the cards it opens stop being inert.**
+
+§11.4's one-paragraph Detail spec is now built, and §11.4.1 records it as a recipe. Supplying
+`onMovieSelected` is all it took to give every poster card and the home hero their `Role.Button`
+and "Open …" action — they had been focusable-but-silent by design, waiting for this screen.
+
+- **The overlay is the §9.3 dialog at screen scale.** In-tree above the shell, opaque, with the
+  shell left composed underneath so its rails keep scroll and focus memory, hidden from TalkBack
+  while it is up, and its Back gated explicitly rather than by registration order. Back restores
+  focus to the card that led away through `IglooMediaRail`'s new `returnRequester`, which rides
+  the anchor the rail already keeps in every state.
+- **Every focus edge is pinned.** The screen's vertical chain is hand-wired end to end and its
+  outward edges are `FocusRequester.Cancel`. A composed-but-invisible shell is exactly the case
+  where spatial focus search will find a card nobody can see. The About block is focusable for
+  the same family of reason as §10's empty rail: content below the last rail that a d-pad cannot
+  scroll to is content that does not exist.
+- **The focused element must not move.** §7.2 said to give it stagger index 0; inside a scroll
+  container that is not enough. The 12dp rise moves the focused button's visual bounds while the
+  container brings it into view, and the column stays parked 12dp down with the hero in the
+  overscan margin. The header now carries no stagger at all.
+- **§3.2 gains a chip-and-control ground** — `Black @ 0.45` under `White @ 0.25`, held through
+  focus — because a `Ghost` button's transparent ground and its theme-tracking focus fill are
+  licensed only on a token canvas, and the detail hero's actions sit on a backdrop.
+- **Promotions to §9.1**: `RatingBadge` (second consumer, as its 2026-08-13 note anticipated),
+  `IglooIconButton`, `MediaFormatting`, plus `IglooButton`'s icon slot and toggle semantics.
+  Five icons authored: `Play`, `Check`, `Heart`, `HeartFilled`, `MoreVertical`, `Person`.
+- **A drift trap worth naming**: the technical-details payload sends `chapters[].movie_id` as a
+  plain number where `openapi.json` promises a `SqlNullInt64` object, and the mismatch failed the
+  *whole* payload — silently, because media badges are a degrade-gracefully section. The field is
+  unused, so it is now simply unmapped, which tolerates either shape. Verify decoding against a
+  live response, not the spec, before trusting a screen that hides its own failures.
 
 **2026-08-14 — Uploaded avatars actually render.**
 

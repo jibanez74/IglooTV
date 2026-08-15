@@ -284,4 +284,171 @@ class MovieRepositoryTest {
 
         assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
     }
+
+    @Test
+    fun `movie details decodes populated related lists`() = runTest {
+        val http = TestHttp {
+            jsonResponse(
+                movieDetailsJson(
+                    cast = listOf(castMemberJson(artistName = "Al Pacino", character = "Vincent Hanna")),
+                    crew = listOf(crewMemberJson(job = "Director", artistName = "Michael Mann")),
+                    genres = listOf(movieGenreJson(tag = "Crime")),
+                    productionCompanies = listOf(productionCompanyJson(name = "Regency Enterprises")),
+                    extraVideos = listOf(extraVideoJson(title = "Heat - Trailer")),
+                ),
+            )
+        }
+
+        val details = (http.movieRepository.movieDetails(1) as ApiResult.Success).value
+
+        assertEquals("Al Pacino", details.cast.single().artistName)
+        assertEquals("Vincent Hanna", details.cast.single().character)
+        assertEquals("Michael Mann", details.crew.single().artistName)
+        assertEquals("Crime", details.genres.single().tag)
+        assertEquals("Regency Enterprises", details.productionCompanies.single().name)
+        assertEquals("Heat - Trailer", details.extraVideos.single().title)
+    }
+
+    @Test
+    fun `technical details hits the contract path and decodes streams`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(
+                technicalDetailsJson(
+                    videoStreams = listOf(videoStreamJson(width = 3840, height = 1600)),
+                    audioStreams = listOf(audioStreamJson(channels = 6)),
+                    subtitles = listOf(subtitleJson()),
+                    chapters = listOf(chapterJson(startTimeSec = 193)),
+                ),
+            )
+        }
+        http.profiles.setPending("igd_test")
+
+        val result = http.movieRepository.movieTechnicalDetails(5)
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/movies/5/technical-details", captured.url.encodedPath)
+        assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+        val data = (result as ApiResult.Success).value
+        assertEquals(3840L, data.videoStreams.single().width)
+        assertEquals(6L, data.audioStreams.single().channels)
+        assertEquals("subrip", data.subtitles.single().codec)
+        assertEquals(193L, data.chapters.single().startTime)
+    }
+
+    @Test
+    fun `a technical details server failure preserves the backend message`() = runTest {
+        val http = TestHttp {
+            jsonResponse(
+                """{"error":true,"message":"probe failed"}""",
+                HttpStatusCode.InternalServerError,
+            )
+        }
+
+        val result = http.movieRepository.movieTechnicalDetails(1)
+
+        val error = (result as ApiResult.Failure).error as AppError.Api
+        assertEquals("probe failed", error.message)
+    }
+
+    @Test
+    fun `watch progress hits the contract path and decodes plain nulls`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(watchProgressJson())
+        }
+
+        val result = http.movieRepository.movieWatchProgress(5)
+
+        assertEquals("/api/movies/5/watch-progress", requireNotNull(request).url.encodedPath)
+        val progress = (result as ApiResult.Success).value
+        assertNull(progress.progressSec)
+        assertNull(progress.durationSec)
+        assertEquals(false, progress.watched)
+    }
+
+    @Test
+    fun `watch progress decodes a saved position`() = runTest {
+        val http = TestHttp {
+            jsonResponse(
+                watchProgressJson(
+                    progressSec = 1800.0,
+                    durationSec = 7200.0,
+                    updatedAt = "2026-08-14T00:00:00Z",
+                ),
+            )
+        }
+
+        val progress = (http.movieRepository.movieWatchProgress(1) as ApiResult.Success).value
+
+        assertEquals(1800.0, requireNotNull(progress.progressSec), 0.0)
+        assertEquals(7200.0, requireNotNull(progress.durationSec), 0.0)
+    }
+
+    @Test
+    fun `set watched PUTs the desired value and decodes the confirmation`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(watchedUpdateJson(movieId = 5, watched = true))
+        }
+
+        val result = http.movieRepository.setMovieWatched(5, watched = true)
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/movies/5/watch-progress/watched", captured.url.encodedPath)
+        assertEquals("PUT", captured.method.value)
+        val data = (result as ApiResult.Success).value
+        assertEquals(5L, data.movieId)
+        assertTrue(data.watched)
+    }
+
+    @Test
+    fun `like status hits the contract path`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(likeStatusJson(isLiked = true))
+        }
+
+        val result = http.movieRepository.movieLikeStatus(5)
+
+        assertEquals("/api/movies/5/like-status", requireNotNull(request).url.encodedPath)
+        assertTrue((result as ApiResult.Success).value.isLiked)
+    }
+
+    @Test
+    fun `like toggle POSTs with no body and decodes the new state`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(likeToggleJson(movieId = 5, isLiked = true))
+        }
+
+        val result = http.movieRepository.toggleMovieLike(5)
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/movies/5/like", captured.url.encodedPath)
+        assertEquals("POST", captured.method.value)
+        val data = (result as ApiResult.Success).value
+        assertEquals(5L, data.movieId)
+        assertTrue(data.isLiked)
+    }
+
+    @Test
+    fun `a like toggle failure maps to an Api error`() = runTest {
+        val http = TestHttp {
+            jsonResponse(
+                """{"error":true,"message":"like failed"}""",
+                HttpStatusCode.InternalServerError,
+            )
+        }
+
+        val result = http.movieRepository.toggleMovieLike(1)
+
+        val error = (result as ApiResult.Failure).error as AppError.Api
+        assertEquals("like failed", error.message)
+    }
 }

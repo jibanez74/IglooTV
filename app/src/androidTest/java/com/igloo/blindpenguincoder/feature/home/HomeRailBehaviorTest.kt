@@ -37,6 +37,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
+import com.igloo.blindpenguincoder.inertDetailsActions
 
 /**
  * The home rails' focus contract: every state of the first rail anchors the content pane,
@@ -78,7 +80,7 @@ class HomeRailBehaviorTest {
     private var latestRetries = 0
     private var albumRetries = 0
     private var theaterRetries = 0
-    private val opened = mutableListOf<HomeMovie>()
+    private val opened = mutableListOf<Long>()
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
 
@@ -87,7 +89,7 @@ class HomeRailBehaviorTest {
         initialLatest: IglooRailState<HomeMovie> = IglooRailState.Loaded(movies),
         initialAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loaded(albums),
         initialTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loaded(theaterMovies),
-        onMovieSelected: ((HomeMovie) -> Unit)? = { opened += it },
+        onMovieSelected: ((Long) -> Unit)? = { opened += it },
     ) {
         continueState = initialContinue
         latestState = initialLatest
@@ -126,6 +128,9 @@ class HomeRailBehaviorTest {
                         }
                     },
                     onMovieSelected = onMovieSelected,
+                    onCloseDetails = {},
+                    details = MovieDetailsUiState(),
+                    detailsActions = inertDetailsActions,
                     onSwitchProfile = {},
                     onSignOut = {},
                     onSignOutConfirm = {},
@@ -321,7 +326,7 @@ class HomeRailBehaviorTest {
         continueCard(1).assertIsFocused()
         continueCard(1).performKeyInput { pressKey(Key.DirectionCenter) }
 
-        assertEquals(listOf(movies[0]), opened)
+        assertEquals(listOf(movies[0].id), opened)
     }
 
     @Test
