@@ -35,6 +35,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -117,6 +118,7 @@ class MovieDetailsViewModelTest {
         assertEquals(0, requests)
         assertNull(viewModel.uiState.value.openMovieId)
         viewModel.refresh()
+        viewModel.retry()
         assertEquals(0, requests)
     }
 
@@ -296,6 +298,46 @@ class MovieDetailsViewModelTest {
         )
     }
 
+    /**
+     * The tier checks use `>=`, and either dimension alone clears a tier — a scope master is
+     * wide without being tall, an academy-ratio one tall without being wide. Pinned at the
+     * exact cutoffs because an off-by-one there misfiles every borderline library.
+     */
+    @Test
+    fun `resolution badge tiers are inclusive at the web cutoffs on either dimension`() = runTest {
+        suspend fun badgesFor(width: Long, height: Long): List<String> {
+            val http = routedHttp(
+                technical = {
+                    jsonResponse(
+                        technicalDetailsJson(
+                            videoStreams = listOf(
+                                videoStreamJson(width = width, height = height, colorTransfer = null),
+                            ),
+                            audioStreams = emptyList(),
+                            // A subtitle keeps the list non-empty so "no resolution badge" is
+                            // distinguishable from "technical details not landed yet".
+                            subtitles = listOf(subtitleJson()),
+                        ),
+                    )
+                },
+            )
+            val viewModel = viewModel(http)
+            viewModel.open(1)
+            return viewModel.uiState
+                .first {
+                    val details = it.details
+                    details is MovieDetailsState.Loaded && details.movie.mediaBadges.isNotEmpty()
+                }
+                .let { (it.details as MovieDetailsState.Loaded).movie.mediaBadges }
+        }
+
+        assertEquals(listOf("4K", "CC"), badgesFor(width = 3200, height = 100))
+        assertEquals(listOf("4K", "CC"), badgesFor(width = 100, height = 2100))
+        assertEquals(listOf("HD", "CC"), badgesFor(width = 1800, height = 100))
+        assertEquals(listOf("HD", "CC"), badgesFor(width = 100, height = 1000))
+        assertEquals(listOf("CC"), badgesFor(width = 1799, height = 999))
+    }
+
     @Test
     fun `the progress strip needs thirty seconds and a position under 98 percent`() = runTest {
         suspend fun progressFor(progressSec: Double?, durationSec: Double?): ProgressUi? {
@@ -371,6 +413,29 @@ class MovieDetailsViewModelTest {
         val movie = viewModel.awaitLoaded()
 
         assertEquals(listOf(4L, 5L, 2L, 1L), movie.extraVideos.map { it.id })
+    }
+
+    /** The scraper's casing is not trusted: `normalizedVideoValue` trims and lowercases first. */
+    @Test
+    fun `the youtube site filter survives casing and whitespace but still drops other sites`() = runTest {
+        val http = routedHttp(
+            details = {
+                jsonResponse(
+                    movieDetailsJson(
+                        extraVideos = listOf(
+                            extraVideoJson(id = 1, title = "Teaser", site = " YouTube "),
+                            extraVideoJson(id = 2, title = "Elsewhere", site = "dailymotion"),
+                        ),
+                    ),
+                )
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        val movie = viewModel.awaitLoaded()
+
+        assertEquals(listOf(1L), movie.extraVideos.map { it.id })
     }
 
     @Test
@@ -481,6 +546,80 @@ class MovieDetailsViewModelTest {
         assertNull(movie.about.revenue)
         assertNull(movie.tagline)
         assertNull(movie.releaseDateText)
+    }
+
+    /**
+     * Every branch of the spoken form: TalkBack reading "1 hours 0 minutes" is exactly the kind
+     * of regression the visual chip ("2h 50m", covered elsewhere) would never show.
+     */
+    @Test
+    fun `the spoken runtime uses singular and plural hours and drops empty parts`() = runTest {
+        suspend fun spoken(runtimeMinutes: Long): String {
+            // Everything else in the metadata row is stripped so the description is exactly
+            // the runtime phrase.
+            val http = routedHttp(
+                details = {
+                    jsonResponse(
+                        movieDetailsJson(
+                            criticRating = null,
+                            certification = null,
+                            releaseDate = null,
+                            runTimeMinutes = runtimeMinutes,
+                        ),
+                    )
+                },
+                technical = {
+                    jsonResponse(
+                        technicalDetailsJson(
+                            videoStreams = emptyList(),
+                            audioStreams = emptyList(),
+                            subtitles = emptyList(),
+                        ),
+                    )
+                },
+            )
+            val viewModel = viewModel(http)
+            viewModel.open(1)
+            return viewModel.awaitLoaded().metadataDescription
+        }
+
+        assertEquals("45 minutes", spoken(45))
+        assertEquals("1 hour", spoken(60))
+        assertEquals("1 hour 30 minutes", spoken(90))
+        assertEquals("2 hours", spoken(120))
+    }
+
+    @Test
+    fun `about is empty only when every field is absent`() = runTest {
+        suspend fun aboutFor(language: String?): AboutUi {
+            val http = routedHttp(
+                details = {
+                    // Companies default empty; zero budget and revenue are scraper "no data".
+                    jsonResponse(movieDetailsJson(language = language, budget = 0.0, revenue = 0.0))
+                },
+            )
+            val viewModel = viewModel(http)
+            viewModel.open(1)
+            return viewModel.awaitLoaded().about
+        }
+
+        // isEmpty drives whether the About section exists at all, so both answers matter.
+        assertTrue(aboutFor(language = null).isEmpty)
+        assertFalse(aboutFor(language = "en").isEmpty)
+    }
+
+    @Test
+    fun `usd amounts round to whole dollars`() = runTest {
+        val http = routedHttp(
+            details = { jsonResponse(movieDetailsJson(budget = 1234567.89, revenue = 99.4)) },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        val movie = viewModel.awaitLoaded()
+
+        assertEquals("$1,234,568", movie.about.budget)
+        assertEquals("$99", movie.about.revenue)
     }
 
     @Test
@@ -704,6 +843,52 @@ class MovieDetailsViewModelTest {
         holdReopenAfterClose.complete(Unit)
         testScheduler.advanceUntilIdle()
         assertEquals(true, viewModel.awaitLoaded().liked)
+    }
+
+    /**
+     * The other half of the pruning rule: `open(keep = movieId)` spares the movie being opened.
+     * A write still pending at Back settles after close and stays in the map (nothing prunes it
+     * until the next open), so reopening that movie paints the toggle it committed instead of
+     * flickering through unknown while the status read is out.
+     */
+    @Test
+    fun `a write settling after Back is kept for reopening the same movie`() = runTest {
+        val writeReached = CompletableDeferred<Unit>()
+        val releaseWrite = CompletableDeferred<Unit>()
+        val holdReopenProgress = CompletableDeferred<Unit>()
+        var progressReads = 0
+        val http = routedHttp(
+            progress = {
+                progressReads += 1
+                // The reopen's read is held so "watched is already true" can only come from the
+                // kept mutation state, not from the read landing first.
+                if (progressReads == 2) holdReopenProgress.await()
+                jsonResponse(watchProgressJson(watched = progressReads == 2))
+            },
+            setWatched = {
+                writeReached.complete(Unit)
+                releaseWrite.await()
+                jsonResponse(watchedUpdateJson(watched = true))
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        viewModel.uiState.first {
+            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+        }
+        viewModel.toggleWatched()
+        writeReached.await()
+        viewModel.close()
+        releaseWrite.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        viewModel.open(1)
+        assertEquals(true, viewModel.awaitLoaded().watched)
+
+        holdReopenProgress.complete(Unit)
+        testScheduler.advanceUntilIdle()
+        assertEquals(true, viewModel.awaitLoaded().watched)
     }
 
     @Test

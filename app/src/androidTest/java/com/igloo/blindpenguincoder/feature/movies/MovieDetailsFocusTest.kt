@@ -368,6 +368,24 @@ class MovieDetailsFocusTest {
         composeRule.onNodeWithTag("cast_card_101").assertIsFocused()
     }
 
+    /**
+     * The remaining shape of the cast rail's down wiring: with no extras and an empty About it
+     * is the page's last section, so its down edge pins rather than falling into the shell.
+     */
+    @Test
+    fun aMovieWhereCastIsTheLastSectionPinsItsDownEdge() {
+        setShellContent(
+            loadedState(
+                testMovieDetails(extraVideos = emptyList())
+                    .copy(about = AboutUi(null, null, null, null)),
+            ),
+        )
+
+        composeRule.onNodeWithTag("cast_card_101").requestFocus()
+        composeRule.onNodeWithTag("cast_card_101").performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("cast_card_101").assertIsFocused()
+    }
+
     @Test
     fun aMovieWithNothingBelowTheHeroPinsTheActionRow() {
         setShellContent(
