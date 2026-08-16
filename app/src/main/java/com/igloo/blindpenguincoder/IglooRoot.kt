@@ -180,6 +180,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         MovieDetailsViewModel(
                             container.movieRepository,
                             container.serverUrlProvider,
+                            onWatchedStateCommitted = homeViewModel::refreshContinueWatching,
                         )
                     }
                     // Device tokens are revoked server-side after long disuse, so a session

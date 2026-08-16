@@ -273,6 +273,63 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `targeted continue watching refresh retains its rail and fetches no others`() = runTest {
+        var continueRequests = 0
+        var latestRequests = 0
+        var albumRequests = 0
+        var theaterRequests = 0
+        val refreshReached = CompletableDeferred<Unit>()
+        val releaseRefresh = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            continueWatching = {
+                continueRequests += 1
+                if (continueRequests == 2) {
+                    refreshReached.complete(Unit)
+                    releaseRefresh.await()
+                }
+                jsonResponse(
+                    continueWatchingMoviesJson(
+                        continueWatchingMovieJson(
+                            id = if (continueRequests == 1) 1 else 2,
+                            title = if (continueRequests == 1) "Heat" else "Arrival",
+                        ),
+                    ),
+                )
+            },
+            latest = {
+                latestRequests += 1
+                jsonResponse(latestMoviesJson())
+            },
+            albums = {
+                albumRequests += 1
+                jsonResponse(latestAlbumsJson())
+            },
+            theaters = {
+                theaterRequests += 1
+                jsonResponse(theaterMoviesJson())
+            },
+        )
+        val viewModel = viewModel(http)
+        assertEquals(listOf("Heat"), viewModel.awaitContinue().items.map { it.movie.title })
+
+        viewModel.refreshContinueWatching()
+        refreshReached.await()
+
+        val during = viewModel.uiState.value.continueWatching
+        assertTrue(during is IglooRailState.Loaded)
+        assertEquals(listOf("Heat"), (during as IglooRailState.Loaded).items.map { it.movie.title })
+        assertEquals(2, continueRequests)
+        assertEquals(1, latestRequests)
+        assertEquals(1, albumRequests)
+        assertEquals(1, theaterRequests)
+
+        releaseRefresh.complete(Unit)
+        viewModel.uiState.first {
+            (it.continueWatching as? IglooRailState.Loaded)?.items?.single()?.movie?.title == "Arrival"
+        }
+    }
+
+    @Test
     fun `a refresh that fails leaves the loaded rail alone`() = runTest {
         var requests = 0
         // The engine shares the test scheduler, so a request is done being handled by the time

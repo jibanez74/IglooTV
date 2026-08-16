@@ -76,6 +76,7 @@ data class MovieDetailsActions(
 fun MovieDetailsScreen(
     state: MovieDetailsState,
     actions: MovieDetailsActions,
+    mutationNotice: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
@@ -134,6 +135,7 @@ fun MovieDetailsScreen(
 
             is MovieDetailsState.Loaded -> DetailsContent(
                 movie = state.movie,
+                mutationNotice = mutationNotice,
                 playRequester = entryRequester,
                 actions = actions,
             )
@@ -144,6 +146,7 @@ fun MovieDetailsScreen(
 @Composable
 private fun DetailsContent(
     movie: MovieDetailsUi,
+    mutationNotice: String?,
     playRequester: FocusRequester,
     actions: MovieDetailsActions,
 ) {
@@ -263,6 +266,7 @@ private fun DetailsContent(
                 onPlay = actions.onPlay,
                 onToggleWatched = actions.onToggleWatched,
                 onToggleLike = actions.onToggleLike,
+                mutationNotice = mutationNotice,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()

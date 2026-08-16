@@ -1310,14 +1310,26 @@ read). The cards are **inert under the cast-card contract**: focusable, one clea
 ("Official Trailer, Trailer"), no announced action until trailer playback exists. A movie with
 no YouTube extras renders no section at all.
 
-**Toggles.** Watched and Like flip optimistically and flip back if the server disagrees. Two
-rules follow from that, and both are easy to get wrong: leaving the screen cancels the screen's
-*reads* but never a mutation — a press followed immediately by Back is still a change the user
-made — and a status read only applies its value if no mutation started or settled while it was
-in flight, because a read issued mid-write is answered from before that write commits. Until
-the status arrives the toggle carries no `stateDescription` at all: it has to look like
-something, but announcing "Not watched" for a movie that is watched states a fact the app does
-not have yet.
+**Toggles.** Watched and Like flip optimistically and roll back if the server disagrees. Every
+accepted press is an intent: Watched writes and Like writes each run through their own FIFO queue,
+with no cancellation or coalescing, so rapid OK presses reach the server once each and in order.
+The visible state is always the last queued intent over the last confirmed answer; an older
+completion can therefore confirm the base without repainting over a newer press.
+
+Three rules follow, and all are easy to get wrong. Leaving the screen cancels the screen's *reads*
+but never a mutation — a press followed immediately by Back is still a change the user made. A
+status read only applies its value while the same movie remains open and only if that movie's
+mutation epoch has not moved since the read began, because a read issued mid-write can be answered
+from before that write commits. And Like is disabled, with no click action in its semantics, until
+its status arrives: its POST toggles an unknown server value, unlike Watched's PUT of an explicit
+value, so guessing "not liked" could perform the opposite action. Watched stays available while
+unknown and its first press explicitly sets `true`.
+
+A failed write restores the confirmed state after the remaining queue drains and re-reads the
+matching status endpoint. The restored toggle is the retry path. The mapped backend reason appears
+in the persistent, polite, non-focusable `IglooNotice` beside the actions; if Back has already
+closed the overlay, the same notice appears below the shell header. A new mutation or opening a new
+movie clears it. There is no toast or inline Retry card (§10).
 
 **Reachability.** Overview and Key Crew are prose between the hero and the cast rail, so moving
 down scrolls them into view on the way; both share the same 620dp prose measure so adjacent
@@ -1530,6 +1542,11 @@ committed to it.
 - **Small alignments**: the rating badge takes the chips' vertical padding on the metadata row;
   Key Crew shares the overview's 620dp prose measure; the always-Loaded cast rail stops passing
   state parameters that can never render.
+- **Mutations preserve every remote press (§11.4.1).** Watched and Like now have independent FIFO
+  write queues, per-movie confirmed state and read epochs, and failure reconciliation. Unknown Like
+  is disabled because its endpoint is a toggle; Watched remains available because its PUT carries
+  the desired value. A persistent `IglooNotice` follows a late failure back to the shell, and a
+  drained successful Watched queue refreshes only Home's Continue Watching rail.
 
 **2026-08-15 — The movie detail screen lands, and the cards it opens stop being inert.**
 

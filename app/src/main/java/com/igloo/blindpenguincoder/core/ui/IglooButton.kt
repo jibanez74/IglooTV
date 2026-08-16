@@ -102,20 +102,29 @@ fun IglooButton(
                 fill = background,
             )
             .onFocusChanged { focused = it.isFocused }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                enabled = enabled,
-                onClick = onClick,
+            .then(
+                if (enabled) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
             )
             .clearAndSetSemantics {
                 contentDescription = semanticLabel
                 role = Role.Button
-                if (!enabled) disabled()
+                if (!enabled) {
+                    disabled()
+                }
                 if (stateDescription != null) this.stateDescription = stateDescription
-                onClick(label = actionLabel ?: semanticLabel) {
-                    if (enabled) onClick()
-                    enabled
+                if (enabled) {
+                    onClick(label = actionLabel ?: semanticLabel) {
+                        onClick()
+                        true
+                    }
                 }
             }
             .padding(horizontal = IglooTheme.spacing.lg),

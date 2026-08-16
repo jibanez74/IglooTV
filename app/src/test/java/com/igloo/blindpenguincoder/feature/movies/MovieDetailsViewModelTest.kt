@@ -19,6 +19,7 @@ import com.igloo.blindpenguincoder.data.repository.videoStreamJson
 import com.igloo.blindpenguincoder.data.repository.watchProgressJson
 import com.igloo.blindpenguincoder.data.repository.watchedUpdateJson
 import io.ktor.client.engine.mock.MockRequestHandleScope
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
@@ -59,8 +60,12 @@ class MovieDetailsViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel(http: TestHttp) =
-        MovieDetailsViewModel(http.movieRepository, http.serverUrl)
+    private fun viewModel(http: TestHttp, onWatchedStateCommitted: () -> Unit = {}) =
+        MovieDetailsViewModel(
+            http.movieRepository,
+            http.serverUrl,
+            onWatchedStateCommitted,
+        )
             .also { viewModels += it }
 
     /**
@@ -122,7 +127,7 @@ class MovieDetailsViewModelTest {
             val path = request.url.encodedPath
             paths += path
             when {
-                path.startsWith("/api/movies/details/") -> jsonResponse(populatedDetailsJson())
+                path.startsWith("/api/movies/details/") -> jsonResponse(populatedDetailsJson(id = 5))
                 path.endsWith("/technical-details") -> jsonResponse(technicalDetailsJson())
                 path.endsWith("/watch-progress") -> jsonResponse(
                     watchProgressJson(progressSec = 1800.0, durationSec = 10200.0),
@@ -134,14 +139,9 @@ class MovieDetailsViewModelTest {
 
         val viewModel = viewModel(http)
         viewModel.open(5)
-        // The four responses land in any order; the fully-composed state has them all.
-        val movie = viewModel.uiState
-            .first {
-                val loaded = (it.details as? MovieDetailsState.Loaded)?.movie
-                loaded != null && loaded.mediaBadges.isNotEmpty() &&
-                    loaded.liked == true && loaded.progress != null
-            }
-            .let { (it.details as MovieDetailsState.Loaded).movie }
+        testScheduler.advanceUntilIdle()
+        // The four responses land in any order; the final publication composes every fragment.
+        val movie = (viewModel.uiState.value.details as MovieDetailsState.Loaded).movie
 
         assertEquals(
             setOf(
@@ -182,7 +182,7 @@ class MovieDetailsViewModelTest {
         assertEquals("$60,000,000", movie.about.budget)
         assertEquals("$187,436,818", movie.about.revenue)
         assertEquals(0.176f, requireNotNull(movie.progress).fraction, 0.001f)
-        assertEquals("140 min left", movie.progress?.minutesLeftLabel)
+        assertEquals("140 min left", movie.progress.minutesLeftLabel)
         assertEquals(false, movie.watched)
         assertEquals(true, movie.liked)
         assertEquals(
@@ -549,6 +549,317 @@ class MovieDetailsViewModelTest {
         viewModel.uiState.first {
             (it.details as? MovieDetailsState.Loaded)?.movie?.liked == false
         }
+    }
+
+    @Test
+    fun `like presses before status resolution send no mutation`() = runTest {
+        val releaseStatus = CompletableDeferred<Unit>()
+        var likeWrites = 0
+        val http = routedHttp(
+            likeStatus = {
+                releaseStatus.await()
+                jsonResponse(likeStatusJson(isLiked = false))
+            },
+            likeToggle = {
+                likeWrites += 1
+                jsonResponse(likeToggleJson(isLiked = true))
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        assertNull(viewModel.awaitLoaded().liked)
+
+        viewModel.toggleLike()
+        testScheduler.runCurrent()
+        assertEquals(0, likeWrites)
+
+        releaseStatus.complete(Unit)
+        viewModel.uiState.first {
+            (it.details as? MovieDetailsState.Loaded)?.movie?.liked == false
+        }
+        viewModel.toggleLike()
+
+        assertEquals(1, likeWrites)
+    }
+
+    @Test
+    fun `rapid watched presses are written once each in order without older completion repaint`() =
+        runTest {
+            val firstReached = CompletableDeferred<Unit>()
+            val releaseFirst = CompletableDeferred<Unit>()
+            val secondReached = CompletableDeferred<Unit>()
+            val targets = mutableListOf<Boolean>()
+            val http = routedHttp(
+                progress = { jsonResponse(watchProgressJson(watched = false)) },
+                setWatched = { request ->
+                    val target = String(request.body.toByteArray()).contains("\"watched\":true")
+                    targets += target
+                    if (targets.size == 1) {
+                        firstReached.complete(Unit)
+                        releaseFirst.await()
+                    } else {
+                        secondReached.complete(Unit)
+                    }
+                    jsonResponse(watchedUpdateJson(watched = target))
+                },
+            )
+
+            val viewModel = viewModel(http)
+            viewModel.open(1)
+            viewModel.uiState.first {
+                (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+            }
+
+            viewModel.toggleWatched()
+            firstReached.await()
+            viewModel.toggleWatched()
+
+            // The second press is already visible, but its request waits behind the first.
+            assertEquals(false, viewModel.awaitLoaded().watched)
+            assertEquals(listOf(true), targets)
+
+            releaseFirst.complete(Unit)
+            withTimeout(WRITE_TIMEOUT_MS) { secondReached.await() }
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(listOf(true, false), targets)
+            assertEquals(false, viewModel.awaitLoaded().watched)
+        }
+
+    @Test
+    fun `rapid like presses are posted once each in strict order`() = runTest {
+        val firstReached = CompletableDeferred<Unit>()
+        val releaseFirst = CompletableDeferred<Unit>()
+        val secondReached = CompletableDeferred<Unit>()
+        var writes = 0
+        val http = routedHttp(
+            likeStatus = { jsonResponse(likeStatusJson(isLiked = false)) },
+            likeToggle = {
+                writes += 1
+                if (writes == 1) {
+                    firstReached.complete(Unit)
+                    releaseFirst.await()
+                    jsonResponse(likeToggleJson(isLiked = true))
+                } else {
+                    secondReached.complete(Unit)
+                    jsonResponse(likeToggleJson(isLiked = false))
+                }
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        viewModel.uiState.first {
+            (it.details as? MovieDetailsState.Loaded)?.movie?.liked == false
+        }
+
+        viewModel.toggleLike()
+        firstReached.await()
+        viewModel.toggleLike()
+        assertEquals(false, viewModel.awaitLoaded().liked)
+        assertEquals(1, writes)
+
+        releaseFirst.complete(Unit)
+        withTimeout(WRITE_TIMEOUT_MS) { secondReached.await() }
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(2, writes)
+        assertEquals(false, viewModel.awaitLoaded().liked)
+    }
+
+    @Test
+    fun `movie A write survives opening B and does not invalidate B status`() = runTest {
+        val writeReached = CompletableDeferred<Unit>()
+        val releaseWrite = CompletableDeferred<Unit>()
+        val writeAnswered = CompletableDeferred<Unit>()
+        val bStatusReached = CompletableDeferred<Unit>()
+        val releaseBStatus = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            details = { request ->
+                val id = request.url.encodedPath.substringAfterLast('/').toLong()
+                jsonResponse(populatedDetailsJson(id))
+            },
+            progress = { request ->
+                val id = request.url.encodedPath.substringAfter("/api/movies/").substringBefore('/')
+                if (id == "2") {
+                    bStatusReached.complete(Unit)
+                    releaseBStatus.await()
+                }
+                jsonResponse(watchProgressJson(watched = false))
+            },
+            setWatched = {
+                writeReached.complete(Unit)
+                releaseWrite.await()
+                writeAnswered.complete(Unit)
+                jsonResponse(watchedUpdateJson(watched = true))
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        viewModel.uiState.first {
+            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+        }
+        viewModel.toggleWatched()
+        writeReached.await()
+
+        viewModel.open(2)
+        bStatusReached.await()
+        releaseWrite.complete(Unit)
+        withTimeout(WRITE_TIMEOUT_MS) { writeAnswered.await() }
+        releaseBStatus.complete(Unit)
+
+        val movieB = viewModel.uiState.first {
+            it.openMovieId == 2L &&
+                (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+        }.let { (it.details as MovieDetailsState.Loaded).movie }
+        assertEquals(2L, movieB.id)
+        assertEquals(false, movieB.watched)
+    }
+
+    @Test
+    fun `late mutation failure survives Back and a new movie clears its notice`() = runTest {
+        val writeReached = CompletableDeferred<Unit>()
+        val releaseWrite = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            details = { request ->
+                val id = request.url.encodedPath.substringAfterLast('/').toLong()
+                jsonResponse(populatedDetailsJson(id))
+            },
+            setWatched = {
+                writeReached.complete(Unit)
+                releaseWrite.await()
+                jsonResponse(
+                    """{"error":true,"message":"backend refused it"}""",
+                    HttpStatusCode.InternalServerError,
+                )
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        viewModel.uiState.first {
+            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+        }
+        viewModel.toggleWatched()
+        writeReached.await()
+        viewModel.close()
+        releaseWrite.complete(Unit)
+
+        val notice = viewModel.uiState.first { it.mutationNotice != null }.mutationNotice
+        assertNull(viewModel.uiState.value.openMovieId)
+        assertTrue(requireNotNull(notice).contains("watched status"))
+        assertTrue(notice.contains("backend refused it"))
+
+        viewModel.open(2)
+        assertNull(viewModel.uiState.value.mutationNotice)
+    }
+
+    @Test
+    fun `failed like reconciles preserves backend text and remains retryable`() = runTest {
+        var statusReads = 0
+        var writes = 0
+        val http = routedHttp(
+            likeStatus = {
+                statusReads += 1
+                jsonResponse(likeStatusJson(isLiked = false))
+            },
+            likeToggle = {
+                writes += 1
+                if (writes == 1) {
+                    jsonResponse(
+                        """{"error":true,"message":"likes are locked"}""",
+                        HttpStatusCode.InternalServerError,
+                    )
+                } else {
+                    jsonResponse(likeToggleJson(isLiked = true))
+                }
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        viewModel.uiState.first {
+            (it.details as? MovieDetailsState.Loaded)?.movie?.liked == false
+        }
+        viewModel.toggleLike()
+
+        val failed = viewModel.uiState.first { it.mutationNotice != null }
+        assertEquals(2, statusReads)
+        assertEquals(false, (failed.details as MovieDetailsState.Loaded).movie.liked)
+        assertTrue(requireNotNull(failed.mutationNotice).contains("likes are locked"))
+
+        viewModel.toggleLike()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(2, writes)
+        assertEquals(true, viewModel.awaitLoaded().liked)
+        assertNull(viewModel.uiState.value.mutationNotice)
+    }
+
+    @Test
+    fun `watched callback fires once after a successful queue drain only`() = runTest {
+        val firstReached = CompletableDeferred<Unit>()
+        val releaseFirst = CompletableDeferred<Unit>()
+        var watchedWrites = 0
+        var likeWrites = 0
+        var commits = 0
+        val http = routedHttp(
+            details = { request ->
+                val id = request.url.encodedPath.substringAfterLast('/').toLong()
+                jsonResponse(populatedDetailsJson(id))
+            },
+            likeStatus = { jsonResponse(likeStatusJson(isLiked = false)) },
+            setWatched = watched@{ request ->
+                watchedWrites += 1
+                if (watchedWrites == 1) {
+                    firstReached.complete(Unit)
+                    releaseFirst.await()
+                }
+                if (watchedWrites == 3) {
+                    return@watched jsonResponse(
+                        """{"error":true,"message":"no"}""",
+                        HttpStatusCode.InternalServerError,
+                    )
+                }
+                val target = String(request.body.toByteArray()).contains("\"watched\":true")
+                jsonResponse(watchedUpdateJson(watched = target))
+            },
+            likeToggle = {
+                likeWrites += 1
+                jsonResponse(likeToggleJson(isLiked = true))
+            },
+        )
+
+        val viewModel = viewModel(http) { commits += 1 }
+        viewModel.open(1)
+        viewModel.uiState.first {
+            val movie = (it.details as? MovieDetailsState.Loaded)?.movie
+            movie?.watched == false && movie.liked == false
+        }
+        viewModel.toggleWatched()
+        firstReached.await()
+        viewModel.toggleWatched()
+        releaseFirst.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(2, watchedWrites)
+        assertEquals(1, commits)
+
+        viewModel.toggleLike()
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, likeWrites)
+        assertEquals(1, commits)
+
+        viewModel.open(2)
+        viewModel.uiState.first {
+            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+        }
+        viewModel.toggleWatched()
+        testScheduler.advanceUntilIdle()
+        assertEquals(3, watchedWrites)
+        assertEquals(1, commits)
     }
 
     @Test

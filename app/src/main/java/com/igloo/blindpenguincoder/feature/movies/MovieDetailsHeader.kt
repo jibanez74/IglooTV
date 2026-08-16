@@ -46,6 +46,7 @@ import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
@@ -68,6 +69,7 @@ internal fun MovieDetailsHeader(
     onPlay: () -> Unit,
     onToggleWatched: () -> Unit,
     onToggleLike: () -> Unit,
+    mutationNotice: String?,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
@@ -122,6 +124,12 @@ internal fun MovieDetailsHeader(
                 onToggleLike = onToggleLike,
                 modifier = Modifier.padding(top = IglooTheme.spacing.sm),
             )
+            if (mutationNotice != null) {
+                IglooNotice(
+                    text = mutationNotice,
+                    modifier = Modifier.testTag("details_mutation_notice"),
+                )
+            }
         }
     }
 }
@@ -323,6 +331,7 @@ private fun ActionRow(
             semanticLabel = "Like",
             stateDescription = movie.liked?.let { if (it) "Liked" else "Not liked" },
             actionLabel = if (liked) "Remove like" else "Like this movie",
+            enabled = movie.liked != null,
             modifier = Modifier
                 .testTag("details_like")
                 .focusRequester(likeRequester)

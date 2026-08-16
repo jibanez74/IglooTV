@@ -9,9 +9,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -103,7 +105,12 @@ class MovieDetailsFocusTest {
                             details = MovieDetailsState.Loaded(testMovieDetails(id = movieId)),
                         )
                     },
-                    onCloseDetails = { detailsState = MovieDetailsUiState() },
+                    onCloseDetails = {
+                        detailsState = detailsState.copy(
+                            openMovieId = null,
+                            details = MovieDetailsState.Loading,
+                        )
+                    },
                     onSwitchProfile = {},
                     onSignOut = {},
                     onSignOutConfirm = {},
@@ -156,6 +163,29 @@ class MovieDetailsFocusTest {
 
         composeRule.onNodeWithTag("movie_details").assertDoesNotExist()
         composeRule.onNodeWithTag("continue_card_2").assertIsFocused()
+    }
+
+    @Test
+    fun backCarriesAMutationFailureNoticeToHomeWithoutTakingFocus() {
+        setShellContent(
+            loadedState().copy(
+                mutationNotice = "Couldn't update watched status: backend refused it",
+            ),
+        )
+
+        pressBack()
+
+        composeRule.onNodeWithTag("movie_details").assertDoesNotExist()
+        composeRule.onNodeWithTag("shell_mutation_notice")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
+            .assertHasNoClickAction()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Focused))
+        composeRule.onNodeWithTag("continue_card_1").assertIsFocused()
     }
 
     /**

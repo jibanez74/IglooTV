@@ -20,6 +20,7 @@ import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import com.igloo.blindpenguincoder.images.youtubeThumbnailUrl
 import java.text.NumberFormat
+import java.util.ArrayDeque
 import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -100,30 +101,46 @@ sealed interface MovieDetailsState {
 data class MovieDetailsUiState(
     val openMovieId: Long? = null,
     val details: MovieDetailsState = MovieDetailsState.Loading,
+    val mutationNotice: String? = null,
 )
 
 class MovieDetailsViewModel(
     private val movies: MovieRepository,
     private val serverUrl: ServerUrlProvider,
+    private val onWatchedStateCommitted: () -> Unit = {},
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MovieDetailsUiState())
     val uiState: StateFlow<MovieDetailsUiState> = _uiState.asStateFlow()
 
-    private enum class Load { Details, Technical, Progress, Like, ToggleWatched, ToggleLike }
+    private enum class Read { Details, Technical, Progress, Like }
+    private enum class MutationType { Watched, Like }
 
-    /** The reads. Leaving the screen cancels these; the two mutations are deliberately not here. */
-    private val reads = setOf(Load.Details, Load.Technical, Load.Progress, Load.Like)
+    private data class MutationIntent(
+        val id: Long,
+        val movieId: Long,
+        val target: Boolean,
+    )
 
-    private val loads = mutableMapOf<Load, Job>()
+    private data class MutationState(
+        var confirmed: Boolean? = null,
+        var epoch: Long = 0,
+        val pending: MutableList<MutationIntent> = mutableListOf(),
+        var reconcileAfterDrain: Boolean = false,
+        var successfulWriteSinceDrain: Boolean = false,
+    ) {
+        val displayed: Boolean?
+            get() = pending.lastOrNull()?.target ?: confirmed
+    }
 
-    // A read that started before a mutation finished carries the pre-flip value, and the server
-    // can answer a read issued mid-write from before that write commits. Each toggle bumps its
-    // counter when it starts *and* when it settles, and a read only applies its value if the
-    // counter has not moved while it was in flight — which covers a read issued after the write
-    // began, the case a plain "is a mutation running?" check misses.
-    private var watchedMutations = 0
-    private var likeMutations = 0
+    /** Reads are screen-owned and cancellable. Mutation workers are intentionally separate. */
+    private val readJobs = mutableMapOf<Read, Job>()
+    private val mutationJobs = mutableMapOf<MutationType, Job>()
+    private val mutationQueues = MutationType.entries.associateWith { ArrayDeque<MutationIntent>() }
+    private val mutationStates = MutationType.entries.associateWith {
+        mutableMapOf<Long, MutationState>()
+    }
+    private var nextMutationId = 0L
 
     // The four requests land in any order; the fragments live here and every arrival republishes
     // the composed Loaded state from whatever has arrived so far. All are keyed to openMovieId:
@@ -131,8 +148,6 @@ class MovieDetailsViewModel(
     private var wireDetails: MovieDetailsData? = null
     private var technical: MovieTechnicalDetailsData? = null
     private var progress: MovieWatchProgress? = null
-    private var watched: Boolean? = null
-    private var liked: Boolean? = null
 
     /** Opens the overlay on [movieId] and starts the four loads. */
     fun open(movieId: Long) {
@@ -141,6 +156,7 @@ class MovieDetailsViewModel(
         _uiState.value = MovieDetailsUiState(
             openMovieId = movieId,
             details = MovieDetailsState.Loading,
+            mutationNotice = null,
         )
         loadAll(movieId, userInitiated = true)
     }
@@ -154,7 +170,9 @@ class MovieDetailsViewModel(
     fun close() {
         cancelReads()
         clearFragments()
-        _uiState.value = MovieDetailsUiState()
+        _uiState.update {
+            it.copy(openMovieId = null, details = MovieDetailsState.Loading)
+        }
     }
 
     /** The full-screen error's Retry: user-initiated, so the screen returns to Loading truth. */
@@ -179,69 +197,30 @@ class MovieDetailsViewModel(
     /** Optimistic: the button flips now and flips back if the server disagrees. */
     fun toggleWatched() {
         val movieId = _uiState.value.openMovieId ?: return
-        // Status still unknown counts as "not watched": the visible button said "Watch".
-        val previous = watched ?: false
-        watched = !previous
-        publishLoaded()
-        // The mutation owns the value now; a status read racing it must not stomp the flip.
-        loads.remove(Load.Progress)?.cancel()
-        watchedMutations += 1
-        launchLoad(Load.ToggleWatched) {
-            val result = movies.setMovieWatched(movieId, watched = !previous)
-            watchedMutations += 1
-            if (_uiState.value.openMovieId != movieId) return@launchLoad
-            watched = when (result) {
-                is ApiResult.Success -> result.value.watched
-                is ApiResult.Failure -> previous
-            }
-            publishLoaded()
-        }
+        val previous = mutationState(MutationType.Watched, movieId).displayed ?: false
+        acceptMutation(MutationType.Watched, movieId, target = !previous)
     }
 
     /** Optimistic, like [toggleWatched]. The endpoint is a server-side toggle with no body. */
     fun toggleLike() {
         val movieId = _uiState.value.openMovieId ?: return
-        val previous = liked ?: false
-        liked = !previous
-        publishLoaded()
-        loads.remove(Load.Like)?.cancel()
-        likeMutations += 1
-        launchLoad(Load.ToggleLike) {
-            val result = movies.toggleMovieLike(movieId)
-            likeMutations += 1
-            if (_uiState.value.openMovieId != movieId) return@launchLoad
-            liked = when (result) {
-                is ApiResult.Success -> result.value.isLiked
-                is ApiResult.Failure -> previous
-            }
-            publishLoaded()
-        }
+        // POST is a server-side toggle. Until the status read resolves there is no known base
+        // state to toggle, so a stale UI event must be ignored instead of guessing "not liked".
+        val previous = mutationState(MutationType.Like, movieId).displayed ?: return
+        acceptMutation(MutationType.Like, movieId, target = !previous)
     }
 
     private fun loadAll(movieId: Long, userInitiated: Boolean) {
         loadDetails(movieId, userInitiated)
-        loadSecondary(movieId, Load.Technical) {
-            technical = (movies.movieTechnicalDetails(movieId) as? ApiResult.Success)?.value ?: technical
-        }
-        loadSecondary(movieId, Load.Progress) {
-            val mutationsAtStart = watchedMutations
-            (movies.movieWatchProgress(movieId) as? ApiResult.Success)?.value?.let {
-                progress = it
-                if (mutationsAtStart == watchedMutations) watched = it.watched
-            }
-        }
-        loadSecondary(movieId, Load.Like) {
-            val mutationsAtStart = likeMutations
-            (movies.movieLikeStatus(movieId) as? ApiResult.Success)?.value?.let {
-                if (mutationsAtStart == likeMutations) liked = it.isLiked
-            }
-        }
+        loadTechnical(movieId)
+        loadProgress(movieId)
+        loadLikeStatus(movieId)
     }
 
     private fun loadDetails(movieId: Long, userInitiated: Boolean) {
-        launchLoad(Load.Details) {
+        launchRead(Read.Details) {
             val result = movies.movieDetails(movieId)
-            if (_uiState.value.openMovieId != movieId) return@launchLoad
+            if (_uiState.value.openMovieId != movieId) return@launchRead
             when (result) {
                 is ApiResult.Success -> {
                     wireDetails = result.value
@@ -263,34 +242,156 @@ class MovieDetailsViewModel(
         }
     }
 
-    /**
-     * The secondary requests degrade instead of failing the screen: badges, the progress strip,
-     * and the toggle states simply stay absent, and a stale value survives a failed refresh.
-     */
-    private fun loadSecondary(movieId: Long, load: Load, fetch: suspend () -> Unit) {
-        launchLoad(load) {
-            fetch()
-            if (_uiState.value.openMovieId == movieId) publishLoaded()
+    private fun loadTechnical(movieId: Long) {
+        launchRead(Read.Technical) {
+            val result = movies.movieTechnicalDetails(movieId)
+            if (_uiState.value.openMovieId != movieId) return@launchRead
+            if (result is ApiResult.Success) technical = result.value
+            publishLoaded()
         }
     }
 
-    private fun launchLoad(load: Load, block: suspend () -> Unit) {
-        loads[load]?.cancel()
-        loads[load] = viewModelScope.launch { block() }
+    private fun loadProgress(movieId: Long) {
+        val state = mutationState(MutationType.Watched, movieId)
+        val epochAtStart = state.epoch
+        launchRead(Read.Progress) {
+            val result = movies.movieWatchProgress(movieId)
+            if (_uiState.value.openMovieId != movieId || state.epoch != epochAtStart) {
+                return@launchRead
+            }
+            if (result is ApiResult.Success) {
+                progress = result.value
+                state.confirmed = result.value.watched
+            }
+            publishLoaded()
+        }
+    }
+
+    private fun loadLikeStatus(movieId: Long) {
+        val state = mutationState(MutationType.Like, movieId)
+        val epochAtStart = state.epoch
+        launchRead(Read.Like) {
+            val result = movies.movieLikeStatus(movieId)
+            if (_uiState.value.openMovieId != movieId || state.epoch != epochAtStart) {
+                return@launchRead
+            }
+            if (result is ApiResult.Success) state.confirmed = result.value.isLiked
+            publishLoaded()
+        }
+    }
+
+    private fun launchRead(read: Read, block: suspend () -> Unit) {
+        readJobs[read]?.cancel()
+        readJobs[read] = viewModelScope.launch { block() }
     }
 
     private fun cancelReads() {
-        reads.forEach { load ->
-            loads.remove(load)?.cancel()
-        }
+        readJobs.values.forEach(Job::cancel)
+        readJobs.clear()
     }
 
     private fun clearFragments() {
         wireDetails = null
         technical = null
         progress = null
-        watched = null
-        liked = null
+    }
+
+    private fun mutationState(type: MutationType, movieId: Long): MutationState =
+        mutationStates.getValue(type).getOrPut(movieId) { MutationState() }
+
+    private fun acceptMutation(type: MutationType, movieId: Long, target: Boolean) {
+        val intent = MutationIntent(++nextMutationId, movieId, target)
+        val state = mutationState(type, movieId)
+        state.epoch += 1
+        state.pending += intent
+        mutationQueues.getValue(type).addLast(intent)
+        _uiState.update { it.copy(mutationNotice = null) }
+        if (_uiState.value.openMovieId == movieId) publishLoaded()
+        startMutationWorker(type)
+    }
+
+    /** One worker per mutation type preserves every accepted press in strict FIFO order. */
+    private fun startMutationWorker(type: MutationType) {
+        if (mutationJobs[type]?.isActive == true) return
+        mutationJobs[type] = viewModelScope.launch {
+            val queue = mutationQueues.getValue(type)
+            while (queue.isNotEmpty()) {
+                val intent = queue.removeFirst()
+                when (type) {
+                    MutationType.Watched -> when (
+                        val result = movies.setMovieWatched(intent.movieId, intent.target)
+                    ) {
+                        is ApiResult.Success -> settleSuccess(type, intent, result.value.watched)
+                        is ApiResult.Failure -> settleFailure(type, intent, result)
+                    }
+
+                    MutationType.Like -> when (val result = movies.toggleMovieLike(intent.movieId)) {
+                        is ApiResult.Success -> settleSuccess(type, intent, result.value.isLiked)
+                        is ApiResult.Failure -> settleFailure(type, intent, result)
+                    }
+                }
+                finishDrainIfNeeded(type, intent.movieId)
+            }
+            mutationJobs.remove(type)
+        }
+    }
+
+    private fun settleSuccess(type: MutationType, intent: MutationIntent, confirmed: Boolean) {
+        val state = mutationState(type, intent.movieId)
+        state.pending.remove(intent)
+        state.confirmed = confirmed
+        state.successfulWriteSinceDrain = true
+        state.epoch += 1
+        if (_uiState.value.openMovieId == intent.movieId) publishLoaded()
+    }
+
+    private fun settleFailure(
+        type: MutationType,
+        intent: MutationIntent,
+        failure: ApiResult.Failure,
+    ) {
+        val state = mutationState(type, intent.movieId)
+        state.pending.remove(intent)
+        state.reconcileAfterDrain = true
+        state.epoch += 1
+        _uiState.update {
+            it.copy(
+                mutationNotice = when (type) {
+                    MutationType.Watched -> "Couldn't update watched status: "
+                    MutationType.Like -> "Couldn't update like status: "
+                } + failure.error.toLibraryDisplayMessage(),
+            )
+        }
+        if (_uiState.value.openMovieId == intent.movieId) publishLoaded()
+    }
+
+    private suspend fun finishDrainIfNeeded(type: MutationType, movieId: Long) {
+        val state = mutationState(type, movieId)
+        if (state.pending.isNotEmpty()) return
+
+        if (state.reconcileAfterDrain) {
+            val epochAtStart = state.epoch
+            val reconciled = when (type) {
+                MutationType.Watched ->
+                    (movies.movieWatchProgress(movieId) as? ApiResult.Success)?.value?.watched
+                MutationType.Like ->
+                    (movies.movieLikeStatus(movieId) as? ApiResult.Success)?.value?.isLiked
+            }
+            if (
+                _uiState.value.openMovieId == movieId &&
+                state.epoch == epochAtStart &&
+                state.pending.isEmpty()
+            ) {
+                if (reconciled != null) state.confirmed = reconciled
+                state.reconcileAfterDrain = false
+                publishLoaded()
+            }
+        }
+
+        if (state.pending.isEmpty() && state.successfulWriteSinceDrain) {
+            state.successfulWriteSinceDrain = false
+            if (type == MutationType.Watched) onWatchedStateCommitted()
+        }
     }
 
     /** Composes the Loaded state from whatever fragments have arrived. No details yet, no-op. */
@@ -353,8 +454,8 @@ class MovieDetailsViewModel(
                 revenue = movie.revenue?.orNull()?.takeIf { it > 0 }?.let(::formatUsd),
             ),
             progress = progressUi(),
-            watched = watched,
-            liked = liked,
+            watched = mutationState(MutationType.Watched, movie.id).displayed,
+            liked = mutationState(MutationType.Like, movie.id).displayed,
             metadataDescription = metadataDescription(
                 ratingBadge = ratingBadge,
                 certification = certification,
@@ -425,7 +526,8 @@ class MovieDetailsViewModel(
      * the server itself flips to watched at 98% — and never once the movie is marked watched.
      */
     private fun progressUi(): ProgressUi? {
-        if (watched == true) return null
+        val movieId = wireDetails?.movie?.id ?: return null
+        if (mutationState(MutationType.Watched, movieId).displayed == true) return null
         val current = progress ?: return null
         val progressSec = current.progressSec ?: return null
         val durationSec = current.durationSec ?: return null

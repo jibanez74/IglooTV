@@ -60,6 +60,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooConfirmDialog
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
+import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooScrim
@@ -185,6 +186,7 @@ fun IglooApp(
             serverOrigin = serverOrigin,
             currentDestination = currentDestination,
             home = home,
+            mutationNotice = details.mutationNotice,
             onRetryRail = onRetryRail,
             openMovie = openMovie,
             railReturnRequesters = railReturnRequesters,
@@ -225,6 +227,7 @@ fun IglooApp(
             MovieDetailsScreen(
                 state = details.details,
                 actions = detailsActions,
+                mutationNotice = details.mutationNotice,
             )
         }
     }
@@ -245,6 +248,7 @@ private fun IglooShell(
     serverOrigin: String,
     currentDestination: IglooDestination,
     home: HomeUiState,
+    mutationNotice: String?,
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
@@ -306,6 +310,7 @@ private fun IglooShell(
             ContentPane(
                 currentDestination = currentDestination,
                 home = home,
+                mutationNotice = mutationNotice,
                 onRetryRail = onRetryRail,
                 openMovie = openMovie,
                 railReturnRequesters = railReturnRequesters,
@@ -380,6 +385,7 @@ private fun IglooShell(
 private fun ContentPane(
     currentDestination: IglooDestination,
     home: HomeUiState,
+    mutationNotice: String?,
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
@@ -438,6 +444,13 @@ private fun ContentPane(
                 )
             }
             StatusBadge()
+        }
+
+        if (mutationNotice != null) {
+            IglooNotice(
+                text = mutationNotice,
+                modifier = Modifier.testTag("shell_mutation_notice"),
+            )
         }
 
         when (currentDestination) {

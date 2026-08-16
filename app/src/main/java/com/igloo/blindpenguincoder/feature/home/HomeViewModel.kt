@@ -110,6 +110,11 @@ class HomeViewModel(
         loadInTheaters(userInitiated = false)
     }
 
+    /** Refreshes only the rail a watched mutation can change, retaining loaded cards in place. */
+    fun refreshContinueWatching() {
+        loadContinueWatching(userInitiated = false)
+    }
+
     /** The Retry the error state offers. Unlike [refresh] there is no content to protect. */
     fun retry(rail: HomeRail) {
         when (rail) {

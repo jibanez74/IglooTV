@@ -56,7 +56,10 @@ class MovieDetailsAccessibilityTest {
     private var retries = 0
     private var plays = 0
 
-    private fun setContent(initial: MovieDetailsState = MovieDetailsState.Loaded(testMovieDetails())) {
+    private fun setContent(
+        initial: MovieDetailsState = MovieDetailsState.Loaded(testMovieDetails()),
+        mutationNotice: String? = null,
+    ) {
         state = initial
         watchedToggles = 0
         likeToggles = 0
@@ -66,6 +69,7 @@ class MovieDetailsAccessibilityTest {
             IglooTheme {
                 MovieDetailsScreen(
                     state = state,
+                    mutationNotice = mutationNotice,
                     actions = MovieDetailsActions(
                         onPlay = { plays += 1 },
                         onToggleWatched = { watchedToggles += 1 },
@@ -133,6 +137,39 @@ class MovieDetailsAccessibilityTest {
         composeRule.waitForIdle()
 
         like.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Liked"))
+    }
+
+    @Test
+    fun likeHasNoActionUntilItsStatusIsKnown() {
+        setContent(MovieDetailsState.Loaded(testMovieDetails(liked = null)))
+
+        val like = composeRule.onNodeWithTag("details_like")
+        like
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Disabled))
+            .assertHasNoClickAction()
+
+        state = MovieDetailsState.Loaded(testMovieDetails(liked = false))
+        composeRule.waitForIdle()
+
+        like
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Disabled))
+            .assertHasClickAction()
+    }
+
+    @Test
+    fun mutationNoticeIsPoliteNonActionableAndDoesNotTakeFocus() {
+        setContent(mutationNotice = "Couldn't update like status: backend refused it")
+
+        composeRule.onNodeWithTag("details_mutation_notice")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
+            .assertHasNoClickAction()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Focused))
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
     }
 
     @Test
