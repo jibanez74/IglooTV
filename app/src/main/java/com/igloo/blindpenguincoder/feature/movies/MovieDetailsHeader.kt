@@ -258,6 +258,9 @@ private fun ActionRow(
     val ghostContent = if (overMedia) Color.White else null
     val watched = movie.watched == true
     val liked = movie.liked == true
+    // Its POST toggles whatever the server holds, so without a known base state there is no
+    // press to make — unlike Watched, whose PUT carries the value it wants (section 11.4.1).
+    val likeEnabled = movie.liked != null
     // Every direction out of the row is pinned: the shell is still composed under this overlay,
     // so an unpinned edge lets a spatial search land on a card the user cannot see. Down is
     // hand-wired to the first section below rather than left to a beam heuristic.
@@ -317,6 +320,11 @@ private fun ActionRow(
                 .testTag("details_watched")
                 .focusRequester(watchedRequester)
                 .then(rowFocus)
+                // A disabled Like is not focusable, so while its status is unknown it leaves the
+                // focus tree and takes the row's right-edge Cancel with it. Right is hand-wired
+                // here for the same reason down is: the row's edges stay pinned by controls that
+                // are always present, not by one that comes and goes.
+                .focusProperties { right = if (likeEnabled) likeRequester else Cancel }
                 .onFocusChanged { if (it.isFocused) onActionFocused(watchedRequester) },
         )
         IglooButton(
@@ -331,7 +339,7 @@ private fun ActionRow(
             semanticLabel = "Like",
             stateDescription = movie.liked?.let { if (it) "Liked" else "Not liked" },
             actionLabel = if (liked) "Remove like" else "Like this movie",
-            enabled = movie.liked != null,
+            enabled = likeEnabled,
             modifier = Modifier
                 .testTag("details_like")
                 .focusRequester(likeRequester)

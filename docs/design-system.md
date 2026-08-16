@@ -1320,16 +1320,32 @@ Three rules follow, and all are easy to get wrong. Leaving the screen cancels th
 but never a mutation — a press followed immediately by Back is still a change the user made. A
 status read only applies its value while the same movie remains open and only if that movie's
 mutation epoch has not moved since the read began, because a read issued mid-write can be answered
-from before that write commits. And Like is disabled, with no click action in its semantics, until
-its status arrives: its POST toggles an unknown server value, unlike Watched's PUT of an explicit
-value, so guessing "not liked" could perform the opposite action. Watched stays available while
-unknown and its first press explicitly sets `true`.
+from before that write commits — but the epoch guards *only the toggle a write owns*. The rest of
+the same payload is nobody's to stomp: the watch-progress read's resume position lands whether or
+not a Watched press overtook it, or a press made mid-read would cost the user the strip. And Like
+is disabled, with no click action in its semantics, until its status arrives: its POST toggles an
+unknown server value, unlike Watched's PUT of an explicit value, so guessing "not liked" could
+perform the opposite action. Watched stays available while unknown and its first press explicitly
+sets `true`. A like-status read that *fails* therefore leaves Like inert until the next refresh —
+the same "secondary requests degrade" contract the media badges and the progress strip already
+follow, not a gap to code a retry around.
+
+A disabled Like is not focusable, so while its status is unknown it leaves the focus tree and
+takes the row's right-edge `Cancel` with it. Watched therefore carries the pin too, wiring Right
+to Like only while Like is enabled: the rule that every direction out of the row is pinned has to
+rest on controls that are always present, not on one that comes and goes.
 
 A failed write restores the confirmed state after the remaining queue drains and re-reads the
 matching status endpoint. The restored toggle is the retry path. The mapped backend reason appears
 in the persistent, polite, non-focusable `IglooNotice` beside the actions; if Back has already
-closed the overlay, the same notice appears below the shell header. A new mutation or opening a new
-movie clears it. There is no toast or inline Retry card (§10).
+closed the overlay, the same notice appears below the shell header — one place at a time, never
+both. A new mutation or opening a new movie clears it. There is no toast or inline Retry card (§10).
+
+**Lifetime.** A movie's toggle state outlives its overlay, because a write settling after Back
+still needs somewhere to land. It is retired instead when the screen moves on — opening another
+movie, or closing the overlay — and only for movies with nothing queued, nothing owed, and nothing
+left to announce. The movie being opened keeps its entry: reopening one paints the toggles it last
+confirmed and lets the status read correct them, rather than flickering back through "unknown".
 
 **Reachability.** Overview and Key Crew are prose between the hero and the cast rail, so moving
 down scrolls them into view on the way; both share the same 620dp prose measure so adjacent
@@ -1547,6 +1563,10 @@ committed to it.
   is disabled because its endpoint is a toggle; Watched remains available because its PUT carries
   the desired value. A persistent `IglooNotice` follows a late failure back to the shell, and a
   drained successful Watched queue refreshes only Home's Continue Watching rail.
+- **Follow-up pass on the above.** The read epoch guards only the toggle a write owns, so a press
+  landing mid-read no longer costs the resume strip its position. Toggle state is retired once the
+  screen moves on instead of accumulating for the session. The failure notice renders in one place
+  at a time. Watched carries the row's right-edge pin, since a disabled Like leaves the focus tree.
 
 **2026-08-15 — The movie detail screen lands, and the cards it opens stop being inert.**
 

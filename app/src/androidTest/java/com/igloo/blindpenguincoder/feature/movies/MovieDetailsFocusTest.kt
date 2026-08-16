@@ -166,6 +166,18 @@ class MovieDetailsFocusTest {
     }
 
     @Test
+    fun theShellDoesNotAlsoRenderTheNoticeWhileTheOverlayIsOpen() {
+        setShellContent(
+            loadedState().copy(
+                mutationNotice = "Couldn't update watched status: backend refused it",
+            ),
+        )
+
+        composeRule.onNodeWithTag("details_mutation_notice").assertExists()
+        composeRule.onNodeWithTag("shell_mutation_notice").assertDoesNotExist()
+    }
+
+    @Test
     fun backCarriesAMutationFailureNoticeToHomeWithoutTakingFocus() {
         setShellContent(
             loadedState().copy(
@@ -278,6 +290,23 @@ class MovieDetailsFocusTest {
         composeRule.onNodeWithTag("details_like").assertIsFocused()
         composeRule.onNodeWithTag("details_like").performKeyInput { pressKey(Key.DirectionRight) }
         composeRule.onNodeWithTag("details_like").assertIsFocused()
+    }
+
+    @Test
+    fun theActionRowStillPinsItsRightEdgeWhileLikeIsUnknown() {
+        setShellContent(loadedState(testMovieDetails(liked = null)))
+
+        val play = composeRule.onNodeWithTag("details_play")
+        play.performKeyInput { pressKey(Key.DirectionRight) }
+        val watched = composeRule.onNodeWithTag("details_watched")
+        watched.assertIsFocused()
+
+        // A Like with no status yet is disabled, so it is not focusable and the row's right-edge
+        // Cancel is not in the tree with it. Watched carries the pin so the edge holds on a
+        // control that is always there rather than on one that comes and goes.
+        watched.performKeyInput { pressKey(Key.DirectionRight) }
+        watched.assertIsFocused()
+        composeRule.onNodeWithTag("continue_card_1").assertIsNotFocused()
     }
 
     @Test

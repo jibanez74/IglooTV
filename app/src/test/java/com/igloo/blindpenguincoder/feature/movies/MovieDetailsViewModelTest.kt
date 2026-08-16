@@ -628,6 +628,85 @@ class MovieDetailsViewModelTest {
         }
 
     @Test
+    fun `a watched press mid-read keeps the resume position that read carried`() = runTest {
+        val progressReached = CompletableDeferred<Unit>()
+        val releaseProgress = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            progress = {
+                progressReached.complete(Unit)
+                releaseProgress.await()
+                jsonResponse(watchProgressJson(progressSec = 1800.0, durationSec = 10200.0))
+            },
+            setWatched = { request ->
+                val target = String(request.body.toByteArray()).contains("\"watched\":true")
+                jsonResponse(watchedUpdateJson(watched = target))
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        progressReached.await()
+
+        // The press bumps the epoch while the read is in flight, so the `watched` flag it answers
+        // with is stale — but the position in the same payload is nobody's to stomp.
+        viewModel.toggleWatched()
+        releaseProgress.complete(Unit)
+        testScheduler.advanceUntilIdle()
+        assertEquals(true, viewModel.awaitLoaded().watched)
+
+        // Watched hides the strip, so unwatching is what proves the position survived at all.
+        viewModel.toggleWatched()
+        testScheduler.advanceUntilIdle()
+
+        val movie = viewModel.awaitLoaded()
+        assertEquals(false, movie.watched)
+        assertEquals("140 min left", requireNotNull(movie.progress).minutesLeftLabel)
+    }
+
+    @Test
+    fun `a settled movie's toggle state is dropped once the screen moves on`() = runTest {
+        val holdReopenAfterOpen = CompletableDeferred<Unit>()
+        val holdReopenAfterClose = CompletableDeferred<Unit>()
+        var likeReads = 0
+        val http = routedHttp(
+            details = { request ->
+                val id = request.url.encodedPath.substringAfterLast('/').toLong()
+                jsonResponse(populatedDetailsJson(id))
+            },
+            // Only the two reopens are held, so "liked is still null" means the entry was
+            // dropped rather than that the read simply had not landed yet.
+            likeStatus = {
+                likeReads += 1
+                when (likeReads) {
+                    3 -> holdReopenAfterOpen.await()
+                    4 -> holdReopenAfterClose.await()
+                }
+                jsonResponse(likeStatusJson(isLiked = true))
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        viewModel.uiState.first { (it.details as? MovieDetailsState.Loaded)?.movie?.liked == true }
+
+        // Opening another movie retires the entry of the one left behind...
+        viewModel.open(2)
+        viewModel.open(1)
+        assertNull(viewModel.awaitLoaded().liked)
+        holdReopenAfterOpen.complete(Unit)
+        viewModel.uiState.first { (it.details as? MovieDetailsState.Loaded)?.movie?.liked == true }
+
+        // ...and so does closing the overlay.
+        viewModel.close()
+        viewModel.open(1)
+        assertNull(viewModel.awaitLoaded().liked)
+
+        holdReopenAfterClose.complete(Unit)
+        testScheduler.advanceUntilIdle()
+        assertEquals(true, viewModel.awaitLoaded().liked)
+    }
+
+    @Test
     fun `rapid like presses are posted once each in strict order`() = runTest {
         val firstReached = CompletableDeferred<Unit>()
         val releaseFirst = CompletableDeferred<Unit>()

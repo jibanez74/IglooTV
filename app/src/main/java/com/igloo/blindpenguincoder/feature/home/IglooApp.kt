@@ -186,7 +186,10 @@ fun IglooApp(
             serverOrigin = serverOrigin,
             currentDestination = currentDestination,
             home = home,
-            mutationNotice = details.mutationNotice,
+            // The details header owns the notice while the overlay is up; rendering it here too
+            // would only shift Home's rails behind a screen nobody can see. It surfaces here
+            // when Back closes an overlay whose write had already failed.
+            mutationNotice = details.mutationNotice.takeIf { !detailsOpen },
             onRetryRail = onRetryRail,
             openMovie = openMovie,
             railReturnRequesters = railReturnRequesters,
