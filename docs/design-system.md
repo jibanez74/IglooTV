@@ -1480,6 +1480,41 @@ forgot to change the code.**
 
 ## Changelog
 
+**2026-08-16 — The detail screen stops moving under the user.**
+
+The refinement pass closing `movie-detail-next-steps.md`'s backlog. The through-line is layout
+and focus stability: nothing on the screen may shift while the eye — or the focus ring — is
+committed to it.
+
+- **`IglooButton` gains `labelVariants` (§9.1).** A toggle reserves the widest label it can
+  show, so Watch→Watched and Like→Liked repaint in place instead of shoving the row's siblings —
+  under the user's own press, and when the status request lands after first paint.
+- **The resume strip's slot is reserved from first paint (§11.4.1).** The strip arrives with a
+  late request and leaves when a movie is marked watched; either reflowed the bottom-anchored
+  hero. The empty slot is invisible, silent to TalkBack, and matched by the skeleton's Play
+  stub.
+- **More is deferred and `IglooIconButton` deleted (§11.4).** A control that takes focus and
+  does nothing on press spends the press to teach the user it is empty; the row is three
+  actions until the menu exists, and the composable went with its only caller. (Its §9.1 row is
+  gone; this entry and the 2026-08-15 promotion are the record.)
+- **Up from the sections restores the last-focused action (§11.4.1)** — the same focus memory
+  the rail keeps for its own cards, replacing the unconditional return to Play.
+- **The overview clamp fades instead of ellipsizing (§4.1).** Drawn only when the text actually
+  overflows; the semantics tree keeps the full string. Single-line metadata keeps its ellipsis
+  deliberately.
+- **The About heading moves above its panel (§11.4.1)** — aligned with the other section
+  headings and back in TalkBack's heading navigation, which the panel's cleared semantics had
+  been erasing.
+- **§3.2 licenses `White @ 0.85` and `@ 0.75`** as the secondary and tertiary text tiers over
+  media, with the measured 12.6:1 floor — vocabulary rows, not a contrast concession.
+- **`overMedia` is licensed by a decoded backdrop (§11.4.1)**, not a non-null URL, and the
+  branch gains its first instrumented coverage via `coil-test` (approved test-only dependency)
+  serving real decoded and failing images — the fixtures' null-URL convention stands everywhere
+  else.
+- **Small alignments**: the rating badge takes the chips' vertical padding on the metadata row;
+  Key Crew shares the overview's 620dp prose measure; the always-Loaded cast rail stops passing
+  state parameters that can never render.
+
 **2026-08-15 — The movie detail screen lands, and the cards it opens stop being inert.**
 
 §11.4's one-paragraph Detail spec is now built, and §11.4.1 records it as a recipe. Supplying

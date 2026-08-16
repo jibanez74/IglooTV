@@ -15,26 +15,11 @@ cap, and the dead cast-rail parameters. All are documented in `design-system.md`
 
 ---
 
-## 1. Cast cards are focus targets with no action
-
-**Found:** 2026-08-16.
-**Status:** open, deliberate, and waiting on a feature — the *semantics* are correct.
-**Files:** `MovieDetailsSections.kt` (cast card `onClick = null`)
-
-By the poster-card convention a null `onClick` keeps the card focusable and announces no
-action, so TalkBack users are told the truth; sighted D-pad users see a pressable-looking card
-that does nothing. The cards stay focusable on purpose — focus is what scrolls the rail, and
-cast members past the right edge would otherwise be unreachable — but a face is the most
-tappable-looking thing on the screen. A person detail screen is the destination; until it
-exists, this is the accepted trade.
-
----
-
-## 2. The focused ghost button's own glow bleeds through its translucent fill
+## 1. The focused ghost button's own glow bleeds through its translucent fill
 
 **Found:** 2026-08-16, during the refinement pass's on-device check. Pre-existing — an A/B
 against `bc88a9c` shows the identical band, so no change in this pass caused it.
-**Status:** open, cosmetic, over-media only.
+**Status:** open, cosmetic, over-media only. The only item actionable today.
 **Files:** `core/ui/FocusRing.kt` (the 16dp focus glow), `core/ui/IglooButton.kt` (Ghost +
 `restingFill`)
 
@@ -51,6 +36,21 @@ composite the translucent fill over an opaque ground so nothing behind the butto
 through. Both touch `focusRing`, which every focusable in the app wears — measure the §6.1
 treatment on token canvas before and after, since the fix must not dim the glow that carries
 the focus signal there.
+
+---
+
+## 2. Cast cards are focus targets with no action
+
+**Found:** 2026-08-16.
+**Status:** open, deliberate, and waiting on a feature — the *semantics* are correct.
+**Files:** `MovieDetailsSections.kt` (cast card `onClick = null`)
+
+By the poster-card convention a null `onClick` keeps the card focusable and announces no
+action, so TalkBack users are told the truth; sighted D-pad users see a pressable-looking card
+that does nothing. The cards stay focusable on purpose — focus is what scrolls the rail, and
+cast members past the right edge would otherwise be unreachable — but a face is the most
+tappable-looking thing on the screen. A person detail screen is the destination; until it
+exists, this is the accepted trade.
 
 ---
 
