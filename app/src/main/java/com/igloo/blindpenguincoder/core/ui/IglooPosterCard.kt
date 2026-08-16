@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
@@ -52,7 +53,8 @@ data class PosterCardProgress(
  * treatment — ring, scale, and glow stay on it while the text keeps still — but the whole card
  * is one focus target and one TalkBack node.
  *
- * [aspect] defaults to the 2:3 movie poster; album art passes `albumAspect` (section 8.2). A
+ * [aspect] defaults to the 2:3 movie poster; album art passes `albumAspect`, and wide video
+ * cards pass `wideAspect` with `wideCardWidth` as [width] (section 8.2). A
  * null or failed image falls back to [fallbackIcon] on the muted fill; the text below is
  * unchanged, so the card loses nothing but the artwork. An optional progress bar sits on the
  * artwork's bottom edge and is announced through [PosterCardProgress.description].
@@ -70,6 +72,7 @@ fun IglooPosterCard(
     modifier: Modifier = Modifier,
     progress: PosterCardProgress? = null,
     aspect: Float = IglooTheme.layout.posterAspect,
+    width: Dp = IglooTheme.layout.posterWidth,
     fallbackIcon: ImageVector = IglooIcons.Movies,
 ) {
     val colors = IglooTheme.colors
@@ -78,7 +81,7 @@ fun IglooPosterCard(
 
     Column(
         modifier = modifier
-            .width(IglooTheme.layout.posterWidth)
+            .width(width)
             .onFocusChanged { focused = it.isFocused }
             .then(
                 if (onClick != null) {

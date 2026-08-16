@@ -86,8 +86,10 @@ fun <T> IglooMediaRail(
     onRetry: () -> Unit = {},
     returnRequester: FocusRequester? = null,
     cardAspect: Float = IglooTheme.layout.posterAspect,
-    // Receives [cardAspect] so the card is shaped by the same value as the skeleton — the
-    // grid-matching rule (section 8.2) holds structurally instead of by convention.
+    // The skeleton takes both geometry values, so it is shaped by the same tokens as the card
+    // it replaces — the grid-matching rule (section 8.2) holds structurally instead of by
+    // convention. [cardWidth] is `wideCardWidth` for 16:9 video rails.
+    cardWidth: Dp = IglooTheme.layout.posterWidth,
     itemContent: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
 ) {
     val localAnchor = remember { FocusRequester() }
@@ -139,6 +141,7 @@ fun <T> IglooMediaRail(
                 anchorModifier = anchorModifier,
                 loadingLabel = loadingLabel,
                 cardAspect = cardAspect,
+                cardWidth = cardWidth,
             )
 
             // Rail-shaped, not form-shaped: the card is bounded to the cards it replaces so a
@@ -212,6 +215,7 @@ private fun RailSkeleton(
     anchorModifier: Modifier,
     loadingLabel: String,
     cardAspect: Float,
+    cardWidth: Dp,
 ) {
     var focused by remember { mutableStateOf(false) }
     Row(
@@ -221,6 +225,7 @@ private fun RailSkeleton(
         SkeletonCell(
             focused = focused,
             cardAspect = cardAspect,
+            cardWidth = cardWidth,
             modifier = anchorModifier
                 .onFocusChanged { focused = it.isFocused }
                 .focusable()
@@ -233,6 +238,7 @@ private fun RailSkeleton(
             SkeletonCell(
                 focused = false,
                 cardAspect = cardAspect,
+                cardWidth = cardWidth,
                 modifier = Modifier.semantics { hideFromAccessibility() },
             )
         }
@@ -243,12 +249,13 @@ private fun RailSkeleton(
 private fun SkeletonCell(
     focused: Boolean,
     cardAspect: Float,
+    cardWidth: Dp,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
     val stubShape = RoundedCornerShape(IglooTheme.radius.sm)
     Column(
-        modifier = modifier.width(IglooTheme.layout.posterWidth),
+        modifier = modifier.width(cardWidth),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
         Box(

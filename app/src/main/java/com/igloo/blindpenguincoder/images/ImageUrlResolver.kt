@@ -20,6 +20,17 @@ fun tmdbImageUrl(apiBaseUrl: String, size: TmdbImageSize, path: String?): String
 }
 
 /**
+ * Builds a proxied YouTube thumbnail URL (`GET /api/youtube/thumbnails/{key}`, hqdefault).
+ * Keys are YouTube video ids (`[A-Za-z0-9_-]`), already URL-safe, so nothing is encoded —
+ * the same contract [tmdbImageUrl] leans on for its bare filename segment.
+ */
+fun youtubeThumbnailUrl(apiBaseUrl: String, key: String?): String? {
+    val id = key?.trim()
+    if (id.isNullOrEmpty()) return null
+    return "$apiBaseUrl/youtube/thumbnails/$id"
+}
+
+/**
  * Resolves a stored avatar value against the server origin. Uploads are saved as the relative
  * `/api/static/avatars/...` path, but `PUT /users/avatar` accepts any string, so an absolute
  * URL is equally valid and passes through untouched. Prepending the origin — rather than

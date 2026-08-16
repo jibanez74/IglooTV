@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.scaled
@@ -41,10 +42,10 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 
 /**
- * Everything below the hero: overview, key crew, the cast rail, and the fine-print about block.
- * All of it sits past the backdrop's fade, on the token canvas, so nothing here carries the
- * section 3.2 over-media treatment. Sections with nothing to show are skipped entirely rather
- * than rendering empty shells.
+ * Everything below the hero: overview, key crew, the cast and extra-videos rails, and the
+ * fine-print about block. All of it sits past the backdrop's fade, on the token canvas, so
+ * nothing here carries the section 3.2 over-media treatment. Sections with nothing to show are
+ * skipped entirely rather than rendering empty shells.
  *
  * Overview and Key Crew are prose, not targets: they sit between the hero and the cast rail, so
  * moving down from the actions scrolls them into view on the way. The About block *is* a focus
@@ -55,11 +56,13 @@ import com.igloo.blindpenguincoder.core.ui.focusRing
 internal fun MovieDetailsSections(
     movie: MovieDetailsUi,
     castEntryRequester: FocusRequester,
+    extrasEntryRequester: FocusRequester,
     aboutRequester: FocusRequester,
     upFromSections: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     val hasCast = movie.cast.isNotEmpty()
+    val hasExtras = movie.extraVideos.isNotEmpty()
     val hasAbout = !movie.about.isEmpty
 
     Column(
@@ -75,6 +78,20 @@ internal fun MovieDetailsSections(
                 cast = movie.cast,
                 entryRequester = castEntryRequester,
                 upRequester = upFromSections,
+                downRequester = when {
+                    hasExtras -> extrasEntryRequester
+                    hasAbout -> aboutRequester
+                    else -> null
+                },
+            )
+        }
+        if (hasExtras) {
+            ExtraVideosSection(
+                videos = movie.extraVideos,
+                entryRequester = extrasEntryRequester,
+                // The cast rail's entry requester rides its last-focused card, so up from the
+                // extras lands where the user left the cast, not on its first card.
+                upRequester = if (hasCast) castEntryRequester else upFromSections,
                 downRequester = if (hasAbout) aboutRequester else null,
             )
         }
@@ -83,7 +100,11 @@ internal fun MovieDetailsSections(
                 title = movie.title,
                 about = movie.about,
                 requester = aboutRequester,
-                upRequester = if (hasCast) castEntryRequester else upFromSections,
+                upRequester = when {
+                    hasExtras -> extrasEntryRequester
+                    hasCast -> castEntryRequester
+                    else -> upFromSections
+                },
             )
         }
     }
@@ -185,15 +206,53 @@ private fun KeyCrewSection(crew: List<CrewEntry>) {
 }
 
 /**
- * The cast reuses the rail primitive with a state that is always Loaded: per-rail focus memory,
- * the one-anchor invariant, and the entry requester come for free. Cards are focusable but
- * inert — there is no person screen yet, and a card that announces "Open …" and then does
- * nothing is worse than one that announces none.
+ * A detail-screen rail: the rail primitive with a state that is always Loaded, so per-rail
+ * focus memory, the one-anchor invariant, and the entry requester come for free. Cards are
+ * focusable but inert — there is no destination for them yet, and a card that announces
+ * "Open …" and then does nothing is worse than one that announces none.
  *
  * Every direction out of the rail is pinned. The shell is still composed underneath this
  * overlay, so an unpinned edge would let a spatial focus search land on a card the user cannot
- * see (the same reason section 9.3's dialog pins all four directions).
+ * see (the same reason section 9.3's dialog pins all four directions). Up and down go to the
+ * neighbouring sections rather than whichever target wins a beam heuristic — the same
+ * hand-wiring the home hero uses for its down target.
  */
+@Composable
+private fun <T> DetailsRailSection(
+    title: String,
+    items: List<T>,
+    itemKey: (T) -> Long,
+    entryRequester: FocusRequester,
+    upRequester: FocusRequester,
+    downRequester: FocusRequester?,
+    cardAspect: Float = IglooTheme.layout.posterAspect,
+    cardWidth: Dp = IglooTheme.layout.posterWidth,
+    card: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
+) {
+    var lastFocusedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    IglooMediaRail(
+        title = title,
+        state = IglooRailState.Loaded(items),
+        itemKey = itemKey,
+        entryRequester = entryRequester,
+        // The overlay owns the whole screen; there is no spine to exit to on the left.
+        leftFocusRequester = Cancel,
+        lastFocusedKey = lastFocusedId,
+        onItemFocused = { lastFocusedId = it },
+        cardAspect = cardAspect,
+        cardWidth = cardWidth,
+    ) { item, itemModifier, aspect ->
+        card(
+            item,
+            itemModifier.focusProperties {
+                up = upRequester
+                down = downRequester ?: Cancel
+            },
+            aspect,
+        )
+    }
+}
+
 @Composable
 private fun CastSection(
     cast: List<CastMemberUi>,
@@ -201,16 +260,13 @@ private fun CastSection(
     upRequester: FocusRequester,
     downRequester: FocusRequester?,
 ) {
-    var lastFocusedCastId by rememberSaveable { mutableStateOf<Long?>(null) }
-    IglooMediaRail(
+    DetailsRailSection(
         title = "Cast",
-        state = IglooRailState.Loaded(cast),
+        items = cast,
         itemKey = { it.id },
         entryRequester = entryRequester,
-        // The overlay owns the whole screen; there is no spine to exit to on the left.
-        leftFocusRequester = Cancel,
-        lastFocusedKey = lastFocusedCastId,
-        onItemFocused = { lastFocusedCastId = it },
+        upRequester = upRequester,
+        downRequester = downRequester,
     ) { member, itemModifier, aspect ->
         IglooPosterCard(
             title = member.name,
@@ -219,14 +275,41 @@ private fun CastSection(
             onClick = null,
             aspect = aspect,
             fallbackIcon = IglooIcons.Person,
-            modifier = itemModifier
-                .focusProperties {
-                    // Up always returns to the actions rather than whichever button wins a beam
-                    // heuristic — the same hand-wiring the home hero uses for its down target.
-                    up = upRequester
-                    down = downRequester ?: Cancel
-                }
-                .testTag("cast_card_${member.id}"),
+            modifier = itemModifier.testTag("cast_card_${member.id}"),
+        )
+    }
+}
+
+/**
+ * The §8.2 wide-card rail: 16:9 thumbnails through the YouTube proxy, the video's type as the
+ * card's one context line. Trailer playback is a later feature, so the cards are inert under
+ * the same contract as the cast.
+ */
+@Composable
+private fun ExtraVideosSection(
+    videos: List<ExtraVideoUi>,
+    entryRequester: FocusRequester,
+    upRequester: FocusRequester,
+    downRequester: FocusRequester?,
+) {
+    DetailsRailSection(
+        title = "Extra Videos",
+        items = videos,
+        itemKey = { it.id },
+        entryRequester = entryRequester,
+        upRequester = upRequester,
+        downRequester = downRequester,
+        cardAspect = IglooTheme.layout.wideAspect,
+        cardWidth = IglooTheme.layout.wideCardWidth,
+    ) { video, itemModifier, aspect ->
+        IglooPosterCard(
+            title = video.title,
+            subtitle = video.typeLabel,
+            imageUrl = video.thumbnailUrl,
+            onClick = null,
+            aspect = aspect,
+            width = IglooTheme.layout.wideCardWidth,
+            modifier = itemModifier.testTag("extra_card_${video.id}"),
         )
     }
 }

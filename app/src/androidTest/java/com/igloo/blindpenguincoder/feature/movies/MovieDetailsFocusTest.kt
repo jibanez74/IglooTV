@@ -259,6 +259,9 @@ class MovieDetailsFocusTest {
         composeRule.onNodeWithTag("cast_card_101").assertIsFocused()
 
         composeRule.onNodeWithTag("cast_card_101").performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("extra_card_201").assertIsFocused()
+
+        composeRule.onNodeWithTag("extra_card_201").performKeyInput { pressKey(Key.DirectionDown) }
         composeRule.onNodeWithTag("details_about").assertIsFocused()
 
         // The last focusable on the screen: down stays put rather than falling through.
@@ -267,16 +270,50 @@ class MovieDetailsFocusTest {
 
         // And back up the same chain.
         composeRule.onNodeWithTag("details_about").performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("extra_card_201").assertIsFocused()
+        composeRule.onNodeWithTag("extra_card_201").performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.onNodeWithTag("cast_card_101").assertIsFocused()
         composeRule.onNodeWithTag("cast_card_101").performKeyInput { pressKey(Key.DirectionUp) }
         play.assertIsFocused()
+    }
+
+    /**
+     * Up from the extras lands on the cast card the user left, not the rail's first card — the
+     * cast rail's entry requester rides its focus memory. Pinned on the second card because a
+     * regression to first-card would still pass the straight down-up walk above.
+     */
+    @Test
+    fun upFromTheExtrasReturnsToTheLastFocusedCastCard() {
+        setShellContent(loadedState())
+
+        composeRule.onNodeWithTag("cast_card_102").requestFocus()
+        composeRule.onNodeWithTag("cast_card_102").assertIsFocused()
+
+        composeRule.onNodeWithTag("cast_card_102").performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("extra_card_201").assertIsFocused()
+
+        composeRule.onNodeWithTag("extra_card_201").performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("cast_card_102").assertIsFocused()
+    }
+
+    /** A movie with no YouTube extras chains the cast straight to About (the fallback wiring). */
+    @Test
+    fun aMovieWithoutExtrasStillChainsCastToAbout() {
+        setShellContent(loadedState(testMovieDetails(extraVideos = emptyList())))
+
+        composeRule.onNodeWithTag("cast_card_101").requestFocus()
+        composeRule.onNodeWithTag("cast_card_101").performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("details_about").assertIsFocused()
+
+        composeRule.onNodeWithTag("details_about").performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("cast_card_101").assertIsFocused()
     }
 
     @Test
     fun aMovieWithNothingBelowTheHeroPinsTheActionRow() {
         setShellContent(
             loadedState(
-                testMovieDetails(cast = emptyList())
+                testMovieDetails(cast = emptyList(), extraVideos = emptyList())
                     .copy(about = AboutUi(null, null, null, null)),
             ),
         )

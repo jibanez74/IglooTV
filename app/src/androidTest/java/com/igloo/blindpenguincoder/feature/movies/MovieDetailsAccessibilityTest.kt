@@ -145,6 +145,15 @@ class MovieDetailsAccessibilityTest {
     }
 
     @Test
+    fun extraVideoCardsAnnounceTitleAndTypeWithNoAction() {
+        setContent()
+
+        composeRule.onNodeWithTag("extra_card_201")
+            .assertContentDescriptionEquals("Official Trailer, Trailer")
+            .assertHasNoClickAction()
+    }
+
+    @Test
     fun theAboutBlockIsOneNodeCarryingEveryRow() {
         setContent()
 
@@ -165,6 +174,7 @@ class MovieDetailsAccessibilityTest {
         composeRule.onNode(hasText("Overview") and isHeading()).assertExists()
         composeRule.onNode(hasText("Key Crew") and isHeading()).assertExists()
         composeRule.onNode(hasText("Cast") and isHeading()).assertExists()
+        composeRule.onNode(hasText("Extra Videos") and isHeading()).assertExists()
         // Sits above the focusable panel, whose cleared semantics would otherwise erase it.
         composeRule.onNode(hasText("About Heat") and isHeading()).assertExists()
         composeRule.onNode(hasText("Heat") and isHeading()).assertExists()

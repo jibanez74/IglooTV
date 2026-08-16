@@ -8,6 +8,7 @@ import com.igloo.blindpenguincoder.feature.home.HomeTheaterMovie
 import com.igloo.blindpenguincoder.feature.movies.AboutUi
 import com.igloo.blindpenguincoder.feature.movies.CastMemberUi
 import com.igloo.blindpenguincoder.feature.movies.CrewEntry
+import com.igloo.blindpenguincoder.feature.movies.ExtraVideoUi
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
 import com.igloo.blindpenguincoder.feature.movies.ProgressUi
@@ -68,6 +69,7 @@ internal fun testMovieDetails(
     liked: Boolean? = false,
     progress: ProgressUi? = ProgressUi(fraction = 0.25f, minutesLeftLabel = "127 min left"),
     cast: List<CastMemberUi> = testCast,
+    extraVideos: List<ExtraVideoUi> = testExtraVideos,
 ) = MovieDetailsUi(
     id = id,
     title = title,
@@ -83,6 +85,7 @@ internal fun testMovieDetails(
     overview = "Obsessive master thief Neil McCauley leads a top-notch crew.",
     keyCrew = listOf(CrewEntry("Director", "Michael Mann")),
     cast = cast,
+    extraVideos = extraVideos,
     about = AboutUi(
         production = "Regency Enterprises",
         language = "EN",
@@ -94,6 +97,11 @@ internal fun testMovieDetails(
     liked = liked,
     metadataDescription = "Rated 8.2 out of 10, R, 4K, HDR10, 5.1 surround sound, " +
         "subtitles available, 2 hours 50 minutes, released December 15, 1995",
+)
+
+internal val testExtraVideos = listOf(
+    ExtraVideoUi(id = 201, title = "Official Trailer", typeLabel = "Trailer", thumbnailUrl = null),
+    ExtraVideoUi(id = 202, title = "Making Heat", typeLabel = "Special feature", thumbnailUrl = null),
 )
 
 internal val testCast = listOf(

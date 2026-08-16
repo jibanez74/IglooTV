@@ -11,12 +11,14 @@ import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.progressLabel
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
+import com.igloo.blindpenguincoder.data.model.MovieExtraVideo
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
+import com.igloo.blindpenguincoder.images.youtubeThumbnailUrl
 import java.text.NumberFormat
 import java.util.Locale
 import kotlinx.coroutines.Job
@@ -35,6 +37,14 @@ data class CastMemberUi(
     val name: String,
     val character: String?,
     val photoUrl: String?,
+)
+
+/** An extra video ready for the rail card; [thumbnailUrl] is the authenticated YouTube proxy. */
+data class ExtraVideoUi(
+    val id: Long,
+    val title: String,
+    val typeLabel: String,
+    val thumbnailUrl: String?,
 )
 
 /** The fine-print rows at the page's end; every field may be absent. */
@@ -71,6 +81,7 @@ data class MovieDetailsUi(
     val overview: String?,
     val keyCrew: List<CrewEntry>,
     val cast: List<CastMemberUi>,
+    val extraVideos: List<ExtraVideoUi>,
     val about: AboutUi,
     val progress: ProgressUi?,
     val watched: Boolean?,
@@ -330,6 +341,7 @@ class MovieDetailsViewModel(
                         ),
                     )
                 },
+            extraVideos = extraVideos(details, apiBaseUrl),
             about = AboutUi(
                 production = details.productionCompanies
                     .map { it.name }
@@ -351,6 +363,48 @@ class MovieDetailsViewModel(
                 releaseDateText = releaseDateText,
             ),
         )
+    }
+
+    /**
+     * YouTube extras only — the backend has no thumbnail proxy for other sites (web parity) —
+     * re-sorted trailers first. The API's `ORDER BY type, title` is alphabetical, which puts
+     * trailers last; the rail wants them leading.
+     */
+    private fun extraVideos(details: MovieDetailsData, apiBaseUrl: String): List<ExtraVideoUi> =
+        details.extraVideos
+            .filter { normalizedVideoValue(it.site) == "youtube" }
+            .sortedWith(
+                compareBy<MovieExtraVideo> { extraVideoSortRank(it.type) }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title },
+            )
+            .map {
+                ExtraVideoUi(
+                    id = it.id,
+                    title = it.title,
+                    typeLabel = extraVideoTypeLabel(it.type),
+                    thumbnailUrl = youtubeThumbnailUrl(apiBaseUrl, it.key),
+                )
+            }
+
+    private fun normalizedVideoValue(value: String): String =
+        value.trim().lowercase(Locale.US).replace('-', '_')
+
+    /** Trailers, then special features, then the rest; unknown types sort last (web parity). */
+    private fun extraVideoSortRank(type: String): Int = when (normalizedVideoValue(type)) {
+        "trailer" -> 0
+        "special_feature" -> 1
+        "other" -> 2
+        else -> 3
+    }
+
+    /** The DB constrains type to the three known values; the fallback absorbs schema growth. */
+    private fun extraVideoTypeLabel(type: String): String = when (val t = normalizedVideoValue(type)) {
+        "trailer" -> "Trailer"
+        "special_feature" -> "Special feature"
+        "other" -> "Other"
+        else -> t.split('_')
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase(Locale.US) } }
     }
 
     /** Director(s) first, then up to three writing credits under their actual jobs (web parity). */

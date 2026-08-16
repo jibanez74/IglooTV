@@ -5,6 +5,7 @@ import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.audioStreamJson
 import com.igloo.blindpenguincoder.data.repository.castMemberJson
 import com.igloo.blindpenguincoder.data.repository.crewMemberJson
+import com.igloo.blindpenguincoder.data.repository.extraVideoJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.likeStatusJson
 import com.igloo.blindpenguincoder.data.repository.likeToggleJson
@@ -12,6 +13,7 @@ import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
 import com.igloo.blindpenguincoder.data.repository.movieGenreJson
 import com.igloo.blindpenguincoder.data.repository.productionCompanyJson
 import com.igloo.blindpenguincoder.data.repository.subtitleJson
+import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
 import com.igloo.blindpenguincoder.data.repository.technicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.videoStreamJson
 import com.igloo.blindpenguincoder.data.repository.watchProgressJson
@@ -342,6 +344,80 @@ class MovieDetailsViewModelTest {
         val movie = viewModel.awaitLoaded()
 
         assertEquals((1..10).map { "Actor $it" }, movie.cast.map { it.name })
+    }
+
+    @Test
+    fun `extra videos are youtube only, trailers first, titles tie-broken case-insensitively`() = runTest {
+        val http = routedHttp(
+            details = {
+                jsonResponse(
+                    movieDetailsJson(
+                        // The server's `ORDER BY type, title` — alphabetical, trailers last —
+                        // plus a vimeo entry the proxy has no thumbnails for.
+                        extraVideos = listOf(
+                            extraVideoJson(id = 1, title = "Bloopers", type = "other"),
+                            extraVideoJson(id = 2, title = "Making Of", type = "special_feature"),
+                            extraVideoJson(id = 3, title = "On Vimeo", type = "trailer", site = "vimeo"),
+                            extraVideoJson(id = 4, title = "official teaser", type = "trailer"),
+                            extraVideoJson(id = 5, title = "Official Trailer", type = "trailer"),
+                        ),
+                    ),
+                )
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        val movie = viewModel.awaitLoaded()
+
+        assertEquals(listOf(4L, 5L, 2L, 1L), movie.extraVideos.map { it.id })
+    }
+
+    @Test
+    fun `extra video types map to labels with a title-cased fallback`() = runTest {
+        val http = routedHttp(
+            details = {
+                jsonResponse(
+                    movieDetailsJson(
+                        extraVideos = listOf(
+                            extraVideoJson(id = 1, title = "A", type = "trailer"),
+                            extraVideoJson(id = 2, title = "B", type = "special_feature"),
+                            extraVideoJson(id = 3, title = "C", type = "other"),
+                            extraVideoJson(id = 4, title = "D", type = "behind_the_scenes"),
+                        ),
+                    ),
+                )
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        val movie = viewModel.awaitLoaded()
+
+        assertEquals(
+            listOf("Trailer", "Special feature", "Other", "Behind The Scenes"),
+            movie.extraVideos.map { it.typeLabel },
+        )
+    }
+
+    @Test
+    fun `extra video thumbnails go through the youtube proxy`() = runTest {
+        val http = routedHttp(
+            details = {
+                jsonResponse(
+                    movieDetailsJson(extraVideos = listOf(extraVideoJson(key = "0xbkYZbdIVw"))),
+                )
+            },
+        )
+
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        val movie = viewModel.awaitLoaded()
+
+        assertEquals(
+            "$TEST_SERVER/youtube/thumbnails/0xbkYZbdIVw",
+            movie.extraVideos.single().thumbnailUrl,
+        )
     }
 
     @Test

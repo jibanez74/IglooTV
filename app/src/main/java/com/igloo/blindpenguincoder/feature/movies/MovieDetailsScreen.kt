@@ -156,9 +156,11 @@ private fun DetailsContent(
     // treatment waits for the decode — a non-null URL alone would paint white text over the
     // bare token canvas for the whole load window.
     val overMedia = imageLoaded
-    // The screen's vertical chain, hand-wired end to end: actions -> cast -> about. Nothing is
-    // left to a spatial search, because the shell composed underneath would be a candidate.
+    // The screen's vertical chain, hand-wired end to end: actions -> cast -> extras -> about.
+    // Nothing is left to a spatial search, because the shell composed underneath would be a
+    // candidate.
     val castEntryRequester = remember { FocusRequester() }
+    val extrasEntryRequester = remember { FocusRequester() }
     val aboutRequester = remember { FocusRequester() }
     val watchedRequester = remember { FocusRequester() }
     val likeRequester = remember { FocusRequester() }
@@ -167,6 +169,7 @@ private fun DetailsContent(
     var lastFocusedAction by remember { mutableStateOf(playRequester) }
     val belowActions = when {
         movie.cast.isNotEmpty() -> castEntryRequester
+        movie.extraVideos.isNotEmpty() -> extrasEntryRequester
         !movie.about.isEmpty -> aboutRequester
         else -> null
     }
@@ -280,6 +283,7 @@ private fun DetailsContent(
         MovieDetailsSections(
             movie = movie,
             castEntryRequester = castEntryRequester,
+            extrasEntryRequester = extrasEntryRequester,
             aboutRequester = aboutRequester,
             upFromSections = lastFocusedAction,
             modifier = Modifier

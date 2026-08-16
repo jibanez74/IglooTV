@@ -657,7 +657,7 @@ no drawer, no hamburger, and no fully-hidden mode.
 |---|---|---|
 | `posterWidth` | 148dp ⚑ | 752dp of pane ⇒ 4 posters + a ~96dp peek, which cues scrollability |
 | `posterAspect` | 2:3 | `Modifier.aspectRatio(2f / 3f)` |
-| `wideCardWidth` | 264dp | Backdrop / episode cards |
+| `wideCardWidth` | 264dp | Backdrop / episode / extra-video cards |
 | `wideAspect` | 16:9 | |
 | `albumAspect` | 1:1 | Album art is square |
 | `gridColumns` | 6 / 5 / 4 ⚑ | Compact / Standard / Large — *unscaled, and inverse* |
@@ -665,9 +665,10 @@ no drawer, no hamburger, and no fully-hidden mode.
 Album art is square and musician thumbnails are circular. Both use `posterWidth` as their base
 width, so an album card is a movie poster's width and a movie poster's width tall.
 
-`IglooPosterCard` takes the aspect as a parameter (`posterAspect` by default, `albumAspect` for
-album art) rather than owning it, and `IglooMediaRail` takes the same value for its skeleton —
-§10's grid-matching rule is only true if the placeholder is the shape of the card replacing it.
+`IglooPosterCard` takes the aspect and width as parameters (`posterAspect` / `posterWidth` by
+default; `albumAspect` for album art, `wideAspect` with `wideCardWidth` for video cards) rather
+than owning them, and `IglooMediaRail` takes the same pair for its skeleton — §10's
+grid-matching rule is only true if the placeholder is the shape of the card replacing it.
 
 **A partially-visible next card is a feature.** It is the only affordance telling a remote user
 the rail continues.
@@ -706,8 +707,8 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
-| `IglooPosterCard` | The 2:3 media card (§8.2): poster at `layout.posterWidth` / `layout.posterAspect`, radius `lg`, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose description joins the cleared node ("Title, Year, N min left", §12) so the bar can never render unannounced. |
-| `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons, minimal `IglooEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). |
+| `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg`, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose description joins the cleared node ("Title, Year, N min left", §12) so the bar can never render unannounced. |
+| `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), minimal `IglooEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). |
 | `IglooEmpty` | §10 empty state, minimal variant only: faded icon + one announced line. The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
 
 The app deliberately does **not** use Material theming. `IglooTheme` is the only source of
@@ -1286,13 +1287,28 @@ slot came and went with it. The skeleton's Play stub reserves the same slot so t
 loading→loaded swap does not move the anchor focus is sitting on.
 
 **Focus.** Play takes entry focus, including through the loading→loaded swap, where the
-skeleton's Play-slot stub holds the anchor. The vertical chain — actions → cast → about — is
-**hand-wired end to end**, and every edge that would leave the screen is pinned to
+skeleton's Play-slot stub holds the anchor. The vertical chain — actions → cast → extra videos
+→ about — is **hand-wired end to end**, with each section skipped when empty and its neighbours
+wired straight through, and every edge that would leave the screen is pinned to
 `FocusRequester.Cancel`: the shell underneath is still composed, and an unpinned edge lets a
 spatial search land on a card the user cannot see. Up from the sections returns to the
 **last-focused action**, not unconditionally to Play — the same focus memory the rail keeps for
-its own cards, so Like → down into cast → up lands back on Like. Back closes the overlay and
+its own cards, so Like → down into cast → up lands back on Like. Crossing between the rails
+rides the same memory: up from the extras targets the cast rail's entry requester, which the
+rail keeps parked on its last-focused card. Back closes the overlay and
 restores focus to the card that opened it, via the rail's `returnRequester` (§6.3).
+
+**Extra videos.** Between cast and About: the movie's TMDB extras (trailers, special features)
+as a second always-Loaded rail, on the §8.2 wide geometry — `wideCardWidth` at `wideAspect`,
+thumbnails through the authenticated `/api/youtube/thumbnails/{key}` proxy, cover-cropped so
+hqdefault's letterbox bars never show. The view model filters to YouTube-hosted extras (the
+backend proxies no other site's thumbnails, web parity) and re-sorts trailers → special
+features → other with a case-insensitive title tie-break — the API's `ORDER BY type, title` is
+alphabetical and puts trailers last. Each card is title over the type as its one context line
+("Trailer", "Special feature" — bare, not the web's parenthesised form, which TalkBack would
+read). The cards are **inert under the cast-card contract**: focusable, one cleared node
+("Official Trailer, Trailer"), no announced action until trailer playback exists. A movie with
+no YouTube extras renders no section at all.
 
 **Toggles.** Watched and Like flip optimistically and flip back if the server disagrees. Two
 rules follow from that, and both are easy to get wrong: leaving the screen cancels the screen's

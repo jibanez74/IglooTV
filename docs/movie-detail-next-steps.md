@@ -39,18 +39,19 @@ the focus signal there.
 
 ---
 
-## 2. Cast cards are focus targets with no action
+## 2. Cast and extra-video cards are focus targets with no action
 
 **Found:** 2026-08-16.
-**Status:** open, deliberate, and waiting on a feature — the *semantics* are correct.
-**Files:** `MovieDetailsSections.kt` (cast card `onClick = null`)
+**Status:** open, deliberate, and waiting on features — the *semantics* are correct.
+**Files:** `MovieDetailsSections.kt` (cast and extras cards `onClick = null`)
 
 By the poster-card convention a null `onClick` keeps the card focusable and announces no
 action, so TalkBack users are told the truth; sighted D-pad users see a pressable-looking card
 that does nothing. The cards stay focusable on purpose — focus is what scrolls the rail, and
-cast members past the right edge would otherwise be unreachable — but a face is the most
-tappable-looking thing on the screen. A person detail screen is the destination; until it
-exists, this is the accepted trade.
+cards past the right edge would otherwise be unreachable — but a face is the most
+tappable-looking thing on the screen, and a trailer thumbnail invites a press almost as hard.
+A person detail screen and a trailer player are the destinations; until they exist, this is
+the accepted trade.
 
 ---
 
@@ -62,8 +63,8 @@ exists, this is the accepted trade.
   increasing sequence, first save around 30 seconds — and those are prerequisites, not
   follow-ups.
 - **Missing sections.** Section 11.4 specifies "cast, chapters, extra details"; the screen has
-  cast and About and ends there. No chapters row, no extras or trailers, no similar-movies
-  rail.
+  cast, Extra Videos (landed 2026-08-16, §11.4.1) and About. No chapters row and no
+  similar-movies rail yet.
 - **More is deferred, not gone.** Section 11.4 keeps it specified as the fourth hero action;
   it returns with its menu. `IglooIconButton` was deleted with its only caller and lives in git
   history (`bc88a9c` and earlier).

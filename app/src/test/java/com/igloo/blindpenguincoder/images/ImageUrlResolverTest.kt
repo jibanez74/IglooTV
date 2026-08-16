@@ -47,6 +47,21 @@ class ImageUrlResolverTest {
     }
 
     @Test
+    fun `youtube thumbnails go through the authenticated proxy`() {
+        val url = youtubeThumbnailUrl(apiBase, "0xbkYZbdIVw")
+
+        assertEquals("http://igloo.test:8080/api/youtube/thumbnails/0xbkYZbdIVw", url)
+        assertTrue(isIglooImageUrl(url, origin))
+    }
+
+    @Test
+    fun `a null or blank youtube key resolves to no URL`() {
+        assertNull(youtubeThumbnailUrl(apiBase, null))
+        assertNull(youtubeThumbnailUrl(apiBase, ""))
+        assertNull(youtubeThumbnailUrl(apiBase, "   "))
+    }
+
+    @Test
     fun `uploaded avatar paths are resolved against the origin`() {
         assertEquals(
             "$origin/api/static/avatars/7-1735689600.jpg",
