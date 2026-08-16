@@ -39,29 +39,32 @@ the focus signal there.
 
 ---
 
-## 2. Cast and extra-video cards are focus targets with no action
+## 2. Cast cards are focus targets with no action
 
-**Found:** 2026-08-16.
-**Status:** open, deliberate, and waiting on features — the *semantics* are correct.
-**Files:** `MovieDetailsSections.kt` (cast and extras cards `onClick = null`)
+**Found:** 2026-08-16. **Updated:** 2026-08-16 — the extras half landed: extra-video cards now
+open the trailer player (§11.8.1) and announce "Play {title}".
+**Status:** open for cast only, deliberate, waiting on a person detail screen — the
+*semantics* are correct.
+**Files:** `MovieDetailsSections.kt` (cast cards `onClick = null`)
 
 By the poster-card convention a null `onClick` keeps the card focusable and announces no
 action, so TalkBack users are told the truth; sighted D-pad users see a pressable-looking card
 that does nothing. The cards stay focusable on purpose — focus is what scrolls the rail, and
 cards past the right edge would otherwise be unreachable — but a face is the most
-tappable-looking thing on the screen, and a trailer thumbnail invites a press almost as hard.
-A person detail screen and a trailer player are the destinations; until they exist, this is
-the accepted trade.
+tappable-looking thing on the screen. A person detail screen is the destination; until it
+exists, this is the accepted trade.
 
 ---
 
 ## Not defects — gaps waiting on features
 
-- **Play does not play.** Media3 is declared in `app/build.gradle.kts` and referenced by zero
-  Kotlin sources, so the screen's primary action is a stub. `known-issues.md` carries the
-  watch-progress rules the player will have to own — one UUID per session, a strictly
-  increasing sequence, first save around 30 seconds — and those are prerequisites, not
-  follow-ups.
+- **Play does not play.** Trailers now play (the §11.8.1 YouTube-embed player, landed with the
+  extras work), but the *movie* player is still missing: Media3 is declared in
+  `app/build.gradle.kts` and referenced by zero Kotlin sources, so the screen's primary action
+  is a stub. `known-issues.md` carries the watch-progress rules that player will have to own —
+  one UUID per session, a strictly increasing sequence, first save around 30 seconds — and
+  those are prerequisites, not follow-ups. The trailer player deliberately shares none of that:
+  trailers don't report progress.
 - **Missing sections.** Section 11.4 specifies "cast, chapters, extra details"; the screen has
   cast, Extra Videos (landed 2026-08-16, §11.4.1) and About. No chapters row and no
   similar-movies rail yet.

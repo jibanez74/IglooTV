@@ -298,6 +298,8 @@ Rules:
 
 The TV app communicates directly with the official Igloo Go backend.  It must not connect to Jellyfin, Plex, Firebase, cloud services, analytics platforms, CDNs, or third-party media servers.
 
+**One approved exception (2026-08-16):** the trailer player's WebView talks directly to `youtube.com` / `*.ytimg.com` / `*.googlevideo.com`, exclusively to host the official YouTube IFrame Player embed for a movie's extra videos — the backend stores only YouTube keys and proxies thumbnails, never video, and the web client embeds the same player.  No Igloo credentials, cookies, or tokens are ever attached to that WebView, and this exception licenses no other third-party traffic.
+
 ### Server configuration
 
 The server URL is entered manually by the user during setup and persisted locally.

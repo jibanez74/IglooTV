@@ -57,8 +57,10 @@ internal fun MovieDetailsSections(
     movie: MovieDetailsUi,
     castEntryRequester: FocusRequester,
     extrasEntryRequester: FocusRequester,
+    extrasReturnRequester: FocusRequester,
     aboutRequester: FocusRequester,
     upFromSections: FocusRequester,
+    onPlayExtra: (ExtraVideoUi) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val hasCast = movie.cast.isNotEmpty()
@@ -93,6 +95,8 @@ internal fun MovieDetailsSections(
                 // extras lands where the user left the cast, not on its first card.
                 upRequester = if (hasCast) castEntryRequester else upFromSections,
                 downRequester = if (hasAbout) aboutRequester else null,
+                returnRequester = extrasReturnRequester,
+                onPlayExtra = onPlayExtra,
             )
         }
         if (hasAbout) {
@@ -207,9 +211,9 @@ private fun KeyCrewSection(crew: List<CrewEntry>) {
 
 /**
  * A detail-screen rail: the rail primitive with a state that is always Loaded, so per-rail
- * focus memory, the one-anchor invariant, and the entry requester come for free. Cards are
- * focusable but inert — there is no destination for them yet, and a card that announces
- * "Open …" and then does nothing is worse than one that announces none.
+ * focus memory, the one-anchor invariant, and the entry requester come for free. Each caller
+ * decides whether its cards act: the cast has no destination yet and stays inert, while the
+ * extras open the trailer player.
  *
  * Every direction out of the rail is pinned. The shell is still composed underneath this
  * overlay, so an unpinned edge would let a spatial focus search land on a card the user cannot
@@ -225,6 +229,7 @@ private fun <T> DetailsRailSection(
     entryRequester: FocusRequester,
     upRequester: FocusRequester,
     downRequester: FocusRequester?,
+    returnRequester: FocusRequester? = null,
     cardAspect: Float = IglooTheme.layout.posterAspect,
     cardWidth: Dp = IglooTheme.layout.posterWidth,
     card: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
@@ -239,6 +244,7 @@ private fun <T> DetailsRailSection(
         leftFocusRequester = Cancel,
         lastFocusedKey = lastFocusedId,
         onItemFocused = { lastFocusedId = it },
+        returnRequester = returnRequester,
         cardAspect = cardAspect,
         cardWidth = cardWidth,
     ) { item, itemModifier, aspect ->
@@ -282,8 +288,10 @@ private fun CastSection(
 
 /**
  * The §8.2 wide-card rail: 16:9 thumbnails through the YouTube proxy, the video's type as the
- * card's one context line. Trailer playback is a later feature, so the cards are inert under
- * the same contract as the cast.
+ * card's one context line. Activating a card opens the trailer player overlay (section 11.8.1),
+ * so each announces "Play {title}" — the honest verb, where the default "Open" promises a page.
+ * [returnRequester] rides the rail's last-focused card, so closing the player restores focus to
+ * the exact card that launched it.
  */
 @Composable
 private fun ExtraVideosSection(
@@ -291,6 +299,8 @@ private fun ExtraVideosSection(
     entryRequester: FocusRequester,
     upRequester: FocusRequester,
     downRequester: FocusRequester?,
+    returnRequester: FocusRequester,
+    onPlayExtra: (ExtraVideoUi) -> Unit,
 ) {
     DetailsRailSection(
         title = "Extra Videos",
@@ -299,6 +309,7 @@ private fun ExtraVideosSection(
         entryRequester = entryRequester,
         upRequester = upRequester,
         downRequester = downRequester,
+        returnRequester = returnRequester,
         cardAspect = IglooTheme.layout.wideAspect,
         cardWidth = IglooTheme.layout.wideCardWidth,
     ) { video, itemModifier, aspect ->
@@ -306,7 +317,8 @@ private fun ExtraVideosSection(
             title = video.title,
             subtitle = video.typeLabel,
             imageUrl = video.thumbnailUrl,
-            onClick = null,
+            onClick = { onPlayExtra(video) },
+            actionLabel = "Play ${video.title}",
             aspect = aspect,
             width = IglooTheme.layout.wideCardWidth,
             modifier = itemModifier.testTag("extra_card_${video.id}"),

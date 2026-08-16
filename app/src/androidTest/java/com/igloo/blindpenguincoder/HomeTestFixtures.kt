@@ -100,8 +100,20 @@ internal fun testMovieDetails(
 )
 
 internal val testExtraVideos = listOf(
-    ExtraVideoUi(id = 201, title = "Official Trailer", typeLabel = "Trailer", thumbnailUrl = null),
-    ExtraVideoUi(id = 202, title = "Making Heat", typeLabel = "Special feature", thumbnailUrl = null),
+    ExtraVideoUi(
+        id = 201,
+        title = "Official Trailer",
+        typeLabel = "Trailer",
+        thumbnailUrl = null,
+        key = "0xbkYZbdIVw",
+    ),
+    ExtraVideoUi(
+        id = 202,
+        title = "Making Heat",
+        typeLabel = "Special feature",
+        thumbnailUrl = null,
+        key = "hV6ZBSD6VBw",
+    ),
 )
 
 internal val testCast = listOf(

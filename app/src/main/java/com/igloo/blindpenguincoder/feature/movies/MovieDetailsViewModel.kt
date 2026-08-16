@@ -40,12 +40,16 @@ data class CastMemberUi(
     val photoUrl: String?,
 )
 
-/** An extra video ready for the rail card; [thumbnailUrl] is the authenticated YouTube proxy. */
+/**
+ * An extra video ready for the rail card; [thumbnailUrl] is the authenticated YouTube proxy and
+ * [key] is the YouTube video id the trailer player plays.
+ */
 data class ExtraVideoUi(
     val id: Long,
     val title: String,
     val typeLabel: String,
     val thumbnailUrl: String?,
+    val key: String,
 )
 
 /** The fine-print rows at the page's end; every field may be absent. */
@@ -527,6 +531,7 @@ class MovieDetailsViewModel(
                     title = it.title,
                     typeLabel = extraVideoTypeLabel(it.type),
                     thumbnailUrl = youtubeThumbnailUrl(apiBaseUrl, it.key),
+                    key = it.key,
                 )
             }
 

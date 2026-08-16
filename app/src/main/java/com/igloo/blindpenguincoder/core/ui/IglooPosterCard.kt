@@ -62,6 +62,10 @@ data class PosterCardProgress(
  * A null [onClick] still renders a focusable card — the rails' focus model needs every card to
  * be a landing site — but it drops the button role and the "Open …" action, because announcing
  * an action that does nothing is worse for a screen reader than announcing none.
+ *
+ * [actionLabel] replaces the default "Open [title]" action label when pressing the card does
+ * something other than open a page — a video card plays, so it says "Play …" (section 12: the
+ * announced action must match what pressing actually does).
  */
 @Composable
 fun IglooPosterCard(
@@ -70,6 +74,7 @@ fun IglooPosterCard(
     imageUrl: String?,
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    actionLabel: String? = null,
     progress: PosterCardProgress? = null,
     aspect: Float = IglooTheme.layout.posterAspect,
     width: Dp = IglooTheme.layout.posterWidth,
@@ -99,7 +104,7 @@ fun IglooPosterCard(
                     listOfNotNull(title, subtitle, progress?.description).joinToString(", ")
                 if (onClick != null) {
                     role = Role.Button
-                    onClick(label = "Open $title") {
+                    onClick(label = actionLabel ?: "Open $title") {
                         onClick()
                         true
                     }

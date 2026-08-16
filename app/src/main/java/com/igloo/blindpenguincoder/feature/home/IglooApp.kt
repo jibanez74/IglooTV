@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.home
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -73,6 +74,9 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsScreen
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
+import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
+import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
+import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
 
 /** Which surface opened the details overlay, so Back can put focus back where it came from. */
 private sealed interface DetailsOrigin {
@@ -107,6 +111,22 @@ private sealed interface DetailsOrigin {
 private fun FocusRequester.requestFocusSafely(): Boolean =
     runCatching { requestFocus() }.isSuccess
 
+/** What the trailer player overlay is playing: only what its screen renders, saveable so the
+ * overlay survives activity recreation (the trailer itself restarts — a WebView cannot be
+ * parceled, and a trailer losing its position is an accepted trade). */
+private data class TrailerRequest(val key: String, val title: String, val typeLabel: String) {
+    companion object {
+        val Saver: Saver<TrailerRequest?, List<String>> = Saver(
+            save = { request ->
+                if (request == null) emptyList() else listOf(request.key, request.title, request.typeLabel)
+            },
+            restore = { saved ->
+                if (saved.isEmpty()) null else TrailerRequest(saved[0], saved[1], saved[2])
+            },
+        )
+    }
+}
+
 @Composable
 fun IglooApp(
     user: AuthUser,
@@ -122,6 +142,11 @@ fun IglooApp(
     onSignOut: () -> Unit,
     onSignOutConfirm: () -> Unit,
     onSignOutDismiss: () -> Unit,
+    // The real engine embeds under the server's own origin — the same real, attributable origin
+    // the web client's trailer page has; YouTube rejects a borrowed youtube.com origin.
+    trailerEngineFactory: (Context, String) -> TrailerPlayerEngine = { context, key ->
+        youTubeIFrameEngine(context, key, serverOrigin)
+    },
 ) {
     var currentDestinationName by rememberSaveable { mutableStateOf(IglooDestination.Home.name) }
     val currentDestination = IglooDestination.valueOf(currentDestinationName)
@@ -144,6 +169,25 @@ fun IglooApp(
         mutableStateOf<DetailsOrigin?>(null)
     }
     val detailsOpen = details.openMovieId != null
+    // The trailer player is the third overlay layer (shell -> details -> player); the host owns
+    // its existence and its focus restore, the same contract the details overlay lives under.
+    var trailerRequest by rememberSaveable(stateSaver = TrailerRequest.Saver) {
+        mutableStateOf<TrailerRequest?>(null)
+    }
+    val trailerOpen = trailerRequest != null
+    // Parked by the extras rail on its last-focused card, so closing the player restores focus
+    // to the exact card that launched it (section 6.3).
+    val extrasReturnRequester = remember { FocusRequester() }
+    val closeTrailer = {
+        trailerRequest = null
+        // In the callback, not an effect, for the detach-race reason the details close documents.
+        // The extras rail is still composed in every reachable case — the player only opens from
+        // it, and nothing that runs under the player removes extras — but if the anchor is gone
+        // anyway, the pane's anchor is a worse restore than the card and far better than a crash.
+        if (!extrasReturnRequester.requestFocusSafely()) {
+            contentStartRequester.requestFocusSafely()
+        }
+    }
 
     val openMovie: ((DetailsOrigin, Long) -> Unit)? = onMovieSelected?.let { select ->
         { origin, movieId ->
@@ -153,8 +197,9 @@ fun IglooApp(
     }
 
     // Every handler is gated explicitly rather than left to win on registration order —
-    // design-system.md section 9.3 requires the host to be deliberate about Back.
-    BackHandler(enabled = detailsOpen && !signOut.confirming) {
+    // design-system.md section 9.3 requires the host to be deliberate about Back. While the
+    // trailer player is up, Back belongs to its own screen (chrome dismissal, then close).
+    BackHandler(enabled = detailsOpen && !signOut.confirming && !trailerOpen) {
         val origin = detailsOrigin
         detailsOrigin = null
         onCloseDetails()
@@ -171,11 +216,14 @@ fun IglooApp(
             contentStartRequester.requestFocusSafely()
         }
     }
-    BackHandler(enabled = !detailsOpen && !signOut.confirming && !railHasFocus) {
+    BackHandler(enabled = !detailsOpen && !signOut.confirming && !trailerOpen && !railHasFocus) {
         railOpenedByBack = true
         navigationRequesters.getValue(currentDestination).requestFocus()
     }
-    BackHandler(enabled = !detailsOpen && !signOut.confirming && railHasFocus && !railOpenedByBack) {
+    BackHandler(
+        enabled = !detailsOpen && !signOut.confirming && !trailerOpen &&
+            railHasFocus && !railOpenedByBack,
+    ) {
         contentStartRequester.requestFocus()
     }
     // railHasFocus && railOpenedByBack: no handler enabled, so Back exits the app.
@@ -223,14 +271,46 @@ fun IglooApp(
             },
         )
 
-        // Last child, so it draws over the rail and nothing clips its focus glow. The shell stays
-        // composed underneath: its rails keep their scroll and focus memory, which is what Back
-        // restores onto.
+        // Drawn over the rail so nothing clips its focus glow. The shell stays composed
+        // underneath: its rails keep their scroll and focus memory, which is what Back restores
+        // onto. The same reasoning stacks once more: while the trailer player is up the details
+        // screen stays composed (its extras rail holds the focus memory the player's close
+        // restores onto) but leaves TalkBack traversal, exactly as the shell does under it.
         if (detailsOpen) {
-            MovieDetailsScreen(
-                state = details.details,
-                actions = detailsActions,
-                mutationNotice = details.mutationNotice,
+            // hideFromAccessibility, not clearAndSetSemantics, for the same reason as the shell:
+            // the nodes stay in the tree, so a test can still assert what is not traversable.
+            Box(
+                modifier = Modifier
+                    .testTag("details_layer")
+                    .then(
+                        if (trailerOpen) {
+                            Modifier.semantics { hideFromAccessibility() }
+                        } else {
+                            Modifier
+                        },
+                    ),
+            ) {
+                MovieDetailsScreen(
+                    state = details.details,
+                    actions = detailsActions,
+                    onPlayExtra = { video ->
+                        trailerRequest = TrailerRequest(video.key, video.title, video.typeLabel)
+                    },
+                    extrasReturnRequester = extrasReturnRequester,
+                    mutationNotice = details.mutationNotice,
+                )
+            }
+        }
+
+        // Last child: the player draws over everything, and its own BackHandler out-registers
+        // the host's gated ones while it is mounted.
+        trailerRequest?.let { request ->
+            TrailerPlayerScreen(
+                videoKey = request.key,
+                title = request.title,
+                typeLabel = request.typeLabel,
+                onClose = closeTrailer,
+                engineFactory = trailerEngineFactory,
             )
         }
     }
@@ -241,7 +321,7 @@ fun IglooApp(
     // card the user had just activated. Skipped entirely when something is already over the
     // shell — this effect runs after the overlay's own, so it would take focus off it.
     LaunchedEffect(Unit) {
-        if (!detailsOpen) contentStartRequester.requestFocus()
+        if (!detailsOpen && !trailerOpen) contentStartRequester.requestFocus()
     }
 }
 

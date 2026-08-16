@@ -2,7 +2,9 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -55,6 +57,7 @@ class MovieDetailsAccessibilityTest {
     private var likeToggles = 0
     private var retries = 0
     private var plays = 0
+    private val playedExtras = mutableListOf<Long>()
 
     private fun setContent(
         initial: MovieDetailsState = MovieDetailsState.Loaded(testMovieDetails()),
@@ -65,6 +68,7 @@ class MovieDetailsAccessibilityTest {
         likeToggles = 0
         retries = 0
         plays = 0
+        playedExtras.clear()
         composeRule.setContent {
             IglooTheme {
                 MovieDetailsScreen(
@@ -76,6 +80,8 @@ class MovieDetailsAccessibilityTest {
                         onToggleLike = { likeToggles += 1 },
                         onRetry = { retries += 1 },
                     ),
+                    onPlayExtra = { playedExtras += it.id },
+                    extrasReturnRequester = remember { FocusRequester() },
                 )
             }
         }
@@ -181,13 +187,24 @@ class MovieDetailsAccessibilityTest {
             .assertHasNoClickAction()
     }
 
+    /**
+     * The card keeps its one merged announcement, and its action says what pressing does: it
+     * plays a video, so the label is "Play …" rather than the poster default "Open …" — and
+     * performing the announced action, not a synthetic click, proves label and behaviour agree.
+     */
     @Test
-    fun extraVideoCardsAnnounceTitleAndTypeWithNoAction() {
+    fun extraVideoCardsAnnouncePlayAndPerformIt() {
         setContent()
 
-        composeRule.onNodeWithTag("extra_card_201")
+        val card = composeRule.onNodeWithTag("extra_card_201")
+        card
             .assertContentDescriptionEquals("Official Trailer, Trailer")
-            .assertHasNoClickAction()
+            .assertHasClickAction()
+        assertEquals("Play Official Trailer", card.clickActionLabel())
+
+        card.performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals(listOf(201L), playedExtras)
     }
 
     @Test

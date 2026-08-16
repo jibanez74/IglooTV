@@ -22,6 +22,23 @@ class MediaFormattingTest {
     }
 
     @Test
+    fun `timecodes show hours only when present and never go negative`() {
+        assertEquals("1:12", formatTimecode(72.4))
+        assertEquals("0:05", formatTimecode(5.0))
+        assertEquals("1:01:15", formatTimecode(3675.0))
+        assertEquals("0:00", formatTimecode(-3.0))
+    }
+
+    @Test
+    fun `spoken time drops empty parts and pluralizes`() {
+        assertEquals("1 minute 12 seconds", formatSpokenTime(72.4))
+        assertEquals("2 minutes", formatSpokenTime(120.0))
+        assertEquals("1 hour 1 minute 15 seconds", formatSpokenTime(3675.0))
+        assertEquals("1 second", formatSpokenTime(1.0))
+        assertEquals("0 seconds", formatSpokenTime(0.0))
+    }
+
+    @Test
     fun `progress fraction clamps and guards a zero duration`() {
         assertEquals(0.25f, progressFraction(1800.0, 7200.0), 0.0001f)
         assertEquals(1f, progressFraction(9000.0, 7200.0), 0.0f)

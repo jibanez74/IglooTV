@@ -25,6 +25,32 @@ fun formatReleaseDate(isoDate: String): String? = runCatching {
     LocalDate.parse(isoDate).format(releaseDateFormat)
 }.getOrNull()
 
+/** `72.4` → `"1:12"`, `3675.0` → `"1:01:15"`; the player's visual timecodes. */
+fun formatTimecode(seconds: Double): String {
+    val total = seconds.toLong().coerceAtLeast(0)
+    val hours = total / 3600
+    val minutes = (total % 3600) / 60
+    val rest = total % 60
+    return when {
+        hours > 0 -> "%d:%02d:%02d".format(Locale.US, hours, minutes, rest)
+        else -> "%d:%02d".format(Locale.US, minutes, rest)
+    }
+}
+
+/** `72.4` → `"1 minute 12 seconds"`; timecodes read as digits are noise for a screen reader. */
+fun formatSpokenTime(seconds: Double): String {
+    val total = seconds.toLong().coerceAtLeast(0)
+    val hours = total / 3600
+    val minutes = (total % 3600) / 60
+    val rest = total % 60
+    val parts = buildList {
+        if (hours > 0) add(if (hours == 1L) "1 hour" else "$hours hours")
+        if (minutes > 0) add(if (minutes == 1L) "1 minute" else "$minutes minutes")
+        if (rest > 0 || isEmpty()) add(if (rest == 1L) "1 second" else "$rest seconds")
+    }
+    return parts.joinToString(" ")
+}
+
 fun progressFraction(progressSec: Double, durationSec: Double): Float =
     if (durationSec > 0) (progressSec / durationSec).toFloat().coerceIn(0f, 1f) else 0f
 

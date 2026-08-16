@@ -1306,9 +1306,12 @@ backend proxies no other site's thumbnails, web parity) and re-sorts trailers �
 features → other with a case-insensitive title tie-break — the API's `ORDER BY type, title` is
 alphabetical and puts trailers last. Each card is title over the type as its one context line
 ("Trailer", "Special feature" — bare, not the web's parenthesised form, which TalkBack would
-read). The cards are **inert under the cast-card contract**: focusable, one cleared node
-("Official Trailer, Trailer"), no announced action until trailer playback exists. A movie with
-no YouTube extras renders no section at all.
+read). The cards are **actionable**: one cleared node ("Official Trailer, Trailer"), the button
+role, and the action label "Play {title}" — "Play", not the poster default "Open", because the
+announced action must say what pressing does (§12) and pressing opens the trailer player
+overlay (§11.8.1). The rail's `returnRequester` joins the host's focus-restore contract: it
+rides the last-focused card, and closing the player lands focus back on the exact card that
+launched it. A movie with no YouTube extras renders no section at all.
 
 **Toggles.** Watched and Like flip optimistically and roll back if the server disagrees. Every
 accepted press is an intent: Watched writes and Like writes each run through their own FIFO queue,
@@ -1426,6 +1429,44 @@ Progress saves to the backend every 15s, starting only after ~15s of real playba
 lands it must inject the bearer from `DeviceCredentialSource` and bridge a 401 from
 `HttpDataSource.InvalidResponseCodeException` into `AuthEventBus.signalUnauthorized`. Every
 media route inherits the global security block; there is no signed-URL escape hatch.
+
+#### 11.8.1 Trailer player (YouTube embed)
+
+The extras rail's player, and deliberately **not** §11.8's: extras exist only as YouTube video
+keys — the backend proxies thumbnails, never video — so playback is a full-screen in-tree
+overlay (the third layer: shell → details → player) hosting a WebView with the official YouTube
+IFrame Player API, the same mechanism the web client uses. Media3, the bearer-injection
+paragraph above, progress saves, resume, chapters, and the quality chip do not apply: **trailers
+don't report progress**. The surface is full-bleed (§2.5); the chrome keeps the safe-area inset.
+
+The page is loaded with the **Igloo server's origin** as its base URL — the same real,
+attributable origin the web client's trailer page has. Device-verified 2026-08-16: a borrowed
+`https://www.youtube.com` base URL is rejected by the embed with error 152, the server origin
+plays. Every control lives in Compose: the WebView is **never focusable** and never in the
+TalkBack tree — all input belongs to the chrome. Chrome is a §11.8-shaped reduction: top bar
+(Back, title, type label), bottom transport (rewind 10s, play/pause, forward 10s) over a 4dp
+seek track with current/total timecodes (one cleared, non-focusable summary node — no live
+region; a narrating timer is §12 noise). No volume control — TV remotes drive device volume.
+Entry focus is Play/Pause. Chrome auto-hides after **4s** of no input, and only while playing —
+a paused frame with no UI reads as a hang. It stays composed while hidden (alpha only), so
+focus and traversal never reshuffle.
+
+| Input | Chrome hidden | Chrome visible |
+|---|---|---|
+| Center / Play-Pause | Toggle play/pause, show chrome | Activates the focused control |
+| Left / Right | Seek ∓10s, show chrome | Move between controls (media keys still seek) |
+| Up / Down | Show chrome, focus Play/Pause | Move between top bar and transport |
+| Back | Exit player | Hide chrome; second Back exits |
+
+While hidden, the chrome swallows every handled key — an invisible control must not activate.
+The host owns close and focus restore (to the launching card, via the rail's `returnRequester`);
+the details overlay underneath stays composed but leaves TalkBack traversal, exactly as the
+shell does under it. **Ended auto-closes** through the same path (web parity). Errors resolve to
+the details screen's error recipe — one pinned Retry, Assertive — with the embed's codes mapped
+to plain sentences; 101/150 say outright that YouTube doesn't allow the video outside
+youtube.com. Two watchdogs back the embed: an in-page 15s guard on the IFrame API script and a
+12s Kotlin guard on player-ready. Activity recreation restarts the trailer at 0:00 — a WebView
+cannot be parceled, an accepted trade for trailers.
 
 ### 11.9 Notifications
 

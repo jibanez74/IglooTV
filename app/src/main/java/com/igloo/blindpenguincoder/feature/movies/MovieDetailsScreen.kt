@@ -25,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -50,6 +49,7 @@ import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
+import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
 
 /**
  * What the details overlay can do, grouped so the shell that hosts it keeps a readable
@@ -71,11 +71,17 @@ data class MovieDetailsActions(
  * entry focus: Play (or the state's stand-in for it) is the first focused element.
  *
  * The backdrop opts out of the safe area (section 2.5); chrome and text keep the inset.
+ *
+ * [onPlayExtra] and [extrasReturnRequester] come from the host rather than [MovieDetailsActions]
+ * for the same reason close is not in the bag: playing an extra opens a host-owned overlay, and
+ * the requester is how the host restores focus to the launching card when that overlay closes.
  */
 @Composable
 fun MovieDetailsScreen(
     state: MovieDetailsState,
     actions: MovieDetailsActions,
+    onPlayExtra: (ExtraVideoUi) -> Unit,
+    extrasReturnRequester: FocusRequester,
     mutationNotice: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -138,6 +144,8 @@ fun MovieDetailsScreen(
                 mutationNotice = mutationNotice,
                 playRequester = entryRequester,
                 actions = actions,
+                onPlayExtra = onPlayExtra,
+                extrasReturnRequester = extrasReturnRequester,
             )
         }
     }
@@ -149,6 +157,8 @@ private fun DetailsContent(
     mutationNotice: String?,
     playRequester: FocusRequester,
     actions: MovieDetailsActions,
+    onPlayExtra: (ExtraVideoUi) -> Unit,
+    extrasReturnRequester: FocusRequester,
 ) {
     val colors = IglooTheme.colors
     val layout = IglooTheme.layout
@@ -288,8 +298,10 @@ private fun DetailsContent(
             movie = movie,
             castEntryRequester = castEntryRequester,
             extrasEntryRequester = extrasEntryRequester,
+            extrasReturnRequester = extrasReturnRequester,
             aboutRequester = aboutRequester,
             upFromSections = lastFocusedAction,
+            onPlayExtra = onPlayExtra,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
@@ -390,18 +402,6 @@ private fun DetailsSkeleton(anchorRequester: FocusRequester) {
             }
         }
     }
-}
-
-/**
- * Pins every direction, for a state whose single focusable has nowhere of its own to go. The
- * overlay's shell is composed underneath it, so an unpinned edge is an escape hatch onto UI the
- * user cannot see (section 11.4.1).
- */
-private fun Modifier.pinnedToScreen(): Modifier = focusProperties {
-    left = FocusRequester.Cancel
-    right = FocusRequester.Cancel
-    up = FocusRequester.Cancel
-    down = FocusRequester.Cancel
 }
 
 /** About 60% of the reference viewport's height (section 8.1); contains text, so a minimum. */

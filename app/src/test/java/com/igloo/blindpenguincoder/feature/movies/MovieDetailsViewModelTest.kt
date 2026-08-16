@@ -466,7 +466,7 @@ class MovieDetailsViewModelTest {
     }
 
     @Test
-    fun `extra video thumbnails go through the youtube proxy`() = runTest {
+    fun `extra videos keep their youtube key and thumbnails go through the proxy`() = runTest {
         val http = routedHttp(
             details = {
                 jsonResponse(
@@ -479,10 +479,9 @@ class MovieDetailsViewModelTest {
         viewModel.open(1)
         val movie = viewModel.awaitLoaded()
 
-        assertEquals(
-            "$TEST_SERVER/youtube/thumbnails/0xbkYZbdIVw",
-            movie.extraVideos.single().thumbnailUrl,
-        )
+        val extra = movie.extraVideos.single()
+        assertEquals("$TEST_SERVER/youtube/thumbnails/0xbkYZbdIVw", extra.thumbnailUrl)
+        assertEquals("0xbkYZbdIVw", extra.key)
     }
 
     @Test

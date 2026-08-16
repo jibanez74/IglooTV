@@ -1,5 +1,7 @@
 package com.igloo.blindpenguincoder.feature.movies
 
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -71,6 +73,8 @@ class MovieDetailsOverMediaTest {
                         testMovieDetails().copy(backdropUrl = backdropUrl),
                     ),
                     actions = inertDetailsActions,
+                    onPlayExtra = {},
+                    extrasReturnRequester = remember { FocusRequester() },
                 )
             }
         }

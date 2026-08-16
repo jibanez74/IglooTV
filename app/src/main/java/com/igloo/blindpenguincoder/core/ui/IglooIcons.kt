@@ -236,6 +236,71 @@ object IglooIcons {
         }
     }
 
+    val Pause: ImageVector by lazy {
+        icon("Pause") {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(7.2f, 4.8f)
+                lineTo(10.4f, 4.8f)
+                lineTo(10.4f, 19.2f)
+                lineTo(7.2f, 19.2f)
+                close()
+                moveTo(13.6f, 4.8f)
+                lineTo(16.8f, 4.8f)
+                lineTo(16.8f, 19.2f)
+                lineTo(13.6f, 19.2f)
+                close()
+            }
+        }
+    }
+
+    val Rewind: ImageVector by lazy {
+        icon("Rewind") {
+            // Two left-pointing triangles sharing the Play glyph's vertical span.
+            path(fill = SolidColor(Color.White)) {
+                moveTo(11.4f, 4.8f)
+                lineTo(2.6f, 12f)
+                lineTo(11.4f, 19.2f)
+                close()
+                moveTo(21.4f, 4.8f)
+                lineTo(12.6f, 12f)
+                lineTo(21.4f, 19.2f)
+                close()
+            }
+        }
+    }
+
+    val FastForward: ImageVector by lazy {
+        icon("FastForward") {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(2.6f, 4.8f)
+                lineTo(11.4f, 12f)
+                lineTo(2.6f, 19.2f)
+                close()
+                moveTo(12.6f, 4.8f)
+                lineTo(21.4f, 12f)
+                lineTo(12.6f, 19.2f)
+                close()
+            }
+        }
+    }
+
+    val ArrowBack: ImageVector by lazy {
+        icon("ArrowBack") {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(20.5f, 10.9f)
+                lineTo(7.7f, 10.9f)
+                lineTo(12.6f, 6f)
+                lineTo(11f, 4.4f)
+                lineTo(3.4f, 12f)
+                lineTo(11f, 19.6f)
+                lineTo(12.6f, 18f)
+                lineTo(7.7f, 13.1f)
+                lineTo(20.5f, 13.1f)
+                close()
+            }
+        }
+    }
+
     val Check: ImageVector by lazy {
         icon("Check") {
             path(fill = SolidColor(Color.White)) {
