@@ -14,17 +14,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.scaled
@@ -97,6 +102,8 @@ private fun SectionHeading(text: String) {
 @Composable
 private fun OverviewSection(overview: String?) {
     val colors = IglooTheme.colors
+    var clamped by remember(overview) { mutableStateOf(false) }
+    val fadeHeight = OVERVIEW_FADE_HEIGHT.scaled()
     Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
         SectionHeading("Overview")
         IglooText(
@@ -109,7 +116,30 @@ private fun OverviewSection(overview: String?) {
             // the semantics tree carries the whole string.
             color = if (overview != null) colors.foreground else colors.mutedForeground,
             maxLines = OVERVIEW_MAX_LINES,
-            modifier = Modifier.widthIn(max = OVERVIEW_MAX_WIDTH.scaled()),
+            // A clamped synopsis fades out instead of ellipsizing: an ellipsis mid-sentence
+            // pretends the cut is deliberate punctuation, while the fade says plainly that the
+            // prose continues past what fits. The alpha-zero stop comes from the color itself —
+            // Color.Transparent is black at zero and would gray the token fade.
+            overflow = TextOverflow.Clip,
+            onTextLayout = { clamped = it.hasVisualOverflow },
+            modifier = Modifier
+                .widthIn(max = SECTION_PROSE_MAX_WIDTH.scaled())
+                .drawWithContent {
+                    drawContent()
+                    if (clamped) {
+                        val fadePx = fadeHeight.toPx()
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                0f to colors.background.copy(alpha = 0f),
+                                1f to colors.background,
+                                startY = size.height - fadePx,
+                                endY = size.height,
+                            ),
+                            topLeft = Offset(0f, size.height - fadePx),
+                            size = Size(size.width, fadePx),
+                        )
+                    }
+                },
         )
     }
 }
@@ -122,7 +152,11 @@ private fun KeyCrewSection(crew: List<CrewEntry>) {
         SectionHeading("Key Crew")
         crew.chunked(CREW_COLUMNS).forEach { rowEntries ->
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                // The overview's measure, so adjacent prose sections share one right edge
+                // instead of the crew columns stretching a name across the whole pane.
+                modifier = Modifier
+                    .widthIn(max = SECTION_PROSE_MAX_WIDTH.scaled())
+                    .fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xl),
             ) {
                 rowEntries.forEach { entry ->
@@ -177,10 +211,6 @@ private fun CastSection(
         leftFocusRequester = Cancel,
         lastFocusedKey = lastFocusedCastId,
         onItemFocused = { lastFocusedCastId = it },
-        loadingLabel = "Loading cast",
-        emptyIcon = IglooIcons.Person,
-        emptyText = "No cast information",
-        onRetry = {},
     ) { member, itemModifier, aspect ->
         IglooPosterCard(
             title = member.name,
@@ -202,8 +232,12 @@ private fun CastSection(
 }
 
 /**
- * The fine print, as one focus stop and one TalkBack node: four two-word rows would be four
- * announcements of nothing much, and the block carries no action to gate.
+ * The fine print. The heading lives outside the focusable panel, so it lines up with the other
+ * section headings despite the panel's inner padding and keeps its heading semantics for
+ * TalkBack's heading navigation. The rows are one focus stop and one TalkBack node: four
+ * two-word rows would be four announcements of nothing much, and the block carries no action to
+ * gate — the heading node directly above supplies the "About" framing, so the panel does not
+ * repeat it.
  */
 @Composable
 private fun AboutSection(
@@ -221,38 +255,37 @@ private fun AboutSection(
         about.revenue?.let { "Revenue" to it },
     )
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            // Before the cleared semantics, which wipe everything below them in the chain.
-            .testTag("details_about")
-            // Panel radius, not the button radius the rest of the app's focusables use, and the
-            // focused fill instead of a bare ring: this is a focus target only so a d-pad can
-            // scroll to it (section 11.4.1), and it carries no action to promise.
-            .focusRing(
-                focused = focused,
-                radius = IglooTheme.radius.xl,
-                fill = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
-                scaleOnFocus = false,
-            )
-            .focusRequester(requester)
-            .focusProperties {
-                up = upRequester
-                down = Cancel
-                left = Cancel
-                right = Cancel
-            }
-            .onFocusChanged { focused = it.isFocused }
-            .focusable()
-            .clearAndSetSemantics {
-                contentDescription = (listOf("About $title") + rows.map { "${it.first}: ${it.second}" })
-                    .joinToString(". ")
-            }
-            .padding(IglooTheme.spacing.md),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
         SectionHeading("About $title")
-        Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                // Before the cleared semantics, which wipe everything below them in the chain.
+                .testTag("details_about")
+                // Panel radius, not the button radius the rest of the app's focusables use, and
+                // the focused fill instead of a bare ring: this is a focus target only so a d-pad
+                // can scroll to it (section 11.4.1), and it carries no action to promise.
+                .focusRing(
+                    focused = focused,
+                    radius = IglooTheme.radius.xl,
+                    fill = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
+                    scaleOnFocus = false,
+                )
+                .focusRequester(requester)
+                .focusProperties {
+                    up = upRequester
+                    down = Cancel
+                    left = Cancel
+                    right = Cancel
+                }
+                .onFocusChanged { focused = it.isFocused }
+                .focusable()
+                .clearAndSetSemantics {
+                    contentDescription = rows.joinToString(". ") { "${it.first}: ${it.second}" }
+                }
+                .padding(IglooTheme.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
+        ) {
             rows.forEach { (label, value) ->
                 Row(horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
                     IglooText(
@@ -274,7 +307,10 @@ private fun AboutSection(
 }
 
 /** Readable measure for bodyMedium prose — roughly 70 characters a line. */
-private val OVERVIEW_MAX_WIDTH = 620.dp
+private val SECTION_PROSE_MAX_WIDTH = 620.dp
+
+/** About one bodyMedium line, so the fade dissolves the last visible line's descenders. */
+private val OVERVIEW_FADE_HEIGHT = 22.dp
 
 private const val OVERVIEW_MAX_LINES = 6
 private const val CREW_COLUMNS = 3

@@ -283,16 +283,6 @@ object IglooIcons {
         }
     }
 
-    val MoreVertical: ImageVector by lazy {
-        icon("MoreVertical") {
-            path(fill = SolidColor(Color.White)) {
-                circle(12f, 5f, 2f)
-                circle(12f, 12f, 2f)
-                circle(12f, 19f, 2f)
-            }
-        }
-    }
-
     private inline fun icon(name: String, block: ImageVector.Builder.() -> Unit): ImageVector =
         ImageVector.Builder(
             name = "Igloo.$name",

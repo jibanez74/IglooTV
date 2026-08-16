@@ -23,10 +23,13 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.compose.ui.text.TextLayoutResult
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.testMovieDetails
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -133,15 +136,6 @@ class MovieDetailsAccessibilityTest {
     }
 
     @Test
-    fun moreIsLabelledButAnnouncesNoActionUntilItsMenuExists() {
-        setContent()
-
-        composeRule.onNodeWithTag("details_more")
-            .assertContentDescriptionEquals("More options")
-            .assertHasNoClickAction()
-    }
-
-    @Test
     fun castCardsAnnounceNameAndCharacterWithNoAction() {
         setContent()
 
@@ -154,9 +148,11 @@ class MovieDetailsAccessibilityTest {
     fun theAboutBlockIsOneNodeCarryingEveryRow() {
         setContent()
 
+        // Rows only: the "About Heat" heading is its own node directly above the panel, so
+        // repeating it here would read the title twice in a row.
         composeRule.onNodeWithTag("details_about")
             .assertContentDescriptionEquals(
-                "About Heat. Production: Regency Enterprises. Original language: EN. " +
+                "Production: Regency Enterprises. Original language: EN. " +
                     "Budget: $60,000,000. Revenue: $187,436,818",
             )
             .assertHasNoClickAction()
@@ -167,7 +163,10 @@ class MovieDetailsAccessibilityTest {
         setContent()
 
         composeRule.onNode(hasText("Overview") and isHeading()).assertExists()
+        composeRule.onNode(hasText("Key Crew") and isHeading()).assertExists()
         composeRule.onNode(hasText("Cast") and isHeading()).assertExists()
+        // Sits above the focusable panel, whose cleared semantics would otherwise erase it.
+        composeRule.onNode(hasText("About Heat") and isHeading()).assertExists()
         composeRule.onNode(hasText("Heat") and isHeading()).assertExists()
     }
 
@@ -181,6 +180,25 @@ class MovieDetailsAccessibilityTest {
         // One text node carrying the whole string: the six-line clamp is a visual limit only
         // (section 4.1), so a screen reader still reaches the last sentence.
         composeRule.onNodeWithText(long).assertExists()
+    }
+
+    /**
+     * The clamp's fade draws off `hasVisualOverflow`, and drawing creates no semantics nodes —
+     * so the trigger is what a test can pin: armed by an overview six lines cannot hold, and
+     * not by one that fits (a fade over complete prose would claim text that is not there).
+     */
+    @Test
+    fun theOverviewFadeArmsOnlyWhenTheTextOverflows() {
+        val long = "A ".repeat(400) + "end."
+        setContent(MovieDetailsState.Loaded(testMovieDetails().copy(overview = long)))
+
+        assertTrue("six lines cannot hold this overview", overviewLayout(long).hasVisualOverflow)
+
+        state = MovieDetailsState.Loaded(testMovieDetails())
+        composeRule.waitForIdle()
+
+        val short = testMovieDetails().overview!!
+        assertFalse("a fitting overview must not clamp", overviewLayout(short).hasVisualOverflow)
     }
 
     @Test
@@ -228,6 +246,13 @@ class MovieDetailsAccessibilityTest {
     }
 
     private fun isHeading() = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
+
+    private fun overviewLayout(text: String): TextLayoutResult {
+        val results = mutableListOf<TextLayoutResult>()
+        composeRule.onNodeWithText(text)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        return results.first()
+    }
 
     /** What TalkBack offers as "double tap to …" — it must match what the press actually does. */
     private fun SemanticsNodeInteraction.clickActionLabel(): String? =

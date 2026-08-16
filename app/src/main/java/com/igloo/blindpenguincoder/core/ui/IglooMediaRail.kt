@@ -77,11 +77,13 @@ fun <T> IglooMediaRail(
     leftFocusRequester: FocusRequester,
     lastFocusedKey: Long?,
     onItemFocused: (Long) -> Unit,
-    loadingLabel: String,
-    emptyIcon: ImageVector,
-    emptyText: String,
-    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    // Only rails whose state can actually be Loading or Empty need to speak here; a rail that
+    // is always Loaded (the cast rail) leaves the defaults, which never render.
+    loadingLabel: String = "Loading",
+    emptyIcon: ImageVector = IglooIcons.Movies,
+    emptyText: String = "Nothing to show",
+    onRetry: () -> Unit = {},
     returnRequester: FocusRequester? = null,
     cardAspect: Float = IglooTheme.layout.posterAspect,
     // Receives [cardAspect] so the card is shaped by the same value as the skeleton — the

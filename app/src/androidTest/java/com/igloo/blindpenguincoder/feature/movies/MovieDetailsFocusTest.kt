@@ -247,9 +247,7 @@ class MovieDetailsFocusTest {
         composeRule.onNodeWithTag("details_watched").performKeyInput { pressKey(Key.DirectionRight) }
         composeRule.onNodeWithTag("details_like").assertIsFocused()
         composeRule.onNodeWithTag("details_like").performKeyInput { pressKey(Key.DirectionRight) }
-        composeRule.onNodeWithTag("details_more").assertIsFocused()
-        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionRight) }
-        composeRule.onNodeWithTag("details_more").assertIsFocused()
+        composeRule.onNodeWithTag("details_like").assertIsFocused()
     }
 
     @Test
@@ -301,7 +299,7 @@ class MovieDetailsFocusTest {
         val play = composeRule.onNodeWithTag("details_play")
         play.assertIsFocused()
 
-        listOf("details_watched", "details_like", "details_more").forEach { tag ->
+        listOf("details_watched", "details_like").forEach { tag ->
             composeRule.onNodeWithTag(tag).requestFocus()
             composeRule.onNodeWithTag(tag).assertIsFocused()
             play.assertIsNotFocused()
@@ -310,6 +308,77 @@ class MovieDetailsFocusTest {
         play.requestFocus()
         play.assertIsFocused()
         composeRule.onNodeWithTag("details_watched").assertIsNotFocused()
+    }
+
+    /**
+     * The toggles reserve their wider label, so flipping one — by the user's own press or by
+     * the status request landing after first paint — repaints the button instead of shoving
+     * everything to its right while the eye is committed to one spot.
+     */
+    @Test
+    fun togglingWatchedDoesNotMoveItsSiblings() {
+        setShellContent(loadedState())
+
+        val watchedBefore = composeRule.onNodeWithTag("details_watched").getUnclippedBoundsInRoot()
+        val likeBefore = composeRule.onNodeWithTag("details_like").getUnclippedBoundsInRoot()
+
+        detailsState = loadedState(testMovieDetails(watched = true, liked = true))
+        composeRule.waitForIdle()
+
+        val watchedAfter = composeRule.onNodeWithTag("details_watched").getUnclippedBoundsInRoot()
+        val likeAfter = composeRule.onNodeWithTag("details_like").getUnclippedBoundsInRoot()
+        assertEquals(watchedBefore.left.value, watchedAfter.left.value, 0.5f)
+        assertEquals(watchedBefore.right.value, watchedAfter.right.value, 0.5f)
+        assertEquals(likeBefore.left.value, likeAfter.left.value, 0.5f)
+        assertEquals(likeBefore.right.value, likeAfter.right.value, 0.5f)
+    }
+
+    /**
+     * The resume slot is reserved from first paint: the progress request lands after the hero
+     * is on screen, and marking a movie watched removes the strip — either would reflow the
+     * bottom-anchored hero under the user's eye if the slot came and went with the strip.
+     */
+    @Test
+    fun theHeroDoesNotMoveWhenTheResumeStripArrivesOrLeaves() {
+        setShellContent(loadedState(testMovieDetails(progress = null)))
+
+        composeRule.onNodeWithTag("details_resume_track").assertDoesNotExist()
+        val before = composeRule.onNodeWithTag("details_play").getUnclippedBoundsInRoot()
+
+        detailsState = loadedState(testMovieDetails())
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("details_resume_track").assertExists()
+        val with = composeRule.onNodeWithTag("details_play").getUnclippedBoundsInRoot()
+        assertEquals(before.top.value, with.top.value, 0.5f)
+        assertEquals(before.left.value, with.left.value, 0.5f)
+
+        detailsState = loadedState(testMovieDetails(watched = true, progress = null))
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("details_resume_track").assertDoesNotExist()
+        val without = composeRule.onNodeWithTag("details_play").getUnclippedBoundsInRoot()
+        assertEquals(before.top.value, without.top.value, 0.5f)
+        assertEquals(before.left.value, without.left.value, 0.5f)
+    }
+
+    /**
+     * Up from the cast returns to the action the user left, not unconditionally to Play — the
+     * same focus memory the rail keeps for its own cards. Pinned on Like because a regression
+     * to always-Play would still pass a Play→down→up→Play walk.
+     */
+    @Test
+    fun upFromTheCastReturnsToTheLastFocusedAction() {
+        setShellContent(loadedState())
+
+        composeRule.onNodeWithTag("details_like").requestFocus()
+        composeRule.onNodeWithTag("details_like").assertIsFocused()
+
+        composeRule.onNodeWithTag("details_like").performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("cast_card_101").assertIsFocused()
+
+        composeRule.onNodeWithTag("cast_card_101").performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("details_like").assertIsFocused()
     }
 
     @Test

@@ -151,11 +151,20 @@ private fun DetailsContent(
     val layout = IglooTheme.layout
     var imageFailed by remember(movie.backdropUrl) { mutableStateOf(false) }
     var imageLoaded by remember(movie.backdropUrl) { mutableStateOf(false) }
-    val overMedia = movie.backdropUrl != null && !imageFailed
+    val showBackdrop = movie.backdropUrl != null && !imageFailed
+    // Section 3.2's literals are licensed only by media actually behind them, so the white
+    // treatment waits for the decode — a non-null URL alone would paint white text over the
+    // bare token canvas for the whole load window.
+    val overMedia = imageLoaded
     // The screen's vertical chain, hand-wired end to end: actions -> cast -> about. Nothing is
     // left to a spatial search, because the shell composed underneath would be a candidate.
     val castEntryRequester = remember { FocusRequester() }
     val aboutRequester = remember { FocusRequester() }
+    val watchedRequester = remember { FocusRequester() }
+    val likeRequester = remember { FocusRequester() }
+    // Up from the sections returns to whichever action the user left, not unconditionally to
+    // Play — the same focus memory the cast rail keeps for its own cards.
+    var lastFocusedAction by remember { mutableStateOf(playRequester) }
     val belowActions = when {
         movie.cast.isNotEmpty() -> castEntryRequester
         !movie.about.isEmpty -> aboutRequester
@@ -183,7 +192,7 @@ private fun DetailsContent(
                 .fillMaxWidth()
                 .heightIn(min = HERO_MIN_HEIGHT.scaled()),
         ) {
-            if (overMedia) {
+            if (showBackdrop) {
                 AsyncImage(
                     model = movie.backdropUrl,
                     contentDescription = null,
@@ -196,6 +205,7 @@ private fun DetailsContent(
                         }
                     },
                     modifier = Modifier
+                        .testTag("details_backdrop")
                         .matchParentSize()
                         .graphicsLayer { alpha = backdropAlpha },
                 )
@@ -211,6 +221,12 @@ private fun DetailsContent(
                 // backdrop's highlights come back through the text column.
                 Box(
                     modifier = Modifier
+                        // Tagged only once the decode lands: the tag's presence is what a test
+                        // reads as "the section 3.2 treatment is on", the same way the resume
+                        // track's tag exists only while the strip is visible.
+                        .then(
+                            if (overMedia) Modifier.testTag("details_backdrop_scrim") else Modifier,
+                        )
                         .matchParentSize()
                         .graphicsLayer { alpha = backdropAlpha }
                         .background(
@@ -237,7 +253,10 @@ private fun DetailsContent(
                 movie = movie,
                 overMedia = overMedia,
                 playRequester = playRequester,
+                watchedRequester = watchedRequester,
+                likeRequester = likeRequester,
                 downRequester = belowActions,
+                onActionFocused = { lastFocusedAction = it },
                 onPlay = actions.onPlay,
                 onToggleWatched = actions.onToggleWatched,
                 onToggleLike = actions.onToggleLike,
@@ -262,7 +281,7 @@ private fun DetailsContent(
             movie = movie,
             castEntryRequester = castEntryRequester,
             aboutRequester = aboutRequester,
-            upFromSections = playRequester,
+            upFromSections = lastFocusedAction,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
@@ -325,28 +344,33 @@ private fun DetailsSkeleton(anchorRequester: FocusRequester) {
                         .background(colors.muted, stubShape),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md)) {
-                    Box(
-                        modifier = Modifier
-                            .width(PLAY_STUB_WIDTH.scaled())
-                            .heightIn(min = IglooTheme.sizes.controlHeight)
-                            .focusRing(
-                                focused = focused,
-                                radius = IglooTheme.radius.lg,
-                                fill = colors.muted,
-                            )
-                            .focusRequester(anchorRequester)
-                            // The screen's only focusable while loading, and the shell is still
-                            // composed underneath: without this, Left or Down pressed before the
-                            // movie lands walks focus onto an invisible card.
-                            .pinnedToScreen()
-                            .onFocusChanged { focused = it.isFocused }
-                            .focusable()
-                            .clearAndSetSemantics {
-                                contentDescription = "Loading movie details"
-                                liveRegion = LiveRegionMode.Polite
-                            },
-                    )
-                    repeat(3) {
+                    // The stub carries the same reserved resume slot as the real Play column,
+                    // so the loading -> loaded swap does not move the anchor the focus sits on.
+                    Column {
+                        Box(
+                            modifier = Modifier
+                                .width(PLAY_STUB_WIDTH.scaled())
+                                .heightIn(min = IglooTheme.sizes.controlHeight)
+                                .focusRing(
+                                    focused = focused,
+                                    radius = IglooTheme.radius.lg,
+                                    fill = colors.muted,
+                                )
+                                .focusRequester(anchorRequester)
+                                // The screen's only focusable while loading, and the shell is still
+                                // composed underneath: without this, Left or Down pressed before the
+                                // movie lands walks focus onto an invisible card.
+                                .pinnedToScreen()
+                                .onFocusChanged { focused = it.isFocused }
+                                .focusable()
+                                .clearAndSetSemantics {
+                                    contentDescription = "Loading movie details"
+                                    liveRegion = LiveRegionMode.Polite
+                                },
+                        )
+                        ResumeProgress(progress = null, overMedia = false)
+                    }
+                    repeat(2) {
                         Box(
                             modifier = Modifier
                                 .width(PLAY_STUB_WIDTH.scaled())

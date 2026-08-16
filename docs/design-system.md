@@ -299,7 +299,13 @@ not track the theme — a poster looks the same in light and dark mode. Use lite
   third, theme-tracking fade into the page background is deliberately **not** ported: it blends an
   unclipped hero into the canvas, and our hero is a clipped card — a theme-tracking brush over
   media would contradict this section.
-- Text over media: `Color.White`, with a shadow for legibility
+- Text over media: `Color.White`, with a shadow for legibility. Secondary text over media —
+  the detail hero's tagline, runtime and date line, and resume caption, and the theater card's
+  year — steps to `Color.White.copy(alpha = 0.85f)`, and tertiary text (the detail hero's
+  genres line) to `0.75f`, so the hierarchy the token ramp (`foreground` → `mutedForeground`)
+  draws on canvas survives over media. Measured where the detail scrim is weakest under the
+  text column (0.62–0.71), the dimmest of these still renders at 12.6:1 — these are vocabulary
+  rows, not a contrast concession.
 - Theater-card scrim (§11.3.2): `Brush.verticalGradient`, transparent → `Color.Black.copy(alpha
   = 0.50f)` → `0.90f`, over the poster's lower third.
 - Rating badge (`core/ui/RatingBadge`), critic-score tiers: ≥ 7 `aurora` / `auroraForeground`;
@@ -370,6 +376,11 @@ intended, say so explicitly with `maxLines`:
 - Nav labels, list rows: `maxLines = 1`
 - Home hero (§11.3.1): title `maxLines = 2`, overview `maxLines = 3` — it is a card, so it takes
   card clamps
+- Detail overview (§11.4.1): `maxLines = 6`, and it **fades** at the bottom edge instead of
+  ellipsizing (`TextOverflow.Clip` plus a `background`-token gradient drawn only when the text
+  actually overflows). An ellipsis mid-sentence reads as punctuation; the fade says plainly that
+  the prose continues past what fits. The fade is for multi-line prose the user came to read —
+  single-line metadata keeps the conventional end-of-line ellipsis
 - Display-on-canvas hero copy (§11.1.0), the pairing code, error messages: **never truncate** —
   pass `overflow = TextOverflow.Visible` and let the container grow. The never-truncate rule is
   scoped to the full-bleed canvas, where the container can grow; a clamped card cannot.
@@ -684,8 +695,7 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | Composable | Notes |
 |---|---|
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
-| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `restingFill` / `contentColor` carry the §3.2 over-media ground where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. |
-| `IglooIconButton` | Icon-only control for row ends (the §11.4 More trigger): square at `sizes.controlHeight`, radius `lg`, same focus treatment. The glyph says nothing to a screen reader, so `semanticLabel` is **required**; a null `onClick` keeps it focusable but announces no action, matching `IglooPosterCard`. |
+| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `restingFill` / `contentColor` carry the §3.2 over-media ground where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
 | `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, `progressLabel` ("43 min left", rounded up, floored at one minute). Called from view models, never from composables. |
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
@@ -1206,8 +1216,10 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   remote user needs a bounded, predictable focus target.
 - **Detail** — full-bleed backdrop with a `background` gradient scrim, content pulled up over
   it. Poster left; title, tagline, metadata chips, genres, and hero actions right. Hero actions:
-  **Play**, **Watched** toggle, **Like**, **More**. Below: cast, chapters, extra details.
-  Play must be the first focused element on entry.
+  **Play**, **Watched** toggle, **Like** — the specified **More** trigger is deferred until its
+  menu exists, because a control that takes focus and does nothing on press spends the user's
+  press to teach them it is empty. Below: cast, chapters, extra details. Play must be the first
+  focused element on entry.
 
 #### 11.4.1 The detail screen, as built
 
@@ -1237,8 +1249,14 @@ gradient, left to right — and neither is licensed off media.
 
 Poster at `posterWidth` / `posterAspect`; title `titleLarge` at 2 lines (**not** `display`,
 per §11.3.1); tagline `bodyLarge` italic in quotes; then the metadata row, genres joined by
-`·`, the action row, and the resume strip. With no backdrop — or one that fails — every §3.2
-literal is dropped for token colors, exactly as the home hero does.
+`·`, the action row, and the resume strip. The §3.2 treatment is licensed by a **decoded**
+backdrop, not by a non-null URL: until the decode lands — and permanently, with no backdrop or
+one that fails — every §3.2 literal is dropped for token colors, exactly as the home hero
+does. (A URL-gated treatment paints white text over the bare token canvas for the whole load
+window, which on the light palette is white on white.) The title's 2-line clamp and the
+single-line tagline, genres, and runtime/date lines ellipsize conventionally: end-of-line
+ellipsis on metadata is an honest cut signal, and the fade treatment (§4.1) is reserved for
+the overview — the one block of prose the user came to read.
 
 **Metadata row.** Rating badge, certification, media-info chips, then runtime and release date
 as plain `label` text. Chips are `label` on the §3.2 chip ground. Media chips are derived from
@@ -1258,15 +1276,23 @@ The strip belongs to **Play**, and is laid out to say so: Play and the strip sha
 inside the action row, sized to Play's own intrinsic width, so the strip is exactly as wide as
 the button whose progress it reports. It sits `sm` below, which also clears Play's focus ring at
 its 1.05x scale. A width of its own — the strip was once a sibling of the whole row capped at a
-fixed max — runs it out under Watched, Like and More, where it reads as the row's progress rather
+fixed max — runs it out under Watched and Like, where it reads as the row's progress rather
 than Play's, and a fixed value drifts from the button the moment the label is localised.
+
+The strip's **slot is reserved from first paint**, invisible and silent while there is no
+progress: the progress request lands after the hero is on screen, and marking a movie watched
+removes the strip, and either would reflow the bottom-anchored hero under the user's eye if the
+slot came and went with it. The skeleton's Play stub reserves the same slot so the
+loading→loaded swap does not move the anchor focus is sitting on.
 
 **Focus.** Play takes entry focus, including through the loading→loaded swap, where the
 skeleton's Play-slot stub holds the anchor. The vertical chain — actions → cast → about — is
 **hand-wired end to end**, and every edge that would leave the screen is pinned to
 `FocusRequester.Cancel`: the shell underneath is still composed, and an unpinned edge lets a
-spatial search land on a card the user cannot see. Back closes the overlay and restores focus
-to the card that opened it, via the rail's `returnRequester` (§6.3).
+spatial search land on a card the user cannot see. Up from the sections returns to the
+**last-focused action**, not unconditionally to Play — the same focus memory the rail keeps for
+its own cards, so Like → down into cast → up lands back on Like. Back closes the overlay and
+restores focus to the card that opened it, via the rail's `returnRequester` (§6.3).
 
 **Toggles.** Watched and Like flip optimistically and flip back if the server disagrees. Two
 rules follow from that, and both are easy to get wrong: leaving the screen cancels the screen's
@@ -1278,9 +1304,14 @@ something, but announcing "Not watched" for a movie that is watched states a fac
 not have yet.
 
 **Reachability.** Overview and Key Crew are prose between the hero and the cast rail, so moving
-down scrolls them into view on the way. The About block is a **focus target** even though it
-carries no action: it sits below the last rail, and content a d-pad can never scroll to may as
-well not be on the page. It announces its rows as one node.
+down scrolls them into view on the way; both share the same 620dp prose measure so adjacent
+sections keep one right edge. The About block is a **focus target** even though it carries no
+action: it sits below the last rail, and content a d-pad can never scroll to may as well not be
+on the page. Its heading sits **above** the focusable panel, aligned with the other section
+headings and keeping its `heading()` semantics for TalkBack's heading navigation — inside the
+panel it would inherit the inner padding's indent and be erased by the cleared semantics. The
+panel announces its rows as one node, without repeating the "About" framing the heading node
+directly above already carries.
 
 Because it is reachable but not actionable, it wears the focus treatment as a **panel** rather
 than a control: `radius.xl` — the §3 radius scale's step for cards, panels and surfaces — instead

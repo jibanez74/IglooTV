@@ -46,13 +46,15 @@ fun ratingBadgeSpec(rating: Double): RatingBadgeSpec {
  * Critic score tiers on the warm aurora accent (section 3.2), one badge per surface.
  *
  * [radius] defaults to the corner the poster-card badge has always used; a badge sitting in a
- * row of chips passes `pill` so the row reads as one set rather than two.
+ * row of chips passes `pill` so the row reads as one set rather than two, and [verticalPadding]
+ * matched to the chips' own so the set shares one height.
  */
 @Composable
 fun RatingBadge(
     spec: RatingBadgeSpec,
     modifier: Modifier = Modifier,
     radius: Dp = IglooTheme.radius.sm,
+    verticalPadding: Dp = 2.dp.scaled(),
 ) {
     val colors = IglooTheme.colors
     val (background, foreground) = when (spec.tier) {
@@ -66,7 +68,7 @@ fun RatingBadge(
     Row(
         modifier = modifier
             .background(background, RoundedCornerShape(radius))
-            .padding(horizontal = IglooTheme.spacing.xs, vertical = 2.dp.scaled()),
+            .padding(horizontal = IglooTheme.spacing.xs, vertical = verticalPadding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp.scaled()),
     ) {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 
@@ -16,6 +17,7 @@ fun IglooText(
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Ellipsis,
     softWrap: Boolean = true,
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
 ) {
     BasicText(
         text = text,
@@ -24,5 +26,6 @@ fun IglooText(
         maxLines = maxLines,
         overflow = overflow,
         softWrap = softWrap,
+        onTextLayout = onTextLayout,
     )
 }

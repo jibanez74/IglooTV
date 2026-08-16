@@ -2,7 +2,6 @@ package com.igloo.blindpenguincoder.core.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +47,11 @@ enum class IglooButtonVariant { Primary, Ghost, Destructive }
  * [recessed] steps a `Primary` fill back while a sibling in the same row holds focus, so the
  * focused control is the strongest thing on screen rather than the resting one. It is presentation
  * only — a recessed button is still enabled and still announces nothing about being recessed.
+ *
+ * [labelVariants] reserves width for every label a toggle can show, so flipping between them is
+ * a repaint rather than a relayout shoving the row's siblings. The variants are laid out
+ * invisibly in the button's own style — a fixed width would drift the moment the labels are
+ * localised — and never reach the semantics tree.
  */
 @Composable
 fun IglooButton(
@@ -65,6 +68,7 @@ fun IglooButton(
     stateDescription: String? = null,
     actionLabel: String? = null,
     recessed: Boolean = false,
+    labelVariants: List<String> = emptyList(),
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
@@ -129,86 +133,22 @@ fun IglooButton(
                     modifier = Modifier.size(IglooTheme.icons.md),
                 )
             }
-            IglooText(
-                text = text,
-                style = IglooTheme.typography.bodyLarge,
-                color = foreground,
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-/**
- * A square icon-only control for row ends (the details screen's More trigger). The glyph alone
- * says nothing to TalkBack, so the label is mandatory; when [onClick] is null the control stays
- * a focus target but announces no action, the same contract as an inert poster card.
- */
-@Composable
-fun IglooIconButton(
-    icon: ImageVector,
-    semanticLabel: String,
-    onClick: (() -> Unit)?,
-    modifier: Modifier = Modifier,
-    variant: IglooButtonVariant = IglooButtonVariant.Ghost,
-    restingFill: Color? = null,
-    contentColor: Color? = null,
-) {
-    val colors = IglooTheme.colors
-    var focused by remember { mutableStateOf(false) }
-    val background = when (variant) {
-        IglooButtonVariant.Primary -> colors.primary
-        IglooButtonVariant.Ghost -> when {
-            restingFill != null -> restingFill
-            focused -> colors.card.copy(alpha = 0.72f)
-            else -> Color.Transparent
-        }
-        IglooButtonVariant.Destructive -> colors.destructive
-    }
-    val foreground = contentColor ?: when (variant) {
-        IglooButtonVariant.Primary -> colors.primaryForeground
-        IglooButtonVariant.Ghost -> colors.foreground
-        IglooButtonVariant.Destructive -> colors.destructiveForeground
-    }
-
-    Box(
-        modifier = modifier
-            .heightIn(min = IglooTheme.sizes.controlHeight)
-            .widthIn(min = IglooTheme.sizes.controlHeight)
-            .focusRing(
-                focused = focused,
-                radius = IglooTheme.radius.lg,
-                fill = background,
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onClick,
+            Box(contentAlignment = Alignment.Center) {
+                labelVariants.filter { it != text }.forEach { reserved ->
+                    IglooText(
+                        text = reserved,
+                        style = IglooTheme.typography.bodyLarge,
+                        color = Color.Transparent,
+                        maxLines = 1,
                     )
-                } else {
-                    Modifier.focusable()
-                },
-            )
-            .clearAndSetSemantics {
-                contentDescription = semanticLabel
-                if (onClick != null) {
-                    role = Role.Button
-                    onClick(label = semanticLabel) {
-                        onClick()
-                        true
-                    }
                 }
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Image(
-            imageVector = icon,
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(foreground),
-            modifier = Modifier.size(IglooTheme.icons.md),
-        )
+                IglooText(
+                    text = text,
+                    style = IglooTheme.typography.bodyLarge,
+                    color = foreground,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }

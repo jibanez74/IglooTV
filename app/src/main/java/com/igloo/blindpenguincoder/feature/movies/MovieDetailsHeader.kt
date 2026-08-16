@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
@@ -44,7 +45,6 @@ import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
-import com.igloo.blindpenguincoder.core.ui.IglooIconButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
@@ -61,7 +61,10 @@ internal fun MovieDetailsHeader(
     movie: MovieDetailsUi,
     overMedia: Boolean,
     playRequester: FocusRequester,
+    watchedRequester: FocusRequester,
+    likeRequester: FocusRequester,
     downRequester: FocusRequester?,
+    onActionFocused: (FocusRequester) -> Unit,
     onPlay: () -> Unit,
     onToggleWatched: () -> Unit,
     onToggleLike: () -> Unit,
@@ -110,7 +113,10 @@ internal fun MovieDetailsHeader(
                 movie = movie,
                 overMedia = overMedia,
                 playRequester = playRequester,
+                watchedRequester = watchedRequester,
+                likeRequester = likeRequester,
                 downRequester = downRequester,
+                onActionFocused = onActionFocused,
                 onPlay = onPlay,
                 onToggleWatched = onToggleWatched,
                 onToggleLike = onToggleLike,
@@ -172,7 +178,11 @@ private fun MetadataRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (movie.ratingBadge != null) {
-            RatingBadge(spec = movie.ratingBadge, radius = IglooTheme.radius.pill)
+            RatingBadge(
+                spec = movie.ratingBadge,
+                radius = IglooTheme.radius.pill,
+                verticalPadding = IglooTheme.spacing.xs,
+            )
         }
         if (movie.certification != null) {
             DetailChip(text = movie.certification, overMedia = overMedia)
@@ -224,7 +234,10 @@ private fun ActionRow(
     movie: MovieDetailsUi,
     overMedia: Boolean,
     playRequester: FocusRequester,
+    watchedRequester: FocusRequester,
+    likeRequester: FocusRequester,
     downRequester: FocusRequester?,
+    onActionFocused: (FocusRequester) -> Unit,
     onPlay: () -> Unit,
     onToggleWatched: () -> Unit,
     onToggleLike: () -> Unit,
@@ -270,14 +283,16 @@ private fun ActionRow(
                     .focusRequester(playRequester)
                     .then(rowFocus)
                     .focusProperties { left = Cancel }
-                    .onFocusChanged { playFocused = it.isFocused },
+                    .onFocusChanged {
+                        playFocused = it.isFocused
+                        if (it.isFocused) onActionFocused(playRequester)
+                    },
             )
-            if (movie.progress != null) {
-                ResumeProgress(progress = movie.progress, overMedia = overMedia)
-            }
+            ResumeProgress(progress = movie.progress, overMedia = overMedia)
         }
         IglooButton(
             text = if (watched) "Watched" else "Watch",
+            labelVariants = TOGGLE_WATCHED_LABELS,
             onClick = onToggleWatched,
             variant = IglooButtonVariant.Ghost,
             icon = IglooIcons.Check,
@@ -292,10 +307,13 @@ private fun ActionRow(
             actionLabel = if (watched) "Remove from watched" else "Mark as watched",
             modifier = Modifier
                 .testTag("details_watched")
-                .then(rowFocus),
+                .focusRequester(watchedRequester)
+                .then(rowFocus)
+                .onFocusChanged { if (it.isFocused) onActionFocused(watchedRequester) },
         )
         IglooButton(
             text = if (liked) "Liked" else "Like",
+            labelVariants = TOGGLE_LIKE_LABELS,
             onClick = onToggleLike,
             variant = IglooButtonVariant.Ghost,
             icon = if (liked) IglooIcons.HeartFilled else IglooIcons.Heart,
@@ -307,42 +325,46 @@ private fun ActionRow(
             actionLabel = if (liked) "Remove like" else "Like this movie",
             modifier = Modifier
                 .testTag("details_like")
-                .then(rowFocus),
-        )
-        // Inert until its menu lands: focusable so the row's shape is final, announcing no
-        // action nothing implements (the poster-card convention).
-        IglooIconButton(
-            icon = IglooIcons.MoreVertical,
-            semanticLabel = "More options",
-            onClick = null,
-            restingFill = ghostFill,
-            contentColor = ghostContent,
-            modifier = Modifier
-                .testTag("details_more")
+                .focusRequester(likeRequester)
                 .then(rowFocus)
-                .focusProperties { right = Cancel },
+                .focusProperties { right = Cancel }
+                .onFocusChanged { if (it.isFocused) onActionFocused(likeRequester) },
         )
     }
 }
+
+// Both labels of each toggle, so the button reserves the wider one and the flip is a repaint
+// rather than a relayout shoving the controls to its right (More, when its menu lands).
+private val TOGGLE_WATCHED_LABELS = listOf("Watch", "Watched")
+private val TOGGLE_LIKE_LABELS = listOf("Like", "Liked")
 
 /**
  * The thin resume strip and its minutes-left caption. The strip repeats what the caption says,
  * so only the caption's text node speaks. It fills the column Play sizes, so it is exactly as
  * wide as the button it belongs to; the top gap clears Play's focus ring at its 1.05x scale.
+ *
+ * The slot is composed even with no [progress] — invisible and silent — because the progress
+ * request lands after first paint and toggling Watched removes the strip: either would reflow
+ * the bottom-anchored hero under the user's eye if the strip's height came and went. The
+ * skeleton reserves the same slot so the loading→loaded swap does not move Play.
  */
 @Composable
-private fun ResumeProgress(
-    progress: ProgressUi,
+internal fun ResumeProgress(
+    progress: ProgressUi?,
     overMedia: Boolean,
 ) {
     val colors = IglooTheme.colors
+    val visible = progress != null
     Column(
-        modifier = Modifier.padding(top = IglooTheme.spacing.sm),
+        modifier = Modifier
+            .padding(top = IglooTheme.spacing.sm)
+            .alpha(if (visible) 1f else 0f)
+            .then(if (visible) Modifier else Modifier.clearAndSetSemantics {}),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
     ) {
         Box(
             modifier = Modifier
-                .testTag("details_resume_track")
+                .then(if (visible) Modifier.testTag("details_resume_track") else Modifier)
                 .fillMaxWidth()
                 .height(4.dp.scaled())
                 .iglooSurface(
@@ -355,13 +377,13 @@ private fun ResumeProgress(
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(progress.fraction)
+                    .fillMaxWidth(progress?.fraction ?: 0f)
                     .fillMaxHeight()
                     .background(colors.primary),
             )
         }
         IglooText(
-            text = progress.minutesLeftLabel,
+            text = progress?.minutesLeftLabel ?: "",
             style = IglooTheme.typography.label.overMedia(overMedia),
             color = if (overMedia) Color.White.copy(alpha = 0.85f) else colors.mutedForeground,
             maxLines = 1,
