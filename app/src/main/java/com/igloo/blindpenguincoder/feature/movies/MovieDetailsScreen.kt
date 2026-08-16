@@ -204,14 +204,19 @@ private fun DetailsContent(
                 // the vertical fade is the token gradient that blends the backdrop into the
                 // canvas the sections sit on. Alpha-zero stops come from the color itself —
                 // Color.Transparent is black at zero and would gray the token fade.
+                //
+                // The stops are the detail hero's own, not section 3.2's home-hero ramp. That one
+                // is written for a clipped card about 752dp wide; stretched across a full-bleed
+                // panel it has decayed to alpha 0.14 by the time the metadata line ends, and the
+                // backdrop's highlights come back through the text column.
                 Box(
                     modifier = Modifier
                         .matchParentSize()
                         .graphicsLayer { alpha = backdropAlpha }
                         .background(
                             Brush.horizontalGradient(
-                                0f to Color.Black.copy(alpha = 0.70f),
-                                0.5f to Color.Black.copy(alpha = 0.35f),
+                                0f to Color.Black.copy(alpha = 0.80f),
+                                0.65f to Color.Black.copy(alpha = 0.55f),
                                 1f to Color.Black.copy(alpha = 0f),
                             ),
                         ),

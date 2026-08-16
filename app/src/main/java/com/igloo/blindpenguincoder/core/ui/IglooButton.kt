@@ -30,6 +30,8 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.recessedPrimary
+import com.igloo.blindpenguincoder.core.design.recessedPrimaryContent
 
 enum class IglooButtonVariant { Primary, Ghost, Destructive }
 
@@ -43,6 +45,10 @@ enum class IglooButtonVariant { Primary, Ghost, Destructive }
  *
  * [stateDescription] and [actionLabel] make a toggle announce properly: "Watched, button,
  * marked as watched — double tap to remove from watched" instead of a bare label.
+ *
+ * [recessed] steps a `Primary` fill back while a sibling in the same row holds focus, so the
+ * focused control is the strongest thing on screen rather than the resting one. It is presentation
+ * only — a recessed button is still enabled and still announces nothing about being recessed.
  */
 @Composable
 fun IglooButton(
@@ -58,12 +64,16 @@ fun IglooButton(
     contentColor: Color? = null,
     stateDescription: String? = null,
     actionLabel: String? = null,
+    recessed: Boolean = false,
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
     val background = when (variant) {
-        IglooButtonVariant.Primary ->
-            if (enabled) colors.primary else colors.primary.copy(alpha = 0.4f)
+        IglooButtonVariant.Primary -> when {
+            !enabled -> colors.primary.copy(alpha = 0.4f)
+            recessed -> colors.recessedPrimary()
+            else -> colors.primary
+        }
         IglooButtonVariant.Ghost -> when {
             restingFill != null -> restingFill
             focused -> colors.card.copy(alpha = 0.72f)
@@ -73,7 +83,8 @@ fun IglooButton(
             if (enabled) colors.destructive else colors.destructive.copy(alpha = 0.4f)
     }
     val foreground = contentColor ?: when (variant) {
-        IglooButtonVariant.Primary -> colors.primaryForeground
+        IglooButtonVariant.Primary ->
+            if (enabled && recessed) colors.recessedPrimaryContent() else colors.primaryForeground
         IglooButtonVariant.Ghost -> colors.foreground
         IglooButtonVariant.Destructive -> colors.destructiveForeground
     }

@@ -260,6 +260,19 @@ luminance under text must stay ≤ 0.093 in dark and ≥ 0.345 in light — the 
 `primary @ 0.18` means "this is the active destination". Both can be true at once, and the nav
 spine renders them together.
 
+**Recession is a mix, not an alpha.** A `Primary` button whose row has focus elsewhere steps back
+to `lerp(primary, background, 0.30f)` — `#2A8AB8` in dark, `#4B94BC` in light. It is deliberately
+*not* expressible in this table, for two reasons. `primary @ 0.40` is already the disabled control
+above and composites over the canvas to `#1C5778`, so recession written as an alpha would collide
+with "you cannot press this" — and the mix has to stay measurably clear of it. And an alpha would
+let a backdrop through the one control on the detail hero that must stay solid. The label follows
+by measured contrast rather than by pairing: recession moves the fill toward the canvas, which in
+light lightens it under a white `primaryForeground` and drops that pair to 3.35:1, so `foreground`
+takes over there (5.55:1) while dark keeps `primaryForeground` (4.83:1). Both live in
+`core/design/IglooColors.kt` as `recessedPrimary()` / `recessedPrimaryContent()`, and
+`RecessedPrimaryTest` pins the values, the opacity, the distance from disabled, and both labels.
+See §6.1 for when a control recedes.
+
 **Only one scrim renders at a time.** The rail's and the modal's are the same `background @ 0.60`,
 and two of them composite to 0.84 — an alpha this table does not authorize, and dark enough that
 the control the user just left stops being legible. One implementation enforces the alpha itself:
@@ -465,6 +478,26 @@ than a guessed colour, so it is correct over `background`, `card`, `sidebar`, or
 Ring against that gap is 8.68:1. Measured on a Shield the gap bottoms at **3.31:1** against the
 fill after the panel's upscale — thin, but past the 3:1 non-text threshold.
 
+**The separator makes focus legible on a `Primary` button; it does not make it the loudest thing
+in a row.** Everything above reasons about one control in isolation, which is not the situation a
+row of actions creates. Because `ring` and `primary` are the same value, a resting `Primary` fill
+and a focused sibling's ring are the same colour — and the fill wins on area. Measured on the
+detail hero with Watched focused, the *unfocused* Play carried **4.8x** the glacier pixels of the
+focused control's ring (21 036 vs 4 377). At ten feet the eye goes to the solid block, and the
+press marks the movie watched instead of playing it.
+
+So a `Primary` button in a row of actions **recedes while a sibling holds focus** (§3.1's mix,
+`IglooButton`'s `recessed` flag), and returns to full `primary` when it is focused itself or when
+the row has no focus at all. It is presentation only: a recessed button is still enabled, still
+clickable, and announces nothing about being recessed. This does not touch the treatment above —
+the ring, separator, scale and glow are unchanged; the resting control gets quieter instead of the
+focused one getting louder, which is what keeps the one treatment one treatment. After the change
+the same measurement finds no glacier at all in Play's bounds, so the focused control is the only
+glacier in the row.
+
+The rule is scoped to a **row of peer actions**, not to every `Primary` on screen: elsewhere the
+app puts exactly one `Primary` per screen (§9.1), where there is no sibling to lose the eye to.
+
 **The glow is ambience, not the indicator, and the colours go in at full alpha.** The platform
 multiplies shadow colours by the theme's `spotShadowAlpha` (0.19) and `ambientShadowAlpha`
 (0.039) before rasterising. A `ring @ 0.20` spot colour — which this section specified until the
@@ -651,7 +684,7 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | Composable | Notes |
 |---|---|
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
-| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `restingFill` / `contentColor` carry the §3.2 over-media ground where the button sits on a backdrop. |
+| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `restingFill` / `contentColor` carry the §3.2 over-media ground where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. |
 | `IglooIconButton` | Icon-only control for row ends (the §11.4 More trigger): square at `sizes.controlHeight`, radius `lg`, same focus treatment. The glyph says nothing to a screen reader, so `semanticLabel` is **required**; a null `onClick` keeps it focusable but announces no action, matching `IglooPosterCard`. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
 | `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, `progressLabel` ("43 min left", rounded up, floored at one minute). Called from view models, never from composables. |
@@ -1192,6 +1225,16 @@ token** blends the backdrop into the canvas the sections sit on. That token fade
 page. Alpha-zero stops are written `color.copy(alpha = 0f)`, never `Color.Transparent`, which
 is black at zero and greys the fade. Chrome and text keep the safe-area inset.
 
+The side gradient runs its **own stops** here — `0.80` → `0.55` at `0.65` → `0` — not §3.2's
+`0.70 → 0.35 at 0.5 → 0`. That ramp is written for the home hero, a *clipped card* about 752dp
+wide; stretched across a full-bleed panel the same fractions have decayed to alpha 0.14 by the
+time the metadata line ends, and the backdrop's highlights come back up through the text column.
+Measured on a high-frequency backdrop, white-on-peak in the title band was **1.69:1** under the
+home ramp and **3.72:1** under these stops, with the tagline and genre bands at 6.51:1 and 4.18:1
+(3.74 / 6.62 / 4.59 on a Shield). The `.overMedia()` shadow mitigates the peaks but does not
+remove them, so the ramp has to carry it. Both heroes still use the same *shape* — a black side
+gradient, left to right — and neither is licensed off media.
+
 Poster at `posterWidth` / `posterAspect`; title `titleLarge` at 2 lines (**not** `display`,
 per §11.3.1); tagline `bodyLarge` italic in quotes; then the metadata row, genres joined by
 `·`, the action row, and the resume strip. With no backdrop — or one that fails — every §3.2
@@ -1210,6 +1253,13 @@ with the abbreviations spelled out — eight two-character stops would be noise 
 player, not this screen. A partially watched movie shows a 4dp strip (`primary` on the §3.2
 `Black @ 0.40` track) and an "N min left" caption, from 30 seconds in until the position stops
 meaning anything — the server flips to watched at 98% — and never once the movie is watched.
+
+The strip belongs to **Play**, and is laid out to say so: Play and the strip share a column
+inside the action row, sized to Play's own intrinsic width, so the strip is exactly as wide as
+the button whose progress it reports. It sits `sm` below, which also clears Play's focus ring at
+its 1.05x scale. A width of its own — the strip was once a sibling of the whole row capped at a
+fixed max — runs it out under Watched, Like and More, where it reads as the row's progress rather
+than Play's, and a fixed value drifts from the button the moment the label is localised.
 
 **Focus.** Play takes entry focus, including through the loading→loaded swap, where the
 skeleton's Play-slot stub holds the anchor. The vertical chain — actions → cast → about — is
@@ -1231,6 +1281,14 @@ not have yet.
 down scrolls them into view on the way. The About block is a **focus target** even though it
 carries no action: it sits below the last rail, and content a d-pad can never scroll to may as
 well not be on the page. It announces its rows as one node.
+
+Because it is reachable but not actionable, it wears the focus treatment as a **panel** rather
+than a control: `radius.xl` — the §3 radius scale's step for cards, panels and surfaces — instead
+of the `radius.lg` every button, input and nav row uses, and the §6.1 focused `card @ 0.72` fill
+rather than a ring on bare canvas. Same one treatment, same ring and glow; what changes is that
+the shape it draws is a surface highlight instead of a button outline, so focus arriving there
+does not promise a press. It keeps `scaleOnFocus = false` — a full-width block that grows 5% reads
+as the page lurching.
 
 **Motion.** The header does **not** stagger. It holds the entry focus, and the rise moves the
 focused button's visual bounds while the scroll container is bringing it into view — the column

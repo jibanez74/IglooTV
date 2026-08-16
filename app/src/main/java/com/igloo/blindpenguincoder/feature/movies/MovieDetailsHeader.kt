@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -14,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +26,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
@@ -115,9 +116,6 @@ internal fun MovieDetailsHeader(
                 onToggleLike = onToggleLike,
                 modifier = Modifier.padding(top = IglooTheme.spacing.sm),
             )
-            if (movie.progress != null) {
-                ResumeProgress(progress = movie.progress, overMedia = overMedia)
-            }
         }
     }
 }
@@ -246,22 +244,38 @@ private fun ActionRow(
         up = Cancel
         down = downRequester ?: Cancel
     }
+    // `ring` and `primary` are the same value, so a resting Play carries several times more
+    // glacier than the ring on whatever is actually focused — the eye lands on Play and the
+    // press toggles watched. Play steps back while a sibling holds focus so the focused control
+    // is the strongest thing in the row.
+    var rowHasFocus by remember { mutableStateOf(false) }
+    var playFocused by remember { mutableStateOf(false) }
 
     Row(
-        modifier = modifier,
+        modifier = modifier.onFocusChanged { rowHasFocus = it.hasFocus },
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
     ) {
-        IglooButton(
-            text = "Play",
-            onClick = onPlay,
-            icon = IglooIcons.Play,
-            semanticLabel = "Play ${movie.title}",
-            modifier = Modifier
-                .testTag("details_play")
-                .focusRequester(playRequester)
-                .then(rowFocus)
-                .focusProperties { left = Cancel },
-        )
+        // Play and its resume strip share a column sized to Play, so the strip reads as Play's
+        // progress rather than the whole row's. Width comes from the button's own intrinsic
+        // width — a fixed value would drift the moment the label is localised.
+        Column(modifier = Modifier.width(IntrinsicSize.Min)) {
+            IglooButton(
+                text = "Play",
+                onClick = onPlay,
+                icon = IglooIcons.Play,
+                semanticLabel = "Play ${movie.title}",
+                recessed = rowHasFocus && !playFocused,
+                modifier = Modifier
+                    .testTag("details_play")
+                    .focusRequester(playRequester)
+                    .then(rowFocus)
+                    .focusProperties { left = Cancel }
+                    .onFocusChanged { playFocused = it.isFocused },
+            )
+            if (movie.progress != null) {
+                ResumeProgress(progress = movie.progress, overMedia = overMedia)
+            }
+        }
         IglooButton(
             text = if (watched) "Watched" else "Watch",
             onClick = onToggleWatched,
@@ -313,7 +327,8 @@ private fun ActionRow(
 
 /**
  * The thin resume strip and its minutes-left caption. The strip repeats what the caption says,
- * so only the caption's text node speaks.
+ * so only the caption's text node speaks. It fills the column Play sizes, so it is exactly as
+ * wide as the button it belongs to; the top gap clears Play's focus ring at its 1.05x scale.
  */
 @Composable
 private fun ResumeProgress(
@@ -322,12 +337,12 @@ private fun ResumeProgress(
 ) {
     val colors = IglooTheme.colors
     Column(
-        modifier = Modifier.padding(top = IglooTheme.spacing.xs),
+        modifier = Modifier.padding(top = IglooTheme.spacing.sm),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
     ) {
         Box(
             modifier = Modifier
-                .widthIn(max = PROGRESS_MAX_WIDTH.scaled())
+                .testTag("details_resume_track")
                 .fillMaxWidth()
                 .height(4.dp.scaled())
                 .iglooSurface(
@@ -353,6 +368,3 @@ private fun ResumeProgress(
         )
     }
 }
-
-/** The web's max-w-md resume strip, scaled to the TV viewport; one-off per section 2.8. */
-private val PROGRESS_MAX_WIDTH = 420.dp

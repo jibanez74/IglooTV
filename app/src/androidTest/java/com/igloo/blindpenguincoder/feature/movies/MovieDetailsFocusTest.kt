@@ -13,11 +13,15 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.unit.width
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -34,6 +38,7 @@ import com.igloo.blindpenguincoder.testHero
 import com.igloo.blindpenguincoder.testHomeMovies
 import com.igloo.blindpenguincoder.testMovieDetails
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -283,6 +288,51 @@ class MovieDetailsFocusTest {
         play.performKeyInput { pressKey(Key.DirectionDown) }
 
         play.assertIsFocused()
+    }
+
+    @Test
+    fun playIsTheOnlyFocusedControlOnceTheRowIsWalked() {
+        // Play's fill recedes while a sibling holds focus, so it stops out-shouting the ring on
+        // whatever is actually focused. The fill itself is pinned by RecessedPrimaryTest; what
+        // matters here is that the row never reports two focused controls, which is the state
+        // the recession keys off.
+        setShellContent(loadedState())
+
+        val play = composeRule.onNodeWithTag("details_play")
+        play.assertIsFocused()
+
+        listOf("details_watched", "details_like", "details_more").forEach { tag ->
+            composeRule.onNodeWithTag(tag).requestFocus()
+            composeRule.onNodeWithTag(tag).assertIsFocused()
+            play.assertIsNotFocused()
+        }
+
+        play.requestFocus()
+        play.assertIsFocused()
+        composeRule.onNodeWithTag("details_watched").assertIsNotFocused()
+    }
+
+    @Test
+    fun theResumeStripIsExactlyAsWideAsPlay() {
+        // It reads as Play's progress only if it matches Play. It used to be a sibling of the
+        // whole row capped at a fixed width, which ran it out under Watch, Like and More.
+        setShellContent(loadedState())
+
+        // Measured with focus parked elsewhere: focus scales Play 1.05x about its centre, which
+        // walks its reported left edge out by half the growth and would fail the alignment check
+        // for a reason that has nothing to do with the strip.
+        composeRule.onNodeWithTag("details_watched").requestFocus()
+        composeRule.onNodeWithTag("details_watched").assertIsFocused()
+
+        val play = composeRule.onNodeWithTag("details_play").getUnclippedBoundsInRoot()
+        val track = composeRule.onNodeWithTag("details_resume_track").getUnclippedBoundsInRoot()
+
+        assertEquals(play.width.value, track.width.value, 0.5f)
+        assertEquals(play.left.value, track.left.value, 0.5f)
+
+        // And it stops well short of the next control, rather than running under the whole row.
+        val watched = composeRule.onNodeWithTag("details_watched").getUnclippedBoundsInRoot()
+        assertTrue("the strip runs into Watch", track.right.value < watched.left.value)
     }
 
     @Test

@@ -19,6 +19,7 @@ import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -225,9 +226,13 @@ private fun AboutSection(
             .fillMaxWidth()
             // Before the cleared semantics, which wipe everything below them in the chain.
             .testTag("details_about")
+            // Panel radius, not the button radius the rest of the app's focusables use, and the
+            // focused fill instead of a bare ring: this is a focus target only so a d-pad can
+            // scroll to it (section 11.4.1), and it carries no action to promise.
             .focusRing(
                 focused = focused,
-                radius = IglooTheme.radius.lg,
+                radius = IglooTheme.radius.xl,
+                fill = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
                 scaleOnFocus = false,
             )
             .focusRequester(requester)
