@@ -93,6 +93,7 @@ class IglooBaseAppTest {
                     ),
                     onRetryRail = {},
                     onMovieSelected = null,
+                    onTheaterMovieSelected = null,
                     onCloseDetails = {},
                     details = MovieDetailsUiState(),
                     detailsActions = inertDetailsActions,

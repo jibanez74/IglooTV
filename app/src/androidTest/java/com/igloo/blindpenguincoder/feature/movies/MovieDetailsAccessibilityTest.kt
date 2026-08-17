@@ -74,14 +74,15 @@ class MovieDetailsAccessibilityTest {
                 MovieDetailsScreen(
                     state = state,
                     mutationNotice = mutationNotice,
-                    actions = MovieDetailsActions(
+                    actions = MovieDetailsActions.Library(
                         onPlay = { plays += 1 },
                         onToggleWatched = { watchedToggles += 1 },
                         onToggleLike = { likeToggles += 1 },
                         onRetry = { retries += 1 },
                     ),
-                    onPlayExtra = { playedExtras += it.id },
+                    onPlayVideo = { video, _ -> playedExtras += video.id },
                     extrasReturnRequester = remember { FocusRequester() },
+                    heroTrailerReturnRequester = remember { FocusRequester() },
                 )
             }
         }

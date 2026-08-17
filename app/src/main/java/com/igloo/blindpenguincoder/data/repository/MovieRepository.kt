@@ -17,6 +17,8 @@ import com.igloo.blindpenguincoder.data.model.MovieWatchedData
 import com.igloo.blindpenguincoder.data.model.SetMovieWatchedRequest
 import com.igloo.blindpenguincoder.data.model.TheaterMovie
 import com.igloo.blindpenguincoder.data.model.TheaterMoviesData
+import com.igloo.blindpenguincoder.data.model.TmdbMovie
+import com.igloo.blindpenguincoder.data.model.TmdbMovieData
 import io.ktor.client.call.body
 
 class MovieRepository(
@@ -43,6 +45,14 @@ class MovieRepository(
         decode = { response ->
             response.body<ApiEnvelope<TheaterMoviesData>>().data?.movies
                 ?: error("Missing movies in in-theaters response")
+        },
+    )
+
+    suspend fun tmdbMovie(tmdbId: Long): ApiResult<TmdbMovie> = safeApiCall(
+        request = { api.tmdbMovie(tmdbId) },
+        decode = { response ->
+            response.body<ApiEnvelope<TmdbMovieData>>().data?.movie
+                ?: error("Missing movie in TMDB movie response")
         },
     )
 

@@ -1193,9 +1193,9 @@ the client sorts by `release_date` descending — the same client-side sort the 
 **The theaters rail is TMDB content, not library content**, which is why its card looks
 deliberately different: the title and year sit *on* the poster over a bottom scrim, with a
 critic-rating badge (star + one-decimal score) in the top-right corner. It renders last because
-these are movies the user cannot play. The cards are focusable but announce no action — there is
-no TMDB detail screen yet — and the whole card is one cleared semantics node reading title, year,
-and "rated X.X out of 10". A rating of 0 is TMDB's "unrated" and drops the badge (and the
+these are movies the user cannot play. Each card opens that movie's in-theaters detail page
+(§11.4.2) and announces "Open {title}"; the whole card is one cleared semantics node reading
+title, year, and "rated X.X out of 10". A rating of 0 is TMDB's "unrated" and drops the badge (and the
 announcement fragment) rather than badging "0.0". Empty copy describes the successful-but-empty
 case; a failed fetch shows the shared error card instead — the web's error-flavored empty copy is
 deliberately not ported. On a server with no TMDB key the rail sits in its error state with
@@ -1374,6 +1374,52 @@ ends up parked 12dp down, with the hero pushed into the overscan margin. The bac
 carries the entrance there; the sections below stagger normally, because nothing in them has
 focus yet. This refines §7.2's "give the focused element index 0": inside a scroll container,
 give it no stagger at all.
+
+#### 11.4.2 The in-theaters detail screen
+
+A card in the theaters rail (§11.3.2) opens the same detail screen for a **TMDB** movie the
+library does not hold, from the one read `GET /api/tmdb/movies/{tmdb_id}`. Web parity: the web
+client's `/movies/in-theaters/$id` route renders its library detail components over a TMDB
+record, and this does the same over `MovieDetailsUi`.
+
+**One screen, one render model.** `MovieDetailsScreen` is not forked. The two pages differ in
+their hero actions and nowhere else, so the variant is carried by the actions bag —
+`MovieDetailsActions.Library` or `.Theater` — and everything the source cannot fill is simply
+absent in the shared model: no media badges (nothing was probed), no resume strip, no watched or
+liked state. The two view models stay separate: this page is a single read with nothing to write,
+and a TMDB id and a library id are both plain numbers, so one `openMovieId` could never tell them
+apart. The host keeps **one overlay slot** and feeds it from whichever view model is open, which
+is what keeps Back, the accessibility fence, and focus restoration single-path; opening either
+closes the other.
+
+**Hero.** Identical to §11.4.1 — full-bleed backdrop, poster, title, tagline, metadata row,
+genres — with one action: **Play Trailer**, TMDB's first YouTube trailer in its own order, opening
+the §11.8.1 player. The button is the entry anchor *and* the node the player restores focus to,
+so a trailer started from the hero comes back to the hero rather than to the extras rail's card
+(§6.3). A movie TMDB lists no trailer for renders **no action row at all** — a control that takes
+focus and does nothing spends a press to teach the user it is empty (the same rule that deferred
+More) — and the entry anchor passes to the first section below, so the page is never focus-dead.
+Up out of the first section is then pinned, because there is nothing above it to return to.
+
+**Metadata.** The rating badge is the §3.2 star badge over TMDB's `vote_average`, the same value
+and the same badge the theaters rail's card carries — not the web's separate "TMDB 7.9" outline
+chip, which would be a second rating style for one number. 0 is TMDB's "unrated" and drops the
+badge. The certification chip is TMDB's `release_dates`, resolved by the **backend scanner's own
+rule** (`TmdbMovie.Certification`): the US rating when there is one, otherwise the first non-empty
+rating from any country — so the chip agrees with the one the same movie would show on its library
+page once it is scanned in. (The web page shows no certification here at all; matching the scanner
+is worth the divergence.)
+
+**Sections.** Overview, Key Crew, Cast, Extra Videos and About, all as §11.4.1 builds them — the
+crew rule, the cast cap, the YouTube-only extras and their trailers-first sort are shared code, not
+a second implementation. Two differences: TMDB's free-form video types ("Featurette", "Behind the
+Scenes") are shown as TMDB spells them, since only the library's snake_case values need splitting;
+and About gains a **Status** row ("Released") between Production and Original language, the one
+field only a TMDB record carries (web parity). TMDB has no numeric id for a video, so the extras
+rail keys off the payload's own order, assigned before the sort.
+
+**Back** closes the overlay and restores focus to the theaters card that opened it, through that
+rail's `returnRequester` like any other rail (§6.3).
 
 ### 11.5 Music
 
@@ -1566,6 +1612,33 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-17 — The theaters rail gets a destination: the in-theaters detail screen (§11.4.2).**
+
+`GET /api/tmdb/movies/{id}` behind the same detail screen, so a card in the Now Playing in
+Theaters rail opens a real page instead of being a focusable that announces nothing. §11.3.2's
+"no TMDB detail screen yet" is retired.
+
+- **The screen was parameterized, not forked.** `MovieDetailsActions` became a sealed pair —
+  `Library` (Play + the toggles) and `Theater` (Play Trailer, or no row) — and the mapping rules
+  both sources share (key crew, cast cap, YouTube extras and their sort, the metadata sentence)
+  moved to `MovieDetailsMapping.kt`. Everything TMDB cannot fill is absent in the one render
+  model, exactly as the library's own secondary reads are until they land.
+- **Two view models, one overlay slot.** `TheaterMovieDetailsViewModel` is a single read with no
+  mutation machinery; the host picks whichever is open, so Back, the TalkBack fence and focus
+  restore stay single-path. Merging them was rejected on the id collision alone: a TMDB id and a
+  library id are both plain numbers.
+- **The player's focus restore learned where it was launched from.** `VideoLaunchSite` rides the
+  saved trailer request, so a trailer started from the hero returns to the hero button and one
+  started from the rail returns to its card (§6.3) — and the theaters rail finally carries the
+  `returnRequester` every rail that opens something needs.
+- **Certification follows the backend scanner's rule**, not the web page (which shows none): US
+  first, then any country — so the chip matches what the library page would show for the same
+  movie later. The rating badge stays the §3.2 star badge over `vote_average`, matching the rail's
+  own card rather than the web's separate TMDB chip.
+- **A hero can now have no actions at all**, so the entry anchor falls to the first section and
+  `MovieDetailsScreen` requests entry focus safely; `requestFocusSafely` and `withRequester` moved
+  to `core/ui/FocusRequesters.kt`, where the host and the rail already needed them both.
 
 **2026-08-16 — The detail screen stops moving under the user.**
 

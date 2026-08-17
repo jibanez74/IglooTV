@@ -50,6 +50,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
+import com.igloo.blindpenguincoder.core.ui.withRequester
 
 /**
  * The hero's content block (docs/design-system.md section 11.4): poster left; title, tagline,
@@ -61,14 +62,14 @@ import com.igloo.blindpenguincoder.core.ui.iglooSurface
 internal fun MovieDetailsHeader(
     movie: MovieDetailsUi,
     overMedia: Boolean,
-    playRequester: FocusRequester,
+    actions: MovieDetailsActions,
+    onPlayTrailer: (() -> Unit)?,
+    primaryRequester: FocusRequester,
+    heroTrailerReturnRequester: FocusRequester,
     watchedRequester: FocusRequester,
     likeRequester: FocusRequester,
     downRequester: FocusRequester?,
     onActionFocused: (FocusRequester) -> Unit,
-    onPlay: () -> Unit,
-    onToggleWatched: () -> Unit,
-    onToggleLike: () -> Unit,
     mutationNotice: String?,
     modifier: Modifier = Modifier,
 ) {
@@ -111,19 +112,31 @@ internal fun MovieDetailsHeader(
                     maxLines = 1,
                 )
             }
-            ActionRow(
-                movie = movie,
-                overMedia = overMedia,
-                playRequester = playRequester,
-                watchedRequester = watchedRequester,
-                likeRequester = likeRequester,
-                downRequester = downRequester,
-                onActionFocused = onActionFocused,
-                onPlay = onPlay,
-                onToggleWatched = onToggleWatched,
-                onToggleLike = onToggleLike,
-                modifier = Modifier.padding(top = IglooTheme.spacing.sm),
-            )
+            val actionRowModifier = Modifier.padding(top = IglooTheme.spacing.sm)
+            when (actions) {
+                is MovieDetailsActions.Library -> LibraryActionRow(
+                    movie = movie,
+                    overMedia = overMedia,
+                    actions = actions,
+                    playRequester = primaryRequester,
+                    watchedRequester = watchedRequester,
+                    likeRequester = likeRequester,
+                    downRequester = downRequester,
+                    onActionFocused = onActionFocused,
+                    modifier = actionRowModifier,
+                )
+
+                is MovieDetailsActions.Theater -> if (onPlayTrailer != null) {
+                    TrailerActionRow(
+                        onPlayTrailer = onPlayTrailer,
+                        playRequester = primaryRequester,
+                        returnRequester = heroTrailerReturnRequester,
+                        downRequester = downRequester,
+                        onActionFocused = onActionFocused,
+                        modifier = actionRowModifier,
+                    )
+                }
+            }
             if (mutationNotice != null) {
                 IglooNotice(
                     text = mutationNotice,
@@ -237,18 +250,58 @@ private fun DetailChip(
     )
 }
 
+/**
+ * The in-theaters hero's whole action row: one Primary button, composed only when TMDB lists a
+ * trailer to play (section 11.4.2). It is the entry anchor through [playRequester] and the node
+ * the trailer player restores focus to through [returnRequester] — two requesters on one button,
+ * the same pairing a rail's card carries.
+ *
+ * Every direction out is pinned but down, for the reason the library row pins its own edges: the
+ * shell is still composed under this overlay, and the row's only control has no horizontal
+ * neighbour of its own.
+ */
 @Composable
-private fun ActionRow(
+private fun TrailerActionRow(
+    onPlayTrailer: () -> Unit,
+    playRequester: FocusRequester,
+    returnRequester: FocusRequester,
+    downRequester: FocusRequester?,
+    onActionFocused: (FocusRequester) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier = modifier) {
+        IglooButton(
+            text = "Play Trailer",
+            onClick = onPlayTrailer,
+            icon = IglooIcons.Play,
+            // "Play", not the poster default's "Open": the announced action has to say what
+            // pressing does (section 12), and pressing opens the trailer player.
+            semanticLabel = "Play Trailer",
+            modifier = Modifier
+                .testTag("details_play_trailer")
+                .focusRequester(playRequester)
+                .withRequester(returnRequester)
+                .focusProperties {
+                    up = Cancel
+                    left = Cancel
+                    right = Cancel
+                    down = downRequester ?: Cancel
+                }
+                .onFocusChanged { if (it.isFocused) onActionFocused(playRequester) },
+        )
+    }
+}
+
+@Composable
+private fun LibraryActionRow(
     movie: MovieDetailsUi,
     overMedia: Boolean,
+    actions: MovieDetailsActions.Library,
     playRequester: FocusRequester,
     watchedRequester: FocusRequester,
     likeRequester: FocusRequester,
     downRequester: FocusRequester?,
     onActionFocused: (FocusRequester) -> Unit,
-    onPlay: () -> Unit,
-    onToggleWatched: () -> Unit,
-    onToggleLike: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
@@ -285,7 +338,7 @@ private fun ActionRow(
         Column(modifier = Modifier.width(IntrinsicSize.Min)) {
             IglooButton(
                 text = "Play",
-                onClick = onPlay,
+                onClick = actions.onPlay,
                 icon = IglooIcons.Play,
                 semanticLabel = "Play ${movie.title}",
                 recessed = rowHasFocus && !playFocused,
@@ -304,7 +357,7 @@ private fun ActionRow(
         IglooButton(
             text = if (watched) "Watched" else "Watch",
             labelVariants = TOGGLE_WATCHED_LABELS,
-            onClick = onToggleWatched,
+            onClick = actions.onToggleWatched,
             variant = IglooButtonVariant.Ghost,
             icon = IglooIcons.Check,
             iconTint = if (watched) colors.primary else null,
@@ -330,7 +383,7 @@ private fun ActionRow(
         IglooButton(
             text = if (liked) "Liked" else "Like",
             labelVariants = TOGGLE_LIKE_LABELS,
-            onClick = onToggleLike,
+            onClick = actions.onToggleLike,
             variant = IglooButtonVariant.Ghost,
             icon = if (liked) IglooIcons.HeartFilled else IglooIcons.Heart,
             iconTint = if (liked) colors.primary else null,

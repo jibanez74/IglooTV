@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertWidthIsEqualTo
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -23,6 +24,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.Dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
@@ -81,6 +83,7 @@ class HomeRailBehaviorTest {
     private var albumRetries = 0
     private var theaterRetries = 0
     private val opened = mutableListOf<Long>()
+    private val theatersOpened = mutableListOf<Long>()
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
 
@@ -90,6 +93,7 @@ class HomeRailBehaviorTest {
         initialAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loaded(albums),
         initialTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loaded(theaterMovies),
         onMovieSelected: ((Long) -> Unit)? = { opened += it },
+        onTheaterMovieSelected: ((Long) -> Unit)? = { theatersOpened += it },
     ) {
         continueState = initialContinue
         latestState = initialLatest
@@ -100,6 +104,7 @@ class HomeRailBehaviorTest {
         albumRetries = 0
         theaterRetries = 0
         opened.clear()
+        theatersOpened.clear()
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
@@ -128,6 +133,7 @@ class HomeRailBehaviorTest {
                         }
                     },
                     onMovieSelected = onMovieSelected,
+                    onTheaterMovieSelected = onTheaterMovieSelected,
                     onCloseDetails = {},
                     details = MovieDetailsUiState(),
                     detailsActions = inertDetailsActions,
@@ -505,16 +511,22 @@ class HomeRailBehaviorTest {
     }
 
     @Test
-    fun theaterCardsAnnounceTitleYearAndRatingWithNoAction() {
+    fun theaterCardsAnnounceTitleYearAndRatingAndOpenTheirPage() {
         setShellContent(IglooRailState.Loaded(continueMovies))
 
         // One cleared node per card: poster, badge, and overlay texts are not separate
-        // announceable nodes. No action — there is no TMDB detail screen to open.
+        // announceable nodes. The action is "Open", because pressing opens the in-theaters
+        // detail page for that TMDB movie (section 11.4.2).
         theaterCard(21)
             .performScrollTo()
             .assertContentDescriptionEquals("Heat 2, 2026, rated 7.9 out of 10")
-            .assertHasNoClickAction()
+            .assertHasClickAction()
+            .requestFocus()
+        theaterCard(21).performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.onAllNodesWithText("Heat 2").assertCountEquals(0)
+        assertEquals(listOf(21L), theatersOpened)
+        // The TMDB id goes to its own callback: a library movie with the same id must not open.
+        assertEquals(emptyList<Long>(), opened)
     }
 
     @Test
@@ -524,6 +536,14 @@ class HomeRailBehaviorTest {
         theaterCard(23)
             .performScrollTo()
             .assertContentDescriptionEquals("Unrated")
+    }
+
+    @Test
+    fun theaterCardsWithNoDestinationAnnounceNoAction() {
+        setShellContent(IglooRailState.Loaded(continueMovies), onTheaterMovieSelected = null)
+
+        theaterCard(21)
+            .performScrollTo()
             .assertHasNoClickAction()
     }
 }

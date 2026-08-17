@@ -73,8 +73,9 @@ class MovieDetailsOverMediaTest {
                         testMovieDetails().copy(backdropUrl = backdropUrl),
                     ),
                     actions = inertDetailsActions,
-                    onPlayExtra = {},
+                    onPlayVideo = { _, _ -> },
                     extrasReturnRequester = remember { FocusRequester() },
+                    heroTrailerReturnRequester = remember { FocusRequester() },
                 )
             }
         }

@@ -90,6 +90,7 @@ class TrailerOverlayFocusTest {
                     detailsActions = inertDetailsActions,
                     onRetryRail = {},
                     onMovieSelected = {},
+                    onTheaterMovieSelected = {},
                     onCloseDetails = {
                         detailsState = detailsState.copy(
                             openMovieId = null,

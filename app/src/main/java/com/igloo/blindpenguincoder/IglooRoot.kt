@@ -41,6 +41,7 @@ import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutViewModel
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
+import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -183,36 +184,70 @@ fun IglooRoot(container: IglooAppContainer) {
                             onWatchedStateCommitted = homeViewModel::refreshContinueWatching,
                         )
                     }
+                    val theaterDetailsViewModel = viewModel(
+                        viewModelStoreOwner = authenticatedSessionOwner,
+                        key = "theater-movie-details",
+                    ) {
+                        TheaterMovieDetailsViewModel(
+                            container.movieRepository,
+                            container.serverUrlProvider,
+                        )
+                    }
                     // Device tokens are revoked server-side after long disuse, so a session
                     // resumed from the background is re-checked before it is trusted — and the
                     // library is re-read, because a TV can sit on this screen for days. The
                     // first START is also the first load; the view models have no init fetch,
                     // and the details refresh is a no-op unless the overlay is open.
-                    LifecycleStartEffect(homeViewModel, detailsViewModel) {
+                    LifecycleStartEffect(homeViewModel, detailsViewModel, theaterDetailsViewModel) {
                         scope.launch { sessionManager.revalidateActive() }
                         homeViewModel.refresh()
                         detailsViewModel.refresh()
+                        theaterDetailsViewModel.refresh()
                         onStopOrDispose { }
                     }
                     val home by homeViewModel.uiState.collectAsStateWithLifecycle()
-                    val details by detailsViewModel.uiState.collectAsStateWithLifecycle()
+                    val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()
+                    val theaterDetails by theaterDetailsViewModel.uiState
+                        .collectAsStateWithLifecycle()
+                    // One overlay slot, two sources: the shell hosts a single details screen, so
+                    // whichever view model is open feeds it and opening either closes the other.
+                    // A library id and a TMDB id are both plain numbers, which is exactly why the
+                    // two states cannot be merged into one view model.
+                    val theaterOpen = theaterDetails.openMovieId != null
                     IglooApp(
                         user = state.user,
                         serverOrigin = state.serverAddress.origin,
                         signOut = signOut,
                         home = home,
-                        details = details,
-                        detailsActions = MovieDetailsActions(
-                            // The details screen's primary action, wired to nothing until the
-                            // player lands. It is the page's contract, so it announces normally.
-                            onPlay = {},
-                            onToggleWatched = detailsViewModel::toggleWatched,
-                            onToggleLike = detailsViewModel::toggleLike,
-                            onRetry = detailsViewModel::retry,
-                        ),
+                        details = if (theaterOpen) theaterDetails else libraryDetails,
+                        detailsActions = if (theaterOpen) {
+                            MovieDetailsActions.Theater(
+                                onRetry = theaterDetailsViewModel::retry,
+                            )
+                        } else {
+                            MovieDetailsActions.Library(
+                                // The details screen's primary action, wired to nothing until the
+                                // player lands. It is the page's contract, so it announces normally.
+                                onPlay = {},
+                                onToggleWatched = detailsViewModel::toggleWatched,
+                                onToggleLike = detailsViewModel::toggleLike,
+                                onRetry = detailsViewModel::retry,
+                            )
+                        },
                         onRetryRail = homeViewModel::retry,
-                        onMovieSelected = detailsViewModel::open,
-                        onCloseDetails = detailsViewModel::close,
+                        onMovieSelected = { movieId ->
+                            theaterDetailsViewModel.close()
+                            detailsViewModel.open(movieId)
+                        },
+                        onTheaterMovieSelected = { tmdbId ->
+                            detailsViewModel.close()
+                            theaterDetailsViewModel.open(tmdbId)
+                        },
+                        // Back does not ask which one was up: closing a closed page is a no-op.
+                        onCloseDetails = {
+                            detailsViewModel.close()
+                            theaterDetailsViewModel.close()
+                        },
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },
                         onSignOut = signOutViewModel::request,
                         onSignOutConfirm = signOutViewModel::confirm,

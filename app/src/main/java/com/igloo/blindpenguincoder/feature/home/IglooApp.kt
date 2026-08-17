@@ -70,10 +70,12 @@ import com.igloo.blindpenguincoder.core.ui.PosterCardProgress
 import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
+import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsScreen
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
+import com.igloo.blindpenguincoder.feature.movies.VideoLaunchSite
 import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
@@ -107,21 +109,36 @@ private sealed interface DetailsOrigin {
     }
 }
 
-/** Requests focus unless the requester has no node attached; reports whether it landed. */
-private fun FocusRequester.requestFocusSafely(): Boolean =
-    runCatching { requestFocus() }.isSuccess
-
-/** What the trailer player overlay is playing: only what its screen renders, saveable so the
- * overlay survives activity recreation (the trailer itself restarts — a WebView cannot be
- * parceled, and a trailer losing its position is an accepted trade). */
-private data class TrailerRequest(val key: String, val title: String, val typeLabel: String) {
+/** What the trailer player overlay is playing: only what its screen renders, plus where it was
+ * launched from, saveable so the overlay survives activity recreation (the trailer itself
+ * restarts — a WebView cannot be parceled, and a trailer losing its position is an accepted
+ * trade). */
+private data class TrailerRequest(
+    val key: String,
+    val title: String,
+    val typeLabel: String,
+    val origin: VideoLaunchSite,
+) {
     companion object {
         val Saver: Saver<TrailerRequest?, List<String>> = Saver(
             save = { request ->
-                if (request == null) emptyList() else listOf(request.key, request.title, request.typeLabel)
+                if (request == null) {
+                    emptyList()
+                } else {
+                    listOf(request.key, request.title, request.typeLabel, request.origin.name)
+                }
             },
             restore = { saved ->
-                if (saved.isEmpty()) null else TrailerRequest(saved[0], saved[1], saved[2])
+                if (saved.isEmpty()) {
+                    null
+                } else {
+                    TrailerRequest(
+                        key = saved[0],
+                        title = saved[1],
+                        typeLabel = saved[2],
+                        origin = VideoLaunchSite.valueOf(saved[3]),
+                    )
+                }
             },
         )
     }
@@ -137,6 +154,7 @@ fun IglooApp(
     detailsActions: MovieDetailsActions,
     onRetryRail: (HomeRail) -> Unit,
     onMovieSelected: ((Long) -> Unit)?,
+    onTheaterMovieSelected: ((Long) -> Unit)?,
     onCloseDetails: () -> Unit,
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
@@ -176,15 +194,22 @@ fun IglooApp(
     }
     val trailerOpen = trailerRequest != null
     // Parked by the extras rail on its last-focused card, so closing the player restores focus
-    // to the exact card that launched it (section 6.3).
+    // to the exact card that launched it (section 6.3). The in-theaters page can launch the same
+    // player from its hero instead, and parks the second requester on that button.
     val extrasReturnRequester = remember { FocusRequester() }
+    val heroTrailerReturnRequester = remember { FocusRequester() }
     val closeTrailer = {
+        val origin = trailerRequest?.origin
         trailerRequest = null
         // In the callback, not an effect, for the detach-race reason the details close documents.
-        // The extras rail is still composed in every reachable case — the player only opens from
-        // it, and nothing that runs under the player removes extras — but if the anchor is gone
-        // anyway, the pane's anchor is a worse restore than the card and far better than a crash.
-        if (!extrasReturnRequester.requestFocusSafely()) {
+        // The launching control is still composed in every reachable case — nothing that runs
+        // under the player removes it — but if the anchor is gone anyway, the pane's anchor is a
+        // worse restore than the card and far better than a crash.
+        val returnRequester = when (origin) {
+            VideoLaunchSite.Hero -> heroTrailerReturnRequester
+            else -> extrasReturnRequester
+        }
+        if (!returnRequester.requestFocusSafely()) {
             contentStartRequester.requestFocusSafely()
         }
     }
@@ -193,6 +218,13 @@ fun IglooApp(
         { origin, movieId ->
             detailsOrigin = origin
             select(movieId)
+        }
+    }
+    // The theaters rail is the in-theaters page's only entrance, so its origin is not a parameter.
+    val openTheaterMovie: ((Long) -> Unit)? = onTheaterMovieSelected?.let { select ->
+        { tmdbId ->
+            detailsOrigin = DetailsOrigin.Rail(HomeRail.InTheaters)
+            select(tmdbId)
         }
     }
 
@@ -240,6 +272,7 @@ fun IglooApp(
             mutationNotice = details.mutationNotice.takeIf { !detailsOpen },
             onRetryRail = onRetryRail,
             openMovie = openMovie,
+            openTheaterMovie = openTheaterMovie,
             railReturnRequesters = railReturnRequesters,
             // The rail stays open behind the dialog: the row that opened it must still be legible,
             // so the focus it gets back on cancel is not a surprise.
@@ -293,10 +326,16 @@ fun IglooApp(
                 MovieDetailsScreen(
                     state = details.details,
                     actions = detailsActions,
-                    onPlayExtra = { video ->
-                        trailerRequest = TrailerRequest(video.key, video.title, video.typeLabel)
+                    onPlayVideo = { video, site ->
+                        trailerRequest = TrailerRequest(
+                            key = video.key,
+                            title = video.title,
+                            typeLabel = video.typeLabel,
+                            origin = site,
+                        )
                     },
                     extrasReturnRequester = extrasReturnRequester,
+                    heroTrailerReturnRequester = heroTrailerReturnRequester,
                     mutationNotice = details.mutationNotice,
                 )
             }
@@ -334,6 +373,7 @@ private fun IglooShell(
     mutationNotice: String?,
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
+    openTheaterMovie: ((Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     railExpanded: Boolean,
     scrimmed: Boolean,
@@ -396,6 +436,7 @@ private fun IglooShell(
                 mutationNotice = mutationNotice,
                 onRetryRail = onRetryRail,
                 openMovie = openMovie,
+                openTheaterMovie = openTheaterMovie,
                 railReturnRequesters = railReturnRequesters,
                 contentStartRequester = contentStartRequester,
                 navigationRequesters = navigationRequesters,
@@ -471,6 +512,7 @@ private fun ContentPane(
     mutationNotice: String?,
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
+    openTheaterMovie: ((Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
@@ -541,6 +583,7 @@ private fun ContentPane(
                 home = home,
                 onRetryRail = onRetryRail,
                 openMovie = openMovie,
+                openTheaterMovie = openTheaterMovie,
                 railReturnRequesters = railReturnRequesters,
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequesters.getValue(IglooDestination.Home),
@@ -580,6 +623,7 @@ private fun HomeRails(
     home: HomeUiState,
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
+    openTheaterMovie: ((Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
@@ -715,10 +759,12 @@ private fun HomeRails(
             emptyIcon = IglooIcons.Movies,
             emptyText = "No movies are playing in theaters right now. Check back later.",
             onRetry = { onRetryRail(HomeRail.InTheaters) },
+            returnRequester = railReturnRequesters.getValue(HomeRail.InTheaters),
         ) { movie, itemModifier, cardAspect ->
             InTheatersCard(
                 movie = movie,
                 aspect = cardAspect,
+                onClick = openTheaterMovie?.let { open -> { open(movie.id) } },
                 modifier = itemModifier.testTag("theater_card_${movie.id}"),
             )
         }

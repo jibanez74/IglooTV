@@ -92,6 +92,7 @@ class NavigationRailBehaviorTest {
                     ),
                     onRetryRail = {},
                     onMovieSelected = null,
+                    onTheaterMovieSelected = null,
                     onCloseDetails = {},
                     details = MovieDetailsUiState(),
                     detailsActions = inertDetailsActions,

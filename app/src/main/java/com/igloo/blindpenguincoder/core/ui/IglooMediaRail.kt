@@ -309,9 +309,6 @@ private fun RailEmpty(
 }
 
 /** A rail anchor carries up to three requesters; absent ones chain to nothing. */
-private fun Modifier.withRequester(requester: FocusRequester?): Modifier =
-    if (requester != null) focusRequester(requester) else this
-
 /** Three cards and their gaps: wide enough for a sentence, still visibly one rail's worth. */
 @Composable
 private fun railErrorWidth(): Dp =

@@ -50,56 +50,91 @@ import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
+import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 
 /**
  * What the details overlay can do, grouped so the shell that hosts it keeps a readable
  * signature. Close is the host's own business (it owns Back and focus restoration) and is
  * deliberately not here.
+ *
+ * Which variant is passed is also what tells the screen *which* detail page it is rendering:
+ * the two differ in their hero actions and in nothing else, so everything below the action row
+ * is one implementation over one [MovieDetailsUi].
  */
-data class MovieDetailsActions(
-    val onPlay: () -> Unit,
-    val onToggleWatched: () -> Unit,
-    val onToggleLike: () -> Unit,
-    val onRetry: () -> Unit,
-)
+sealed interface MovieDetailsActions {
+    /** The full-screen error's Retry, which both pages have. */
+    val onRetry: () -> Unit
+
+    /** A library movie's hero row: Play, plus the two optimistic toggles (section 11.4.1). */
+    data class Library(
+        val onPlay: () -> Unit,
+        val onToggleWatched: () -> Unit,
+        val onToggleLike: () -> Unit,
+        override val onRetry: () -> Unit,
+    ) : MovieDetailsActions
+
+    /**
+     * An in-theaters movie's hero row: Play Trailer alone, and no row at all when TMDB lists no
+     * trailer (section 11.4.2) — there is nothing to watch, mark, or like on a movie the library
+     * does not hold. What the button plays is [MovieDetailsUi.heroTrailer], opened through the
+     * screen's own `onPlayVideo`: the trailer is one of the extras, and the player is the same.
+     */
+    data class Theater(
+        override val onRetry: () -> Unit,
+    ) : MovieDetailsActions
+}
 
 /**
- * The movie details screen (docs/design-system.md section 11.4): a full-screen in-tree overlay
- * above the shell, opaque on the `background` token, with a full-bleed backdrop that scrolls
- * away with the hero. Back and focus-restore belong to the host ([com.igloo.blindpenguincoder.feature.home.IglooApp]),
- * which also fences the shell's focusables while this is open — the screen itself only anchors
- * entry focus: Play (or the state's stand-in for it) is the first focused element.
+ * Which control asked for a video to play: a card in the extras rail, or the in-theaters hero's
+ * Play Trailer button. The host opens the same player either way and uses this to restore focus
+ * to the control that led away when the player closes (section 6.3).
+ */
+enum class VideoLaunchSite { ExtrasRail, Hero }
+
+/**
+ * The movie details screen (docs/design-system.md sections 11.4 and 11.4.2): a full-screen
+ * in-tree overlay above the shell, opaque on the `background` token, with a full-bleed backdrop
+ * that scrolls away with the hero. Back and focus-restore belong to the host
+ * ([com.igloo.blindpenguincoder.feature.home.IglooApp]), which also fences the shell's focusables
+ * while this is open — the screen itself only anchors entry focus: the hero's primary action
+ * (or the state's stand-in for it) is the first focused element, and where an in-theaters movie
+ * has no trailer to play, the first section below takes that anchor instead.
  *
  * The backdrop opts out of the safe area (section 2.5); chrome and text keep the inset.
  *
- * [onPlayExtra] and [extrasReturnRequester] come from the host rather than [MovieDetailsActions]
- * for the same reason close is not in the bag: playing an extra opens a host-owned overlay, and
- * the requester is how the host restores focus to the launching card when that overlay closes.
+ * [onPlayVideo] and the two return requesters come from the host rather than
+ * [MovieDetailsActions] for the same reason close is not in the bag: playing a video opens a
+ * host-owned overlay, and the requesters are how the host restores focus to whichever control
+ * launched it — a card in the extras rail, or the hero's Play Trailer button — when that overlay
+ * closes.
  */
 @Composable
 fun MovieDetailsScreen(
     state: MovieDetailsState,
     actions: MovieDetailsActions,
-    onPlayExtra: (ExtraVideoUi) -> Unit,
+    onPlayVideo: (ExtraVideoUi, VideoLaunchSite) -> Unit,
     extrasReturnRequester: FocusRequester,
+    heroTrailerReturnRequester: FocusRequester,
     mutationNotice: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
     val entryRequester = remember { FocusRequester() }
 
-    // Play is the first focused element on entry (section 11.4); while loading, the skeleton's
-    // Play-slot stub holds the anchor so focus already sits where the real button will land.
-    LaunchedEffect(Unit) { entryRequester.requestFocus() }
+    // The hero's primary action is the first focused element on entry (section 11.4); while
+    // loading, the skeleton's action-slot stub holds the anchor so focus already sits where the
+    // real button will land. Requested safely because one state has nothing to anchor: an
+    // in-theaters movie with no trailer, no cast, no extras and no about is all prose.
+    LaunchedEffect(Unit) { entryRequester.requestFocusSafely() }
 
     // The IglooMediaRail swap-capture pattern: the outgoing state's focused node only detaches
     // once the composition applies, so this still sees whether the screen owned focus going in,
     // and the effect re-lands it on the incoming state's anchor. Keyed on the state's class —
-    // a Loaded republish (a toggle, a badge arriving) must not yank focus back to Play.
+    // a Loaded republish (a toggle, a badge arriving) must not yank focus back to the action row.
     var screenHasFocus by remember { mutableStateOf(false) }
     val hadFocusAtSwap = remember(state::class) { screenHasFocus }
     LaunchedEffect(state::class) {
-        if (hadFocusAtSwap) entryRequester.requestFocus()
+        if (hadFocusAtSwap) entryRequester.requestFocusSafely()
     }
 
     Box(
@@ -114,7 +149,14 @@ fun MovieDetailsScreen(
             .testTag("movie_details"),
     ) {
         when (state) {
-            is MovieDetailsState.Loading -> DetailsSkeleton(anchorRequester = entryRequester)
+            is MovieDetailsState.Loading -> DetailsSkeleton(
+                anchorRequester = entryRequester,
+                // Geometry-matched to the row it stands in for: the in-theaters hero carries one
+                // action and no resume strip, and a stand-in of the wrong shape would move the
+                // anchor focus is sitting on when the real row lands.
+                actionStubs = if (actions is MovieDetailsActions.Theater) 1 else LIBRARY_ACTIONS,
+                reserveResumeSlot = actions is MovieDetailsActions.Library,
+            )
 
             // The only region on screen, so Assertive is safe and right: the user just asked
             // for this page and is waiting on it (section 10).
@@ -142,10 +184,11 @@ fun MovieDetailsScreen(
             is MovieDetailsState.Loaded -> DetailsContent(
                 movie = state.movie,
                 mutationNotice = mutationNotice,
-                playRequester = entryRequester,
+                entryRequester = entryRequester,
                 actions = actions,
-                onPlayExtra = onPlayExtra,
+                onPlayVideo = onPlayVideo,
                 extrasReturnRequester = extrasReturnRequester,
+                heroTrailerReturnRequester = heroTrailerReturnRequester,
             )
         }
     }
@@ -155,10 +198,11 @@ fun MovieDetailsScreen(
 private fun DetailsContent(
     movie: MovieDetailsUi,
     mutationNotice: String?,
-    playRequester: FocusRequester,
+    entryRequester: FocusRequester,
     actions: MovieDetailsActions,
-    onPlayExtra: (ExtraVideoUi) -> Unit,
+    onPlayVideo: (ExtraVideoUi, VideoLaunchSite) -> Unit,
     extrasReturnRequester: FocusRequester,
+    heroTrailerReturnRequester: FocusRequester,
 ) {
     val colors = IglooTheme.colors
     val layout = IglooTheme.layout
@@ -169,21 +213,46 @@ private fun DetailsContent(
     // treatment waits for the decode — a non-null URL alone would paint white text over the
     // bare token canvas for the whole load window.
     val overMedia = imageLoaded
+    // What the hero's action row is: the library page always has Play, while the in-theaters page
+    // has Play Trailer only for as long as TMDB lists one (section 11.4.2).
+    val onPlayTrailer: (() -> Unit)? = movie.heroTrailer
+        ?.takeIf { actions is MovieDetailsActions.Theater }
+        ?.let { trailer -> { onPlayVideo(trailer, VideoLaunchSite.Hero) } }
+    val hasHeroActions = actions is MovieDetailsActions.Library || onPlayTrailer != null
+
     // The screen's vertical chain, hand-wired end to end: actions -> cast -> extras -> about.
     // Nothing is left to a spatial search, because the shell composed underneath would be a
     // candidate.
-    val castEntryRequester = remember { FocusRequester() }
-    val extrasEntryRequester = remember { FocusRequester() }
-    val aboutRequester = remember { FocusRequester() }
     val watchedRequester = remember { FocusRequester() }
     val likeRequester = remember { FocusRequester() }
-    // Up from the sections returns to whichever action the user left, not unconditionally to
-    // Play — the same focus memory the cast rail keeps for its own cards.
-    var lastFocusedAction by remember { mutableStateOf(playRequester) }
+    val castEntry = remember { FocusRequester() }
+    val extrasEntry = remember { FocusRequester() }
+    val about = remember { FocusRequester() }
+    val hasCast = movie.cast.isNotEmpty()
+    val hasExtras = movie.extraVideos.isNotEmpty()
+    val hasAbout = !movie.about.isEmpty
+    // With no action row there is nothing in the header to anchor entry focus on, so the first
+    // section below owns the anchor: the screen's requester *is* that section's entry requester,
+    // which lands entry focus there and leaves every edge wired at the section untouched. It
+    // attaches to nothing at all on a page that is only prose, which is why the entry request is
+    // made safely.
+    val sectionAnchor = entryRequester.takeIf { !hasHeroActions }
+    val castEntryRequester = if (sectionAnchor != null && hasCast) sectionAnchor else castEntry
+    val extrasEntryRequester =
+        if (sectionAnchor != null && !hasCast && hasExtras) sectionAnchor else extrasEntry
+    val aboutRequester =
+        if (sectionAnchor != null && !hasCast && !hasExtras) sectionAnchor else about
+    // Up from the sections returns to whichever action the user left, not unconditionally to the
+    // primary one — the same focus memory the cast rail keeps for its own cards. Null while the
+    // hero has no actions, so up from the first section stays on the screen instead of pointing
+    // at a requester attached to nothing.
+    var lastFocusedAction by remember(hasHeroActions) {
+        mutableStateOf(entryRequester.takeIf { hasHeroActions })
+    }
     val belowActions = when {
-        movie.cast.isNotEmpty() -> castEntryRequester
-        movie.extraVideos.isNotEmpty() -> extrasEntryRequester
-        !movie.about.isEmpty -> aboutRequester
+        hasCast -> castEntryRequester
+        hasExtras -> extrasEntryRequester
+        hasAbout -> aboutRequester
         else -> null
     }
     // The backdrop fades in on top of the token canvas instead of popping (section 7.2's
@@ -268,14 +337,14 @@ private fun DetailsContent(
             MovieDetailsHeader(
                 movie = movie,
                 overMedia = overMedia,
-                playRequester = playRequester,
+                actions = actions,
+                onPlayTrailer = onPlayTrailer,
+                primaryRequester = entryRequester,
+                heroTrailerReturnRequester = heroTrailerReturnRequester,
                 watchedRequester = watchedRequester,
                 likeRequester = likeRequester,
                 downRequester = belowActions,
                 onActionFocused = { lastFocusedAction = it },
-                onPlay = actions.onPlay,
-                onToggleWatched = actions.onToggleWatched,
-                onToggleLike = actions.onToggleLike,
                 mutationNotice = mutationNotice,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -301,7 +370,7 @@ private fun DetailsContent(
             extrasReturnRequester = extrasReturnRequester,
             aboutRequester = aboutRequester,
             upFromSections = lastFocusedAction,
-            onPlayExtra = onPlayExtra,
+            onPlayExtra = { video -> onPlayVideo(video, VideoLaunchSite.ExtrasRail) },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
@@ -316,11 +385,16 @@ private fun DetailsContent(
 
 /**
  * Static geometry-matched stand-ins (section 10): poster and text stubs where the hero lands,
- * and an action-row whose Play-slot stub is the screen's one focusable anchor, so entry focus
- * taken during the load sits exactly where the real Play button appears.
+ * and an action row of [actionStubs] whose first slot is the screen's one focusable anchor, so
+ * entry focus taken during the load sits exactly where the real primary button appears.
+ * [reserveResumeSlot] reserves the strip only the library hero can grow.
  */
 @Composable
-private fun DetailsSkeleton(anchorRequester: FocusRequester) {
+private fun DetailsSkeleton(
+    anchorRequester: FocusRequester,
+    actionStubs: Int,
+    reserveResumeSlot: Boolean,
+) {
     val colors = IglooTheme.colors
     val layout = IglooTheme.layout
     val stubShape = RoundedCornerShape(IglooTheme.radius.sm)
@@ -388,9 +462,11 @@ private fun DetailsSkeleton(anchorRequester: FocusRequester) {
                                     liveRegion = LiveRegionMode.Polite
                                 },
                         )
-                        ResumeProgress(progress = null, overMedia = false)
+                        if (reserveResumeSlot) {
+                            ResumeProgress(progress = null, overMedia = false)
+                        }
                     }
-                    repeat(2) {
+                    repeat(actionStubs - 1) {
                         Box(
                             modifier = Modifier
                                 .width(PLAY_STUB_WIDTH.scaled())
@@ -409,3 +485,6 @@ private val HERO_MIN_HEIGHT = 320.dp
 
 /** The Play button's approximate footprint, so focus taken while loading does not jump. */
 private val PLAY_STUB_WIDTH = 120.dp
+
+/** Play, Watched, Like — what the library hero's skeleton has to stand in for. */
+private const val LIBRARY_ACTIONS = 3

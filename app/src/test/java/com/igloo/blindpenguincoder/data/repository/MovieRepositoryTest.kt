@@ -195,6 +195,34 @@ class MovieRepositoryTest {
     }
 
     @Test
+    fun `one TMDB movie hits the contract path with the bearer token`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(tmdbMovieJson(id = 969681, title = "Heat 2"))
+        }
+        http.profiles.setPending("igd_test")
+
+        val result = http.movieRepository.tmdbMovie(969681)
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/tmdb/movies/969681", captured.url.encodedPath)
+        assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+        val movie = (result as ApiResult.Success).value
+        assertEquals(969681, movie.id)
+        assertEquals("Heat 2", movie.title)
+    }
+
+    @Test
+    fun `a TMDB movie response with no data fails instead of rendering an empty page`() = runTest {
+        val http = TestHttp { jsonResponse("""{"error":false,"message":"tmdb movie"}""") }
+
+        val result = http.movieRepository.tmdbMovie(1)
+
+        assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
+    }
+
+    @Test
     fun `no movies in theaters is a success with no movies`() = runTest {
         val http = TestHttp { jsonResponse(theaterMoviesJson()) }
 

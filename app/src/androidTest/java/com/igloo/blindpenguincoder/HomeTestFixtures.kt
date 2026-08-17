@@ -54,7 +54,7 @@ internal val testHero = HomeHero(
 )
 
 /** No-op actions for shells whose details overlay is closed. */
-internal val inertDetailsActions = MovieDetailsActions(
+internal val inertDetailsActions = MovieDetailsActions.Library(
     onPlay = {},
     onToggleWatched = {},
     onToggleLike = {},
@@ -97,6 +97,38 @@ internal fun testMovieDetails(
     liked = liked,
     metadataDescription = "Rated 8.2 out of 10, R, 4K, HDR10, 5.1 surround sound, " +
         "subtitles available, 2 hours 50 minutes, released December 15, 1995",
+)
+
+/**
+ * The in-theaters page's render model (section 11.4.2): the same shape from a TMDB record, so
+ * everything the library fills from its own reads is absent and the hero's action is a trailer.
+ */
+internal fun testTheaterMovieDetails(
+    id: Long = 21,
+    title: String = "Heat 2",
+    heroTrailer: ExtraVideoUi? = testExtraVideos.first(),
+    cast: List<CastMemberUi> = testCast,
+    extraVideos: List<ExtraVideoUi> = testExtraVideos,
+) = testMovieDetails(
+    id = id,
+    title = title,
+    watched = null,
+    liked = null,
+    progress = null,
+    cast = cast,
+    extraVideos = extraVideos,
+).copy(
+    mediaBadges = emptyList(),
+    about = AboutUi(
+        production = "Regency Enterprises",
+        language = "EN",
+        budget = "$60,000,000",
+        revenue = "$187,436,818",
+        status = "Released",
+    ),
+    metadataDescription = "Rated 8.2 out of 10, R, 2 hours 50 minutes, " +
+        "released December 15, 1995",
+    heroTrailer = heroTrailer,
 )
 
 internal val testExtraVideos = listOf(

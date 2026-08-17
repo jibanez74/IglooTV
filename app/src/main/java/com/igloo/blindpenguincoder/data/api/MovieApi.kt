@@ -31,6 +31,10 @@ class MovieApi(
     suspend fun moviesInTheaters(): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/tmdb/movies/in-theaters")
 
+    /** One TMDB movie by its TMDB id; backs the in-theaters detail screen. */
+    suspend fun tmdbMovie(tmdbId: Long): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/tmdb/movies/$tmdbId")
+
     /** Probed streams, subtitles, and chapters for one movie; source of the media badges. */
     suspend fun movieTechnicalDetails(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/movies/$id/technical-details")

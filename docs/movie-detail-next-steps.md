@@ -41,8 +41,9 @@ the focus signal there.
 
 ## 2. Cast cards are focus targets with no action
 
-**Found:** 2026-08-16. **Updated:** 2026-08-16 — the extras half landed: extra-video cards now
-open the trailer player (§11.8.1) and announce "Play {title}".
+**Found:** 2026-08-16. **Updated:** 2026-08-17 — the extras half landed (extra-video cards open
+the trailer player, §11.8.1, and announce "Play {title}"), and the in-theaters detail screen
+(§11.4.2) now shares this rail, so a person screen would close it on both pages at once.
 **Status:** open for cast only, deliberate, waiting on a person detail screen — the
 *semantics* are correct.
 **Files:** `MovieDetailsSections.kt` (cast cards `onClick = null`)
@@ -67,7 +68,8 @@ exists, this is the accepted trade.
   trailers don't report progress.
 - **Missing sections.** Section 11.4 specifies "cast, chapters, extra details"; the screen has
   cast, Extra Videos (landed 2026-08-16, §11.4.1) and About. No chapters row and no
-  similar-movies rail yet.
+  similar-movies rail yet. Both are library-only: a TMDB record has neither, so §11.4.2's page
+  would skip them the way it already skips the media badges.
 - **More is deferred, not gone.** Section 11.4 keeps it specified as the fourth hero action;
   it returns with its menu. `IglooIconButton` was deleted with its only caller and lives in git
   history (`bc88a9c` and earlier).

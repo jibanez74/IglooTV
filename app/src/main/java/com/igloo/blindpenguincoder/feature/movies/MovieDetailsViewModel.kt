@@ -8,20 +8,16 @@ import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
-import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.progressLabel
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
-import com.igloo.blindpenguincoder.data.model.MovieExtraVideo
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
-import com.igloo.blindpenguincoder.images.youtubeThumbnailUrl
-import java.text.NumberFormat
 import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,9 +55,12 @@ data class AboutUi(
     val language: String?,
     val budget: String?,
     val revenue: String?,
+    /** TMDB's release status, which only the in-theaters page has (web parity). */
+    val status: String? = null,
 ) {
     val isEmpty: Boolean
-        get() = production == null && language == null && budget == null && revenue == null
+        get() = production == null && language == null && budget == null && revenue == null &&
+            status == null
 }
 
 /** The thin strip under the actions; present only while a resume position is worth showing. */
@@ -94,6 +93,13 @@ data class MovieDetailsUi(
     val liked: Boolean?,
     /** The metadata row spoken as one TalkBack stop, composed here so it cannot drift. */
     val metadataDescription: String,
+    /**
+     * The hero's Play Trailer target on the in-theaters page (section 11.4.2) — null there when
+     * TMDB lists no YouTube trailer, and always null for a library movie, whose hero action is
+     * Play. Fields the other source cannot fill behave the same way: [mediaBadges] is empty and
+     * [progress], [watched] and [liked] stay null for a movie the library does not hold.
+     */
+    val heroTrailer: ExtraVideoUi? = null,
 )
 
 sealed interface MovieDetailsState {
@@ -474,7 +480,9 @@ class MovieDetailsViewModel(
                 .takeIf { it.isNotEmpty() }
                 ?.joinToString(" · "),
             overview = movie.overview?.orNullIfBlank(),
-            keyCrew = keyCrew(details),
+            keyCrew = keyCrew(
+                details.crew.map { CrewCredit(it.job, it.department, it.artistName) },
+            ),
             cast = details.cast
                 .sortedBy { it.castOrder }
                 .take(CAST_LIMIT)
@@ -490,7 +498,18 @@ class MovieDetailsViewModel(
                         ),
                     )
                 },
-            extraVideos = extraVideos(details, apiBaseUrl),
+            extraVideos = youTubeExtraVideos(
+                details.extraVideos.map {
+                    VideoSource(
+                        id = it.id,
+                        title = it.title,
+                        type = it.type,
+                        site = it.site,
+                        key = it.key,
+                    )
+                },
+                apiBaseUrl,
+            ),
             about = AboutUi(
                 production = details.productionCompanies
                     .map { it.name }
@@ -507,67 +526,11 @@ class MovieDetailsViewModel(
             metadataDescription = metadataDescription(
                 ratingBadge = ratingBadge,
                 certification = certification,
-                badges = badges,
+                mediaBadges = badges,
                 runtimeMinutes = runtimeMinutes,
                 releaseDateText = releaseDateText,
             ),
         )
-    }
-
-    /**
-     * YouTube extras only — the backend has no thumbnail proxy for other sites (web parity) —
-     * re-sorted trailers first. The API's `ORDER BY type, title` is alphabetical, which puts
-     * trailers last; the rail wants them leading.
-     */
-    private fun extraVideos(details: MovieDetailsData, apiBaseUrl: String): List<ExtraVideoUi> =
-        details.extraVideos
-            .filter { normalizedVideoValue(it.site) == "youtube" }
-            .sortedWith(
-                compareBy<MovieExtraVideo> { extraVideoSortRank(it.type) }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title },
-            )
-            .map {
-                ExtraVideoUi(
-                    id = it.id,
-                    title = it.title,
-                    typeLabel = extraVideoTypeLabel(it.type),
-                    thumbnailUrl = youtubeThumbnailUrl(apiBaseUrl, it.key),
-                    key = it.key,
-                )
-            }
-
-    private fun normalizedVideoValue(value: String): String =
-        value.trim().lowercase(Locale.US).replace('-', '_')
-
-    /** Trailers, then special features, then the rest; unknown types sort last (web parity). */
-    private fun extraVideoSortRank(type: String): Int = when (normalizedVideoValue(type)) {
-        "trailer" -> 0
-        "special_feature" -> 1
-        "other" -> 2
-        else -> 3
-    }
-
-    /** The DB constrains type to the three known values; the fallback absorbs schema growth. */
-    private fun extraVideoTypeLabel(type: String): String = when (val t = normalizedVideoValue(type)) {
-        "trailer" -> "Trailer"
-        "special_feature" -> "Special feature"
-        "other" -> "Other"
-        else -> t.split('_')
-            .filter { it.isNotBlank() }
-            .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase(Locale.US) } }
-    }
-
-    /** Director(s) first, then up to three writing credits under their actual jobs (web parity). */
-    private fun keyCrew(details: MovieDetailsData): List<CrewEntry> {
-        val directors = details.crew
-            .filter { it.job == "Director" }
-            .map { CrewEntry(job = it.job, name = it.artistName) }
-        val writers = details.crew
-            .filter { it.department == "Writing" }
-            .map { CrewEntry(job = it.job, name = it.artistName) }
-            .distinct()
-            .take(WRITER_LIMIT)
-        return (directors + writers).distinct()
     }
 
     /**
@@ -586,33 +549,6 @@ class MovieDetailsViewModel(
             minutesLeftLabel = progressLabel(progressSec, durationSec),
         )
     }
-
-    private fun metadataDescription(
-        ratingBadge: RatingBadgeSpec?,
-        certification: String?,
-        badges: List<String>,
-        runtimeMinutes: Long?,
-        releaseDateText: String?,
-    ): String = listOfNotNull(
-        ratingBadge?.let { "Rated ${it.label} out of 10" },
-        certification,
-        *badges.map { spokenBadge(it) }.toTypedArray(),
-        runtimeMinutes?.let { formatSpokenTime(it * 60.0) },
-        releaseDateText?.let { "released $it" },
-    ).joinToString(", ")
-
-    /** The visual chip is terse; TalkBack gets the words the abbreviation stands for. */
-    private fun spokenBadge(badge: String): String = when (badge) {
-        "CC" -> "subtitles available"
-        "5.1", "7.1" -> "$badge surround sound"
-        "Surround" -> "surround sound"
-        else -> badge
-    }
-
-    private fun formatUsd(amount: Double): String =
-        NumberFormat.getCurrencyInstance(Locale.US)
-            .apply { maximumFractionDigits = 0 }
-            .format(amount)
 
     private fun mediaBadges(tech: MovieTechnicalDetailsData): List<String> = buildList {
         // Width thresholds deliberately catch scope/anamorphic sources (web parity): a 3840x1600
@@ -644,8 +580,6 @@ class MovieDetailsViewModel(
     }
 
     private companion object {
-        const val CAST_LIMIT = 10
-        const val WRITER_LIMIT = 3
         const val RESUME_MIN_SEC = 30.0
         const val RESUME_MAX_RATIO = 0.98
         const val SURROUND_MIN_CHANNELS = 6

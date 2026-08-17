@@ -59,7 +59,9 @@ internal fun MovieDetailsSections(
     extrasEntryRequester: FocusRequester,
     extrasReturnRequester: FocusRequester,
     aboutRequester: FocusRequester,
-    upFromSections: FocusRequester,
+    // Null on an in-theaters page whose hero has no trailer to play: there is no action row
+    // above the first section to go back up to (section 11.4.2).
+    upFromSections: FocusRequester?,
     onPlayExtra: (ExtraVideoUi) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -227,7 +229,7 @@ private fun <T> DetailsRailSection(
     items: List<T>,
     itemKey: (T) -> Long,
     entryRequester: FocusRequester,
-    upRequester: FocusRequester,
+    upRequester: FocusRequester?,
     downRequester: FocusRequester?,
     returnRequester: FocusRequester? = null,
     cardAspect: Float = IglooTheme.layout.posterAspect,
@@ -251,7 +253,7 @@ private fun <T> DetailsRailSection(
         card(
             item,
             itemModifier.focusProperties {
-                up = upRequester
+                up = upRequester ?: Cancel
                 down = downRequester ?: Cancel
             },
             aspect,
@@ -263,7 +265,7 @@ private fun <T> DetailsRailSection(
 private fun CastSection(
     cast: List<CastMemberUi>,
     entryRequester: FocusRequester,
-    upRequester: FocusRequester,
+    upRequester: FocusRequester?,
     downRequester: FocusRequester?,
 ) {
     DetailsRailSection(
@@ -297,7 +299,7 @@ private fun CastSection(
 private fun ExtraVideosSection(
     videos: List<ExtraVideoUi>,
     entryRequester: FocusRequester,
-    upRequester: FocusRequester,
+    upRequester: FocusRequester?,
     downRequester: FocusRequester?,
     returnRequester: FocusRequester,
     onPlayExtra: (ExtraVideoUi) -> Unit,
@@ -339,12 +341,13 @@ private fun AboutSection(
     title: String,
     about: AboutUi,
     requester: FocusRequester,
-    upRequester: FocusRequester,
+    upRequester: FocusRequester?,
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
     val rows = listOfNotNull(
         about.production?.let { "Production" to it },
+        about.status?.let { "Status" to it },
         about.language?.let { "Original language" to it },
         about.budget?.let { "Budget" to it },
         about.revenue?.let { "Revenue" to it },
@@ -368,7 +371,7 @@ private fun AboutSection(
                 )
                 .focusRequester(requester)
                 .focusProperties {
-                    up = upRequester
+                    up = upRequester ?: Cancel
                     down = Cancel
                     left = Cancel
                     right = Cancel

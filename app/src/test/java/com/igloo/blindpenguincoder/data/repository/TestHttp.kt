@@ -204,6 +204,94 @@ fun theaterMoviesJson(vararg movies: String): String =
     """{"error":false,"message":"movies in theaters","data":{"movies":[${movies.joinToString(",")}]}}"""
 
 /**
+ * `GET /tmdb/movies/{id}` payload — the in-theaters detail screen's one read. TMDB sends plain
+ * values rather than `sql.Null*` wrappers, and `null` for a list it has nothing for, which the
+ * nulled parameters here reproduce.
+ */
+fun tmdbMovieJson(
+    id: Int = 21,
+    title: String = "Heat 2",
+    overview: String = "A prequel and a sequel.",
+    releaseDate: String = "2026-08-01",
+    posterPath: String? = "/heat2.jpg",
+    backdropPath: String? = "/heat2-backdrop.jpg",
+    voteAverage: Double = 7.9,
+    runtime: Long = 170,
+    status: String = "Released",
+    tagline: String = "A Los Angeles crime saga.",
+    budget: Long = 60_000_000,
+    revenue: Long = 187_436_818,
+    originalLanguage: String = "en",
+    genres: List<String>? = listOf(tmdbGenreJson(), tmdbGenreJson(id = 18, name = "Drama")),
+    productionCompanies: List<String>? = listOf(tmdbProductionCompanyJson()),
+    cast: List<String>? = emptyList(),
+    crew: List<String>? = emptyList(),
+    videos: List<String>? = emptyList(),
+    releaseDates: List<String>? = listOf(tmdbCountryReleaseDatesJson()),
+): String = """
+    {"error":false,"message":"tmdb movie","data":{"movie":{
+      "id":$id,"title":"$title","original_title":"$title",
+      "overview":"$overview","release_date":"$releaseDate",
+      "poster_path":${jsonStringOrNull(posterPath)},
+      "backdrop_path":${jsonStringOrNull(backdropPath)},
+      "popularity":1831.2,"vote_average":$voteAverage,"vote_count":1829,"adult":false,
+      "original_language":"$originalLanguage","genre_ids":null,"video":false,
+      "runtime":$runtime,"status":"$status","tagline":"$tagline",
+      "budget":$budget,"revenue":$revenue,"homepage":"","imdb_id":"tt0113277",
+      "production_companies":${jsonArrayOrNull(productionCompanies)},
+      "genres":${jsonArrayOrNull(genres)},
+      "credits":{"cast":${jsonArrayOrNull(cast)},"crew":${jsonArrayOrNull(crew)}},
+      "videos":{"results":${jsonArrayOrNull(videos)}},
+      "release_dates":{"results":${jsonArrayOrNull(releaseDates)}}
+    }}}
+""".trimIndent()
+
+fun tmdbGenreJson(id: Int = 80, name: String = "Crime"): String = """{"id":$id,"name":"$name"}"""
+
+fun tmdbProductionCompanyJson(
+    id: Int = 508,
+    name: String = "Regency Enterprises",
+): String = """{"id":$id,"logo_path":"/regency.png","name":"$name","origin_country":"US"}"""
+
+fun tmdbCastJson(
+    id: Int = 100,
+    name: String = "Al Pacino",
+    character: String = "Vincent Hanna",
+    profilePath: String? = "/pacino.jpg",
+    order: Int = 0,
+): String = """{"id":$id,"name":"$name","character":"$character",""" +
+    """"profile_path":${jsonStringOrNull(profilePath)},"order":$order}"""
+
+fun tmdbCrewJson(
+    id: Int = 200,
+    name: String = "Michael Mann",
+    job: String = "Director",
+    department: String = "Directing",
+): String = """{"id":$id,"name":"$name","job":"$job","department":"$department",""" +
+    """"profile_path":"/mann.jpg"}"""
+
+fun tmdbVideoJson(
+    id: String = "v1",
+    key: String = "0xbkYZbdIVw",
+    name: String = "Official Trailer",
+    site: String = "YouTube",
+    type: String = "Trailer",
+): String = """{"id":"$id","key":"$key","name":"$name","site":"$site","type":"$type",""" +
+    """"official":true}"""
+
+fun tmdbCountryReleaseDatesJson(
+    country: String = "US",
+    certifications: List<String> = listOf("R"),
+): String = """{"iso_3166_1":"$country","release_dates":[""" +
+    certifications.joinToString(",") { """{"certification":"$it"}""" } +
+    "]}"
+
+private fun jsonStringOrNull(value: String?): String = if (value == null) "null" else "\"$value\""
+
+private fun jsonArrayOrNull(values: List<String>?): String =
+    values?.joinToString(",", prefix = "[", postfix = "]") ?: "null"
+
+/**
  * `GET /movies/details/{id}` payload: the full movie plus its related lists, whose shapes the
  * spec leaves untyped but live responses pin (see the typed models in Movies.kt). The lists
  * default empty; details-screen tests pass populated entries from the builders below.

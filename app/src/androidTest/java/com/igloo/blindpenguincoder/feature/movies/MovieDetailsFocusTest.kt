@@ -105,6 +105,7 @@ class MovieDetailsFocusTest {
                             details = MovieDetailsState.Loaded(testMovieDetails(id = movieId)),
                         )
                     },
+                    onTheaterMovieSelected = null,
                     onCloseDetails = {
                         detailsState = detailsState.copy(
                             openMovieId = null,
