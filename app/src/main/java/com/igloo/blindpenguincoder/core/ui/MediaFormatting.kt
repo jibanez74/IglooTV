@@ -25,12 +25,15 @@ fun formatReleaseDate(isoDate: String): String? = runCatching {
     LocalDate.parse(isoDate).format(releaseDateFormat)
 }.getOrNull()
 
+/** Whole hours, minutes, and seconds of a non-negative duration. */
+private fun hms(seconds: Double): Triple<Long, Long, Long> {
+    val total = seconds.toLong().coerceAtLeast(0)
+    return Triple(total / 3600, (total % 3600) / 60, total % 60)
+}
+
 /** `72.4` → `"1:12"`, `3675.0` → `"1:01:15"`; the player's visual timecodes. */
 fun formatTimecode(seconds: Double): String {
-    val total = seconds.toLong().coerceAtLeast(0)
-    val hours = total / 3600
-    val minutes = (total % 3600) / 60
-    val rest = total % 60
+    val (hours, minutes, rest) = hms(seconds)
     return when {
         hours > 0 -> "%d:%02d:%02d".format(Locale.US, hours, minutes, rest)
         else -> "%d:%02d".format(Locale.US, minutes, rest)
@@ -39,10 +42,7 @@ fun formatTimecode(seconds: Double): String {
 
 /** `72.4` → `"1 minute 12 seconds"`; timecodes read as digits are noise for a screen reader. */
 fun formatSpokenTime(seconds: Double): String {
-    val total = seconds.toLong().coerceAtLeast(0)
-    val hours = total / 3600
-    val minutes = (total % 3600) / 60
-    val rest = total % 60
+    val (hours, minutes, rest) = hms(seconds)
     val parts = buildList {
         if (hours > 0) add(if (hours == 1L) "1 hour" else "$hours hours")
         if (minutes > 0) add(if (minutes == 1L) "1 minute" else "$minutes minutes")

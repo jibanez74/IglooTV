@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -97,6 +98,9 @@ private class YouTubeIFrameEngine(
         webView.removeJavascriptInterface(JS_INTERFACE)
         webView.stopLoading()
         webView.loadUrl("about:blank")
+        // destroy() requires the view to be out of the hierarchy first; the AndroidView holding
+        // it may not have detached it yet, and destroying an attached WebView crashes its renderer.
+        (webView.parent as? ViewGroup)?.removeView(webView)
         webView.destroy()
     }
 
@@ -125,7 +129,11 @@ private class YouTubeIFrameEngine(
 
     companion object {
         private const val JS_INTERFACE = "IglooNative"
-        private const val API_LOAD_TIMEOUT_MS = 15_000
+
+        // Must stay under the screen's ready watchdog: an Error is sticky, so a guard that fires
+        // second can never be seen, and this one knows the narrower cause — the API script itself
+        // never arrived — so it gets to report first.
+        private const val API_LOAD_TIMEOUT_MS = 8_000
         private const val INVALID_VIDEO_ID = 2
         private val SAFE_KEY = Regex("^[A-Za-z0-9_-]{1,64}$")
 

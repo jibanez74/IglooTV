@@ -698,7 +698,7 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
 | `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `restingFill` / `contentColor` carry the §3.2 over-media ground where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
-| `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, `progressLabel` ("43 min left", rounded up, floored at one minute). Called from view models, never from composables. |
+| `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, `progressLabel` ("43 min left", rounded up, floored at one minute), `formatTimecode` ("1:01:15") and `formatSpokenTime` ("1 hour 1 minute 15 seconds") for the player's clock and its spoken form. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
 | `IglooNotice` | One announced line — `bodyMedium` / `mutedForeground`, `liveRegion = Polite`. For a message the user did not ask for and cannot act on: what a gate says after an action that already happened (§10, §11.1.1). Not an error card; no Retry. |
@@ -1464,9 +1464,11 @@ the details overlay underneath stays composed but leaves TalkBack traversal, exa
 shell does under it. **Ended auto-closes** through the same path (web parity). Errors resolve to
 the details screen's error recipe — one pinned Retry, Assertive — with the embed's codes mapped
 to plain sentences; 101/150 say outright that YouTube doesn't allow the video outside
-youtube.com. Two watchdogs back the embed: an in-page 15s guard on the IFrame API script and a
-12s Kotlin guard on player-ready. Activity recreation restarts the trailer at 0:00 — a WebView
-cannot be parceled, an accepted trade for trailers.
+youtube.com. Two watchdogs back the embed, and the inner one must fire first, because the first
+error is sticky and a guard that reports second is a guard nobody ever sees: an in-page **8s**
+guard on the IFrame API script, which names the narrower cause, inside a **12s** Kotlin guard on
+player-ready that catches everything else that stalls. Activity recreation restarts the trailer
+at 0:00 — a WebView cannot be parceled, an accepted trade for trailers.
 
 ### 11.9 Notifications
 

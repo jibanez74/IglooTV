@@ -64,6 +64,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.iglooTween
+import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
@@ -74,6 +75,7 @@ import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
+import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPhase
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerState
@@ -151,7 +153,7 @@ fun TrailerPlayerScreen(
         if (state.phase == TrailerPhase.Playing) engine.pause() else engine.play()
     }
     val seekBy = { deltaSec: Double ->
-        val target = (state.currentTimeSec + deltaSec).coerceAtLeast(0.0)
+        val target = state.seekTarget(deltaSec)
         engine.seekTo(target)
         state = state.onSeekApplied(target)
     }
@@ -311,7 +313,7 @@ private fun PlayerChrome(
                 onClick = onBack,
                 variant = IglooButtonVariant.Ghost,
                 semanticLabel = "Close trailer",
-                restingFill = Color.Black.copy(alpha = 0.40f),
+                restingFill = OVER_MEDIA_CONTROL_FILL,
                 contentColor = Color.White,
                 modifier = Modifier
                     .focusRequester(backRequester)
@@ -327,14 +329,14 @@ private fun PlayerChrome(
             Column {
                 IglooText(
                     text = title,
-                    style = IglooTheme.typography.titleMedium,
+                    style = IglooTheme.typography.titleMedium.overMedia(true),
                     color = Color.White,
                     maxLines = 1,
                 )
                 IglooText(
                     text = typeLabel,
-                    style = IglooTheme.typography.label,
-                    color = Color.White.copy(alpha = 0.72f),
+                    style = IglooTheme.typography.label.overMedia(true),
+                    color = OVER_MEDIA_SECONDARY,
                     maxLines = 1,
                 )
             }
@@ -344,8 +346,8 @@ private fun PlayerChrome(
             if (state.phase == TrailerPhase.Loading) {
                 IglooText(
                     text = "Loading trailer…",
-                    style = IglooTheme.typography.bodyLarge,
-                    color = Color.White.copy(alpha = 0.72f),
+                    style = IglooTheme.typography.bodyLarge.overMedia(true),
+                    color = OVER_MEDIA_SECONDARY,
                     modifier = Modifier
                         .align(Alignment.Center)
                         .testTag("trailer_loading"),
@@ -436,7 +438,7 @@ private fun TransportButton(
             .focusRing(
                 focused = focused,
                 radius = IglooTheme.radius.pill,
-                fill = Color.Black.copy(alpha = 0.40f),
+                fill = OVER_MEDIA_CONTROL_FILL,
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(
@@ -471,10 +473,7 @@ private fun TransportButton(
 @Composable
 private fun SeekBar(state: TrailerPlayerState) {
     val colors = IglooTheme.colors
-    val fraction = when {
-        state.durationSec > 0.0 -> (state.currentTimeSec / state.durationSec).toFloat().coerceIn(0f, 1f)
-        else -> 0f
-    }
+    val fraction = progressFraction(state.currentTimeSec, state.durationSec)
 
     Column(
         modifier = Modifier
@@ -506,13 +505,13 @@ private fun SeekBar(state: TrailerPlayerState) {
         ) {
             IglooText(
                 text = formatTimecode(state.currentTimeSec),
-                style = IglooTheme.typography.label,
+                style = IglooTheme.typography.label.overMedia(true),
                 color = Color.White,
             )
             IglooText(
                 text = formatTimecode(state.durationSec),
-                style = IglooTheme.typography.label,
-                color = Color.White.copy(alpha = 0.72f),
+                style = IglooTheme.typography.label.overMedia(true),
+                color = OVER_MEDIA_TERTIARY,
             )
         }
     }
@@ -619,7 +618,16 @@ private fun handlePlayerKey(
     return false
 }
 
+// The section 3.2 over-media literals, which deliberately do not track the theme: the chrome sits
+// on video, not on a surface. The seek track keeps the progress-strip ground (0.40f) instead.
+private val OVER_MEDIA_CONTROL_FILL = Color.Black.copy(alpha = 0.45f)
+private val OVER_MEDIA_SECONDARY = Color.White.copy(alpha = 0.85f)
+private val OVER_MEDIA_TERTIARY = Color.White.copy(alpha = 0.75f)
+
 private const val SEEK_STEP_SEC = 10.0
 private const val CHROME_HIDE_MS = 4_000L
+
+// The outer net, deliberately later than the engine's in-page API-load guard: that one names the
+// narrower cause and must get to report first, this one catches everything else that stalls.
 private const val READY_WATCHDOG_MS = 12_000L
 private const val SCRIM_STRENGTH = 0.70f

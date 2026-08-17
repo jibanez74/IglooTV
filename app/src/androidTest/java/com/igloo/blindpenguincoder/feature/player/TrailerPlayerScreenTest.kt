@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.feature.player
 
 import android.app.Activity
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
@@ -13,6 +14,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -44,24 +49,49 @@ class TrailerPlayerScreenTest {
     private var closes = 0
     private var hostActivity: Activity? = null
 
+    /**
+     * A lifecycle the test drives directly. The screen observes [LocalLifecycleOwner] to silence
+     * playback in standby, and the host activity's own lifecycle cannot be moved from a test
+     * without tearing the composition down with it.
+     */
+    private class TestLifecycleOwner : LifecycleOwner {
+        val registry = LifecycleRegistry.createUnsafe(this)
+        override val lifecycle: Lifecycle get() = registry
+    }
+
+    private lateinit var lifecycleOwner: TestLifecycleOwner
+
     private fun setContent() {
         engine = FakeTrailerPlayerEngine()
         closes = 0
+        lifecycleOwner = TestLifecycleOwner()
+        lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
-                TrailerPlayerScreen(
-                    videoKey = "0xbkYZbdIVw",
-                    title = "Official Trailer",
-                    typeLabel = "Trailer",
-                    onClose = { closes += 1 },
-                    engineFactory = { _, _ -> engine },
-                )
+                CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
+                    TrailerPlayerScreen(
+                        videoKey = "0xbkYZbdIVw",
+                        title = "Official Trailer",
+                        typeLabel = "Trailer",
+                        onClose = { closes += 1 },
+                        engineFactory = { _, _ -> engine },
+                    )
+                }
             }
         }
         composeRule.waitForIdle()
     }
+
+    private fun moveLifecycleTo(state: Lifecycle.State) {
+        composeRule.runOnUiThread { lifecycleOwner.registry.currentState = state }
+        composeRule.waitForIdle()
+    }
+
+    /** Just the standby traffic, in order — the transport assertions use `playbackCommands`. */
+    private fun lifecycleCommands(): List<String> =
+        engine.commands.filter { it == "hostPaused" || it == "hostResumed" }
 
     private fun startPlaying(durationSec: Double = 143.0) {
         engine.emit(TrailerPlayerEvent.Ready(durationSec))
@@ -80,6 +110,14 @@ class TrailerPlayerScreenTest {
     private fun letChromeHide() {
         composeRule.mainClock.autoAdvance = false
         composeRule.mainClock.advanceTimeBy(4_500)
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
+    }
+
+    /** Past the screen's 12s ready watchdog, with room to spare. */
+    private fun advancePastTheReadyWatchdog() {
+        composeRule.mainClock.autoAdvance = false
+        composeRule.mainClock.advanceTimeBy(12_500)
         composeRule.mainClock.autoAdvance = true
         composeRule.waitForIdle()
     }
@@ -227,6 +265,51 @@ class TrailerPlayerScreenTest {
 
         pressBack()
         assertEquals(1, closes)
+    }
+
+    /**
+     * A TV that goes to standby must be silent, and coming back must not restart the video on its
+     * own — the user resumes deliberately (the engine's own contract, and section 11.8.1).
+     */
+    @Test
+    fun standbySilencesPlaybackAndReturningDoesNotResumeIt() {
+        setContent()
+        startPlaying()
+        val transportBeforeStandby = engine.playbackCommands
+
+        moveLifecycleTo(Lifecycle.State.CREATED)
+        moveLifecycleTo(Lifecycle.State.RESUMED)
+
+        // The mount replays a resume, then standby and the return each land exactly once.
+        assertEquals(listOf("hostResumed", "hostPaused", "hostResumed"), lifecycleCommands())
+        // Silencing is the engine's job on standby; the chrome sends no transport of its own,
+        // and nothing auto-plays on the way back.
+        assertEquals(transportBeforeStandby, engine.playbackCommands)
+    }
+
+    /**
+     * The ready watchdog: a player that never reaches ready must resolve into an error the user
+     * can act on rather than an indefinite spinner — and must leave a ready player alone.
+     */
+    @Test
+    fun aPlayerThatNeverBecomesReadyFailsIntoAnActionableError() {
+        setContent()
+
+        advancePastTheReadyWatchdog()
+
+        composeRule.onNodeWithText("The video player took too long to load.").assertExists()
+        composeRule.onNodeWithContentDescription("Retry playing trailer").assertIsFocused()
+    }
+
+    @Test
+    fun theReadyWatchdogLeavesAPlayerThatStartedAlone() {
+        setContent()
+        startPlaying()
+
+        advancePastTheReadyWatchdog()
+
+        composeRule.onNodeWithTag("trailer_play_pause").assertContentDescriptionEquals("Pause")
+        composeRule.onNodeWithContentDescription("Retry playing trailer").assertDoesNotExist()
     }
 
     @Test

@@ -63,15 +63,22 @@ data class TrailerPlayerState(
         )
     }
 
+    /**
+     * Where a relative seek lands, clamped into the playable range. The engine and the bar are
+     * given the same value: a target past the end would make the embed report Ended, and the
+     * player auto-closes on Ended — a forward seek near the end must not quietly exit.
+     */
+    fun seekTarget(deltaSec: Double): Double = clampToPlayable(currentTimeSec + deltaSec)
+
     /** An optimistic seek: the bar moves under a held key without waiting for the next tick. */
     fun onSeekApplied(targetSec: Double): TrailerPlayerState = when (phase) {
         TrailerPhase.Error -> this
-        else -> copy(
-            currentTimeSec = when {
-                durationSec > 0.0 -> targetSec.coerceIn(0.0, durationSec)
-                else -> targetSec.coerceAtLeast(0.0)
-            },
-        )
+        else -> copy(currentTimeSec = clampToPlayable(targetSec))
+    }
+
+    private fun clampToPlayable(seconds: Double): Double = when {
+        durationSec > 0.0 -> seconds.coerceIn(0.0, durationSec)
+        else -> seconds.coerceAtLeast(0.0)
     }
 
     private fun keptDuration(incoming: Double): Double =

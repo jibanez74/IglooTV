@@ -8,6 +8,7 @@ import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
+import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.progressLabel
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
@@ -596,7 +597,7 @@ class MovieDetailsViewModel(
         ratingBadge?.let { "Rated ${it.label} out of 10" },
         certification,
         *badges.map { spokenBadge(it) }.toTypedArray(),
-        runtimeMinutes?.let(::spokenRuntime),
+        runtimeMinutes?.let { formatSpokenTime(it * 60.0) },
         releaseDateText?.let { "released $it" },
     ).joinToString(", ")
 
@@ -606,16 +607,6 @@ class MovieDetailsViewModel(
         "5.1", "7.1" -> "$badge surround sound"
         "Surround" -> "surround sound"
         else -> badge
-    }
-
-    private fun spokenRuntime(minutes: Long): String {
-        val hours = minutes / 60
-        val rest = minutes % 60
-        return when {
-            hours == 0L -> "$rest minutes"
-            rest == 0L -> if (hours == 1L) "1 hour" else "$hours hours"
-            else -> (if (hours == 1L) "1 hour" else "$hours hours") + " $rest minutes"
-        }
     }
 
     private fun formatUsd(amount: Double): String =

@@ -36,6 +36,10 @@ class MediaFormattingTest {
         assertEquals("1 hour 1 minute 15 seconds", formatSpokenTime(3675.0))
         assertEquals("1 second", formatSpokenTime(1.0))
         assertEquals("0 seconds", formatSpokenTime(0.0))
+        // The whole-minute singular: this is the case the details screen's own spoken runtime
+        // used to get wrong ("1 minutes"), and it now formats through here.
+        assertEquals("1 minute", formatSpokenTime(60.0))
+        assertEquals("1 hour", formatSpokenTime(3600.0))
     }
 
     @Test

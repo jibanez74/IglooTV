@@ -120,6 +120,30 @@ class TrailerPlayerStateMachineTest {
         assertEquals(42.0, state.onSeekApplied(42.0).currentTimeSec, 0.0)
     }
 
+    /**
+     * The engine gets the same clamped value the bar does. An unclamped forward seek would run
+     * the embed past the end, which reports Ended — and the player auto-closes on Ended, so the
+     * miss would show up as the trailer quietly exiting under a Fast-Forward press.
+     */
+    @Test
+    fun `a relative seek target never passes the end or goes below zero`() {
+        val nearTheEnd = TrailerPlayerState().onReady(143.0).onTime(currentSec = 140.0, durationSec = 143.0)
+        assertEquals(143.0, nearTheEnd.seekTarget(10.0), 0.0)
+
+        val nearTheStart = TrailerPlayerState().onReady(143.0).onTime(currentSec = 4.0, durationSec = 143.0)
+        assertEquals(0.0, nearTheStart.seekTarget(-10.0), 0.0)
+
+        assertEquals(14.0, nearTheStart.seekTarget(10.0), 0.0)
+    }
+
+    @Test
+    fun `a relative seek before the duration is known only guards the floor`() {
+        val unknownDuration = TrailerPlayerState().onTime(currentSec = 4.0, durationSec = 0.0)
+
+        assertEquals(0.0, unknownDuration.seekTarget(-10.0), 0.0)
+        assertEquals(14.0, unknownDuration.seekTarget(10.0), 0.0)
+    }
+
     @Test
     fun `a seek before the duration is known never goes negative`() {
         assertEquals(0.0, TrailerPlayerState().onSeekApplied(-10.0).currentTimeSec, 0.0)
