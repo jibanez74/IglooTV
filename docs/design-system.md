@@ -1398,8 +1398,12 @@ the §11.8.1 player. The button is the entry anchor *and* the node the player re
 so a trailer started from the hero comes back to the hero rather than to the extras rail's card
 (§6.3). A movie TMDB lists no trailer for renders **no action row at all** — a control that takes
 focus and does nothing spends a press to teach the user it is empty (the same rule that deferred
-More) — and the entry anchor passes to the first section below, so the page is never focus-dead.
-Up out of the first section is then pinned, because there is nothing above it to return to.
+More) — and the entry anchor passes to the first section below: cast, else extras, else About. Up
+out of the first section is then pinned, because there is nothing above it to return to. A record
+with no trailer, no cast, no extras *and* an empty About has nothing to anchor at all, which is
+why the entry request is made through `requestFocusSafely` — the page is prose the user can read
+and Back out of, not a crash. TMDB always sends `original_language` and `status`, so About carries
+a row and this is not a state a real record reaches.
 
 **Metadata.** The rating badge is the §3.2 star badge over TMDB's `vote_average`, the same value
 and the same badge the theaters rail's card carries — not the web's separate "TMDB 7.9" outline
@@ -1621,9 +1625,11 @@ Theaters rail opens a real page instead of being a focusable that announces noth
 
 - **The screen was parameterized, not forked.** `MovieDetailsActions` became a sealed pair —
   `Library` (Play + the toggles) and `Theater` (Play Trailer, or no row) — and the mapping rules
-  both sources share (key crew, cast cap, YouTube extras and their sort, the metadata sentence)
-  moved to `MovieDetailsMapping.kt`. Everything TMDB cannot fill is absent in the one render
-  model, exactly as the library's own secondary reads are until they land.
+  both sources share (key crew, cast cap, YouTube extras and their sort, the metadata sentence,
+  the genres and production lines) moved to `MovieDetailsMapping.kt`. The one state rule they
+  share, `errorOrKeep`, sits with `MovieDetailsState` instead. Everything TMDB cannot fill is
+  absent in the one render model, exactly as the library's own secondary reads are until they
+  land.
 - **Two view models, one overlay slot.** `TheaterMovieDetailsViewModel` is a single read with no
   mutation machinery; the host picks whichever is open, so Back, the TalkBack fence and focus
   restore stay single-path. Merging them was rejected on the id collision alone: a TMDB id and a

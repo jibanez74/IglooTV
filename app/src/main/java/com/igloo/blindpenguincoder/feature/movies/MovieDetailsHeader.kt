@@ -50,7 +50,6 @@ import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
-import com.igloo.blindpenguincoder.core.ui.withRequester
 
 /**
  * The hero's content block (docs/design-system.md section 11.4): poster left; title, tagline,
@@ -182,8 +181,8 @@ private fun HeaderPoster(posterUrl: String?) {
 
 /**
  * Rating badge, certification, media badges, runtime, and release date — visually a row of
- * chips, but one TalkBack stop: eight consecutive two-character announcements would be noise,
- * so the ViewModel composes the one sentence the row speaks.
+ * chips, but one TalkBack stop: eight consecutive two-character announcements would be noise, so
+ * the one sentence the row speaks is composed at mapping time by [metadataDescription].
  */
 @Composable
 private fun MetadataRow(
@@ -280,7 +279,7 @@ private fun TrailerActionRow(
             modifier = Modifier
                 .testTag("details_play_trailer")
                 .focusRequester(playRequester)
-                .withRequester(returnRequester)
+                .focusRequester(returnRequester)
                 .focusProperties {
                     up = Cancel
                     left = Cancel

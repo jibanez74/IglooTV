@@ -204,17 +204,17 @@ fun theaterMoviesJson(vararg movies: String): String =
     """{"error":false,"message":"movies in theaters","data":{"movies":[${movies.joinToString(",")}]}}"""
 
 /**
- * `GET /tmdb/movies/{id}` payload — the in-theaters detail screen's one read. TMDB sends plain
- * values rather than `sql.Null*` wrappers, and `null` for a list it has nothing for, which the
- * nulled parameters here reproduce.
+ * `GET /tmdb/movies/{id}` payload — the in-theaters detail screen's one read. The server marshals
+ * plain Go values rather than `sql.Null*` wrappers, so only the lists can arrive as `null` (which
+ * the nullable parameters here reproduce); a string it has nothing for arrives as `""`.
  */
 fun tmdbMovieJson(
     id: Int = 21,
     title: String = "Heat 2",
     overview: String = "A prequel and a sequel.",
     releaseDate: String = "2026-08-01",
-    posterPath: String? = "/heat2.jpg",
-    backdropPath: String? = "/heat2-backdrop.jpg",
+    posterPath: String = "/heat2.jpg",
+    backdropPath: String = "/heat2-backdrop.jpg",
     voteAverage: Double = 7.9,
     runtime: Long = 170,
     status: String = "Released",
@@ -232,8 +232,8 @@ fun tmdbMovieJson(
     {"error":false,"message":"tmdb movie","data":{"movie":{
       "id":$id,"title":"$title","original_title":"$title",
       "overview":"$overview","release_date":"$releaseDate",
-      "poster_path":${jsonStringOrNull(posterPath)},
-      "backdrop_path":${jsonStringOrNull(backdropPath)},
+      "poster_path":"$posterPath",
+      "backdrop_path":"$backdropPath",
       "popularity":1831.2,"vote_average":$voteAverage,"vote_count":1829,"adult":false,
       "original_language":"$originalLanguage","genre_ids":null,"video":false,
       "runtime":$runtime,"status":"$status","tagline":"$tagline",
@@ -257,10 +257,10 @@ fun tmdbCastJson(
     id: Int = 100,
     name: String = "Al Pacino",
     character: String = "Vincent Hanna",
-    profilePath: String? = "/pacino.jpg",
+    profilePath: String = "/pacino.jpg",
     order: Int = 0,
 ): String = """{"id":$id,"name":"$name","character":"$character",""" +
-    """"profile_path":${jsonStringOrNull(profilePath)},"order":$order}"""
+    """"profile_path":"$profilePath","order":$order}"""
 
 fun tmdbCrewJson(
     id: Int = 200,
@@ -285,8 +285,6 @@ fun tmdbCountryReleaseDatesJson(
 ): String = """{"iso_3166_1":"$country","release_dates":[""" +
     certifications.joinToString(",") { """{"certification":"$it"}""" } +
     "]}"
-
-private fun jsonStringOrNull(value: String?): String = if (value == null) "null" else "\"$value\""
 
 private fun jsonArrayOrNull(values: List<String>?): String =
     values?.joinToString(",", prefix = "[", postfix = "]") ?: "null"

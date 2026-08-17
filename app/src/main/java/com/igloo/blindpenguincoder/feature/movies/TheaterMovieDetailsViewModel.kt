@@ -90,16 +90,12 @@ class TheaterMovieDetailsViewModel(
                 }
 
                 is ApiResult.Failure -> _uiState.update {
-                    // The orKeep rule: a failed background refresh leaves loaded content alone.
-                    if (!userInitiated && it.details is MovieDetailsState.Loaded) {
-                        it
-                    } else {
-                        it.copy(
-                            details = MovieDetailsState.Error(
-                                result.error.toLibraryDisplayMessage(),
-                            ),
-                        )
-                    }
+                    it.copy(
+                        details = it.details.errorOrKeep(
+                            result.error.toLibraryDisplayMessage(),
+                            userInitiated,
+                        ),
+                    )
                 }
             }
         }
@@ -125,11 +121,7 @@ class TheaterMovieDetailsViewModel(
             mediaBadges = emptyList(),
             runtimeText = runtimeMinutes?.let(::formatRuntime),
             releaseDateText = releaseDateText,
-            genresLine = movie.genres.orEmpty()
-                .map { it.name }
-                .filter { it.isNotBlank() }
-                .takeIf { it.isNotEmpty() }
-                ?.joinToString(" · "),
+            genresLine = joinedNames(movie.genres.orEmpty().map { it.name }, " · "),
             overview = movie.overview.orNullIfBlank(),
             keyCrew = keyCrew(
                 movie.credits.crew.orEmpty().map { CrewCredit(it.job, it.department, it.name) },
@@ -151,11 +143,7 @@ class TheaterMovieDetailsViewModel(
                 },
             extraVideos = extraVideos,
             about = AboutUi(
-                production = movie.productionCompanies.orEmpty()
-                    .map { it.name }
-                    .filter { it.isNotBlank() }
-                    .takeIf { it.isNotEmpty() }
-                    ?.joinToString(", "),
+                production = joinedNames(movie.productionCompanies.orEmpty().map { it.name }, ", "),
                 language = movie.originalLanguage.orNullIfBlank()?.uppercase(Locale.US),
                 budget = movie.budget.takeIf { it > 0 }?.toDouble()?.let(::formatUsd),
                 revenue = movie.revenue.takeIf { it > 0 }?.toDouble()?.let(::formatUsd),

@@ -91,7 +91,10 @@ data class MovieDetailsUi(
     val progress: ProgressUi?,
     val watched: Boolean?,
     val liked: Boolean?,
-    /** The metadata row spoken as one TalkBack stop, composed here so it cannot drift. */
+    /**
+     * The metadata row spoken as one TalkBack stop, composed by [metadataDescription] once for
+     * both sources so the sentence and the chips cannot drift apart.
+     */
     val metadataDescription: String,
     /**
      * The hero's Play Trailer target on the in-theaters page (section 11.4.2) — null there when
@@ -107,6 +110,21 @@ sealed interface MovieDetailsState {
     data class Loaded(val movie: MovieDetailsUi) : MovieDetailsState
     data class Error(val message: String) : MovieDetailsState
 }
+
+/**
+ * A failed read becomes the screen's error — unless it was a background refresh over content
+ * already on screen: a TV waking from standby must not swap a readable page for an error card the
+ * user never asked for. The rule is the same whichever source the page came from.
+ */
+internal fun MovieDetailsState.errorOrKeep(
+    message: String,
+    userInitiated: Boolean,
+): MovieDetailsState =
+    if (!userInitiated && this is MovieDetailsState.Loaded) {
+        this
+    } else {
+        MovieDetailsState.Error(message)
+    }
 
 /** [openMovieId] is the overlay's existence: null means closed and [details] is meaningless. */
 data class MovieDetailsUiState(
@@ -250,16 +268,12 @@ class MovieDetailsViewModel(
                     publishLoaded()
                 }
                 is ApiResult.Failure -> _uiState.update {
-                    // The orKeep rule: a failed background refresh leaves loaded content alone.
-                    if (!userInitiated && it.details is MovieDetailsState.Loaded) {
-                        it
-                    } else {
-                        it.copy(
-                            details = MovieDetailsState.Error(
-                                result.error.toLibraryDisplayMessage(),
-                            ),
-                        )
-                    }
+                    it.copy(
+                        details = it.details.errorOrKeep(
+                            result.error.toLibraryDisplayMessage(),
+                            userInitiated,
+                        ),
+                    )
                 }
             }
         }
@@ -474,11 +488,7 @@ class MovieDetailsViewModel(
             mediaBadges = badges,
             runtimeText = runtimeMinutes?.let(::formatRuntime),
             releaseDateText = releaseDateText,
-            genresLine = details.genres
-                .map { it.tag }
-                .filter { it.isNotBlank() }
-                .takeIf { it.isNotEmpty() }
-                ?.joinToString(" · "),
+            genresLine = joinedNames(details.genres.map { it.tag }, " · "),
             overview = movie.overview?.orNullIfBlank(),
             keyCrew = keyCrew(
                 details.crew.map { CrewCredit(it.job, it.department, it.artistName) },
@@ -511,11 +521,7 @@ class MovieDetailsViewModel(
                 apiBaseUrl,
             ),
             about = AboutUi(
-                production = details.productionCompanies
-                    .map { it.name }
-                    .filter { it.isNotBlank() }
-                    .takeIf { it.isNotEmpty() }
-                    ?.joinToString(", "),
+                production = joinedNames(details.productionCompanies.map { it.name }, ", "),
                 language = movie.language?.orNullIfBlank()?.uppercase(Locale.US),
                 budget = movie.budget?.orNull()?.takeIf { it > 0 }?.let(::formatUsd),
                 revenue = movie.revenue?.orNull()?.takeIf { it > 0 }?.let(::formatUsd),

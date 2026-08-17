@@ -50,9 +50,11 @@ data class TmdbSearchResultsData(
  * library models carry.
  *
  * Only the fields that screen renders are modelled; `ignoreUnknownKeys` drops the rest of a
- * large payload. Every list arrives as `null` when TMDB has nothing to send (the live response
- * sends `genre_ids: null`), and the spec's non-nullable strings do come back null in practice
- * for missing artwork, so both are declared nullable with defaults.
+ * large payload. The lists are genuinely nullable — the server marshals the record whole, so a
+ * slice TMDB sent nothing for arrives as `null`, which is how the spec types them too. The
+ * scalars are non-null with defaults: the server's own fields are plain Go values, so missing
+ * artwork arrives as `""` rather than `null`, and `tmdbImageUrl` already reads a blank path as
+ * no image.
  */
 @Serializable
 data class TmdbMovie(
@@ -60,8 +62,8 @@ data class TmdbMovie(
     val title: String,
     val overview: String = "",
     @SerialName("release_date") val releaseDate: String = "",
-    @SerialName("poster_path") val posterPath: String? = null,
-    @SerialName("backdrop_path") val backdropPath: String? = null,
+    @SerialName("poster_path") val posterPath: String = "",
+    @SerialName("backdrop_path") val backdropPath: String = "",
     @SerialName("vote_average") val voteAverage: Double = 0.0,
     /** Minutes. TMDB sends 0 for an unknown runtime. */
     val runtime: Long = 0,
@@ -79,13 +81,11 @@ data class TmdbMovie(
 
 @Serializable
 data class TmdbGenre(
-    val id: Int,
     val name: String,
 )
 
 @Serializable
 data class TmdbProductionCompany(
-    val id: Int,
     val name: String,
 )
 
@@ -100,14 +100,13 @@ data class TmdbCastMember(
     val id: Int,
     val name: String,
     val character: String = "",
-    @SerialName("profile_path") val profilePath: String? = null,
+    @SerialName("profile_path") val profilePath: String = "",
     /** TMDB's billing order; the rail shows the top of it. */
     val order: Int = 0,
 )
 
 @Serializable
 data class TmdbCrewMember(
-    val id: Int,
     val name: String,
     val job: String = "",
     val department: String = "",
@@ -118,9 +117,12 @@ data class TmdbVideos(
     val results: List<TmdbVideo>? = null,
 )
 
+/**
+ * TMDB has no numeric id for a video, so none is modelled: the extras rail keys off the payload's
+ * own order instead (`TheaterMovieDetailsViewModel.videoSources`).
+ */
 @Serializable
 data class TmdbVideo(
-    val id: String,
     val key: String,
     val name: String,
     val site: String,

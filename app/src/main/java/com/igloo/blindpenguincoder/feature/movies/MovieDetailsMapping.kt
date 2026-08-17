@@ -34,6 +34,12 @@ internal data class VideoSource(
     val key: String,
 )
 
+/** A line built from names: blanks dropped, and null rather than an empty line. */
+internal fun joinedNames(names: List<String>, separator: String): String? = names
+    .filter { it.isNotBlank() }
+    .takeIf { it.isNotEmpty() }
+    ?.joinToString(separator)
+
 /** Director(s) first, then up to three writing credits under their actual jobs (web parity). */
 internal fun keyCrew(crew: List<CrewCredit>): List<CrewEntry> {
     val directors = crew
@@ -101,9 +107,9 @@ internal fun extraVideoTypeLabel(type: String): String = when (normalizedVideoVa
 
 /**
  * The metadata row's single TalkBack sentence (section 11.4.1): the row renders as chips, but
- * eight consecutive two-character announcements would be noise, so the view model composes what
- * it speaks. [mediaBadges] is empty for a movie the library does not hold — there are no probed
- * streams to derive badges from.
+ * eight consecutive two-character announcements would be noise, so what it speaks is composed
+ * here, once for both sources. [mediaBadges] is empty for a movie the library does not hold —
+ * there are no probed streams to derive badges from.
  */
 internal fun metadataDescription(
     ratingBadge: RatingBadgeSpec?,

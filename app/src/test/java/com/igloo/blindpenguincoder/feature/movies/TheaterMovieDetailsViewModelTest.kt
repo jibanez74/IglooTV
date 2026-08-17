@@ -89,7 +89,8 @@ class TheaterMovieDetailsViewModelTest {
                             id = 101,
                             name = "Robert De Niro",
                             character = "Neil McCauley",
-                            profilePath = null,
+                            // No portrait on the record: "" is how the server says so.
+                            profilePath = "",
                             order = 1,
                         ),
                     ),
@@ -279,8 +280,10 @@ class TheaterMovieDetailsViewModelTest {
                 jsonResponse(
                     tmdbMovieJson(
                         overview = "",
-                        posterPath = null,
-                        backdropPath = null,
+                        // The server's artwork fields are plain strings, so "nothing" is "",
+                        // never null — the blank is what has to render as no image.
+                        posterPath = "",
+                        backdropPath = "",
                         // TMDB's "no data" for a rating, a runtime, and money is a valid 0.
                         voteAverage = 0.0,
                         runtime = 0,
