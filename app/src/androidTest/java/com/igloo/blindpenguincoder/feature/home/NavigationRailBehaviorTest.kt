@@ -109,9 +109,13 @@ class NavigationRailBehaviorTest {
     /** The content anchor on Home: the hero, whenever it is visible (section 11.3.1). */
     private fun contentStartCard() = composeRule.onNodeWithTag("home_hero")
 
-    /** The content anchor on every other destination: the placeholder's Movies card. */
+    /**
+     * The content anchor on every other destination. The placeholder is one cleared node — the
+     * same contract as the hero and an inert poster card — so it is addressed by the description
+     * it announces, not by the text inside it.
+     */
     private fun placeholderStartCard() = composeRule.onNodeWithContentDescription(
-        "Movies. API contract loaded. Poster rails and playback will plug into this shell.",
+        "Movies. Movie library scaffolding is ready for API-backed content.",
     )
 
     private fun rail() = composeRule.onNodeWithTag("navigation_rail")
@@ -191,8 +195,9 @@ class NavigationRailBehaviorTest {
 
         composeRule.onNodeWithContentDescription("Search").performClick()
 
-        composeRule.onNodeWithText("Find movies, shows, music, and photos across your library.")
-            .assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(
+            "Search. Find movies, shows, music, and photos across your library.",
+        ).assertIsDisplayed()
     }
 
     @Test

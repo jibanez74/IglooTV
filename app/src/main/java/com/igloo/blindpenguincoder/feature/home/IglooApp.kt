@@ -5,23 +5,24 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,22 +33,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooEasing
@@ -63,13 +61,12 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
-import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooScrim
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.PosterCardProgress
 import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.focusRing
-import com.igloo.blindpenguincoder.core.ui.iglooSurface
+import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
@@ -491,15 +488,11 @@ private fun IglooShell(
                 railReturnRequesters = railReturnRequesters,
                 contentStartRequester = contentStartRequester,
                 navigationRequesters = navigationRequesters,
-                onDestinationSelected = onDestinationSelected,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
-                        start = layout.navRailCollapsedWidth + IglooTheme.spacing.xl,
-                        end = layout.safeAreaHorizontal,
-                        top = layout.safeAreaVertical,
-                        bottom = layout.safeAreaVertical,
-                    ),
+                // The pane fills the panel and applies no gutter of its own. It used to box every
+                // screen into 752x486dp, which is where the dead margins came from. The gutter is
+                // handed down as contentInset instead, so each section applies the inset it owes
+                // — and art, which owes none, reaches the physical edge (sections 2.5, 8.3).
+                modifier = Modifier.fillMaxSize(),
             )
             // The modal owns the only scrim while mounted. Removing this node immediately avoids
             // compositing the rail's animated 0.60 layer under the dialog reveal.
@@ -567,10 +560,8 @@ private fun ContentPane(
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
-    onDestinationSelected: (IglooDestination) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = IglooTheme.colors
     // Hoisted above the destination branch so a Home -> Movies -> Home round trip still knows
     // the card to restore (section 6.3), and saveable so process death does not forget it.
     // One map keyed by rail: each rail keeps its own focus memory, and a new rail is one entry
@@ -588,50 +579,35 @@ private fun ContentPane(
         ),
     ) { mutableStateMapOf() }
 
-    Column(
-        // Rail and content are each a traversal group, so TalkBack reads one block at a
-        // time instead of geometrically interleaving rows that share a y position.
-        modifier = modifier.semantics { isTraversalGroup = true },
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
+    // The pane's one gutter, handed to the sections instead of applied here: the collapsed rail
+    // plus a reading gutter on the start, the overscan inset on the end. Chrome and text take it;
+    // a backdrop and a rail's scroll surface deliberately do not (sections 2.5, 8.3).
+    val contentInset = PaddingValues(
+        start = IglooTheme.layout.navRailCollapsedWidth + IglooTheme.spacing.xl,
+        end = IglooTheme.layout.safeAreaHorizontal,
+    )
+
+    Box(
+        modifier = modifier.testTag("content_pane").semantics {
+            // Rail and content are each a traversal group, so TalkBack reads one block at a
+            // time instead of geometrically interleaving rows that share a y position.
+            isTraversalGroup = true
+            // The pane header that used to carry the destination name went with the boxed layout
+            // — Home's hero is full-bleed now and starts at the top edge, so no text node holds
+            // it any more. Activating a nav row swaps the pane without moving focus, so this is
+            // the only thing left that can tell TalkBack the destination changed at all. A pane
+            // title rather than a live region on a hidden node: the platform fires
+            // CONTENT_CHANGE_TYPE_PANE_TITLE on the value change, it is the mechanism the menu,
+            // both dialogs and both overlays already use, and it does not put a second node
+            // carrying the destination's name into the tree to collide with the rail's own row.
+            paneTitle = currentDestination.label
+        },
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
-                // A live region on the title, not a merged one over the pair: activating a nav
-                // item or a card swaps this header without moving focus, so it is the only thing
-                // that can tell TalkBack the destination changed at all — but collapsing the two
-                // texts into one node would take the supporting text out of the tree.
-                IglooText(
-                    text = currentDestination.label,
-                    style = IglooTheme.typography.titleLarge,
-                    color = colors.foreground,
-                    modifier = Modifier.semantics {
-                        heading()
-                        liveRegion = LiveRegionMode.Polite
-                    },
-                )
-                IglooText(
-                    text = currentDestination.supportingText,
-                    style = IglooTheme.typography.bodyMedium,
-                    color = colors.mutedForeground,
-                )
-            }
-            StatusBadge()
-        }
-
-        if (mutationNotice != null) {
-            IglooNotice(
-                text = mutationNotice,
-                modifier = Modifier.testTag("shell_mutation_notice"),
-            )
-        }
-
         when (currentDestination) {
             IglooDestination.Home -> HomeRails(
                 home = home,
+                mutationNotice = mutationNotice,
+                contentInset = contentInset,
                 onRetryRail = onRetryRail,
                 openMovie = openMovie,
                 openTheaterMovie = openTheaterMovie,
@@ -643,9 +619,10 @@ private fun ContentPane(
 
             else -> PlaceholderContent(
                 currentDestination = currentDestination,
+                mutationNotice = mutationNotice,
+                contentInset = contentInset,
                 contentStartRequester = contentStartRequester,
-                navigationRequesters = navigationRequesters,
-                onDestinationSelected = onDestinationSelected,
+                navigationRequester = navigationRequesters.getValue(currentDestination),
             )
         }
     }
@@ -672,6 +649,8 @@ private fun paneBranchIsHome(destination: IglooDestination): Boolean =
 @Composable
 private fun HomeRails(
     home: HomeUiState,
+    mutationNotice: String?,
+    contentInset: PaddingValues,
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
@@ -701,16 +680,30 @@ private fun HomeRails(
 
     Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
     ) {
+        // Inside the scroll and above the hero: it is text, so it owes the inset, and it scrolls
+        // away with the content rather than permanently costing the hero its top edge. The hero
+        // holds entry focus, so the scroll is at 0 and the notice is on screen when it exists.
+        if (mutationNotice != null) {
+            IglooNotice(
+                text = mutationNotice,
+                modifier = Modifier
+                    .padding(contentInset)
+                    .padding(top = IglooTheme.layout.safeAreaVertical)
+                    .testTag("shell_mutation_notice"),
+            )
+        }
+
         if (heroVisible) {
             HomeHero(
                 state = home.hero,
                 entryRequester = contentStartRequester,
                 leftFocusRequester = navigationRequester,
                 downFocusRequester = continueEntryRequester,
+                contentInset = contentInset,
                 onSelect = openMovie?.let { open ->
                     { movieId -> open(DetailsOrigin.Hero, movieId) }
                 },
@@ -719,6 +712,7 @@ private fun HomeRails(
         }
 
         IglooMediaRail(
+            contentInset = contentInset,
             title = "Continue Watching",
             state = home.continueWatching,
             itemKey = { it.movie.id },
@@ -746,6 +740,7 @@ private fun HomeRails(
         }
 
         IglooMediaRail(
+            contentInset = contentInset,
             title = "Recently Added Movies",
             state = home.latestMovies,
             itemKey = { it.id },
@@ -772,6 +767,7 @@ private fun HomeRails(
         }
 
         IglooMediaRail(
+            contentInset = contentInset,
             title = "Recently Added Albums",
             state = home.latestAlbums,
             itemKey = { it.id },
@@ -799,6 +795,7 @@ private fun HomeRails(
         }
 
         IglooMediaRail(
+            contentInset = contentInset,
             title = "Now Playing in Theaters",
             state = home.inTheaters,
             itemKey = { it.id },
@@ -822,152 +819,92 @@ private fun HomeRails(
     }
 }
 
+/**
+ * The non-Home destinations, until each grows a real screen. Full-bleed like the hero, so the
+ * shell reads as one product rather than as a dashboard bolted onto a TV: the destination's own
+ * name and supporting line over the ambient backdrop, bottom-left on the pane's gutter.
+ *
+ * One focus target, and it is inert — the same contract as an empty rail (section 10) and an
+ * actionless poster card. The pane's focus model requires an anchor in every state; it does not
+ * require that the anchor go anywhere, and a card announcing an action it cannot perform would
+ * be worse than one announcing none.
+ */
 @Composable
 private fun PlaceholderContent(
     currentDestination: IglooDestination,
+    mutationNotice: String?,
+    contentInset: PaddingValues,
     contentStartRequester: FocusRequester,
-    navigationRequesters: Map<IglooDestination, FocusRequester>,
-    onDestinationSelected: (IglooDestination) -> Unit,
+    navigationRequester: FocusRequester,
 ) {
     val colors = IglooTheme.colors
-    Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg)) {
-        HeroPanel()
+    val direction = LocalLayoutDirection.current
+    // Constant rather than rememberAmbientProgress(): section 7.2's one-loop carve-out names the
+    // welcome screen alone, and a destination the user sits on is exactly where drift would be
+    // motion in the periphery with nothing to say.
+    val still = remember { mutableFloatStateOf(0f) }
+    var focused by remember { mutableStateOf(false) }
 
-        IglooText(
-            text = "Start here",
-            style = IglooTheme.typography.titleMedium,
-            color = colors.foreground,
-        )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .iglooAuroraBackdrop(still),
+    ) {
+        if (mutationNotice != null) {
+            IglooNotice(
+                text = mutationNotice,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(contentInset)
+                    .padding(top = IglooTheme.layout.safeAreaVertical)
+                    .testTag("shell_mutation_notice"),
+            )
+        }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(
+                    start = contentInset.calculateStartPadding(direction),
+                    end = contentInset.calculateEndPadding(direction),
+                    bottom = IglooTheme.layout.safeAreaVertical,
+                )
+                .widthIn(max = PLACEHOLDER_TEXT_MAX_WIDTH.scaled())
+                .focusRing(
+                    focused = focused,
+                    radius = IglooTheme.radius.lg,
+                    scaleOnFocus = false,
+                )
+                .focusRequester(contentStartRequester)
+                .focusProperties {
+                    left = navigationRequester
+                    right = FocusRequester.Cancel
+                    up = FocusRequester.Cancel
+                    down = FocusRequester.Cancel
+                }
+                .onFocusChanged { focused = it.isFocused }
+                .focusable()
+                .clearAndSetSemantics {
+                    heading()
+                    contentDescription =
+                        "${currentDestination.label}. ${currentDestination.supportingText}"
+                }
+                .padding(IglooTheme.spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         ) {
-            FeatureCard(
-                title = "Movies",
-                body = "API contract loaded. Poster rails and playback will plug into this shell.",
-                modifier = Modifier.weight(1f),
-                focusRequester = contentStartRequester,
-                leftFocusRequester = navigationRequesters.getValue(currentDestination),
-                onClick = { onDestinationSelected(IglooDestination.Movies) },
+            IglooText(
+                text = currentDestination.label,
+                style = IglooTheme.typography.display,
+                color = colors.foreground,
             )
-            FeatureCard(
-                title = "Music",
-                body = "Coil, Media3, Ktor, and DataStore are ready for feature work.",
-                modifier = Modifier.weight(1f),
-                onClick = { onDestinationSelected(IglooDestination.Music) },
-            )
-            FeatureCard(
-                title = "Settings",
-                body = "Server setup and theme persistence can be added without changing the app frame.",
-                modifier = Modifier.weight(1f),
-                onClick = { onDestinationSelected(IglooDestination.Settings) },
+            IglooText(
+                text = currentDestination.supportingText,
+                style = IglooTheme.typography.bodyLarge,
+                color = colors.foreground,
             )
         }
     }
 }
 
-@Composable
-private fun StatusBadge() {
-    val colors = IglooTheme.colors
-    Box(
-        modifier = Modifier
-            .iglooSurface(
-                radius = IglooTheme.radius.pill,
-                fill = colors.aurora.copy(alpha = 0.16f),
-                border = colors.aurora.copy(alpha = 0.48f),
-            )
-            .padding(horizontal = IglooTheme.spacing.md, vertical = IglooTheme.spacing.sm),
-    ) {
-        IglooText(
-            text = "Base app",
-            style = IglooTheme.typography.label,
-            color = colors.aurora,
-        )
-    }
-}
-
-@Composable
-private fun HeroPanel() {
-    val colors = IglooTheme.colors
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .iglooSurface(radius = IglooTheme.radius.xl, fill = colors.card)
-            .padding(IglooTheme.spacing.xl),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-    ) {
-        IglooText(
-            text = "Your library, ready",
-            style = IglooTheme.typography.titleLarge,
-            color = colors.cardForeground,
-        )
-        IglooText(
-            text = "This Android TV foundation is remote-first, dark by default, and ready for the Igloo backend contract.",
-            style = IglooTheme.typography.bodyLarge,
-            color = colors.mutedForeground,
-        )
-    }
-}
-
-@Composable
-private fun FeatureCard(
-    title: String,
-    body: String,
-    modifier: Modifier = Modifier,
-    focusRequester: FocusRequester? = null,
-    leftFocusRequester: FocusRequester? = null,
-    onClick: () -> Unit,
-) {
-    val colors = IglooTheme.colors
-    var focused by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = modifier
-            .heightIn(min = 178.dp.scaled())
-            .focusRing(
-                focused = focused,
-                radius = IglooTheme.radius.xl,
-                fill = if (focused) colors.card.copy(alpha = 0.96f) else colors.muted,
-            )
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .then(
-                if (leftFocusRequester != null) {
-                    Modifier.focusProperties {
-                        left = leftFocusRequester
-                    }
-                } else {
-                    Modifier
-                },
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            )
-            .clearAndSetSemantics {
-                contentDescription = "$title. $body"
-                role = Role.Button
-                onClick(label = "Open $title") {
-                    onClick()
-                    true
-                }
-            }
-            .padding(IglooTheme.spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-    ) {
-        IglooText(
-            text = title,
-            style = IglooTheme.typography.titleMedium,
-            color = colors.foreground,
-            maxLines = 1,
-        )
-        IglooText(
-            text = body,
-            style = IglooTheme.typography.bodyMedium,
-            color = colors.mutedForeground,
-            maxLines = 4,
-        )
-    }
-}
+/** Readable measure for the supporting line at bodyLarge; one-off per section 2.8. */
+private val PLACEHOLDER_TEXT_MAX_WIDTH = 520.dp

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -83,9 +84,12 @@ fun PinEntryScreen(
             IglooInlineError(message = message)
         }
 
+        // Indicator, pad and footer share one bounded measure so the cells sit over the keys and
+        // the footer reads as part of the pad rather than as a stray full-width control.
         PinIndicator(
             enteredCount = uiState.enteredCount,
             isVerifying = uiState.isVerifying,
+            modifier = Modifier.widthIn(max = PIN_FORM_MAX_WIDTH.scaled()),
         )
 
         Keypad(
@@ -102,6 +106,7 @@ fun PinEntryScreen(
             onClick = viewModel::back,
             variant = IglooButtonVariant.Ghost,
             modifier = Modifier
+                .widthIn(max = PIN_FORM_MAX_WIDTH.scaled())
                 .fillMaxWidth()
                 .focusRequester(backFocus)
                 .focusProperties { up = lastFocusedKey ?: keyFocus.first() },
@@ -175,6 +180,14 @@ private fun Keypad(
 
     Column(
         modifier = modifier
+            // Bounded, then filled. The keys are `weight(1f)` over a `controlHeight` minimum, so
+            // across the full-bleed canvas's form column they stretch into squat slabs — three
+            // ~154dp keys 52dp tall. At 320dp a key is about as wide as it is tall, the shape a
+            // keypad wants and the one the old 480dp card gave it by accident.
+            //
+            // The order is load-bearing: fillMaxWidth pins the minimum to the parent's width, and
+            // a widthIn after it can only raise its own max back to that minimum — a silent no-op.
+            .widthIn(max = PIN_FORM_MAX_WIDTH.scaled())
             .fillMaxWidth()
             // Remotes that do have number keys should just work.
             .onPreviewKeyEvent { event ->
@@ -269,6 +282,9 @@ private fun KeypadKey(
         )
     }
 }
+
+/** Bounds the PIN form: a key about as wide as it is tall at three columns (section 2.8). */
+private val PIN_FORM_MAX_WIDTH = 320.dp
 
 private const val DELETE_KEY = '⌫'
 private const val KEYPAD_COLUMNS = 3

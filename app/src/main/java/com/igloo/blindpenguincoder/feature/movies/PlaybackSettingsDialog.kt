@@ -97,7 +97,7 @@ internal fun PlaybackSettingsDialog(
         contentAlignment = Alignment.Center,
     ) {
         BoxWithConstraints {
-            val cardWidth = minOf(IglooTheme.layout.authCardWidth, maxWidth)
+            val cardWidth = minOf(IglooTheme.layout.dialogWidth, maxWidth)
             val cardMaxHeight = maxHeight - IglooTheme.layout.safeAreaVertical * 2
             Column(
                 modifier = Modifier

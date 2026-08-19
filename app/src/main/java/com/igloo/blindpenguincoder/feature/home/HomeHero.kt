@@ -7,6 +7,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -27,6 +30,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -46,12 +50,18 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 
 /**
- * The featured-movie banner over the home rails (docs/design-system.md section 11.3.1): a
- * pane-width rounded card, one focus target, no action until the details screen lands. The
- * caller renders it only while [state] is Loading or Loaded — Hidden means no hero at all,
- * and the Continue Watching rail owns the pane's entry anchor instead.
+ * The featured-movie banner at the top of home (docs/design-system.md section 11.3.1): a
+ * full-bleed backdrop, one focus target, no action until the details screen lands. The caller
+ * renders it only while [state] is Loading or Loaded — Hidden means no hero at all, and the
+ * Continue Watching rail owns the pane's entry anchor instead.
  *
- * The Loading card holds the final geometry so entry focus taken during the load sits exactly
+ * **The art reaches all four physical edges; the text does not.** [contentInset] is the pane's
+ * gutter, and only the text plate takes it — that is what keeps the title out from under the nav
+ * rail while letting the backdrop pass behind it. The focus ring rides the plate rather than the
+ * bleeding surface for the same reason a backdrop may bleed and a word may not: a 3dp ring traced
+ * round the panel would sit in the overscan margin, the one place section 2.5 says a TV may crop.
+ *
+ * The Loading state holds the final geometry so entry focus taken during the load sits exactly
  * where the loaded hero lands. A backdrop that is missing or fails to fetch drops the section
  * 3.2 over-media treatment entirely: token colors on the card fill, no gradients.
  *
@@ -64,6 +74,7 @@ fun HomeHero(
     entryRequester: FocusRequester,
     leftFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester,
+    contentInset: PaddingValues,
     onSelect: ((Long) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
@@ -78,14 +89,10 @@ fun HomeHero(
     val heroModifier = modifier
         .fillMaxWidth()
         .heightIn(min = HERO_MIN_HEIGHT.scaled())
-        .focusRing(
-            focused = focused,
-            radius = IglooTheme.radius.xl,
-            // The skeleton is a muted block like the rails'; the loaded hero is a card surface
-            // even with a backdrop, because the fill is what shows while the image fetches.
-            fill = if (state is HomeHeroState.Loaded) colors.card else colors.muted,
-            scaleOnFocus = false,
-        )
+        // The fill still shows while the image fetches, and under a hero with no backdrop at
+        // all. What it no longer carries is the focus ring — that moved to the text plate, which
+        // is bounded and always inside the safe area.
+        .background(if (state is HomeHeroState.Loaded) colors.card else colors.muted)
         .focusRequester(entryRequester)
         .focusProperties {
             left = leftFocusRequester
@@ -113,6 +120,8 @@ fun HomeHero(
     when (state) {
         is HomeHeroState.Hidden -> Unit
         is HomeHeroState.Loading -> HeroSkeleton(
+            focused = focused,
+            contentInset = contentInset,
             modifier = heroModifier.semantics {
                 contentDescription = "Loading featured movie"
                 liveRegion = LiveRegionMode.Polite
@@ -121,6 +130,8 @@ fun HomeHero(
 
         is HomeHeroState.Loaded -> HeroContent(
             hero = state.hero,
+            focused = focused,
+            contentInset = contentInset,
             modifier = heroModifier.clearAndSetSemantics {
                 contentDescription = listOfNotNull(
                     "Featured",
@@ -145,6 +156,8 @@ fun HomeHero(
 @Composable
 private fun HeroContent(
     hero: HomeHero,
+    focused: Boolean,
+    contentInset: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
@@ -194,8 +207,7 @@ private fun HeroContent(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .widthIn(max = HERO_TEXT_MAX_WIDTH.scaled())
-                .padding(IglooTheme.spacing.xl),
+                .heroTextPlate(focused = focused, contentInset = contentInset),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         ) {
             IglooText(
@@ -224,16 +236,53 @@ private fun HeroContent(
     }
 }
 
+/**
+ * The focus plate: the bounded, always-inside-the-safe-area box that carries the section 6.1
+ * treatment on behalf of the bleeding surface around it, and the pane's gutter on behalf of the
+ * text inside it. Shared by both hero states so focus taken during the load sits exactly where
+ * the loaded plate lands — the invariant the whole Loading geometry exists to keep.
+ *
+ * `scaleOnFocus` stays false: the plate sits on a gradient over art, and lifting text off its own
+ * ground is the one motion section 7.2 will not buy.
+ */
+@Composable
+private fun Modifier.heroTextPlate(
+    focused: Boolean,
+    contentInset: PaddingValues,
+): Modifier {
+    val direction = LocalLayoutDirection.current
+    return this
+        .padding(
+            start = contentInset.calculateStartPadding(direction),
+            end = contentInset.calculateEndPadding(direction),
+            bottom = IglooTheme.layout.safeAreaVertical,
+        )
+        .widthIn(max = HERO_TEXT_MAX_WIDTH.scaled())
+        .focusRing(
+            focused = focused,
+            radius = IglooTheme.radius.lg,
+            // Section 3.2's chip-and-control ground: the plate has to read as a surface for the
+            // ring to have anything to contract against, and it sits over media.
+            fill = Color.Black.copy(alpha = 0.45f),
+            scaleOnFocus = false,
+        )
+        .padding(IglooTheme.spacing.lg)
+}
+
 /** Text stubs where the loaded text column sits — static blocks, nothing loops (section 10). */
 @Composable
-private fun HeroSkeleton(modifier: Modifier = Modifier) {
+private fun HeroSkeleton(
+    focused: Boolean,
+    contentInset: PaddingValues,
+    modifier: Modifier = Modifier,
+) {
     val colors = IglooTheme.colors
     val stubShape = RoundedCornerShape(IglooTheme.radius.sm)
     Box(modifier = modifier) {
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(IglooTheme.spacing.xl),
+                .heroTextPlate(focused = focused, contentInset = contentInset),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         ) {
             Box(
@@ -252,8 +301,15 @@ private fun HeroSkeleton(modifier: Modifier = Modifier) {
     }
 }
 
-/** Contains text, so a minimum, not a fixed height (section 2.6); one-off per section 2.8. */
-private val HERO_MIN_HEIGHT = 280.dp
+/**
+ * Contains text, so a minimum, not a fixed height (section 2.6); one-off per section 2.8.
+ *
+ * 360dp of the 540dp reference viewport. It was 280dp when the hero sat under ~117dp of pane
+ * header and gutter; starting at the top edge instead, 360 leaves *more* of the Continue Watching
+ * rail showing than the old card did (540 - 360 = 180dp against 540 - 397 = 143dp), so section
+ * 8.2's scroll affordance strengthens rather than weakens.
+ */
+private val HERO_MIN_HEIGHT = 360.dp
 
 /** Readable measure for the overview at bodyMedium — roughly 50 characters a line. */
 private val HERO_TEXT_MAX_WIDTH = 420.dp

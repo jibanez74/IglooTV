@@ -66,9 +66,12 @@ data class IglooLayout(
      */
     val navRailCollapsedWidth: Dp,
     val navRailExpandedWidth: Dp,
-    /** The centered auth card: [authCardWidth] for a form, [authCardWideWidth] for a row. */
-    val authCardWidth: Dp,
-    val authCardWideWidth: Dp,
+    /**
+     * The centered dialog and error card. Auth no longer uses it — those screens are full-bleed
+     * two-column canvases (section 11.1) — but a dialog is genuinely a card floating over a
+     * screen, so the width outlived the name it was born with.
+     */
+    val dialogWidth: Dp,
     val posterWidth: Dp,
     val wideCardWidth: Dp,
     val posterAspect: Float,
@@ -152,8 +155,7 @@ private fun iglooDimens(
         // icon column never clips at Compact, where the safe portion must not shrink.
         navRailCollapsedWidth = 48.dp.at(viewportFactor) + 80.dp.at(scale),
         navRailExpandedWidth = 236.dp.at(scale),
-        authCardWidth = 480.dp.at(scale),
-        authCardWideWidth = 840.dp.at(scale),
+        dialogWidth = 480.dp.at(scale),
         posterWidth = 148.dp.at(scale),
         wideCardWidth = 264.dp.at(scale),
         posterAspect = 2f / 3f,

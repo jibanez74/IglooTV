@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -29,6 +31,8 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -78,6 +82,13 @@ fun <T> IglooMediaRail(
     lastFocusedKey: Long?,
     onItemFocused: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * The pane's gutter (section 8.3). The heading and the non-scrolling states take it as
+     * padding; the `LazyRow` takes it as `contentPadding`, so the scroll surface spans the whole
+     * panel and cards run off the physical edge instead of stopping short of it. A rail that is
+     * already inside a padded parent — the detail screen's sections — leaves it at zero.
+     */
+    contentInset: PaddingValues = PaddingValues(0.dp),
     // Only rails whose state can actually be Loading or Empty need to speak here; a rail that
     // is always Loaded (the cast rail) leaves the defaults, which never render.
     loadingLabel: String = "Loading",
@@ -125,6 +136,13 @@ fun <T> IglooMediaRail(
             right = FocusRequester.Cancel
         }
 
+    val direction = LocalLayoutDirection.current
+    val insetStart = contentInset.calculateStartPadding(direction)
+    val insetEnd = contentInset.calculateEndPadding(direction)
+    // Everything that is not the scroll surface owes the gutter: the heading and every
+    // non-scrolling state are text, and text stays inside the overscan inset.
+    val insetModifier = Modifier.padding(start = insetStart, end = insetEnd)
+
     Column(
         modifier = modifier.onFocusChanged { railHasFocus = it.hasFocus },
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
@@ -133,15 +151,18 @@ fun <T> IglooMediaRail(
             text = title,
             style = IglooTheme.typography.titleMedium,
             color = IglooTheme.colors.foreground,
-            modifier = Modifier.semantics { heading() },
+            modifier = insetModifier.semantics { heading() },
         )
 
         when (state) {
+            // The skeleton takes the start inset only: its fixed cells are meant to run off the
+            // end the same way real cards do, which is the affordance they stand in for.
             is IglooRailState.Loading -> RailSkeleton(
                 anchorModifier = anchorModifier,
                 loadingLabel = loadingLabel,
                 cardAspect = cardAspect,
                 cardWidth = cardWidth,
+                modifier = Modifier.padding(start = insetStart),
             )
 
             // Rail-shaped, not form-shaped: the card is bounded to the cards it replaces so a
@@ -154,7 +175,7 @@ fun <T> IglooMediaRail(
                 onAction = onRetry,
                 actionModifier = anchorModifier,
                 liveRegionMode = LiveRegionMode.Polite,
-                modifier = Modifier
+                modifier = insetModifier
                     .padding(vertical = IglooTheme.spacing.md)
                     .widthIn(max = railErrorWidth()),
             )
@@ -164,6 +185,7 @@ fun <T> IglooMediaRail(
                     anchorModifier = anchorModifier,
                     emptyIcon = emptyIcon,
                     emptyText = emptyText,
+                    modifier = insetModifier,
                 )
             } else {
                 // Created scrolled to the entry card so a rail rebuilt on returning to this
@@ -178,9 +200,24 @@ fun <T> IglooMediaRail(
                     state = listState,
                     horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
                     // Vertical room inside the scroll surface, so the focus scale and glow are
-                    // not cross-axis-clipped; the row's horizontal extremes still trim the glow,
-                    // the same accepted artifact section 6.1 records for the spine.
-                    contentPadding = PaddingValues(vertical = IglooTheme.spacing.md),
+                    // not cross-axis-clipped. The horizontal values are the pane's gutter carried
+                    // *inside* the scroll rather than applied to it (section 8.3): the surface
+                    // spans the whole panel, so the first card still rests at the gutter while the
+                    // last one scrolls off the physical edge — and the trailing glow that the
+                    // row's extreme used to trim now has the end inset to live in.
+                    contentPadding = PaddingValues(
+                        start = insetStart,
+                        end = insetEnd,
+                        top = IglooTheme.spacing.md,
+                        bottom = IglooTheme.spacing.md,
+                    ),
+                    // A lazy list sizes to its content up to the incoming constraint, so a rail
+                    // holding fewer cards than the panel is wide would end where its last card
+                    // does — and the scroll surface, not the card, is what has to span the panel
+                    // for the end inset above to be the thing cards scroll through.
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("rail_scroll_$title"),
                 ) {
                     itemsIndexed(state.items, key = { _, item -> itemKey(item) }) { index, item ->
                         val key = itemKey(item)
@@ -216,10 +253,11 @@ private fun RailSkeleton(
     loadingLabel: String,
     cardAspect: Float,
     cardWidth: Dp,
+    modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.padding(vertical = IglooTheme.spacing.md),
+        modifier = modifier.padding(vertical = IglooTheme.spacing.md),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
     ) {
         SkeletonCell(
@@ -288,12 +326,13 @@ private fun RailEmpty(
     anchorModifier: Modifier,
     emptyIcon: ImageVector,
     emptyText: String,
+    modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
     Box(
         // Focusable deliberately: when the rail is the pane's only section, an unfocusable
         // empty state would leave the pane with no anchor and break the shell's focus model.
-        modifier = Modifier
+        modifier = modifier
             .focusRing(focused = focused, radius = IglooTheme.radius.lg)
             .then(anchorModifier)
             .onFocusChanged { focused = it.isFocused }

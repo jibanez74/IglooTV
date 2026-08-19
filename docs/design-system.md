@@ -138,8 +138,10 @@ Older and some current TVs crop the edges of the signal. The convention is a **5
 safeArea = PaddingValues(horizontal = 48.dp, vertical = 27.dp)   // exactly 5% of 960x540dp
 ```
 
-- Applied via `Modifier.iglooSafeArea()` at the **shell** and on full-screen non-shell surfaces
-  (the auth canvas), **not** globally at the root.
+- Applied via `Modifier.iglooSafeArea()` on full-screen non-shell surfaces (the auth canvas, the
+  welcome screen), **not** globally at the root and **not** on the shell's content pane. The pane
+  hands its sections a `contentInset` instead and each applies what it owes (§8.1) — a container
+  that insets everything cannot let a backdrop through.
 - **Full-bleed content opts out**: backdrops, poster gradients, and the video player surface
   must be able to reach the physical edge. Only *chrome and text* need the inset.
 - Rails pad their **content** with the safe area while letting the scroll surface bleed, so
@@ -636,13 +638,23 @@ A persistent **left nav spine** and a content pane, inside the safe area.
 | `navRailCollapsedWidth` | 128dp *(48dp safe area — `viewportFactor` only — + 80dp scaled icon strip)* |
 | `navRailExpandedWidth` | 236dp |
 | `safeArea` | 48dp × 27dp *(unscaled)* |
-| `authCardWidth` | 480dp *(the centered auth card for a form — §11.1.2, §11.1.3)* |
-| `authCardWideWidth` | 840dp *(the centered auth card for a row — §11.1.1, quick connect)* |
+| `dialogWidth` | 480dp *(the centered dialog and error card — §9.3, §10)* |
 
-At Standard on the 960dp reference viewport: 960 − 128 (collapsed rail, which absorbs the left
-safe area) − 32 (content gutter, `spacing.xl`) − 48 (right safe area) = **752dp of content
-pane**. That is the budget. Everything in §8.2 is sized against it — the expanded rail overlays
-the pane and costs it nothing.
+**The pane is the whole panel. The gutter is a property of what sits in it.** The content pane
+applies no padding of its own; it hands its sections a `contentInset` and each applies the part it
+owes. Chrome and text take it, a backdrop does not, and a rail's scroll surface carries it as
+`contentPadding` (§8.3) so cards run off the physical edge instead of stopping short of it.
+
+At Standard on the 960dp reference viewport that inset is 128 (collapsed rail, which absorbs the
+left safe area) + 32 (content gutter, `spacing.xl`) on the start and 48 (right safe area) on the
+end, leaving **752dp of inset content measure**. That is the budget everything in §8.2 is sized
+against — but it is a text measure, not a clip. `IglooDimensTest` pins the arithmetic.
+
+The rail **overlays**, it does not displace: it rests as a horizontal scrim (§11.2) over content
+that reaches x = 0, and the expanded rail costs the pane nothing.
+
+⚑ *This was a hard `padding()` on the pane container until 2026-08-19, which boxed every screen
+into 752×486dp of a 960×540dp panel. See the revision entry — the failure mode is worth knowing.*
 
 The spine is the primary vertical d-pad target and is always visible, resting as the collapsed
 icon strip. It expands to `navRailExpandedWidth` exactly while d-pad focus is inside it,
@@ -655,7 +667,7 @@ no drawer, no hamburger, and no fully-hidden mode.
 
 | Token | Standard | Notes |
 |---|---|---|
-| `posterWidth` | 148dp ⚑ | 752dp of pane ⇒ 4 posters + a ~96dp peek, which cues scrollability |
+| `posterWidth` | 148dp ⚑ | 752dp of inset measure ⇒ 4 posters + a peek, which cues scrollability |
 | `posterAspect` | 2:3 | `Modifier.aspectRatio(2f / 3f)` |
 | `wideCardWidth` | 264dp | Backdrop / episode / extra-video cards |
 | `wideAspect` | 16:9 | |
@@ -671,7 +683,8 @@ than owning them, and `IglooMediaRail` takes the same pair for its skeleton — 
 grid-matching rule is only true if the placeholder is the shape of the card replacing it.
 
 **A partially-visible next card is a feature.** It is the only affordance telling a remote user
-the rail continues.
+the rail continues — and since §8.3 it is a card genuinely cut by the panel's edge, not one
+parked short of a gutter, which reads as the end of the list rather than the middle of it.
 
 ### 8.3 Rails and grids
 
@@ -685,7 +698,21 @@ the rail continues.
 
 Grids use `LazyVerticalGrid` with `GridCells.Fixed(IglooTheme.layout.gridColumns)`.
 
-Rails pad content with the safe area and let the scroll surface bleed past it (§2.5).
+**Rails pad their content and let the scroll surface bleed past it.** `IglooMediaRail` takes the
+pane's `contentInset` and splits it by node:
+
+| Node | Gets the inset as |
+|---|---|
+| The heading, the empty state, the error card | `padding` — they are text |
+| The `LazyRow` | `contentPadding`, plus `fillMaxWidth()` |
+| The loading skeleton | `padding(start)` only — its cells are meant to run off the end |
+
+The `LazyRow` needs **both**: `contentPadding` puts the gutter inside the scroll surface so the
+first card rests at the inset while the last scrolls past the panel edge, and `fillMaxWidth()`
+because a lazy list otherwise sizes to its content and a short rail would end where its last card
+does. **The parent must not pad horizontally**, or it re-clips the surface and the inset silently
+becomes a gutter again — which is exactly how this went unimplemented from the TV-first rewrite
+until 2026-08-19.
 
 ---
 
@@ -711,7 +738,7 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
 | `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg`, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose description joins the cleared node ("Title, Year, N min left", §12) so the bar can never render unannounced. |
-| `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), minimal `IglooEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). |
+| `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), minimal `IglooEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). Takes the pane's `contentInset` and splits it by node per §8.3 — heading and non-scrolling states pad, the `LazyRow` carries it as `contentPadding` so cards bleed off the panel edge. |
 | `IglooEmpty` | §10 empty state, minimal variant only: faded icon + one announced line. The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
 
 The app deliberately does **not** use Material theming. `IglooTheme` is the only source of
@@ -753,7 +780,7 @@ choice, not an oversight, and four things break if someone "fixes" it into a rea
 Everything a dialog window would give for free — focus containment, accessibility scoping — is a
 handful of modifiers we already use elsewhere.
 
-**Geometry.** Card at `layout.authCardWidth` (reused, not a new token), `radius.xl`, `card` fill,
+**Geometry.** Card at `layout.dialogWidth` (reused, not a new token), `radius.xl`, `card` fill,
 `spacing.xl` interior padding, `spacing.lg` between blocks, `spacing.md` between the buttons.
 Centered in an `IglooScrim`. The card is the modal's only surface; it does not clip, so the confirm
 button's focus glow survives (§6.1).
@@ -859,10 +886,31 @@ names, not for layout.
 Two top-level states: **unauthenticated** (full-bleed auth canvas, no shell) and
 **authenticated** (nav spine + content pane). Neither ever shows nav chrome on the auth side.
 
-The auth canvas takes two forms. The **card form** (§11.1.1–11.1.3) centers a single card on a
-vertical gradient and scrolls internally if it does not fit; every step of setup uses it. The
-**hero form** (§11.1.0) is full-bleed with no card, and opens each fresh launch of initial setup
-until the user has saved a valid server URL.
+**There is no card.** Every auth screen is the same full-bleed canvas — §11.1.0's two radial
+gradients over an opaque fill, reaching all four physical edges — with only chrome and text taking
+the overscan inset (§2.5). `AuthSurface` lays it out in one of two shapes, chosen by what the
+screen's content actually is:
+
+| `AuthCanvas` | Shape | Used by |
+|---|---|---|
+| `Split` | Identity left, a `weight(1f)` column of controls right | §11.1.1's PIN, §11.1.3's password path, the server prompt |
+| `Stacked` | Identity across the top, content spanning the full inset measure below | the profile picker, quick connect — both are *rows*, and neither fits a half-panel column |
+
+`Split` at Standard on the reference viewport: 960 − 96 (safe area) − 48 (`spacing.xxl` gutter)
+= 816, split 384/384. The two content extremes land on x = 48dp and x = 912dp — **both safe-area
+edges**. That is the whole point of the section.
+
+In `Split` the identity block stacks the brand mark above the words; in `Stacked` it sets the mark
+*beside* them, because there the headline sits above content that already fills the panel and the
+taller form costs ~80dp — enough to push quick connect's own header off a 540dp screen.
+
+Both `Split` columns are traversal groups, or TalkBack's geometric sort interleaves the identity
+block with the form rows sharing its y position (§12).
+
+⚑ *Until 2026-08-19 this was a **card form**: a 480dp card centred on a 960dp panel, with 840dp
+for the two row screens. Half the panel's width was empty background. It is the single clearest
+example of a web/mobile idiom surviving a port unexamined — a centred card is right when the
+viewport might be a phone, and wrong when it is definitionally a television.*
 
 A device token belongs to exactly one user and the backend has no "switch user" call, so
 multiple people on one TV means **one stored token per person**. Every unauthenticated screen
@@ -975,7 +1023,8 @@ welcome on that transition.
 
 #### 11.1.1 Profile picker
 
-"Who's watching?" on the auth canvas at 840dp — the width §11.1.3 already uses. A single
+"Who's watching?" on the `Stacked` canvas (§11.1): six tiles at the cap need the full inset
+measure, not half of it. A single
 horizontal row of circular tiles, most recently used first, then an **Add profile** tile that
 is always visible and never focus-gated (§6.2). Below the row, a ghost **Change server** row.
 
@@ -1030,7 +1079,11 @@ sign-in behind a PIN this moment verified, or the periodic revalidation of a ses
 running. A PIN set while someone is watching must not eject them mid-session.
 
 **Remotes have no number keys.** This is the constraint the screen is designed around: a 3×4
-on-screen keypad (1–9, delete, 0) plus four masked indicator cells on the 480dp card. Hardware
+on-screen keypad (1–9, delete, 0) plus four masked indicator cells, in the `Split` canvas's form
+column (§11.1). Indicator, pad and footer share one bounded 320dp measure — the keys are
+`weight(1f)` over a `controlHeight` minimum, so across the full column they stretch into squat
+slabs, and at 320dp a key is about as wide as it is tall. The old 480dp card gave them that shape
+by accident; the bound makes it deliberate. Hardware
 digits are accepted where they exist. An `IglooTextField` is wrong here — it would summon the
 IME, which §11.6 reserves for search and login.
 
@@ -1057,11 +1110,12 @@ offering it mid-add is a trap. **Back takes that same slot's action**, and only 
 first-time setup, and after the last profile signs out, there is nothing behind this screen and
 Back correctly exits the app.
 
-The quick-connect card **fits 960×540 without scrolling in its resting state** at Standard and
-font scale 1.0 — measured, with the header at 38dp. That matters because focus lands on a bottom
+Quick connect **fits 960×540 without scrolling in its resting state** at Standard and font scale
+1.0 — measured. It gained room when the card went: no 32dp of card padding on each axis, and a
+side-by-side headline instead of a stacked one. That matters because focus lands on a bottom
 control the moment the screen composes, so overflow would immediately scroll the header out of
-sight. `QuickConnectLayoutTest` guards it, and the card form's internal scroll (§11.1) is left for
-the degraded states — an inline error present, a larger `UiScale`, or a raised font scale.
+sight. `QuickConnectLayoutTest` guards it, and the canvas's internal scroll (§11.1) is left for the
+degraded states — an inline error present, a larger `UiScale`, or a raised font scale.
 
 Signing out the **last** profile lands here rather than on the picker, so this screen carries the
 same `IglooNotice` slot (§11.1.1), on both the quick-connect and password paths. A notice is one of
@@ -1081,6 +1135,14 @@ remote.
 
 **Sign out asks first** (§9.3) — it is destructive, one press away, and reachable by whoever is
 holding the remote. Switch profile does not ask: it loses nothing.
+
+**The resting rail is a scrim, not a fill.** The pane bleeds under it (§8.1), so the ground is a
+horizontal gradient — `sidebar @ 0.90` at the panel edge fading to nothing across the collapsed
+width — and art passes beneath the icon strip instead of being cut off by it. Not opaque even at
+x = 0: a flat column of `sidebar` against `background` is two near-identical darks, which is
+precisely what read as a black bar down the side of the screen. Legibility is not the scrim's job
+— every rail row carries its own surface fill. Expanding restores the solid fill, driven by the
+same `labelAlpha` as the labels so the two cannot disagree.
 
 **Switch profile is not cancellable either**, for the same reason sign-out is not. It drops the
 in-memory credential before it publishes the picker, so a caller torn down in between — an
@@ -1129,6 +1191,12 @@ watch rooms — under the hero (§11.3.1). This is the most TV-native layout in 
 index screens. Vertical d-pad moves between rails; horizontal moves within one; focus is
 restored per-rail on return.
 
+**There is no pane header.** Home opens on the hero's backdrop at the top edge of the panel; the
+destination's name is carried by the rail's `selected` row visually and by the pane's `paneTitle`
+for TalkBack (§12). A title block with supporting text above the content was a Material top app
+bar in everything but name, and it was what made a full-bleed hero impossible. Non-Home
+destinations still render a heading, inside their own content.
+
 #### 11.3.1 The hero
 
 The hero features the **single most recently added movie**: the first item of the Recently Added
@@ -1137,13 +1205,25 @@ two requests chain inside the rail's own load job, so the rail's Retry re-runs t
 foreground refresh cancels both together. It does not rotate — §7.2 permits no looping surface,
 and a hero carousel fails that rule twice (it carries information; it moves geometry under text).
 
-**Geometry.** A pane-width rounded card *inside* the content pane's padding — deliberately not
-full-bleed. The pane header sits above it, so the hero could never reach the top edge; what §2.5's
-opt-out exists for (backdrops that touch the physical edge) does not apply to a card sitting below
-chrome. Radius `xl`, `heightIn(min = 280dp)` (scaled; a one-off literal per §2.8 — it contains
-text, so §2.6 requires min, not fixed). At Standard on the reference viewport this leaves the
-Continue Watching heading and the top of its posters visible below — the §8.2 scroll affordance.
-The hero scrolls away with the rails; no pinning, no collapse choreography.
+**Geometry. The art is full-bleed; the words are not.** The backdrop reaches the top, left and
+right physical edges — §2.5's opt-out is exactly what it exists for — and passes *under* the nav
+rail, which rests as a scrim over it (§11.2). The text sits on a plate inset by the pane's
+`contentInset`, so the title never lands under the icon strip. Art may go under chrome; words may
+not.
+
+`heightIn(min = 360dp)` (scaled; a one-off literal per §2.8 — it contains text, so §2.6 requires
+min, not fixed). It was 280dp as a rounded card parked ~117dp down the screen under a pane header;
+starting at the top edge instead, 360dp leaves **more** of the Continue Watching rail showing than
+the card did (540 − 360 = 180dp against 540 − 397 = 143dp), so §8.2's scroll affordance
+strengthens. The hero scrolls away with the rails; no pinning, no collapse choreography.
+
+**The focus ring rides the text plate, not the bleeding surface.** This is a deliberate departure
+from §6.1's "ring wraps the focusable" and must not be tidied back: a 3dp ring traced around a
+surface that reaches the panel's edges sits in the overscan margin, the one place §2.5 says a TV
+is allowed to crop — a focus indicator that a television may simply not show. The plate is
+bounded, always inside the safe area, and carries §3.2's chip-and-control ground so the ring has a
+surface to contract against. The node the ring *describes* is still the hero: one focus target,
+one `clearAndSetSemantics`, every focus edge unchanged.
 
 **Backdrop.** `w1280` via the TMDB proxy, `ContentScale.Crop`. Over it, two static gradients
 (over-media literals, §3.2): the bottom title gradient, and the side gradient left-to-right so the
@@ -1318,7 +1398,7 @@ Back closes the menu — never the overlay under it.
 
 **Playback Settings dialog.** The menu's first item opens `PlaybackSettingsDialog`
 (`feature/movies/`): the §9.3 modal recipe — in-tree, scrimmed, one `standard` alpha reveal, no
-exit animation, `authCardWidth` card, focus trapped, Back dismisses — holding three flat
+exit animation, `dialogWidth` card, focus trapped, Back dismisses — holding three flat
 `IglooRadioRow` (§9.1) lists in one scrollable column: **Playback** (all seven modes, always:
 direct and remux say "Original quality" outright, the five transcode profiles carry their
 height and intent — "1080p — best quality"), **Audio** (per-track "Language · layout" labels
@@ -1593,6 +1673,12 @@ Non-negotiable. `AGENTS.md` §Accessibility governs; this section covers the des
   the accessibility tree.
 - **No focus traps**, and no custom focus handling that breaks screen-reader traversal.
 - **State changes are announced**: loading → loaded, empty results, errors, and action failures.
+- **A pane whose title is not drawn as text announces through `paneTitle`, not through a live
+  region on a hidden node.** Swapping the shell's destination moves no focus and, since §11.3
+  removed the pane header, changes no text — so without this the change is silent. `paneTitle` is
+  the platform's own mechanism for it (`CONTENT_CHANGE_TYPE_PANE_TITLE`), it is what the menu,
+  both dialogs and both overlays already use, and unlike a 1dp live-region node it does not put a
+  second copy of the destination's name into the tree to collide with the rail's own row.
 - **Contrast**: body text targets ≥7:1; all other foreground/surface pairs ≥4.5:1, in both
   themes. The paired token structure (§3) is what makes this hold.
 - **Reduced motion** is honored globally through `iglooTween` (§7.1).
@@ -1666,6 +1752,54 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-19 — The app stops looking like a phone app: full-bleed everywhere.**
+
+Verified on a Shield that the window was never the problem — `mFrame=[0,0][1920,1080]`,
+`mWindowingMode=fullscreen`, SurfaceFlinger `viewport=[0 0 1920 1080] destinationClip=[0 0 3840
+2160]`, no letterbox anywhere. Every bar on that screen was drawn by us.
+
+- **§11.1: the auth card is deleted.** One full-bleed canvas in two shapes — `Split` (identity
+  left, controls right) and `Stacked` (identity above full-width content). `authCardWidth` becomes
+  **`dialogWidth`**: 480dp was never the auth card's width, it was the measure of one column of
+  controls, which is why the modal and both error cards had already borrowed it. `authCardWideWidth`
+  (840dp) is deleted — `Stacked` is panel-driven, and 840 was always narrower than the panel it
+  was centred on.
+- **§8.1/§8.3: the pane applies no gutter.** It hands sections a `contentInset` and each applies
+  what it owes. That is what finally makes §8.3's "rails pad content and let the scroll surface
+  bleed" true rather than aspirational — it had been written since the TV-first rewrite and never
+  built, because the pane's own `padding(end = safeArea)` re-clipped every rail. The `LazyRow`
+  needs `fillMaxWidth()` as well as `contentPadding`: a lazy list sizes to its content, so a short
+  rail ended where its last card did.
+- **§11.3.1: the hero is full-bleed on all four edges** at `heightIn(min = 360dp)`, which leaves
+  *more* rail visible than the old 280dp card did, because it no longer sits under 117dp of
+  chrome. Its focus ring moved onto the bounded text plate — a ring traced around a bleeding
+  surface sits in the overscan margin, the one place §2.5 says a TV may crop.
+- **§11.2: the rail is a scrim, not a strip**, so art passes under the icon column. Deliberately
+  not opaque even at x = 0: `sidebar` against `background` is two near-identical darks, and a flat
+  column of it is the black bar this entry is about.
+- **§11.3/§12: Home has no pane header**, and the destination announcement moved to `paneTitle`.
+  The header's title had carried the only live region that could tell TalkBack the destination
+  changed. A hidden 1dp live-region node was tried first and was wrong twice over: it put a second
+  "Home" into the semantics tree, which made `onNodeWithContentDescription("Home")` ambiguous
+  against the rail's own row.
+- **The ambient backdrop had a latent seam.** `iglooAuroraBackdrop` drew each gradient at exactly
+  `size` and then `translate`d it, so the drift walked the rect's trailing edge inside the viewport
+  and left a band of bare `background` — 18dp across the top of a Shield, a hard horizontal line.
+  Invisible while every screen using it happened to be background-coloured at the top; not
+  invisible over a full-bleed canvas. The rects are now drawn one drift-amplitude oversized.
+- **Manifest and theme.** `android.software.leanback` is `required="true"` — this is a TV client
+  and installing on a phone is not a scenario. `Theme.Igloo` drops the phone Material parent for
+  its `.Fullscreen` variant and sets `windowDrawsSystemBarBackgrounds=false`, which is
+  load-bearing: the platform was painting a status-bar rectangle over the top of the window.
+  `statusBarColor` and `navigationBarColor` are gone — they name things a TV does not have.
+  `resizeableActivity="false"` was considered and **rejected**: that flag opts an activity into
+  size-compat mode, which letterboxes the window. It manufactures the defect this entry removes.
+- **The missing guard.** `QuickConnectLayoutTest`'s `assertFullyOnscreen` checked top and bottom
+  only — which is how a surface occupying half the panel's *width* shipped. New `ShellBleedTest`
+  and `AuthSurfaceLayoutTest` assert bounds against the viewport's edges, and a new
+  `IglooDimensTest` case pins §8.2's four-posters-and-a-peek arithmetic, which had only ever lived
+  in prose.
 
 **2026-08-18 — Playback Settings dialog (§11.4.1, §9.1).**
 

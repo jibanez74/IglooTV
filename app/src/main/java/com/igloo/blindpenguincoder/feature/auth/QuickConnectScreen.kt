@@ -121,7 +121,7 @@ internal fun QuickConnectContent(
     AuthSurface(
         title = "Sign in to Igloo",
         subtitle = serverOrigin,
-        cardWidth = IglooTheme.layout.authCardWideWidth,
+        canvas = AuthCanvas.Stacked,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),

@@ -6,6 +6,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -323,7 +324,7 @@ private fun DetailsBody(
                 actionModifier = Modifier
                     .focusRequester(entryRequester)
                     .pinnedToScreen(),
-                modifier = Modifier.width(IglooTheme.layout.authCardWidth),
+                modifier = Modifier.width(IglooTheme.layout.dialogWidth),
             )
         }
 
@@ -525,13 +526,13 @@ private fun DetailsContent(
             aboutRequester = aboutRequester,
             upFromSections = lastFocusedAction,
             onPlayExtra = { video -> onPlayVideo(video, VideoLaunchSite.ExtrasRail) },
+            // The horizontal inset is handed down rather than applied here: the prose sections
+            // take it, the cast and extras rails carry it as scroll padding so their cards run
+            // off the panel's edge instead of stopping short of it (section 8.3).
+            contentInset = PaddingValues(horizontal = layout.safeAreaHorizontal),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(
-                    start = layout.safeAreaHorizontal,
-                    end = layout.safeAreaHorizontal,
-                    bottom = layout.safeAreaVertical,
-                )
+                .padding(bottom = layout.safeAreaVertical)
                 .iglooEnterStagger(entered = entered, index = 0),
         )
     }

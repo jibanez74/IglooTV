@@ -58,8 +58,7 @@ class IglooDimensTest {
             assertEquals(27.dp, safeAreaVertical)
             assertEquals(128.dp, navRailCollapsedWidth)
             assertEquals(236.dp, navRailExpandedWidth)
-            assertEquals(480.dp, authCardWidth)
-            assertEquals(840.dp, authCardWideWidth)
+            assertEquals(480.dp, dialogWidth)
             assertEquals(148.dp, posterWidth)
             assertEquals(264.dp, wideCardWidth)
             assertEquals(2f / 3f, posterAspect, 0.0001f)
@@ -107,6 +106,35 @@ class IglooDimensTest {
         assertEquals(4, large.layout.gridColumns)
     }
 
+    /**
+     * Section 8.2's arithmetic, which had only ever lived in prose. The pane fills the panel now,
+     * so the number that matters is the *inset content* measure — what is left of the reference
+     * viewport once the collapsed rail, its gutter and the end overscan inset are taken. Four
+     * posters plus a partial fifth is the scroll affordance; losing it means the rails stopped
+     * cueing that they continue.
+     */
+    @Test
+    fun `the inset content measure still leaves four posters and a peek`() {
+        listOf(compact, standard, large).forEach { dimens ->
+            with(dimens.layout) {
+                val content =
+                    TV_REFERENCE_WIDTH_DP.dp - navRailCollapsedWidth - dimens.spacing.xl - safeAreaHorizontal
+                val fourCards = posterWidth * 4 + dimens.spacing.md * 3
+                assertTrue(
+                    "content measure $content must fit four $posterWidth posters ($fourCards)",
+                    content > fourCards,
+                )
+            }
+        }
+        // The documented Standard figure: four posters and a peek wide enough to read as a card.
+        with(standard.layout) {
+            val content =
+                TV_REFERENCE_WIDTH_DP.dp - navRailCollapsedWidth - standard.spacing.xl - safeAreaHorizontal
+            val peek = content - (posterWidth * 4 + standard.spacing.md * 3)
+            assertTrue("expected a peek of at least 96dp, got $peek", peek >= 96.dp)
+        }
+    }
+
     @Test
     fun `scaled dimensions grow monotonically with ui scale`() {
         val scaled: List<(IglooDimens) -> Dp> = listOf(
@@ -117,7 +145,7 @@ class IglooDimensTest {
             { it.icons.md }, { it.icons.lg },
             { it.layout.navRailCollapsedWidth }, { it.layout.navRailExpandedWidth },
             { it.layout.posterWidth }, { it.layout.wideCardWidth },
-            { it.layout.authCardWidth }, { it.layout.authCardWideWidth },
+            { it.layout.dialogWidth },
         )
         scaled.forEach { token ->
             assertTrue(

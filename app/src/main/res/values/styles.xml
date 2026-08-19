@@ -1,11 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Igloo" parent="@android:style/Theme.Material.NoActionBar">
+    <!--
+        A TV window, not a phone one. The app draws every pixel itself with Compose foundation and
+        pulls in no Material or AppCompat component, so this theme supplies window policy only.
+        Fullscreen is the point: a TV has no status or navigation bar, and the parent's system-bar
+        backgrounds would otherwise frame the app on any host that does. statusBarColor and
+        navigationBarColor are deliberately absent for the same reason — they are phone concepts.
+    -->
+    <style name="Theme.Igloo" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
         <item name="android:fontFamily">sans</item>
-        <item name="android:navigationBarColor">@color/igloo_background</item>
-        <item name="android:statusBarColor">@color/igloo_background</item>
         <item name="android:windowActionBar">false</item>
         <item name="android:windowBackground">@color/igloo_background</item>
+        <!--
+            Off, and load-bearing. The Material parent turns this on, which makes the platform
+            paint a status-bar-coloured rectangle over the top of the window — measured at 18dp on
+            a Shield, a hard seam straight across the backdrop. It was invisible while every screen
+            happened to be background-coloured at the top; it is not invisible over art.
+        -->
+        <item name="android:windowDrawsSystemBarBackgrounds">false</item>
         <item name="android:windowNoTitle">true</item>
     </style>
 

@@ -538,7 +538,7 @@ private fun PlayerError(
             actionModifier = Modifier
                 .focusRequester(retryRequester)
                 .pinnedToScreen(),
-            modifier = Modifier.width(IglooTheme.layout.authCardWidth),
+            modifier = Modifier.width(IglooTheme.layout.dialogWidth),
         )
     }
 }

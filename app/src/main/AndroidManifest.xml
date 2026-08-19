@@ -1,9 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+        Leanback is required: this is a TV client and nothing else. Declaring it hard is what
+        keeps the app off phones and tablets, whose form factor no screen here is designed for.
+        It also means the APK will not install on a non-TV emulator — connectedAndroidTest needs
+        a TV image or a real TV device.
+    -->
     <uses-feature
         android:name="android.software.leanback"
-        android:required="false" />
+        android:required="true" />
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />
@@ -19,9 +25,22 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Igloo"
         android:usesCleartextTraffic="true">
+        <!--
+            A TV panel is landscape, so the orientation is pinned. `resizeableActivity` is
+            deliberately NOT set to false: that flag opts an activity into the platform's
+            size-compat mode, which letterboxes the window — it manufactures the pillarboxing
+            this screen layout exists to avoid.
+
+            configChanges keeps an HDMI mode switch from recreating the Activity: IglooRoot's
+            `booted` is a plain remember, so a recreation replays the launch splash mid-session.
+            uiMode, locale and fontScale are left off on purpose — the theme's density clamp and
+            UiScale want a real recreation on those.
+        -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation|screenLayout|screenSize|smallestScreenSize|density"
             android:exported="true"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.Igloo.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -24,7 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
@@ -92,7 +94,25 @@ fun NavigationRail(
     Column(
         modifier = modifier
             .semantics { isTraversalGroup = true }
-            .background(colors.sidebar)
+            // The pane bleeds under the rail now (section 8.1), so the resting ground is a scrim
+            // rather than a fill: art fades out beneath the icon strip instead of being cut off
+            // by a solid column, which against `background` read as a black bar down the edge of
+            // the screen. Expanding restores the opaque fill — an expanded rail is chrome over a
+            // scrimmed pane, not a gradient over art — and it rides `labelAlpha` so the fill and
+            // the labels can never disagree about which state the rail is in.
+            .drawBehind {
+                drawRect(
+                    Brush.horizontalGradient(
+                        // Not fully opaque even at the panel edge: at 1.0 the leftmost column of
+                        // the screen is a flat wall of `sidebar`, which is the bar this whole
+                        // change is removing. The rows carry their own surface fills, so the
+                        // scrim owes legibility nothing — it only has to seat them.
+                        0f to colors.sidebar.copy(alpha = 0.90f),
+                        1f to colors.sidebar.copy(alpha = 0f),
+                    ),
+                )
+                if (labelAlpha > 0f) drawRect(colors.sidebar, alpha = labelAlpha)
+            }
             .padding(
                 start = IglooTheme.layout.safeAreaHorizontal,
                 end = IglooTheme.spacing.lg,

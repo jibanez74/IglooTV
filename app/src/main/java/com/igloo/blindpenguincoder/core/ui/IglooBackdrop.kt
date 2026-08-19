@@ -5,6 +5,7 @@ import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.luminance
@@ -61,6 +62,15 @@ fun Modifier.iglooAuroraBackdrop(progress: State<Float>): Modifier {
         val driftX = size.width * 0.028f
         val driftY = size.height * 0.034f
 
+        // Each gradient is drawn one drift-amplitude oversized on every side. `translate` moves
+        // the rect, not the canvas it must still cover, so a rect drawn at exactly `size` walks
+        // its trailing edge inside the viewport and leaves a band of bare `background` there —
+        // measured at 18dp across the top of a Shield, a hard horizontal seam right through the
+        // backdrop. The brushes are positioned by absolute center and radius, so the extra area
+        // is the same gradient continuing, not a stretched copy of it.
+        val bleed = Offset(-driftX, -driftY)
+        val bleedSize = Size(size.width + driftX * 2f, size.height + driftY * 2f)
+
         onDrawBehind {
             val t = progress.value
             drawRect(colors.background)
@@ -68,13 +78,13 @@ fun Modifier.iglooAuroraBackdrop(progress: State<Float>): Modifier {
                 ambientOffset(t, 0f, driftX),
                 ambientOffset(t, 0.25f, driftY),
             ) {
-                drawRect(glacier)
+                drawRect(glacier, topLeft = bleed, size = bleedSize)
             }
             translate(
                 ambientOffset(t, 0.5f, -driftX * 0.7f),
                 ambientOffset(t, 0.75f, driftY * 0.8f),
             ) {
-                drawRect(aurora)
+                drawRect(aurora, topLeft = bleed, size = bleedSize)
             }
         }
     }

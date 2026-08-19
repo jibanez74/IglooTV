@@ -159,11 +159,17 @@ class IglooBaseAppTest {
     fun navigationItemsChangeContentPane() {
         setShellContent()
 
+        // The placeholder is one cleared node (section 10's inert-anchor contract), so the pane
+        // is identified by what it announces rather than by a loose text node inside it.
         composeRule.onNodeWithContentDescription("Movies").performClick()
-        composeRule.onNodeWithText("Movie library scaffolding is ready for API-backed content.").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(
+            "Movies. Movie library scaffolding is ready for API-backed content.",
+        ).assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription("Music").performClick()
-        composeRule.onNodeWithText("Music playback dependencies are available for the next feature pass.").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(
+            "Music. Music playback dependencies are available for the next feature pass.",
+        ).assertIsDisplayed()
     }
 
     @Test

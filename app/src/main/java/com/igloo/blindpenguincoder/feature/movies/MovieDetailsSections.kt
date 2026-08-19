@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.feature.movies
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -63,6 +64,12 @@ internal fun MovieDetailsSections(
     // above the first section to go back up to (section 11.4.2).
     upFromSections: FocusRequester?,
     onPlayExtra: (ExtraVideoUi) -> Unit,
+    /**
+     * The overscan inset. Held here rather than applied by the caller's container so the rails
+     * can bleed past it while the prose sections stay inside it (section 8.3) — a container that
+     * insets everything cannot let a card scroll off the panel's edge.
+     */
+    contentInset: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     val hasCast = movie.cast.isNotEmpty()
@@ -73,13 +80,20 @@ internal fun MovieDetailsSections(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
     ) {
-        OverviewSection(overview = movie.overview)
+        OverviewSection(
+            overview = movie.overview,
+            modifier = Modifier.padding(contentInset),
+        )
         if (movie.keyCrew.isNotEmpty()) {
-            KeyCrewSection(crew = movie.keyCrew)
+            KeyCrewSection(
+                crew = movie.keyCrew,
+                modifier = Modifier.padding(contentInset),
+            )
         }
         if (hasCast) {
             CastSection(
                 cast = movie.cast,
+                contentInset = contentInset,
                 entryRequester = castEntryRequester,
                 upRequester = upFromSections,
                 downRequester = when {
@@ -92,6 +106,7 @@ internal fun MovieDetailsSections(
         if (hasExtras) {
             ExtraVideosSection(
                 videos = movie.extraVideos,
+                contentInset = contentInset,
                 entryRequester = extrasEntryRequester,
                 // The cast rail's entry requester rides its last-focused card, so up from the
                 // extras lands where the user left the cast, not on its first card.
@@ -105,6 +120,7 @@ internal fun MovieDetailsSections(
             AboutSection(
                 title = movie.title,
                 about = movie.about,
+                modifier = Modifier.padding(contentInset),
                 requester = aboutRequester,
                 upRequester = when {
                     hasExtras -> extrasEntryRequester
@@ -127,11 +143,11 @@ private fun SectionHeading(text: String) {
 }
 
 @Composable
-private fun OverviewSection(overview: String?) {
+private fun OverviewSection(overview: String?, modifier: Modifier = Modifier) {
     val colors = IglooTheme.colors
     var clamped by remember(overview) { mutableStateOf(false) }
     val fadeHeight = OVERVIEW_FADE_HEIGHT.scaled()
-    Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
         SectionHeading("Overview")
         IglooText(
             // Rendered even with nothing to say (web parity): a movie without an overview reads
@@ -173,9 +189,9 @@ private fun OverviewSection(overview: String?) {
 
 /** Director first, then the writing credits, in rows of three label-over-name pairs. */
 @Composable
-private fun KeyCrewSection(crew: List<CrewEntry>) {
+private fun KeyCrewSection(crew: List<CrewEntry>, modifier: Modifier = Modifier) {
     val colors = IglooTheme.colors
-    Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
         SectionHeading("Key Crew")
         crew.chunked(CREW_COLUMNS).forEach { rowEntries ->
             Row(
@@ -228,6 +244,7 @@ private fun <T> DetailsRailSection(
     title: String,
     items: List<T>,
     itemKey: (T) -> Long,
+    contentInset: PaddingValues,
     entryRequester: FocusRequester,
     upRequester: FocusRequester?,
     downRequester: FocusRequester?,
@@ -246,6 +263,7 @@ private fun <T> DetailsRailSection(
         leftFocusRequester = Cancel,
         lastFocusedKey = lastFocusedId,
         onItemFocused = { lastFocusedId = it },
+        contentInset = contentInset,
         returnRequester = returnRequester,
         cardAspect = cardAspect,
         cardWidth = cardWidth,
@@ -264,6 +282,7 @@ private fun <T> DetailsRailSection(
 @Composable
 private fun CastSection(
     cast: List<CastMemberUi>,
+    contentInset: PaddingValues,
     entryRequester: FocusRequester,
     upRequester: FocusRequester?,
     downRequester: FocusRequester?,
@@ -272,6 +291,7 @@ private fun CastSection(
         title = "Cast",
         items = cast,
         itemKey = { it.id },
+        contentInset = contentInset,
         entryRequester = entryRequester,
         upRequester = upRequester,
         downRequester = downRequester,
@@ -298,6 +318,7 @@ private fun CastSection(
 @Composable
 private fun ExtraVideosSection(
     videos: List<ExtraVideoUi>,
+    contentInset: PaddingValues,
     entryRequester: FocusRequester,
     upRequester: FocusRequester?,
     downRequester: FocusRequester?,
@@ -308,6 +329,7 @@ private fun ExtraVideosSection(
         title = "Extra Videos",
         items = videos,
         itemKey = { it.id },
+        contentInset = contentInset,
         entryRequester = entryRequester,
         upRequester = upRequester,
         downRequester = downRequester,
@@ -342,6 +364,7 @@ private fun AboutSection(
     about: AboutUi,
     requester: FocusRequester,
     upRequester: FocusRequester?,
+    modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
@@ -353,7 +376,7 @@ private fun AboutSection(
         about.revenue?.let { "Revenue" to it },
     )
 
-    Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
         SectionHeading("About $title")
         Column(
             modifier = Modifier

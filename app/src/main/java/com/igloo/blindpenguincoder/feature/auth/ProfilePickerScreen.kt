@@ -78,7 +78,8 @@ fun ProfilePickerScreen(
     AuthSurface(
         title = "Who's watching?",
         subtitle = state.serverAddress.origin,
-        cardWidth = IglooTheme.layout.authCardWideWidth,
+        // Six tiles at section 11.1.1's cap need the full inset measure, not half of it.
+        canvas = AuthCanvas.Stacked,
     ) {
         state.restoreError?.let { error ->
             IglooInlineError(

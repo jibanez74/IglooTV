@@ -88,7 +88,7 @@ fun IglooConfirmDialog(
         contentAlignment = Alignment.Center,
     ) {
         BoxWithConstraints {
-            val cardWidth = minOf(IglooTheme.layout.authCardWidth, maxWidth)
+            val cardWidth = minOf(IglooTheme.layout.dialogWidth, maxWidth)
             Column(
                 modifier = Modifier
                     .width(cardWidth)
