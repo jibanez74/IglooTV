@@ -706,6 +706,7 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | `IglooScrim` | The paint-only dim: `background @ 0.60` by default (§3.1), no `clickable`/`focusable`/`semantics`, so it can never intercept the d-pad and TalkBack does not know it exists. Used by the rail (§8.1) and the modal (§9.3) — **never both at once**. |
 | `IglooConfirmDialog` | The confirmation modal (§9.3) |
 | `IglooMenu` | The anchored menu: a `card` surface of focusable rows placed against the trigger's root-coordinate bounds — right-aligned, below it, flipping above when the bottom safe area would be breached. In-tree for §9.3's four reasons and hosted as the last child of the screen that owns the trigger; **unscrimmed**, unlike the modal — an anchored menu is local chrome, not a page-blocking decision, and §9.1 gives the scrim to the rail and the modal only. One `standard` alpha reveal, no exit animation. Focus is trapped (up/down walk the rows, everything else `Cancel`), the first row takes focus on reveal, the caller restores focus in `onDismiss` and gates its own Back (§9.3). `paneTitle` + one cleared Button node per row; a `destructive` row wears the destructive token pair, and `separatorBefore` draws a silent hairline. The covered screen leaves TalkBack traversal via `hideFromAccessibility`, the overlay-stack treatment. |
+| `IglooRadioRow` | One option row of a radio list on a card ground: the `IglooMenu` row recipe (`navItemHeight` minimum, `muted` focused fill, `spacing.md` padding, focus per §6.1) plus a drawn-only leading radio glyph — outer ring on `border` (`primary` when selected), `primary` dot when selected, unscaled 2dp stroke so the hairline stays a hairline. One cleared `RadioButton` node per row announcing label and selected state with a "Select" action. A null `onSelect` is the inert variant: still **focusable** — an unfocusable row mid-list punches a hole in a hand-wired up/down chain, the §9.3 pending-row argument — but announced disabled with no action; the label carries the reason it cannot be chosen. Focus wiring is the caller's, like the menu's rows. |
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
@@ -1303,7 +1304,8 @@ restores focus to the card that opened it, via the rail's `returnRequester` (§6
 
 **More menu.** The row's fourth action is the icon-only `IglooIconButton` trigger ("More
 options"), and pressing it opens an `IglooMenu` (§9.1) anchored to the trigger's reported
-bounds — display only for now: every item fires a stubbed callback and closes the menu. Items:
+bounds. Playback Settings opens the dialog below; the remaining items fire stubbed callbacks
+and close the menu until each feature lands. Items:
 Playback Settings, Watch Together, Technical Details, then for admins (`AuthUser.is_admin`)
 Identify Movie and, behind the silent separator, a destructive Delete Movie. Admin items are
 **hidden, not disabled** — they are never composed for non-admins, so they exist in neither the
@@ -1313,6 +1315,33 @@ must gate its details-closing Back on it, §9.3) and restores focus to the trigg
 dismiss callback; the screen owns the item list and the trigger's anchor bounds. While the menu
 is up the details content behind it leaves TalkBack traversal via `hideFromAccessibility`, and
 Back closes the menu — never the overlay under it.
+
+**Playback Settings dialog.** The menu's first item opens `PlaybackSettingsDialog`
+(`feature/movies/`): the §9.3 modal recipe — in-tree, scrimmed, one `standard` alpha reveal, no
+exit animation, `authCardWidth` card, focus trapped, Back dismisses — holding three flat
+`IglooRadioRow` (§9.1) lists in one scrollable column: **Playback** (all seven modes, always:
+direct and remux say "Original quality" outright, the five transcode profiles carry their
+height and intent — "1080p — best quality"), **Audio** (per-track "Language · layout" labels
+through the shared web-parity formatters in `PlaybackSettingsMapping.kt`), and **Subtitles**
+("None" first; image-based PGS/DVD/DVB tracks render as inert rows labelled "(image-based)" —
+the backend can only serve text tracks as VTT). Flat lists, not expanding selects: a popup
+inside a modal breaks the one-layer focus-trap recipe, and on a TV every visible option beats a
+nested picker. Below the scroll, always visible, a plain-language explanation line
+(`bodyMedium` on `cardForeground`, `liveRegion = Polite` — it changes only on a deliberate OK
+press and says what the radio state alone cannot) describes what the chosen settings will do,
+then a full-width Done.
+
+OK selects without dismissing; entry focus lands on the *selected* mode row. Selections are
+**session-only** — held in `MovieDetailsViewModel`, consumed when Play lands, reset when the
+overlay closes; nothing is persisted or sent. Resolution is web parity: the default audio is
+the file's `is_default` track (else the first), subtitles default off, and Direct plus any
+non-first audio track resolves to Remux with the explanation saying why — direct play serves
+the raw container, which always sounds its first track. The host wiring repeats the menu's
+split once more: `IglooApp` owns the open flag, gates its details-closing Back on it, and
+suppresses the menu's focus restore when a menu action just opened the dialog (the menu item
+fires its action *before* dismissing — load-bearing order); dismissing the dialog restores
+focus to the More trigger. While it is up, the details body leaves TalkBack traversal, the
+overlay-stack treatment.
 
 The trigger also re-pins the row's right edge: Right is `Cancel` on More alone now, Like points
 Right at More, and Watched's hand-wired Right (the disabled-Like rule above) skips to More
@@ -1637,6 +1666,23 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-18 — Playback Settings dialog (§11.4.1, §9.1).**
+
+The More menu's first item is display-only no longer: it opens the new `PlaybackSettingsDialog`
+— the §9.3 modal recipe holding three flat radio lists (quality/mode, audio track, subtitles)
+over a live plain-language explanation line and a Done button. Selections are session-only in
+`MovieDetailsViewModel`, waiting for Play to land; labels, language names, and the direct-play
+audio rule are ported from the web client's in-player dialog (`PlaybackSettingsMapping.kt`, web
+parity — except direct and remux now say "Original quality" outright).
+
+- **`IglooRadioRow` joins §9.1**: the menu-row recipe plus a drawn radio glyph, one cleared
+  `RadioButton` node per row; the inert variant stays focusable but announces disabled.
+- **`MovieDetailsActions.Library` reshapes**: `onPlaybackSettings` is gone — opening a
+  host-owned overlay is host business, the `onPlayVideo` precedent — replaced by the three
+  selection callbacks (`onSelectPlaybackMode`, `onSelectAudioTrack`, `onSelectSubtitle`).
+- The host's Back priority gains a layer: trailer → playback dialog → More menu → details
+  close → rail; the menu's focus restore is suppressed when its action just opened the dialog.
 
 **2026-08-17 — More lands with its menu (§11.4.1, §9.1).**
 

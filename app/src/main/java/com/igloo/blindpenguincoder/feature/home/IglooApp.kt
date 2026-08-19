@@ -203,11 +203,17 @@ fun IglooApp(
     // to know one is. Plain `remember` — an open menu is not worth surviving process death.
     var moreMenuOpen by remember { mutableStateOf(false) }
     val moreReturnRequester = remember { FocusRequester() }
+    // The Playback Settings dialog is host state for the same reason the menu is; the two are
+    // never up together — opening the dialog closes the menu in the same event.
+    var playbackSettingsOpen by remember { mutableStateOf(false) }
     // Back cannot close the details while the menu is up (its handler is gated on the flag), but
     // the overlay can still leave on its own — a session revalidation, a profile switch — and a
     // flag that outlived it would greet the next movie with a menu it never asked for.
     LaunchedEffect(detailsOpen) {
-        if (!detailsOpen) moreMenuOpen = false
+        if (!detailsOpen) {
+            moreMenuOpen = false
+            playbackSettingsOpen = false
+        }
     }
     val closeTrailer = {
         val origin = trailerRequest?.origin
@@ -242,7 +248,10 @@ fun IglooApp(
     // Every handler is gated explicitly rather than left to win on registration order —
     // design-system.md section 9.3 requires the host to be deliberate about Back. While the
     // trailer player is up, Back belongs to its own screen (chrome dismissal, then close).
-    BackHandler(enabled = detailsOpen && !signOut.confirming && !trailerOpen && !moreMenuOpen) {
+    BackHandler(
+        enabled = detailsOpen && !signOut.confirming && !trailerOpen && !moreMenuOpen &&
+            !playbackSettingsOpen,
+    ) {
         val origin = detailsOrigin
         detailsOrigin = null
         onCloseDetails()
@@ -357,13 +366,27 @@ fun IglooApp(
                     // In the callback, not an effect, like every overlay's focus restore
                     // (section 9.3). The trigger is still composed in every reachable case;
                     // the pane anchor is the same last-resort fallback the other overlays use.
+                    // The playbackSettingsOpen check is the menu→dialog hand-off: the menu item
+                    // fires its action *before* this dismiss (menuItem's documented order), so
+                    // the flag is already set and the restore is suppressed — the dialog's own
+                    // entry effect takes focus instead of a transient frame on the trigger.
                     onDismissMoreMenu = {
                         moreMenuOpen = false
-                        if (!moreReturnRequester.requestFocusSafely()) {
+                        if (!playbackSettingsOpen && !moreReturnRequester.requestFocusSafely()) {
                             contentStartRequester.requestFocusSafely()
                         }
                     },
                     moreRequester = moreReturnRequester,
+                    playbackSettingsOpen = playbackSettingsOpen,
+                    onOpenPlaybackSettings = { playbackSettingsOpen = true },
+                    // The dialog's dismiss restores to the More trigger — the surviving control
+                    // that led away; the menu it passed through is long gone.
+                    onDismissPlaybackSettings = {
+                        playbackSettingsOpen = false
+                        if (!moreReturnRequester.requestFocusSafely()) {
+                            contentStartRequester.requestFocusSafely()
+                        }
+                    },
                     mutationNotice = details.mutationNotice,
                 )
             }

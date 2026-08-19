@@ -87,11 +87,13 @@ class MovieDetailsAccessibilityTest {
                         onPlay = { plays += 1 },
                         onToggleWatched = { watchedToggles += 1 },
                         onToggleLike = { likeToggles += 1 },
-                        onPlaybackSettings = { menuSelections += "Playback Settings" },
                         onWatchTogether = { menuSelections += "Watch Together" },
                         onTechnicalDetails = { menuSelections += "Technical Details" },
                         onIdentifyMovie = { menuSelections += "Identify Movie" },
                         onDeleteMovie = { menuSelections += "Delete Movie" },
+                        onSelectPlaybackMode = {},
+                        onSelectAudioTrack = {},
+                        onSelectSubtitle = {},
                         onRetry = { retries += 1 },
                     ),
                     isAdmin = isAdmin,
@@ -105,6 +107,11 @@ class MovieDetailsAccessibilityTest {
                         moreRequester.requestFocusSafely()
                     },
                     moreRequester = moreRequester,
+                    // The dialog stays closed here — its open/dismiss behavior has its own
+                    // suite; this host only proves the menu item still announces and fires.
+                    playbackSettingsOpen = false,
+                    onOpenPlaybackSettings = { menuSelections += "Playback Settings" },
+                    onDismissPlaybackSettings = {},
                 )
             }
         }

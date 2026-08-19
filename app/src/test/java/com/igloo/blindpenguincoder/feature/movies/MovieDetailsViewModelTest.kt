@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.movies
 
 import com.igloo.blindpenguincoder.core.ui.RatingTier
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.audioStreamJson
 import com.igloo.blindpenguincoder.data.repository.castMemberJson
@@ -605,6 +606,117 @@ class MovieDetailsViewModelTest {
         // isEmpty drives whether the About section exists at all, so both answers matter.
         assertTrue(aboutFor(language = null).isEmpty)
         assertFalse(aboutFor(language = "en").isEmpty)
+    }
+
+    /** Waits past the details publish for the one carrying resolved playback audio. */
+    private suspend fun MovieDetailsViewModel.awaitPlaybackSettings(): PlaybackSettingsUi =
+        uiState.first {
+            (it.details as? MovieDetailsState.Loaded)?.movie?.playbackSettings?.selectedAudioId != null
+        }.let { (it.details as MovieDetailsState.Loaded).movie.playbackSettings!! }
+
+    @Test
+    fun `playback settings default to direct, the default audio track, and subtitles off`() =
+        runTest {
+            val http = routedHttp(
+                technical = {
+                    jsonResponse(
+                        technicalDetailsJson(
+                            audioStreams = listOf(
+                                audioStreamJson(id = 10, isDefault = true),
+                                audioStreamJson(id = 11, isDefault = false, language = "spa"),
+                            ),
+                            subtitles = listOf(subtitleJson(id = 20)),
+                        ),
+                    )
+                },
+            )
+            val viewModel = viewModel(http)
+            viewModel.open(1)
+            val settings = viewModel.awaitPlaybackSettings()
+
+            assertEquals(PlaybackMode.Direct, settings.selectedMode)
+            assertEquals(10L, settings.selectedAudioId)
+            assertNull(settings.selectedSubtitleId)
+            assertEquals(listOf("English · 5.1 surround", "Spanish · 5.1 surround"), settings.audioTracks.map { it.label })
+        }
+
+    @Test
+    fun `playback selections republish with the coupling and explanation applied`() = runTest {
+        val http = routedHttp(
+            technical = {
+                jsonResponse(
+                    technicalDetailsJson(
+                        audioStreams = listOf(
+                            audioStreamJson(id = 10, isDefault = true),
+                            audioStreamJson(id = 11, isDefault = false, language = "spa"),
+                        ),
+                        subtitles = listOf(subtitleJson(id = 20)),
+                    ),
+                )
+            },
+        )
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        viewModel.awaitPlaybackSettings()
+
+        // A non-first track under Direct resolves to Remux with the note (direct play can
+        // only sound the container's first track).
+        viewModel.selectAudioTrack(11)
+        var settings = viewModel.awaitPlaybackSettings()
+        assertEquals(PlaybackMode.Remux, settings.selectedMode)
+        assertEquals(11L, settings.selectedAudioId)
+        assertTrue(settings.explanation.contains("Direct play always uses the first audio track"))
+
+        viewModel.selectPlaybackMode(PlaybackMode.P1080Mbps8)
+        viewModel.selectSubtitle(20)
+        settings = viewModel.awaitPlaybackSettings()
+        assertEquals(PlaybackMode.P1080Mbps8, settings.selectedMode)
+        assertEquals(20L, settings.selectedSubtitleId)
+        assertTrue(settings.explanation.contains("Subtitles: English."))
+    }
+
+    @Test
+    fun `a mode picked before technical details arrive survives their arrival`() = runTest {
+        val releaseTechnical = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            technical = {
+                releaseTechnical.await()
+                jsonResponse(technicalDetailsJson())
+            },
+        )
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        viewModel.awaitLoaded()
+
+        viewModel.selectPlaybackMode(PlaybackMode.P720Mbps3)
+        val pending = requireNotNull(viewModel.awaitLoaded().playbackSettings)
+        assertEquals(PlaybackMode.P720Mbps3, pending.selectedMode)
+        // Tracks unknown: the audio section holds its inert stand-in.
+        assertNull(pending.selectedAudioId)
+        assertFalse(pending.audioTracks.single().enabled)
+
+        releaseTechnical.complete(Unit)
+        val settings = viewModel.awaitPlaybackSettings()
+        assertEquals(PlaybackMode.P720Mbps3, settings.selectedMode)
+        assertEquals(1L, settings.selectedAudioId)
+    }
+
+    @Test
+    fun `closing the overlay resets playback selections`() = runTest {
+        val http = routedHttp()
+        val viewModel = viewModel(http)
+        viewModel.open(1)
+        viewModel.awaitPlaybackSettings()
+        viewModel.selectPlaybackMode(PlaybackMode.P720Mbps3)
+        assertEquals(
+            PlaybackMode.P720Mbps3,
+            viewModel.awaitPlaybackSettings().selectedMode,
+        )
+
+        viewModel.close()
+        viewModel.open(1)
+
+        assertEquals(PlaybackMode.Direct, viewModel.awaitPlaybackSettings().selectedMode)
     }
 
     @Test

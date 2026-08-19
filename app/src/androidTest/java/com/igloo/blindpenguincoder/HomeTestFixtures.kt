@@ -11,8 +11,14 @@ import com.igloo.blindpenguincoder.feature.movies.CrewEntry
 import com.igloo.blindpenguincoder.feature.movies.ExtraVideoUi
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
+import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
+import com.igloo.blindpenguincoder.feature.movies.PlaybackSettingsUi
 import com.igloo.blindpenguincoder.feature.movies.ProgressUi
+import com.igloo.blindpenguincoder.feature.movies.playbackSettingsUi
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
+import com.igloo.blindpenguincoder.data.model.AudioStream
+import com.igloo.blindpenguincoder.data.model.SqlNullString
+import com.igloo.blindpenguincoder.data.model.Subtitle
 
 /**
  * Poster-less movies for shell-level tests: the placeholder path renders deterministically
@@ -58,12 +64,75 @@ internal val inertDetailsActions = MovieDetailsActions.Library(
     onPlay = {},
     onToggleWatched = {},
     onToggleLike = {},
-    onPlaybackSettings = {},
     onWatchTogether = {},
     onTechnicalDetails = {},
     onIdentifyMovie = {},
     onDeleteMovie = {},
+    onSelectPlaybackMode = {},
+    onSelectAudioTrack = {},
+    onSelectSubtitle = {},
     onRetry = {},
+)
+
+/**
+ * The Playback Settings dialog through the real mapping, so fixture labels and resolution rules
+ * cannot drift from production. Two audio tracks (the default first), a text subtitle and an
+ * image-based one — every row kind the dialog renders.
+ */
+internal fun testPlaybackSettings(
+    selection: PlaybackSelection = PlaybackSelection(),
+): PlaybackSettingsUi = playbackSettingsUi(
+    audioStreams = testAudioStreams,
+    subtitles = testSubtitles,
+    selection = selection,
+)
+
+internal val testAudioStreams = listOf(
+    testAudioStream(id = 301, language = "eng", isDefault = true),
+    testAudioStream(id = 302, language = "spa", channels = 2, channelLayout = "stereo"),
+)
+
+internal val testSubtitles = listOf(
+    testSubtitle(id = 401, codec = "subrip", language = "eng"),
+    testSubtitle(id = 402, codec = "hdmv_pgs_subtitle", language = "spa"),
+)
+
+private fun testAudioStream(
+    id: Long,
+    language: String,
+    channels: Long = 6,
+    channelLayout: String = "5.1(side)",
+    isDefault: Boolean = false,
+) = AudioStream(
+    id = id,
+    movieId = 1,
+    streamIndex = id,
+    codec = "dts",
+    bitRate = 0,
+    channels = channels,
+    channelLayout = SqlNullString(channelLayout, valid = true),
+    language = SqlNullString(language, valid = true),
+    title = null,
+    isDefault = isDefault,
+    createdAt = "2026-01-01 00:00:00",
+    updatedAt = "2026-01-01 00:00:00",
+)
+
+private fun testSubtitle(
+    id: Long,
+    codec: String,
+    language: String,
+) = Subtitle(
+    id = id,
+    movieId = 1,
+    streamIndex = id,
+    codec = codec,
+    language = SqlNullString(language, valid = true),
+    title = null,
+    isForced = false,
+    isDefault = false,
+    createdAt = "2026-01-01 00:00:00",
+    updatedAt = "2026-01-01 00:00:00",
 )
 
 /** Image-less again: every artwork path falls back to a glyph, so nothing hits the network. */
@@ -75,6 +144,7 @@ internal fun testMovieDetails(
     progress: ProgressUi? = ProgressUi(fraction = 0.25f, minutesLeftLabel = "127 min left"),
     cast: List<CastMemberUi> = testCast,
     extraVideos: List<ExtraVideoUi> = testExtraVideos,
+    playbackSettings: PlaybackSettingsUi? = testPlaybackSettings(),
 ) = MovieDetailsUi(
     id = id,
     title = title,
@@ -102,6 +172,7 @@ internal fun testMovieDetails(
     liked = liked,
     metadataDescription = "Rated 8.2 out of 10, R, 4K, HDR10, 5.1 surround sound, " +
         "subtitles available, 2 hours 50 minutes, released December 15, 1995",
+    playbackSettings = playbackSettings,
 )
 
 /**
@@ -134,6 +205,7 @@ internal fun testTheaterMovieDetails(
     metadataDescription = "Rated 8.2 out of 10, R, 2 hours 50 minutes, " +
         "released December 15, 1995",
     heroTrailer = heroTrailer,
+    playbackSettings = null,
 )
 
 internal val testExtraVideos = listOf(

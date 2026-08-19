@@ -582,12 +582,16 @@ class MovieDetailsFocusTest {
     }
 
     @Test
-    fun selectingAnItemClosesTheMenuAndRestoresFocusToMore() {
+    fun selectingAStubItemClosesTheMenuAndRestoresFocusToMore() {
         setShellContent(loadedState())
         composeRule.onNodeWithTag("details_more").requestFocus()
         composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
 
+        // Item 1, Watch Together — still a stub. Item 0 opens the Playback Settings dialog,
+        // which suppresses this restore on purpose; PlaybackSettingsDialogTest covers it.
         composeRule.onNodeWithTag("more_menu_item_0")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("more_menu_item_1")
             .performKeyInput { pressKey(Key.DirectionCenter) }
 
         composeRule.onNodeWithTag("more_menu").assertDoesNotExist()

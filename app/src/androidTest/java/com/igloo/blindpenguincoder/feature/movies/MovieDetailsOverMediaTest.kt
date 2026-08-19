@@ -81,6 +81,9 @@ class MovieDetailsOverMediaTest {
                     onOpenMoreMenu = {},
                     onDismissMoreMenu = {},
                     moreRequester = remember { FocusRequester() },
+                    playbackSettingsOpen = false,
+                    onOpenPlaybackSettings = {},
+                    onDismissPlaybackSettings = {},
                 )
             }
         }

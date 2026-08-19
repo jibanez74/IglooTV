@@ -70,10 +70,12 @@ exists, this is the accepted trade.
   cast, Extra Videos (landed 2026-08-16, §11.4.1) and About. No chapters row and no
   similar-movies rail yet. Both are library-only: a TMDB record has neither, so §11.4.2's page
   would skip them the way it already skips the media badges.
-- **More landed display-only (2026-08-17).** The fourth hero action and its anchored menu are
-  in (§11.4.1), with `IglooIconButton` restored from `bc88a9c`. What remains are the actions
-  themselves: Playback Settings, Watch Together, Technical Details, Identify Movie, and Delete
-  Movie all fire stubbed callbacks that only close the menu.
+- **More landed display-only (2026-08-17); Playback Settings landed (2026-08-18).** The fourth
+  hero action and its anchored menu are in (§11.4.1), with `IglooIconButton` restored from
+  `bc88a9c`. Playback Settings now opens its dialog — quality/mode, audio, subtitles, with
+  session-only selections in `MovieDetailsViewModel` waiting for Play to consume them. What
+  remains are Watch Together, Technical Details, Identify Movie, and Delete Movie, all still
+  firing stubbed callbacks that only close the menu.
 
 ---
 

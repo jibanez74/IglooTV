@@ -55,6 +55,7 @@ import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
 
 /**
  * What the details overlay can do, grouped so the shell that hosts it keeps a readable
@@ -78,11 +79,18 @@ sealed interface MovieDetailsActions {
         val onPlay: () -> Unit,
         val onToggleWatched: () -> Unit,
         val onToggleLike: () -> Unit,
-        val onPlaybackSettings: () -> Unit,
         val onWatchTogether: () -> Unit,
         val onTechnicalDetails: () -> Unit,
         val onIdentifyMovie: () -> Unit,
         val onDeleteMovie: () -> Unit,
+        /**
+         * The Playback Settings dialog's selections. Opening the dialog is the host's business
+         * (like `onPlayVideo` — it is a host-owned overlay), so there is no open callback here;
+         * what a selection *does* is the page's contract, like the toggles.
+         */
+        val onSelectPlaybackMode: (PlaybackMode) -> Unit,
+        val onSelectAudioTrack: (Long) -> Unit,
+        val onSelectSubtitle: (Long?) -> Unit,
         override val onRetry: () -> Unit,
     ) : MovieDetailsActions
 
@@ -125,6 +133,10 @@ enum class VideoLaunchSite { ExtrasRail, Hero }
  * while any modal is up, section 9.3) and restores focus through [moreRequester] in
  * [onDismissMoreMenu]; the screen owns what the menu shows — [isAdmin] gates the admin-only
  * items out of composition entirely, so non-admins have nothing to focus or hear.
+ *
+ * The Playback Settings dialog repeats the pattern once more: [playbackSettingsOpen] and both
+ * transitions are the host's (its Back gating and focus hand-off live beside the menu's), while
+ * the selection callbacks in [MovieDetailsActions.Library] are the page's contract.
  */
 @Composable
 fun MovieDetailsScreen(
@@ -138,6 +150,9 @@ fun MovieDetailsScreen(
     onOpenMoreMenu: () -> Unit,
     onDismissMoreMenu: () -> Unit,
     moreRequester: FocusRequester,
+    playbackSettingsOpen: Boolean,
+    onOpenPlaybackSettings: () -> Unit,
+    onDismissPlaybackSettings: () -> Unit,
     mutationNotice: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -183,7 +198,7 @@ fun MovieDetailsScreen(
             modifier = Modifier
                 .testTag("details_body")
                 .then(
-                    if (moreMenuOpen) {
+                    if (moreMenuOpen || playbackSettingsOpen) {
                         Modifier.semantics { hideFromAccessibility() }
                     } else {
                         Modifier
@@ -204,14 +219,15 @@ fun MovieDetailsScreen(
             )
         }
 
-        // Last child, over the body, like every overlay in the stack. Selecting an item is a
-        // stub for now: it fires the page's callback and closes the menu, nothing more.
+        // Last child, over the body, like every overlay in the stack. Playback Settings opens
+        // the host-owned dialog below; the remaining items fire stubbed callbacks and close the
+        // menu, nothing more, until each feature lands.
         val menuAnchor = moreAnchor
         if (moreMenuOpen && actions is MovieDetailsActions.Library && menuAnchor != null) {
             IglooMenu(
                 title = "More options",
                 items = buildList {
-                    add(menuItem("Playback Settings", actions.onPlaybackSettings, onDismissMoreMenu))
+                    add(menuItem("Playback Settings", onOpenPlaybackSettings, onDismissMoreMenu))
                     add(menuItem("Watch Together", actions.onWatchTogether, onDismissMoreMenu))
                     add(menuItem("Technical Details", actions.onTechnicalDetails, onDismissMoreMenu))
                     if (isAdmin) {
@@ -229,6 +245,24 @@ fun MovieDetailsScreen(
                 onDismiss = onDismissMoreMenu,
             )
         }
+
+        // Loaded guard is belt-and-braces: the menu that opens this only exists on Loaded, and
+        // background refresh failures keep Loaded — but a state swap must decompose the dialog
+        // rather than crash a cast. The host flag then persists until details close, which is
+        // the same outcome every stale-overlay flag gets.
+        if (playbackSettingsOpen && actions is MovieDetailsActions.Library &&
+            state is MovieDetailsState.Loaded
+        ) {
+            state.movie.playbackSettings?.let { settings ->
+                PlaybackSettingsDialog(
+                    settings = settings,
+                    onSelectMode = actions.onSelectPlaybackMode,
+                    onSelectAudio = actions.onSelectAudioTrack,
+                    onSelectSubtitle = actions.onSelectSubtitle,
+                    onDismiss = onDismissPlaybackSettings,
+                )
+            }
+        }
     }
 }
 
@@ -239,6 +273,9 @@ private fun menuItem(
 ): IglooMenuItem = IglooMenuItem(
     label = label,
     onSelect = {
+        // Action before dismiss, load-bearing: the host's onDismissMoreMenu suppresses its
+        // focus restore when an action just opened the Playback Settings dialog, which it can
+        // only see if the flag was written first.
         action()
         dismiss()
     },

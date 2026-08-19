@@ -14,6 +14,7 @@ import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.images.TmdbImageSize
@@ -103,6 +104,11 @@ data class MovieDetailsUi(
      * [progress], [watched] and [liked] stay null for a movie the library does not hold.
      */
     val heroTrailer: ExtraVideoUi? = null,
+    /**
+     * The Playback Settings dialog, resolved from the technical-details streams and the user's
+     * session-only selection. Null for the in-theaters page, which has no file to configure.
+     */
+    val playbackSettings: PlaybackSettingsUi? = null,
 )
 
 sealed interface MovieDetailsState {
@@ -188,10 +194,16 @@ class MovieDetailsViewModel(
     private var technical: MovieTechnicalDetailsData? = null
     private var progress: MovieWatchProgress? = null
 
+    // Session-only (the user's decision): reset with the overlay, never persisted. Deliberately
+    // not cleared with the fragments — a Retry of the same movie keeps the user's choices, and
+    // the mapping's id-matching degrades to defaults if a track list changed underneath them.
+    private var playbackSelection = PlaybackSelection()
+
     /** Opens the overlay on [movieId] and starts the four loads. */
     fun open(movieId: Long) {
         cancelReads()
         clearFragments()
+        playbackSelection = PlaybackSelection()
         pruneSettledMutations(keep = movieId)
         _uiState.value = MovieDetailsUiState(
             openMovieId = movieId,
@@ -210,6 +222,7 @@ class MovieDetailsViewModel(
     fun close() {
         cancelReads()
         clearFragments()
+        playbackSelection = PlaybackSelection()
         pruneSettledMutations(keep = null)
         _uiState.update {
             it.copy(openMovieId = null, details = MovieDetailsState.Loading)
@@ -249,6 +262,23 @@ class MovieDetailsViewModel(
         // state to toggle, so a stale UI event must be ignored instead of guessing "not liked".
         val previous = mutationState(MutationType.Like, movieId).displayed ?: return
         acceptMutation(MutationType.Like, movieId, target = !previous)
+    }
+
+    /** Playback Settings dialog choices. Local state only — nothing to send anywhere yet. */
+    fun selectPlaybackMode(mode: PlaybackMode) {
+        playbackSelection = playbackSelection.copy(mode = mode)
+        publishLoaded()
+    }
+
+    fun selectAudioTrack(streamId: Long) {
+        playbackSelection = playbackSelection.copy(audioStreamId = streamId)
+        publishLoaded()
+    }
+
+    /** Null is the "None" row: subtitles off. */
+    fun selectSubtitle(streamId: Long?) {
+        playbackSelection = playbackSelection.copy(subtitleStreamId = streamId)
+        publishLoaded()
     }
 
     private fun loadAll(movieId: Long, userInitiated: Boolean) {
@@ -535,6 +565,11 @@ class MovieDetailsViewModel(
                 mediaBadges = badges,
                 runtimeMinutes = runtimeMinutes,
                 releaseDateText = releaseDateText,
+            ),
+            playbackSettings = playbackSettingsUi(
+                audioStreams = technical?.audioStreams,
+                subtitles = technical?.subtitles,
+                selection = playbackSelection,
             ),
         )
     }

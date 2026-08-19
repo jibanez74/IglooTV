@@ -231,13 +231,15 @@ fun IglooRoot(container: IglooAppContainer) {
                                 onPlay = {},
                                 onToggleWatched = detailsViewModel::toggleWatched,
                                 onToggleLike = detailsViewModel::toggleLike,
-                                // The More menu's items, wired to nothing until each feature
-                                // lands; selecting one only closes the menu for now.
-                                onPlaybackSettings = {},
+                                // The remaining More menu items, wired to nothing until each
+                                // feature lands; selecting one only closes the menu for now.
                                 onWatchTogether = {},
                                 onTechnicalDetails = {},
                                 onIdentifyMovie = {},
                                 onDeleteMovie = {},
+                                onSelectPlaybackMode = detailsViewModel::selectPlaybackMode,
+                                onSelectAudioTrack = detailsViewModel::selectAudioTrack,
+                                onSelectSubtitle = detailsViewModel::selectSubtitle,
                                 onRetry = detailsViewModel::retry,
                             )
                         },
