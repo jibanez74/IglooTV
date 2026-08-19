@@ -333,6 +333,16 @@ object IglooIcons {
         }
     }
 
+    val MoreVertical: ImageVector by lazy {
+        icon("MoreVertical") {
+            path(fill = SolidColor(Color.White)) {
+                circle(12f, 5f, 2f)
+                circle(12f, 12f, 2f)
+                circle(12f, 19f, 2f)
+            }
+        }
+    }
+
     val Person: ImageVector by lazy {
         icon("Person") {
             path(fill = SolidColor(Color.White)) {

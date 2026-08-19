@@ -702,8 +702,10 @@ Rails pad content with the safe area and let the scroll surface bleed past it (�
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
 | `IglooNotice` | One announced line — `bodyMedium` / `mutedForeground`, `liveRegion = Polite`. For a message the user did not ask for and cannot act on: what a gate says after an action that already happened (§10, §11.1.1). Not an error card; no Retry. |
+| `IglooIconButton` | The square icon-only control for row ends (the detail hero's More trigger): `controlHeight` both ways, radius `lg`, focus per §6.1, glyph at `icons.md`. `semanticLabel` is mandatory — the glyph alone says nothing to TalkBack. With a null `onClick` it stays a focus target but announces no action, the inert-poster-card contract. Carries `restingFill` / `contentColor` for the §3.2 over-media ground like `IglooButton`. |
 | `IglooScrim` | The paint-only dim: `background @ 0.60` by default (§3.1), no `clickable`/`focusable`/`semantics`, so it can never intercept the d-pad and TalkBack does not know it exists. Used by the rail (§8.1) and the modal (§9.3) — **never both at once**. |
 | `IglooConfirmDialog` | The confirmation modal (§9.3) |
+| `IglooMenu` | The anchored menu: a `card` surface of focusable rows placed against the trigger's root-coordinate bounds — right-aligned, below it, flipping above when the bottom safe area would be breached. In-tree for §9.3's four reasons and hosted as the last child of the screen that owns the trigger; **unscrimmed**, unlike the modal — an anchored menu is local chrome, not a page-blocking decision, and §9.1 gives the scrim to the rail and the modal only. One `standard` alpha reveal, no exit animation. Focus is trapped (up/down walk the rows, everything else `Cancel`), the first row takes focus on reveal, the caller restores focus in `onDismiss` and gates its own Back (§9.3). `paneTitle` + one cleared Button node per row; a `destructive` row wears the destructive token pair, and `separatorBefore` draws a silent hairline. The covered screen leaves TalkBack traversal via `hideFromAccessibility`, the overlay-stack treatment. |
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
@@ -1217,10 +1219,11 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   remote user needs a bounded, predictable focus target.
 - **Detail** — full-bleed backdrop with a `background` gradient scrim, content pulled up over
   it. Poster left; title, tagline, metadata chips, genres, and hero actions right. Hero actions:
-  **Play**, **Watched** toggle, **Like** — the specified **More** trigger is deferred until its
-  menu exists, because a control that takes focus and does nothing on press spends the user's
-  press to teach them it is empty. Below: cast, chapters, extra details. Play must be the first
-  focused element on entry.
+  **Play**, **Watched** toggle, **Like**, and the icon-only **More** trigger, which opens the
+  anchored menu (§11.4.1): Playback Settings, Watch Together, Technical Details, and — admin
+  only, hidden rather than disabled — Identify Movie and a destructive Delete Movie behind a
+  separator. Below: cast, chapters, extra details. Play must be the first focused element on
+  entry.
 
 #### 11.4.1 The detail screen, as built
 
@@ -1297,6 +1300,24 @@ its own cards, so Like → down into cast → up lands back on Like. Crossing be
 rides the same memory: up from the extras targets the cast rail's entry requester, which the
 rail keeps parked on its last-focused card. Back closes the overlay and
 restores focus to the card that opened it, via the rail's `returnRequester` (§6.3).
+
+**More menu.** The row's fourth action is the icon-only `IglooIconButton` trigger ("More
+options"), and pressing it opens an `IglooMenu` (§9.1) anchored to the trigger's reported
+bounds — display only for now: every item fires a stubbed callback and closes the menu. Items:
+Playback Settings, Watch Together, Technical Details, then for admins (`AuthUser.is_admin`)
+Identify Movie and, behind the silent separator, a destructive Delete Movie. Admin items are
+**hidden, not disabled** — they are never composed for non-admins, so they exist in neither the
+focus tree nor the semantics tree; a control a user can reach but never use only teaches them
+the press is wasted. The split follows the overlay contract: the host owns the open flag (it
+must gate its details-closing Back on it, §9.3) and restores focus to the trigger in the
+dismiss callback; the screen owns the item list and the trigger's anchor bounds. While the menu
+is up the details content behind it leaves TalkBack traversal via `hideFromAccessibility`, and
+Back closes the menu — never the overlay under it.
+
+The trigger also re-pins the row's right edge: Right is `Cancel` on More alone now, Like points
+Right at More, and Watched's hand-wired Right (the disabled-Like rule above) skips to More
+instead of carrying the edge pin itself — the pin rests on the one right-end control that is
+always present.
 
 **Extra videos.** Between cast and About: the movie's TMDB extras (trailers, special features)
 as a second always-Loaded rail, on the §8.2 wide geometry — `wideCardWidth` at `wideAspect`,
@@ -1616,6 +1637,25 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-17 — More lands with its menu (§11.4.1, §9.1).**
+
+The 2026-08-16 deferral is closed on its own terms: the trigger waited until it had a menu to
+open, and now it does. The library hero's fourth action is the icon-only More trigger, opening
+the new `IglooMenu` — the in-tree anchored menu (§9.1) — with Playback Settings, Watch
+Together, Technical Details, and for admins Identify Movie and a destructive Delete Movie
+behind a separator. Display only: items fire stubbed callbacks and close the menu.
+
+- **`IglooIconButton` returns from `bc88a9c`**, restored with the caller it was deleted for;
+  its §9.1 row is back. `IglooIcons` gains `MoreVertical`.
+- **Admin items are hidden, not disabled** — never composed for non-admins, absent from focus
+  and semantics alike. Admin comes from the session's `AuthUser.is_admin`; it is not persisted.
+- **The overlay contract stretches to a third layer shape**: host-owned open flag and
+  dismiss-callback focus restore (§9.3), screen-owned item list and anchor, unscrimmed because
+  §9.1's scrim belongs to the rail and the modal.
+- **The row's right-edge pin moved onto More**, the always-present control the disabled-Like
+  rule was waiting for; Watched's hand-wired Right now skips a disabled Like instead of
+  carrying the pin.
 
 **2026-08-17 — The theaters rail gets a destination: the in-theaters detail screen (§11.4.2).**
 

@@ -77,6 +77,7 @@ class MovieDetailsFocusTest {
     private fun setShellContent(
         initialDetails: MovieDetailsUiState = MovieDetailsUiState(),
         hero: HomeHeroState = HomeHeroState.Hidden,
+        user: AuthUser = this.user,
     ) {
         detailsState = initialDetails
         opened.clear()
@@ -290,11 +291,13 @@ class MovieDetailsFocusTest {
         composeRule.onNodeWithTag("details_watched").performKeyInput { pressKey(Key.DirectionRight) }
         composeRule.onNodeWithTag("details_like").assertIsFocused()
         composeRule.onNodeWithTag("details_like").performKeyInput { pressKey(Key.DirectionRight) }
-        composeRule.onNodeWithTag("details_like").assertIsFocused()
+        composeRule.onNodeWithTag("details_more").assertIsFocused()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.onNodeWithTag("details_more").assertIsFocused()
     }
 
     @Test
-    fun theActionRowStillPinsItsRightEdgeWhileLikeIsUnknown() {
+    fun rightFromWatchedSkipsAnUnknownLikeToMore() {
         setShellContent(loadedState(testMovieDetails(liked = null)))
 
         val play = composeRule.onNodeWithTag("details_play")
@@ -302,11 +305,14 @@ class MovieDetailsFocusTest {
         val watched = composeRule.onNodeWithTag("details_watched")
         watched.assertIsFocused()
 
-        // A Like with no status yet is disabled, so it is not focusable and the row's right-edge
-        // Cancel is not in the tree with it. Watched carries the pin so the edge holds on a
-        // control that is always there rather than on one that comes and goes.
+        // A Like with no status yet is disabled, so it is not focusable and a rightward search
+        // would have to guess past the hole. Watched's hand-wired right skips straight to More,
+        // the always-present control that pins the row's right edge.
         watched.performKeyInput { pressKey(Key.DirectionRight) }
-        watched.assertIsFocused()
+        val more = composeRule.onNodeWithTag("details_more")
+        more.assertIsFocused()
+        more.performKeyInput { pressKey(Key.DirectionRight) }
+        more.assertIsFocused()
         composeRule.onNodeWithTag("continue_card_1").assertIsNotFocused()
     }
 
@@ -414,7 +420,7 @@ class MovieDetailsFocusTest {
         val play = composeRule.onNodeWithTag("details_play")
         play.assertIsFocused()
 
-        listOf("details_watched", "details_like").forEach { tag ->
+        listOf("details_watched", "details_like", "details_more").forEach { tag ->
             composeRule.onNodeWithTag(tag).requestFocus()
             composeRule.onNodeWithTag(tag).assertIsFocused()
             play.assertIsNotFocused()
@@ -494,6 +500,131 @@ class MovieDetailsFocusTest {
 
         composeRule.onNodeWithTag("cast_card_101").performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.onNodeWithTag("details_like").assertIsFocused()
+
+        // The memory covers the whole row, More included.
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("cast_card_101").assertIsFocused()
+        composeRule.onNodeWithTag("cast_card_101").performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("details_more").assertIsFocused()
+    }
+
+    @Test
+    fun pressingMoreOpensTheMenuOnItsFirstItem() {
+        setShellContent(loadedState())
+
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
+
+        composeRule.onNodeWithTag("more_menu").assertExists()
+        composeRule.onNodeWithTag("more_menu_item_0").assertIsFocused()
+    }
+
+    @Test
+    fun theMenuTrapsEveryDpadDirection() {
+        setShellContent(loadedState())
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
+
+        // Up from the first row and the horizontals on an interior row are all pinned: the
+        // whole details screen is still composed under the menu.
+        val first = composeRule.onNodeWithTag("more_menu_item_0")
+        first.assertIsFocused()
+        first.performKeyInput { pressKey(Key.DirectionUp) }
+        first.assertIsFocused()
+
+        first.performKeyInput { pressKey(Key.DirectionDown) }
+        val second = composeRule.onNodeWithTag("more_menu_item_1")
+        second.assertIsFocused()
+        second.performKeyInput { pressKey(Key.DirectionLeft) }
+        second.assertIsFocused()
+        second.performKeyInput { pressKey(Key.DirectionRight) }
+        second.assertIsFocused()
+
+        // Down from the last row stays put rather than falling through to the screen below.
+        second.performKeyInput { pressKey(Key.DirectionDown) }
+        val last = composeRule.onNodeWithTag("more_menu_item_2")
+        last.assertIsFocused()
+        last.performKeyInput { pressKey(Key.DirectionDown) }
+        last.assertIsFocused()
+    }
+
+    @Test
+    fun backClosesTheMenuAndRestoresFocusToMore() {
+        setShellContent(loadedState())
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.onNodeWithTag("more_menu_item_0").assertIsFocused()
+
+        pressBack()
+
+        composeRule.onNodeWithTag("more_menu").assertDoesNotExist()
+        composeRule.onNodeWithTag("details_more").assertIsFocused()
+    }
+
+    @Test
+    fun backWithTheMenuOpenDoesNotCloseTheDetailsOverlay() {
+        setShellContent(loadedState())
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
+        // Synchronizes on the open menu: a Back dispatched before the composition applies would
+        // still find the host's details handler enabled.
+        composeRule.onNodeWithTag("more_menu_item_0").assertIsFocused()
+
+        pressBack()
+
+        // One Back spends itself on the menu; the overlay under it is untouched.
+        composeRule.onNodeWithTag("movie_details").assertExists()
+
+        pressBack()
+
+        composeRule.onNodeWithTag("movie_details").assertDoesNotExist()
+    }
+
+    @Test
+    fun selectingAnItemClosesTheMenuAndRestoresFocusToMore() {
+        setShellContent(loadedState())
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
+
+        composeRule.onNodeWithTag("more_menu_item_0")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+
+        composeRule.onNodeWithTag("more_menu").assertDoesNotExist()
+        composeRule.onNodeWithTag("details_more").assertIsFocused()
+    }
+
+    @Test
+    fun adminItemsAreHiddenFromNonAdmins() {
+        setShellContent(loadedState())
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
+
+        // Hidden means absent — not composed, so nothing to focus and nothing to announce.
+        composeRule.onNodeWithContentDescription("Playback Settings").assertExists()
+        composeRule.onNodeWithContentDescription("Watch Together").assertExists()
+        composeRule.onNodeWithContentDescription("Technical Details").assertExists()
+        composeRule.onNodeWithContentDescription("Identify Movie").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Delete Movie").assertDoesNotExist()
+        composeRule.onNodeWithTag("more_menu_item_3").assertDoesNotExist()
+    }
+
+    @Test
+    fun adminItemsArePresentForAdmins() {
+        setShellContent(loadedState(), user = user.copy(isAdmin = true))
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
+
+        composeRule.onNodeWithContentDescription("Identify Movie").assertExists()
+        // Delete is the last row, after the separator.
+        composeRule.onNodeWithTag("more_menu_item_4")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.ContentDescription,
+                    listOf("Delete Movie"),
+                ),
+            )
+        composeRule.onNodeWithTag("more_menu_item_5").assertDoesNotExist()
     }
 
     @Test

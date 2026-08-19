@@ -28,9 +28,12 @@ import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -45,6 +48,7 @@ import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
+import com.igloo.blindpenguincoder.core.ui.IglooIconButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
@@ -67,8 +71,11 @@ internal fun MovieDetailsHeader(
     heroTrailerReturnRequester: FocusRequester,
     watchedRequester: FocusRequester,
     likeRequester: FocusRequester,
+    moreRequester: FocusRequester,
     downRequester: FocusRequester?,
     onActionFocused: (FocusRequester) -> Unit,
+    onOpenMoreMenu: () -> Unit,
+    onMoreAnchorPositioned: (Rect) -> Unit,
     mutationNotice: String?,
     modifier: Modifier = Modifier,
 ) {
@@ -120,8 +127,11 @@ internal fun MovieDetailsHeader(
                     playRequester = primaryRequester,
                     watchedRequester = watchedRequester,
                     likeRequester = likeRequester,
+                    moreRequester = moreRequester,
                     downRequester = downRequester,
                     onActionFocused = onActionFocused,
+                    onOpenMoreMenu = onOpenMoreMenu,
+                    onMoreAnchorPositioned = onMoreAnchorPositioned,
                     modifier = actionRowModifier,
                 )
 
@@ -299,8 +309,11 @@ private fun LibraryActionRow(
     playRequester: FocusRequester,
     watchedRequester: FocusRequester,
     likeRequester: FocusRequester,
+    moreRequester: FocusRequester,
     downRequester: FocusRequester?,
     onActionFocused: (FocusRequester) -> Unit,
+    onOpenMoreMenu: () -> Unit,
+    onMoreAnchorPositioned: (Rect) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
@@ -372,11 +385,11 @@ private fun LibraryActionRow(
                 .testTag("details_watched")
                 .focusRequester(watchedRequester)
                 .then(rowFocus)
-                // A disabled Like is not focusable, so while its status is unknown it leaves the
-                // focus tree and takes the row's right-edge Cancel with it. Right is hand-wired
-                // here for the same reason down is: the row's edges stay pinned by controls that
-                // are always present, not by one that comes and goes.
-                .focusProperties { right = if (likeEnabled) likeRequester else Cancel }
+                // A disabled Like is not focusable, so while its status is unknown it leaves
+                // the focus tree, and a rightward search from here would have to guess past the
+                // hole. Right is hand-wired for the same reason down is: it skips straight to
+                // More, the always-present control that now pins the row's right edge.
+                .focusProperties { right = if (likeEnabled) likeRequester else moreRequester }
                 .onFocusChanged { if (it.isFocused) onActionFocused(watchedRequester) },
         )
         IglooButton(
@@ -396,14 +409,28 @@ private fun LibraryActionRow(
                 .testTag("details_like")
                 .focusRequester(likeRequester)
                 .then(rowFocus)
-                .focusProperties { right = Cancel }
+                .focusProperties { right = moreRequester }
                 .onFocusChanged { if (it.isFocused) onActionFocused(likeRequester) },
+        )
+        IglooIconButton(
+            icon = IglooIcons.MoreVertical,
+            semanticLabel = "More options",
+            onClick = onOpenMoreMenu,
+            restingFill = ghostFill,
+            contentColor = ghostContent,
+            modifier = Modifier
+                .testTag("details_more")
+                .focusRequester(moreRequester)
+                .then(rowFocus)
+                .focusProperties { right = Cancel }
+                .onGloballyPositioned { onMoreAnchorPositioned(it.boundsInRoot()) }
+                .onFocusChanged { if (it.isFocused) onActionFocused(moreRequester) },
         )
     }
 }
 
 // Both labels of each toggle, so the button reserves the wider one and the flip is a repaint
-// rather than a relayout shoving the controls to its right (More, when its menu lands).
+// rather than a relayout shoving the controls to its right (Like, and the More trigger).
 private val TOGGLE_WATCHED_LABELS = listOf("Watch", "Watched")
 private val TOGGLE_LIKE_LABELS = listOf("Like", "Liked")
 

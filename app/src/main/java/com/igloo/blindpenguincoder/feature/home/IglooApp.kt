@@ -198,6 +198,17 @@ fun IglooApp(
     // player from its hero instead, and parks the second requester on that button.
     val extrasReturnRequester = remember { FocusRequester() }
     val heroTrailerReturnRequester = remember { FocusRequester() }
+    // The details screen's More menu is host state for the same reason Back is host behavior:
+    // section 9.3 makes the host gate its own handlers while any modal is up, so the host has
+    // to know one is. Plain `remember` — an open menu is not worth surviving process death.
+    var moreMenuOpen by remember { mutableStateOf(false) }
+    val moreReturnRequester = remember { FocusRequester() }
+    // Back cannot close the details while the menu is up (its handler is gated on the flag), but
+    // the overlay can still leave on its own — a session revalidation, a profile switch — and a
+    // flag that outlived it would greet the next movie with a menu it never asked for.
+    LaunchedEffect(detailsOpen) {
+        if (!detailsOpen) moreMenuOpen = false
+    }
     val closeTrailer = {
         val origin = trailerRequest?.origin
         trailerRequest = null
@@ -231,7 +242,7 @@ fun IglooApp(
     // Every handler is gated explicitly rather than left to win on registration order —
     // design-system.md section 9.3 requires the host to be deliberate about Back. While the
     // trailer player is up, Back belongs to its own screen (chrome dismissal, then close).
-    BackHandler(enabled = detailsOpen && !signOut.confirming && !trailerOpen) {
+    BackHandler(enabled = detailsOpen && !signOut.confirming && !trailerOpen && !moreMenuOpen) {
         val origin = detailsOrigin
         detailsOrigin = null
         onCloseDetails()
@@ -326,7 +337,12 @@ fun IglooApp(
                 MovieDetailsScreen(
                     state = details.details,
                     actions = detailsActions,
+                    isAdmin = user.isAdmin,
                     onPlayVideo = { video, site ->
+                        // A cheap invariant, not a reachable path today — the extras rail is
+                        // unfocusable while the menu is up — so a stale open flag can never
+                        // survive an overlay swap.
+                        moreMenuOpen = false
                         trailerRequest = TrailerRequest(
                             key = video.key,
                             title = video.title,
@@ -336,6 +352,18 @@ fun IglooApp(
                     },
                     extrasReturnRequester = extrasReturnRequester,
                     heroTrailerReturnRequester = heroTrailerReturnRequester,
+                    moreMenuOpen = moreMenuOpen,
+                    onOpenMoreMenu = { moreMenuOpen = true },
+                    // In the callback, not an effect, like every overlay's focus restore
+                    // (section 9.3). The trigger is still composed in every reachable case;
+                    // the pane anchor is the same last-resort fallback the other overlays use.
+                    onDismissMoreMenu = {
+                        moreMenuOpen = false
+                        if (!moreReturnRequester.requestFocusSafely()) {
+                            contentStartRequester.requestFocusSafely()
+                        }
+                    },
+                    moreRequester = moreReturnRequester,
                     mutationNotice = details.mutationNotice,
                 )
             }

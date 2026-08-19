@@ -58,6 +58,11 @@ internal val inertDetailsActions = MovieDetailsActions.Library(
     onPlay = {},
     onToggleWatched = {},
     onToggleLike = {},
+    onPlaybackSettings = {},
+    onWatchTogether = {},
+    onTechnicalDetails = {},
+    onIdentifyMovie = {},
+    onDeleteMovie = {},
     onRetry = {},
 )
 

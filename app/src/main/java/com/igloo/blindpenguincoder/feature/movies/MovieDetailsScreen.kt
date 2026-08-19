@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -35,6 +36,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
@@ -47,6 +49,8 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
+import com.igloo.blindpenguincoder.core.ui.IglooMenu
+import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
@@ -65,11 +69,20 @@ sealed interface MovieDetailsActions {
     /** The full-screen error's Retry, which both pages have. */
     val onRetry: () -> Unit
 
-    /** A library movie's hero row: Play, plus the two optimistic toggles (section 11.4.1). */
+    /**
+     * A library movie's hero row: Play, the two optimistic toggles, and the More menu's items
+     * (section 11.4.1). The menu's own open/close is the host's, like Back; what an item *does*
+     * is the page's contract and lives here.
+     */
     data class Library(
         val onPlay: () -> Unit,
         val onToggleWatched: () -> Unit,
         val onToggleLike: () -> Unit,
+        val onPlaybackSettings: () -> Unit,
+        val onWatchTogether: () -> Unit,
+        val onTechnicalDetails: () -> Unit,
+        val onIdentifyMovie: () -> Unit,
+        val onDeleteMovie: () -> Unit,
         override val onRetry: () -> Unit,
     ) : MovieDetailsActions
 
@@ -107,19 +120,34 @@ enum class VideoLaunchSite { ExtrasRail, Hero }
  * host-owned overlay, and the requesters are how the host restores focus to whichever control
  * launched it — a card in the extras rail, or the hero's Play Trailer button — when that overlay
  * closes.
+ *
+ * The More menu follows the same split: the host owns [moreMenuOpen] (it must gate its own Back
+ * while any modal is up, section 9.3) and restores focus through [moreRequester] in
+ * [onDismissMoreMenu]; the screen owns what the menu shows — [isAdmin] gates the admin-only
+ * items out of composition entirely, so non-admins have nothing to focus or hear.
  */
 @Composable
 fun MovieDetailsScreen(
     state: MovieDetailsState,
     actions: MovieDetailsActions,
+    isAdmin: Boolean,
     onPlayVideo: (ExtraVideoUi, VideoLaunchSite) -> Unit,
     extrasReturnRequester: FocusRequester,
     heroTrailerReturnRequester: FocusRequester,
+    moreMenuOpen: Boolean,
+    onOpenMoreMenu: () -> Unit,
+    onDismissMoreMenu: () -> Unit,
+    moreRequester: FocusRequester,
     mutationNotice: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
     val entryRequester = remember { FocusRequester() }
+    // Where the More trigger last landed, in root coordinates — the details overlay fills the
+    // window, so root coordinates are also this screen's. The menu only exists once the trigger
+    // has reported a position, and focus is trapped inside it while open, so the column cannot
+    // scroll the anchor stale underneath it.
+    var moreAnchor by remember { mutableStateOf<Rect?>(null) }
 
     // The hero's primary action is the first focused element on entry (section 11.4); while
     // loading, the skeleton's action-slot stub holds the anchor so focus already sits where the
@@ -148,49 +176,132 @@ fun MovieDetailsScreen(
             }
             .testTag("movie_details"),
     ) {
-        when (state) {
-            is MovieDetailsState.Loading -> DetailsSkeleton(
-                anchorRequester = entryRequester,
-                // Geometry-matched to the row it stands in for: the in-theaters hero carries one
-                // action and no resume strip, and a stand-in of the wrong shape would move the
-                // anchor focus is sitting on when the real row lands.
-                actionStubs = if (actions is MovieDetailsActions.Theater) 1 else LIBRARY_ACTIONS,
-                reserveResumeSlot = actions is MovieDetailsActions.Library,
-            )
-
-            // The only region on screen, so Assertive is safe and right: the user just asked
-            // for this page and is waiting on it (section 10).
-            is MovieDetailsState.Error -> Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(IglooTheme.layout.safeAreaHorizontal),
-                contentAlignment = Alignment.Center,
-            ) {
-                IglooInlineError(
-                    message = state.message,
-                    actionText = "Retry",
-                    actionSemanticLabel = "Retry loading movie details",
-                    onAction = actions.onRetry,
-                    // The screen's only focusable, so every direction is pinned: the shell is
-                    // still composed underneath, and a spatial search that escaped would strand
-                    // focus on a card nobody can see, with no way back to Retry.
-                    actionModifier = Modifier
-                        .focusRequester(entryRequester)
-                        .pinnedToScreen(),
-                    modifier = Modifier.width(IglooTheme.layout.authCardWidth),
-                )
-            }
-
-            is MovieDetailsState.Loaded -> DetailsContent(
-                movie = state.movie,
+        // hideFromAccessibility, not clearAndSetSemantics, while the menu covers this — the
+        // same treatment the shell gets under the details overlay: nodes stay in the tree, so
+        // a test can still assert what left traversal.
+        Box(
+            modifier = Modifier
+                .testTag("details_body")
+                .then(
+                    if (moreMenuOpen) {
+                        Modifier.semantics { hideFromAccessibility() }
+                    } else {
+                        Modifier
+                    },
+                ),
+        ) {
+            DetailsBody(
+                state = state,
+                actions = actions,
                 mutationNotice = mutationNotice,
                 entryRequester = entryRequester,
-                actions = actions,
                 onPlayVideo = onPlayVideo,
                 extrasReturnRequester = extrasReturnRequester,
                 heroTrailerReturnRequester = heroTrailerReturnRequester,
+                moreRequester = moreRequester,
+                onOpenMoreMenu = onOpenMoreMenu,
+                onMoreAnchorPositioned = { moreAnchor = it },
             )
         }
+
+        // Last child, over the body, like every overlay in the stack. Selecting an item is a
+        // stub for now: it fires the page's callback and closes the menu, nothing more.
+        val menuAnchor = moreAnchor
+        if (moreMenuOpen && actions is MovieDetailsActions.Library && menuAnchor != null) {
+            IglooMenu(
+                title = "More options",
+                items = buildList {
+                    add(menuItem("Playback Settings", actions.onPlaybackSettings, onDismissMoreMenu))
+                    add(menuItem("Watch Together", actions.onWatchTogether, onDismissMoreMenu))
+                    add(menuItem("Technical Details", actions.onTechnicalDetails, onDismissMoreMenu))
+                    if (isAdmin) {
+                        add(menuItem("Identify Movie", actions.onIdentifyMovie, onDismissMoreMenu))
+                        add(
+                            menuItem(
+                                "Delete Movie",
+                                actions.onDeleteMovie,
+                                onDismissMoreMenu,
+                            ).copy(destructive = true, separatorBefore = true),
+                        )
+                    }
+                },
+                anchorBounds = menuAnchor,
+                onDismiss = onDismissMoreMenu,
+            )
+        }
+    }
+}
+
+private fun menuItem(
+    label: String,
+    action: () -> Unit,
+    dismiss: () -> Unit,
+): IglooMenuItem = IglooMenuItem(
+    label = label,
+    onSelect = {
+        action()
+        dismiss()
+    },
+)
+
+@Composable
+private fun DetailsBody(
+    state: MovieDetailsState,
+    actions: MovieDetailsActions,
+    mutationNotice: String?,
+    entryRequester: FocusRequester,
+    onPlayVideo: (ExtraVideoUi, VideoLaunchSite) -> Unit,
+    extrasReturnRequester: FocusRequester,
+    heroTrailerReturnRequester: FocusRequester,
+    moreRequester: FocusRequester,
+    onOpenMoreMenu: () -> Unit,
+    onMoreAnchorPositioned: (Rect) -> Unit,
+) {
+    when (state) {
+        is MovieDetailsState.Loading -> DetailsSkeleton(
+                anchorRequester = entryRequester,
+            // Geometry-matched to the row it stands in for: the in-theaters hero carries one
+            // action and no resume strip, and a stand-in of the wrong shape would move the
+            // anchor focus is sitting on when the real row lands.
+            actionStubs = if (actions is MovieDetailsActions.Theater) 1 else LIBRARY_ACTIONS,
+            reserveResumeSlot = actions is MovieDetailsActions.Library,
+        )
+
+        // The only region on screen, so Assertive is safe and right: the user just asked
+        // for this page and is waiting on it (section 10).
+        is MovieDetailsState.Error -> Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(IglooTheme.layout.safeAreaHorizontal),
+            contentAlignment = Alignment.Center,
+        ) {
+            IglooInlineError(
+                message = state.message,
+                actionText = "Retry",
+                actionSemanticLabel = "Retry loading movie details",
+                onAction = actions.onRetry,
+                // The screen's only focusable, so every direction is pinned: the shell is
+                // still composed underneath, and a spatial search that escaped would strand
+                // focus on a card nobody can see, with no way back to Retry.
+                actionModifier = Modifier
+                    .focusRequester(entryRequester)
+                    .pinnedToScreen(),
+                modifier = Modifier.width(IglooTheme.layout.authCardWidth),
+            )
+        }
+
+        is MovieDetailsState.Loaded -> DetailsContent(
+            movie = state.movie,
+            mutationNotice = mutationNotice,
+            entryRequester = entryRequester,
+            actions = actions,
+            onPlayVideo = onPlayVideo,
+            extrasReturnRequester = extrasReturnRequester,
+            heroTrailerReturnRequester = heroTrailerReturnRequester,
+            moreRequester = moreRequester,
+            onOpenMoreMenu = onOpenMoreMenu,
+            onMoreAnchorPositioned = onMoreAnchorPositioned,
+        )
     }
 }
 
@@ -203,6 +314,9 @@ private fun DetailsContent(
     onPlayVideo: (ExtraVideoUi, VideoLaunchSite) -> Unit,
     extrasReturnRequester: FocusRequester,
     heroTrailerReturnRequester: FocusRequester,
+    moreRequester: FocusRequester,
+    onOpenMoreMenu: () -> Unit,
+    onMoreAnchorPositioned: (Rect) -> Unit,
 ) {
     val colors = IglooTheme.colors
     val layout = IglooTheme.layout
@@ -343,8 +457,11 @@ private fun DetailsContent(
                 heroTrailerReturnRequester = heroTrailerReturnRequester,
                 watchedRequester = watchedRequester,
                 likeRequester = likeRequester,
+                moreRequester = moreRequester,
                 downRequester = belowActions,
                 onActionFocused = { lastFocusedAction = it },
+                onOpenMoreMenu = onOpenMoreMenu,
+                onMoreAnchorPositioned = onMoreAnchorPositioned,
                 mutationNotice = mutationNotice,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -466,10 +583,19 @@ private fun DetailsSkeleton(
                             ResumeProgress(progress = null, overMedia = false)
                         }
                     }
-                    repeat(actionStubs - 1) {
+                    repeat(actionStubs - 1) { index ->
+                        // The library row ends in the square More trigger; a wide stub there
+                        // would shift the row's geometry when the real row lands.
+                        val squareStub = reserveResumeSlot && index == actionStubs - 2
                         Box(
                             modifier = Modifier
-                                .width(PLAY_STUB_WIDTH.scaled())
+                                .width(
+                                    if (squareStub) {
+                                        IglooTheme.sizes.controlHeight
+                                    } else {
+                                        PLAY_STUB_WIDTH.scaled()
+                                    },
+                                )
                                 .heightIn(min = IglooTheme.sizes.controlHeight)
                                 .background(colors.muted, RoundedCornerShape(IglooTheme.radius.lg)),
                         )
@@ -486,5 +612,5 @@ private val HERO_MIN_HEIGHT = 320.dp
 /** The Play button's approximate footprint, so focus taken while loading does not jump. */
 private val PLAY_STUB_WIDTH = 120.dp
 
-/** Play, Watched, Like — what the library hero's skeleton has to stand in for. */
-private const val LIBRARY_ACTIONS = 3
+/** Play, Watched, Like, More — what the library hero's skeleton has to stand in for. */
+private const val LIBRARY_ACTIONS = 4

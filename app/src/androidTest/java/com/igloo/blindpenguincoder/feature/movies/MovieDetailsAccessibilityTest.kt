@@ -17,6 +17,8 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -28,6 +30,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.compose.ui.text.TextLayoutResult
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.testMovieDetails
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -53,22 +56,28 @@ class MovieDetailsAccessibilityTest {
     private var state by mutableStateOf<MovieDetailsState>(
         MovieDetailsState.Loaded(testMovieDetails()),
     )
+    private var moreMenuOpen by mutableStateOf(false)
+    private val moreRequester = FocusRequester()
     private var watchedToggles = 0
     private var likeToggles = 0
     private var retries = 0
     private var plays = 0
     private val playedExtras = mutableListOf<Long>()
+    private val menuSelections = mutableListOf<String>()
 
     private fun setContent(
         initial: MovieDetailsState = MovieDetailsState.Loaded(testMovieDetails()),
         mutationNotice: String? = null,
+        isAdmin: Boolean = false,
     ) {
         state = initial
+        moreMenuOpen = false
         watchedToggles = 0
         likeToggles = 0
         retries = 0
         plays = 0
         playedExtras.clear()
+        menuSelections.clear()
         composeRule.setContent {
             IglooTheme {
                 MovieDetailsScreen(
@@ -78,14 +87,32 @@ class MovieDetailsAccessibilityTest {
                         onPlay = { plays += 1 },
                         onToggleWatched = { watchedToggles += 1 },
                         onToggleLike = { likeToggles += 1 },
+                        onPlaybackSettings = { menuSelections += "Playback Settings" },
+                        onWatchTogether = { menuSelections += "Watch Together" },
+                        onTechnicalDetails = { menuSelections += "Technical Details" },
+                        onIdentifyMovie = { menuSelections += "Identify Movie" },
+                        onDeleteMovie = { menuSelections += "Delete Movie" },
                         onRetry = { retries += 1 },
                     ),
+                    isAdmin = isAdmin,
                     onPlayVideo = { video, _ -> playedExtras += video.id },
                     extrasReturnRequester = remember { FocusRequester() },
                     heroTrailerReturnRequester = remember { FocusRequester() },
+                    moreMenuOpen = moreMenuOpen,
+                    onOpenMoreMenu = { moreMenuOpen = true },
+                    onDismissMoreMenu = {
+                        moreMenuOpen = false
+                        moreRequester.requestFocusSafely()
+                    },
+                    moreRequester = moreRequester,
                 )
             }
         }
+        composeRule.waitForIdle()
+    }
+
+    private fun openMenu() {
+        composeRule.onNodeWithTag("details_more").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 
@@ -308,6 +335,79 @@ class MovieDetailsAccessibilityTest {
         assertEquals(1, plays)
         assertEquals(1, watchedToggles)
         assertEquals(1, likeToggles)
+    }
+
+    @Test
+    fun theMoreTriggerAnnouncesMoreOptionsAsAButton() {
+        setContent()
+
+        val more = composeRule.onNodeWithTag("details_more")
+        more
+            .assertContentDescriptionEquals("More options")
+            .assertHasClickAction()
+        assertEquals("More options", more.clickActionLabel())
+    }
+
+    @Test
+    fun theMenuCarriesAPaneTitleAndOneNodePerItem() {
+        setContent()
+        openMenu()
+
+        composeRule.onNodeWithTag("more_menu")
+            .assert(
+                SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "More options"),
+            )
+        listOf("Playback Settings", "Watch Together", "Technical Details")
+            .forEachIndexed { index, label ->
+                val item = composeRule.onNodeWithTag("more_menu_item_$index")
+                item.assertContentDescriptionEquals(label).assertHasClickAction()
+                // The announced action is the label itself: pressing does what it says.
+                assertEquals(label, item.clickActionLabel())
+            }
+    }
+
+    @Test
+    fun theAnnouncedMenuActionPerformsItsWorkAndClosesTheMenu() {
+        setContent()
+        openMenu()
+
+        composeRule.onNodeWithTag("more_menu_item_0")
+            .performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals(listOf("Playback Settings"), menuSelections)
+        composeRule.onNodeWithTag("more_menu").assertDoesNotExist()
+    }
+
+    @Test
+    fun theScreenBehindTheMenuLeavesTalkBackTraversal() {
+        setContent()
+        val body = composeRule.onNodeWithTag("details_body")
+        body.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+
+        openMenu()
+
+        // Hidden from traversal but still in the tree, so the assertion is meaningful — and the
+        // menu's own items are outside the hidden subtree.
+        body.assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
+        composeRule.onNodeWithTag("more_menu_item_0")
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+    }
+
+    @Test
+    fun theSeparatorIsSilent() {
+        setContent(isAdmin = true)
+        openMenu()
+
+        // Five announcements and nothing else: the hairline before Delete has no semantics of
+        // its own, so TalkBack walks Technical Details straight into Identify Movie.
+        composeRule.onNodeWithTag("more_menu_item_4")
+            .assertContentDescriptionEquals("Delete Movie")
+        composeRule
+            .onAllNodes(
+                hasAnyAncestor(hasTestTag("more_menu")) and
+                    SemanticsMatcher.keyIsDefined(SemanticsProperties.ContentDescription),
+            )
+            .assertCountEquals(5)
     }
 
     private fun isHeading() = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)

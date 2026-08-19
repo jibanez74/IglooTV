@@ -70,9 +70,10 @@ exists, this is the accepted trade.
   cast, Extra Videos (landed 2026-08-16, §11.4.1) and About. No chapters row and no
   similar-movies rail yet. Both are library-only: a TMDB record has neither, so §11.4.2's page
   would skip them the way it already skips the media badges.
-- **More is deferred, not gone.** Section 11.4 keeps it specified as the fourth hero action;
-  it returns with its menu. `IglooIconButton` was deleted with its only caller and lives in git
-  history (`bc88a9c` and earlier).
+- **More landed display-only (2026-08-17).** The fourth hero action and its anchored menu are
+  in (§11.4.1), with `IglooIconButton` restored from `bc88a9c`. What remains are the actions
+  themselves: Playback Settings, Watch Together, Technical Details, Identify Movie, and Delete
+  Movie all fire stubbed callbacks that only close the menu.
 
 ---
 
