@@ -1375,7 +1375,10 @@ skeleton's Play-slot stub holds the anchor. The vertical chain — actions → c
 → about — is **hand-wired end to end**, with each section skipped when empty and its neighbours
 wired straight through, and every edge that would leave the screen is pinned to
 `FocusRequester.Cancel`: the shell underneath is still composed, and an unpinned edge lets a
-spatial search land on a card the user cannot see. Up from the sections returns to the
+spatial search land on a card the user cannot see. While a spoken screen reader runs the same
+chain gains the **reading stops** (§12): hero info above the actions (up from the row, where
+the pin otherwise is), then Overview and Key Crew between the actions and the cast rail. Up
+from the sections returns to the
 **last-focused action**, not unconditionally to Play — the same focus memory the rail keeps for
 its own cards, so Like → down into cast → up lands back on Like. Crossing between the rails
 rides the same memory: up from the extras targets the cast rail's entry requester, which the
@@ -1485,10 +1488,32 @@ down scrolls them into view on the way; both share the same 620dp prose measure 
 sections keep one right edge. The About block is a **focus target** even though it carries no
 action: it sits below the last rail, and content a d-pad can never scroll to may as well not be
 on the page. Its heading sits **above** the focusable panel, aligned with the other section
-headings and keeping its `heading()` semantics for TalkBack's heading navigation — inside the
-panel it would inherit the inner padding's indent and be erased by the cleared semantics. The
-panel announces its rows as one node, without repeating the "About" framing the heading node
-directly above already carries.
+headings — inside the panel it would inherit the inner padding's indent and be erased by the
+cleared semantics. The panel announces its rows as one node **with the heading folded in**
+("About {title}. Production: …"): TV TalkBack follows input focus (§12), so the heading's own
+text node above is never reached by a screen reader.
+
+**Reading stops (screen reader only).** TalkBack for TV moves with **input focus** — it never
+traverses plain text the way handset TalkBack's linear navigation does, so any prose that is not
+a focus target simply does not exist for a TV screen reader. While
+`rememberSpokenAccessibilityEnabled()` reports a spoken service (`core/ui/SpokenAccessibility.kt`,
+live-updating), the page therefore adds three **reading stops** — focus targets in the About
+panel's §6.1 treatment (surface highlight, no scale, no action) whose one cleared announcement
+carries text the d-pad otherwise passes by:
+
+- **Hero info**, reached by pressing up from the action row (whose top edge is pinned
+  otherwise): title, tagline, the metadata sentence, and the genres with `·` spoken as commas —
+  `MovieDetailsUi.heroInfoDescription`.
+- **Overview** and **Key Crew**, joining the vertical chain between the actions and the cast
+  rail, each folding its heading into the announcement.
+
+Without a spoken service the stops are not composed as targets and the chain is exactly the
+paragraph above — two extra presses between the actions and the cast rail would tax the most
+common path for no sighted benefit. Two companions to the same rule: the resume caption's
+"N min left" rides Play as its `stateDescription` (the caption's text node is unreachable), and
+the pane title becomes the movie's own title once Loaded — a pane-title change is announced
+(§12), so the page names the film on arrival instead of the generic "Movie details" the loading
+and error states keep.
 
 Because it is reachable but not actionable, it wears the focus treatment as a **panel** rather
 than a control: `radius.xl` — the §3 radius scale's step for cards, panels and surfaces — instead
@@ -1528,8 +1553,10 @@ the §11.8.1 player. The button is the entry anchor *and* the node the player re
 so a trailer started from the hero comes back to the hero rather than to the extras rail's card
 (§6.3). A movie TMDB lists no trailer for renders **no action row at all** — a control that takes
 focus and does nothing spends a press to teach the user it is empty (the same rule that deferred
-More) — and the entry anchor passes to the first section below: cast, else extras, else About. Up
-out of the first section is then pinned, because there is nothing above it to return to. A record
+More) — and the entry anchor passes to the first section below: the Overview reading stop while
+a screen reader runs (§11.4.1 Reachability), else cast, else extras, else About. Up out of the
+first section is then pinned — unless the reading stops are in, where it climbs to the hero
+info stop: there is still content above to hear. A record
 with no trailer, no cast, no extras *and* an empty About has nothing to anchor at all, which is
 why the entry request is made through `requestFocusSafely` — the page is prose the user can read
 and Back out of, not a crash. TMDB always sends `original_language` and `status`, so About carries
@@ -1672,6 +1699,14 @@ Non-negotiable. `AGENTS.md` §Accessibility governs; this section covers the des
   continue-watching card needs title, year, and progress. Decorative images are hidden from
   the accessibility tree.
 - **No focus traps**, and no custom focus handling that breaks screen-reader traversal.
+- **TalkBack for TV follows input focus.** It does not linearly traverse non-focusable text the
+  way handset TalkBack does — a plain text node is unreachable, and unspoken, on a TV. Text a
+  screen-reader user must hear either rides a focusable node's semantics (the metadata sentence,
+  Play's resume state) or becomes a **reading stop**: a focus target with no action, composed
+  only while `rememberSpokenAccessibilityEnabled()` reports a spoken service, announcing the
+  prose in one cleared node with its section heading folded in (§11.4.1 Reachability is the
+  as-built example). Heading, live-region and traversal-order semantics still matter for the
+  platform's other surfaces, but none of them make text reachable by d-pad.
 - **State changes are announced**: loading → loaded, empty results, errors, and action failures.
 - **A pane whose title is not drawn as text announces through `paneTitle`, not through a live
   region on a hidden node.** Swapping the shell's destination moves no focus and, since §11.3

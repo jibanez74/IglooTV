@@ -181,7 +181,7 @@ class MovieDetailsViewModelTest {
             movie.cast.first().photoUrl,
         )
         assertEquals("Regency Enterprises, Forward Pass", movie.about.production)
-        assertEquals("EN", movie.about.language)
+        assertEquals("English", movie.about.language)
         assertEquals("$60,000,000", movie.about.budget)
         assertEquals("$187,436,818", movie.about.revenue)
         assertEquals(0.176f, requireNotNull(movie.progress).fraction, 0.001f)
@@ -192,6 +192,12 @@ class MovieDetailsViewModelTest {
             "Rated 8.2 out of 10, R, 4K, HDR10, 5.1 surround sound, subtitles available, " +
                 "2 hours 50 minutes, released December 15, 1995",
             movie.metadataDescription,
+        )
+        assertEquals(
+            "Heat. A Los Angeles crime saga. " +
+                "Rated 8.2 out of 10, R, 4K, HDR10, 5.1 surround sound, subtitles available, " +
+                "2 hours 50 minutes, released December 15, 1995. Crime, Drama",
+            movie.heroInfoDescription,
         )
     }
 

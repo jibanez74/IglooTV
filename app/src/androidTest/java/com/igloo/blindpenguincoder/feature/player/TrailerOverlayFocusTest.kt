@@ -79,6 +79,9 @@ class TrailerOverlayFocusTest {
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 IglooApp(
+                    // Pinned: the Shield test device runs TalkBack, and this suite
+                    // asserts the focus chain without the reading stops.
+                    spokenAccessibilityEnabled = false,
                     user = user,
                     serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),

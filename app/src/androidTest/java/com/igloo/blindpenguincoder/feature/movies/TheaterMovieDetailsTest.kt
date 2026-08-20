@@ -66,7 +66,11 @@ class TheaterMovieDetailsTest {
     private var hostActivity: Activity? = null
 
     /** The shell with the theaters rail loaded; opening a card publishes [movie] as the page. */
-    private fun setShellContent(movie: MovieDetailsUi = testTheaterMovieDetails()) {
+    private fun setShellContent(
+        movie: MovieDetailsUi = testTheaterMovieDetails(),
+        // Explicit, never the ambient default: the Shield test device runs TalkBack.
+        spokenAccessibilityEnabled: Boolean = false,
+    ) {
         detailsState = MovieDetailsUiState()
         engines.clear()
         composeRule.setContent {
@@ -74,6 +78,7 @@ class TheaterMovieDetailsTest {
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 IglooApp(
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                     user = user,
                     serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),
@@ -219,12 +224,41 @@ class TheaterMovieDetailsTest {
         openFromTheatersRail()
 
         // One node for the whole block, with Status between production and language — the row
-        // only a TMDB record carries (web parity).
+        // only a TMDB record carries (web parity) — and the heading folded in, because TV
+        // TalkBack never reaches the heading's own text node.
         composeRule.onNodeWithTag("details_about")
             .performScrollTo()
             .assertContentDescriptionEquals(
-                "Production: Regency Enterprises. Status: Released. Original language: EN. " +
-                    "Budget: $60,000,000. Revenue: $187,436,818",
+                "About Heat 2. Production: Regency Enterprises. Status: Released. " +
+                    "Original language: English. Budget: $60,000,000. Revenue: $187,436,818",
             )
+    }
+
+    /**
+     * The gated variant of the no-trailer anchor: with a screen reader running the Overview
+     * reading stop is the page's first section, so entry lands there and up climbs to the hero
+     * prose instead of pinning — there is still content above to hear.
+     */
+    @Test
+    fun withNoTrailerAndAScreenReaderTheOverviewStopTakesTheEntryAnchor() {
+        setShellContent(
+            testTheaterMovieDetails(heroTrailer = null),
+            spokenAccessibilityEnabled = true,
+        )
+
+        openFromTheatersRail()
+
+        composeRule.onNodeWithTag("details_play_trailer").assertDoesNotExist()
+        val overview = composeRule.onNodeWithTag("details_overview_stop")
+        overview.assertIsFocused()
+
+        overview.performKeyInput { pressKey(Key.DirectionUp) }
+        val heroInfo = composeRule.onNodeWithTag("details_hero_info")
+        heroInfo.assertIsFocused()
+        heroInfo.performKeyInput { pressKey(Key.DirectionUp) }
+        heroInfo.assertIsFocused()
+
+        heroInfo.performKeyInput { pressKey(Key.DirectionDown) }
+        overview.assertIsFocused()
     }
 }

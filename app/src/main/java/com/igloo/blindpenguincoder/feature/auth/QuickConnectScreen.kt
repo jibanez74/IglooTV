@@ -1,11 +1,5 @@
 package com.igloo.blindpenguincoder.feature.auth
 
-import android.accessibilityservice.AccessibilityServiceInfo
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
-import android.provider.Settings
-import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +53,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooQrCode
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 
 @Composable
 fun QuickConnectScreen(
@@ -411,48 +405,3 @@ private fun AccessiblePairingCode(
         }
     }
 }
-
-@Composable
-private fun rememberSpokenAccessibilityEnabled(): Boolean {
-    val context = LocalContext.current
-    val accessibilityManager = remember(context) {
-        context.getSystemService(AccessibilityManager::class.java)
-    }
-    var enabled by remember(accessibilityManager) {
-        mutableStateOf(accessibilityManager.hasSpokenFeedbackService())
-    }
-
-    DisposableEffect(accessibilityManager) {
-        if (accessibilityManager == null) return@DisposableEffect onDispose { }
-
-        val update = {
-            enabled = accessibilityManager.hasSpokenFeedbackService()
-        }
-        val accessibilityStateListener =
-            AccessibilityManager.AccessibilityStateChangeListener { update() }
-        accessibilityManager.addAccessibilityStateChangeListener(accessibilityStateListener)
-        val servicesStateObserver = object : ContentObserver(
-            Handler(Looper.getMainLooper()),
-        ) {
-            override fun onChange(selfChange: Boolean) {
-                update()
-            }
-        }
-        context.contentResolver.registerContentObserver(
-            Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
-            false,
-            servicesStateObserver,
-        )
-
-        onDispose {
-            accessibilityManager.removeAccessibilityStateChangeListener(accessibilityStateListener)
-            context.contentResolver.unregisterContentObserver(servicesStateObserver)
-        }
-    }
-
-    return enabled
-}
-
-private fun AccessibilityManager?.hasSpokenFeedbackService(): Boolean =
-    this?.isEnabled == true &&
-        getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_SPOKEN).isNotEmpty()

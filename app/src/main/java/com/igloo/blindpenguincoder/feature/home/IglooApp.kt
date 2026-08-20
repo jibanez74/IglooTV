@@ -67,6 +67,7 @@ import com.igloo.blindpenguincoder.core.ui.PosterCardProgress
 import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
+import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
@@ -162,6 +163,9 @@ fun IglooApp(
     trailerEngineFactory: (Context, String) -> TrailerPlayerEngine = { context, key ->
         youTubeIFrameEngine(context, key, serverOrigin)
     },
+    // Resolved here and handed to the details overlay, and parameterized so focus tests can
+    // force both states — a test device with TalkBack running would otherwise pin it open.
+    spokenAccessibilityEnabled: Boolean = rememberSpokenAccessibilityEnabled(),
 ) {
     var currentDestinationName by rememberSaveable { mutableStateOf(IglooDestination.Home.name) }
     val currentDestination = IglooDestination.valueOf(currentDestinationName)
@@ -385,6 +389,7 @@ fun IglooApp(
                         }
                     },
                     mutationNotice = details.mutationNotice,
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
         }

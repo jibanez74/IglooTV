@@ -48,14 +48,19 @@ import com.igloo.blindpenguincoder.core.ui.focusRing
  * nothing here carries the section 3.2 over-media treatment. Sections with nothing to show are
  * skipped entirely rather than rendering empty shells.
  *
- * Overview and Key Crew are prose, not targets: they sit between the hero and the cast rail, so
- * moving down from the actions scrolls them into view on the way. The About block *is* a focus
- * target — it is below the last rail, and content a d-pad can never scroll to may as well not
- * be on the page (the same reason section 10's empty rail is focusable).
+ * Overview and Key Crew are prose, not targets, for a sighted d-pad user: they sit between the
+ * hero and the cast rail, so moving down from the actions scrolls them into view on the way. But
+ * TV TalkBack follows input focus and never reaches plain text, so while a screen reader runs
+ * they join the vertical chain as reading stops — the About panel's pattern, which *is* always a
+ * focus target because it sits below the last rail and content a d-pad can never scroll to may
+ * as well not be on the page (the same reason section 10's empty rail is focusable).
  */
 @Composable
 internal fun MovieDetailsSections(
     movie: MovieDetailsUi,
+    spokenAccessibilityEnabled: Boolean,
+    overviewRequester: FocusRequester,
+    keyCrewRequester: FocusRequester,
     castEntryRequester: FocusRequester,
     extrasEntryRequester: FocusRequester,
     extrasReturnRequester: FocusRequester,
@@ -76,17 +81,39 @@ internal fun MovieDetailsSections(
     val hasExtras = movie.extraVideos.isNotEmpty()
     val hasAbout = !movie.about.isEmpty
 
+    // The vertical chain, one entry per section actually on the page. With the reading stops out
+    // (no screen reader) this reduces to exactly the old wiring: cast → extras → about.
+    val chain = listOfNotNull(
+        overviewRequester.takeIf { spokenAccessibilityEnabled },
+        keyCrewRequester.takeIf { spokenAccessibilityEnabled && movie.keyCrew.isNotEmpty() },
+        castEntryRequester.takeIf { hasCast },
+        extrasEntryRequester.takeIf { hasExtras },
+        aboutRequester.takeIf { hasAbout },
+    )
+    fun above(requester: FocusRequester): FocusRequester? =
+        chain.getOrNull(chain.indexOf(requester) - 1) ?: upFromSections
+    fun below(requester: FocusRequester): FocusRequester? =
+        chain.getOrNull(chain.indexOf(requester) + 1)
+
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
     ) {
         OverviewSection(
             overview = movie.overview,
+            readingStop = spokenAccessibilityEnabled,
+            requester = overviewRequester,
+            upRequester = above(overviewRequester),
+            downRequester = below(overviewRequester),
             modifier = Modifier.padding(contentInset),
         )
         if (movie.keyCrew.isNotEmpty()) {
             KeyCrewSection(
                 crew = movie.keyCrew,
+                readingStop = spokenAccessibilityEnabled,
+                requester = keyCrewRequester,
+                upRequester = above(keyCrewRequester),
+                downRequester = below(keyCrewRequester),
                 modifier = Modifier.padding(contentInset),
             )
         }
@@ -95,12 +122,8 @@ internal fun MovieDetailsSections(
                 cast = movie.cast,
                 contentInset = contentInset,
                 entryRequester = castEntryRequester,
-                upRequester = upFromSections,
-                downRequester = when {
-                    hasExtras -> extrasEntryRequester
-                    hasAbout -> aboutRequester
-                    else -> null
-                },
+                upRequester = above(castEntryRequester),
+                downRequester = below(castEntryRequester),
             )
         }
         if (hasExtras) {
@@ -110,8 +133,8 @@ internal fun MovieDetailsSections(
                 entryRequester = extrasEntryRequester,
                 // The cast rail's entry requester rides its last-focused card, so up from the
                 // extras lands where the user left the cast, not on its first card.
-                upRequester = if (hasCast) castEntryRequester else upFromSections,
-                downRequester = if (hasAbout) aboutRequester else null,
+                upRequester = above(extrasEntryRequester),
+                downRequester = below(extrasEntryRequester),
                 returnRequester = extrasReturnRequester,
                 onPlayExtra = onPlayExtra,
             )
@@ -122,11 +145,7 @@ internal fun MovieDetailsSections(
                 about = movie.about,
                 modifier = Modifier.padding(contentInset),
                 requester = aboutRequester,
-                upRequester = when {
-                    hasExtras -> extrasEntryRequester
-                    hasCast -> castEntryRequester
-                    else -> upFromSections
-                },
+                upRequester = above(aboutRequester),
             )
         }
     }
@@ -142,17 +161,80 @@ private fun SectionHeading(text: String) {
     )
 }
 
+/**
+ * The reading-stop treatment for a prose section while a screen reader runs: the About panel's
+ * focus-target-only look (ring and fill, no scale — there is no action to promise), pinned
+ * horizontal edges, and one cleared announcement that folds the section's heading in, because a
+ * heading text node is as unreachable to TV TalkBack as the prose under it.
+ */
 @Composable
-private fun OverviewSection(overview: String?, modifier: Modifier = Modifier) {
+private fun Modifier.readingStopTarget(
+    tag: String,
+    focused: Boolean,
+    requester: FocusRequester,
+    upRequester: FocusRequester?,
+    downRequester: FocusRequester?,
+    onFocusChanged: (Boolean) -> Unit,
+    description: String,
+): Modifier {
+    val colors = IglooTheme.colors
+    return this
+        .testTag(tag)
+        .focusRing(
+            focused = focused,
+            radius = IglooTheme.radius.xl,
+            fill = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
+            scaleOnFocus = false,
+        )
+        .focusRequester(requester)
+        .focusProperties {
+            up = upRequester ?: Cancel
+            down = downRequester ?: Cancel
+            left = Cancel
+            right = Cancel
+        }
+        .onFocusChanged { onFocusChanged(it.isFocused) }
+        .focusable()
+        .clearAndSetSemantics { contentDescription = description }
+}
+
+@Composable
+private fun OverviewSection(
+    overview: String?,
+    readingStop: Boolean,
+    requester: FocusRequester,
+    upRequester: FocusRequester?,
+    downRequester: FocusRequester?,
+    modifier: Modifier = Modifier,
+) {
     val colors = IglooTheme.colors
     var clamped by remember(overview) { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
     val fadeHeight = OVERVIEW_FADE_HEIGHT.scaled()
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
+    // Rendered even with nothing to say (web parity): a movie without an overview reads as
+    // "none available", not as a page with a piece missing — and the reading stop says the same.
+    val text = overview ?: "No overview available."
+    Column(
+        modifier = modifier.then(
+            if (readingStop) {
+                Modifier.readingStopTarget(
+                    tag = "details_overview_stop",
+                    focused = focused,
+                    requester = requester,
+                    upRequester = upRequester,
+                    downRequester = downRequester,
+                    onFocusChanged = { focused = it },
+                    description = "Overview. $text",
+                )
+            } else {
+                Modifier
+            },
+        ),
+        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+    ) {
         SectionHeading("Overview")
         IglooText(
-            // Rendered even with nothing to say (web parity): a movie without an overview reads
-            // as "none available", not as a page with a piece missing.
-            text = overview ?: "No overview available.",
+            text = text,
             style = IglooTheme.typography.bodyMedium,
             // foreground, not mutedForeground: prose the user came to read has to clear the
             // section 12 body contrast target. The visual clamp is not an accessibility clamp —
@@ -189,9 +271,35 @@ private fun OverviewSection(overview: String?, modifier: Modifier = Modifier) {
 
 /** Director first, then the writing credits, in rows of three label-over-name pairs. */
 @Composable
-private fun KeyCrewSection(crew: List<CrewEntry>, modifier: Modifier = Modifier) {
+private fun KeyCrewSection(
+    crew: List<CrewEntry>,
+    readingStop: Boolean,
+    requester: FocusRequester,
+    upRequester: FocusRequester?,
+    downRequester: FocusRequester?,
+    modifier: Modifier = Modifier,
+) {
     val colors = IglooTheme.colors
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
+    var focused by remember { mutableStateOf(false) }
+    Column(
+        modifier = modifier.then(
+            if (readingStop) {
+                Modifier.readingStopTarget(
+                    tag = "details_key_crew_stop",
+                    focused = focused,
+                    requester = requester,
+                    upRequester = upRequester,
+                    downRequester = downRequester,
+                    onFocusChanged = { focused = it },
+                    description = "Key Crew. " +
+                        crew.joinToString(". ") { "${it.job}: ${it.name}" },
+                )
+            } else {
+                Modifier
+            },
+        ),
+        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+    ) {
         SectionHeading("Key Crew")
         crew.chunked(CREW_COLUMNS).forEach { rowEntries ->
             Row(
@@ -352,11 +460,10 @@ private fun ExtraVideosSection(
 
 /**
  * The fine print. The heading lives outside the focusable panel, so it lines up with the other
- * section headings despite the panel's inner padding and keeps its heading semantics for
- * TalkBack's heading navigation. The rows are one focus stop and one TalkBack node: four
- * two-word rows would be four announcements of nothing much, and the block carries no action to
- * gate — the heading node directly above supplies the "About" framing, so the panel does not
- * repeat it.
+ * section headings despite the panel's inner padding. The rows are one focus stop and one
+ * TalkBack node: four two-word rows would be four announcements of nothing much, and the block
+ * carries no action to gate. The announcement folds the heading in — TV TalkBack follows input
+ * focus, so the heading's own text node above is never reached.
  */
 @Composable
 private fun AboutSection(
@@ -401,8 +508,11 @@ private fun AboutSection(
                 }
                 .onFocusChanged { focused = it.isFocused }
                 .focusable()
+                // The heading is folded into the announcement: its text node sits directly above
+                // for the eye, but TV TalkBack follows input focus and never lands on it.
                 .clearAndSetSemantics {
-                    contentDescription = rows.joinToString(". ") { "${it.first}: ${it.second}" }
+                    contentDescription = "About $title. " +
+                        rows.joinToString(". ") { "${it.first}: ${it.second}" }
                 }
                 .padding(IglooTheme.spacing.md),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),

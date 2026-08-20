@@ -12,7 +12,6 @@ import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
-import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -144,7 +143,7 @@ class TheaterMovieDetailsViewModel(
             extraVideos = extraVideos,
             about = AboutUi(
                 production = joinedNames(movie.productionCompanies.orEmpty().map { it.name }, ", "),
-                language = movie.originalLanguage.orNullIfBlank()?.uppercase(Locale.US),
+                language = languageDisplayName(movie.originalLanguage.orNullIfBlank()),
                 budget = movie.budget.takeIf { it > 0 }?.toDouble()?.let(::formatUsd),
                 revenue = movie.revenue.takeIf { it > 0 }?.toDouble()?.let(::formatUsd),
                 status = movie.status.orNullIfBlank(),

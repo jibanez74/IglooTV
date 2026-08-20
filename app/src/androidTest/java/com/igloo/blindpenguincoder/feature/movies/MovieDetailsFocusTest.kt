@@ -78,6 +78,9 @@ class MovieDetailsFocusTest {
         initialDetails: MovieDetailsUiState = MovieDetailsUiState(),
         hero: HomeHeroState = HomeHeroState.Hidden,
         user: AuthUser = this.user,
+        // Explicit, never the ambient default: the Shield test device runs TalkBack, and this
+        // suite pins the chain both with and without the reading stops.
+        spokenAccessibilityEnabled: Boolean = false,
     ) {
         detailsState = initialDetails
         opened.clear()
@@ -86,6 +89,7 @@ class MovieDetailsFocusTest {
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 IglooApp(
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                     user = user,
                     serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),
@@ -341,6 +345,74 @@ class MovieDetailsFocusTest {
         composeRule.onNodeWithTag("cast_card_101").assertIsFocused()
         composeRule.onNodeWithTag("cast_card_101").performKeyInput { pressKey(Key.DirectionUp) }
         play.assertIsFocused()
+    }
+
+    /**
+     * With a spoken screen reader running the vertical chain gains the reading stops (TV
+     * TalkBack follows input focus and never reaches plain text): up from the action row climbs
+     * to the hero prose, and down walks Overview and Key Crew before the cast rail.
+     */
+    @Test
+    fun theReadingStopsJoinTheChainWhileAScreenReaderRuns() {
+        setShellContent(loadedState(), spokenAccessibilityEnabled = true)
+
+        val play = composeRule.onNodeWithTag("details_play")
+        play.assertIsFocused()
+
+        // Up from the action row reads the hero prose; up from there pins.
+        play.performKeyInput { pressKey(Key.DirectionUp) }
+        val heroInfo = composeRule.onNodeWithTag("details_hero_info")
+        heroInfo.assertIsFocused()
+        heroInfo.performKeyInput { pressKey(Key.DirectionUp) }
+        heroInfo.assertIsFocused()
+
+        // Down returns to the primary action, then the chain walks every section in order.
+        heroInfo.performKeyInput { pressKey(Key.DirectionDown) }
+        play.assertIsFocused()
+        play.performKeyInput { pressKey(Key.DirectionDown) }
+        val overview = composeRule.onNodeWithTag("details_overview_stop")
+        overview.assertIsFocused()
+        overview.performKeyInput { pressKey(Key.DirectionDown) }
+        val keyCrew = composeRule.onNodeWithTag("details_key_crew_stop")
+        keyCrew.assertIsFocused()
+        keyCrew.performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("cast_card_101").assertIsFocused()
+
+        // And back up the same chain.
+        composeRule.onNodeWithTag("cast_card_101").performKeyInput { pressKey(Key.DirectionUp) }
+        keyCrew.assertIsFocused()
+        keyCrew.performKeyInput { pressKey(Key.DirectionUp) }
+        overview.assertIsFocused()
+        overview.performKeyInput { pressKey(Key.DirectionUp) }
+        play.assertIsFocused()
+    }
+
+    /** The stops keep the row's focus memory: up from the overview returns to the action left. */
+    @Test
+    fun upFromTheOverviewStopReturnsToTheLastFocusedAction() {
+        setShellContent(loadedState(), spokenAccessibilityEnabled = true)
+
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionDown) }
+        val overview = composeRule.onNodeWithTag("details_overview_stop")
+        overview.assertIsFocused()
+
+        overview.performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("details_more").assertIsFocused()
+    }
+
+    /** A reading stop's horizontal edges pin: the shell is still composed underneath. */
+    @Test
+    fun theReadingStopsPinTheirHorizontalEdges() {
+        setShellContent(loadedState(), spokenAccessibilityEnabled = true)
+
+        val overview = composeRule.onNodeWithTag("details_overview_stop")
+        overview.requestFocus()
+        overview.assertIsFocused()
+        overview.performKeyInput { pressKey(Key.DirectionLeft) }
+        overview.assertIsFocused()
+        overview.performKeyInput { pressKey(Key.DirectionRight) }
+        overview.assertIsFocused()
     }
 
     /**

@@ -19,7 +19,6 @@ import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
-import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -109,7 +108,21 @@ data class MovieDetailsUi(
      * session-only selection. Null for the in-theaters page, which has no file to configure.
      */
     val playbackSettings: PlaybackSettingsUi? = null,
-)
+) {
+    /**
+     * Everything the hero's text column says, as the one sentence its screen-reader reading stop
+     * announces (TV TalkBack never traverses plain text). The genre separators become commas —
+     * "·" is a pause the eye takes and a symbol a screen reader stumbles over — and each part
+     * sheds its own trailing period so a tagline that ends in one doesn't double up in the join.
+     */
+    val heroInfoDescription: String
+        get() = listOfNotNull(
+            title,
+            tagline,
+            metadataDescription.takeIf { it.isNotBlank() },
+            genresLine?.replace(" · ", ", "),
+        ).joinToString(". ") { it.trimEnd('.', ' ') }
+}
 
 sealed interface MovieDetailsState {
     data object Loading : MovieDetailsState
@@ -552,7 +565,7 @@ class MovieDetailsViewModel(
             ),
             about = AboutUi(
                 production = joinedNames(details.productionCompanies.map { it.name }, ", "),
-                language = movie.language?.orNullIfBlank()?.uppercase(Locale.US),
+                language = languageDisplayName(movie.language?.orNullIfBlank()),
                 budget = movie.budget?.orNull()?.takeIf { it > 0 }?.let(::formatUsd),
                 revenue = movie.revenue?.orNull()?.takeIf { it > 0 }?.let(::formatUsd),
             ),

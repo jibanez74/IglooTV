@@ -69,6 +69,9 @@ class MovieDetailsOverMediaTest {
         composeRule.setContent {
             IglooTheme {
                 MovieDetailsScreen(
+                    // Pinned: the Shield test device runs TalkBack, and this suite
+                    // asserts the focus chain without the reading stops.
+                    spokenAccessibilityEnabled = false,
                     state = MovieDetailsState.Loaded(
                         testMovieDetails().copy(backdropUrl = backdropUrl),
                     ),

@@ -69,6 +69,9 @@ class MovieDetailsAccessibilityTest {
         initial: MovieDetailsState = MovieDetailsState.Loaded(testMovieDetails()),
         mutationNotice: String? = null,
         isAdmin: Boolean = false,
+        // Explicit, never the ambient default: the Shield test device runs TalkBack, and these
+        // cases pin the semantics that exist with and without the reading-stop chain.
+        spokenAccessibilityEnabled: Boolean = false,
     ) {
         state = initial
         moreMenuOpen = false
@@ -112,6 +115,7 @@ class MovieDetailsAccessibilityTest {
                     playbackSettingsOpen = false,
                     onOpenPlaybackSettings = { menuSelections += "Playback Settings" },
                     onDismissPlaybackSettings = {},
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
         }
@@ -143,9 +147,11 @@ class MovieDetailsAccessibilityTest {
     fun theWatchedToggleCarriesItsStateAndTheActionItWouldPerform() {
         setContent()
 
+        // The announced label is the visible one — a constant "Watched" against a "Not watched"
+        // state read as a contradiction under TalkBack.
         val watched = composeRule.onNodeWithTag("details_watched")
         watched
-            .assertContentDescriptionEquals("Watched")
+            .assertContentDescriptionEquals("Watch")
             .assert(
                 SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Not watched"),
             )
@@ -158,9 +164,14 @@ class MovieDetailsAccessibilityTest {
         state = MovieDetailsState.Loaded(testMovieDetails(watched = true))
         composeRule.waitForIdle()
 
-        watched.assert(
-            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Marked as watched"),
-        )
+        watched
+            .assertContentDescriptionEquals("Watched")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    "Marked as watched",
+                ),
+            )
         assertEquals(
             "Remove from watched",
             watched.clickActionLabel(),
@@ -246,11 +257,11 @@ class MovieDetailsAccessibilityTest {
     fun theAboutBlockIsOneNodeCarryingEveryRow() {
         setContent()
 
-        // Rows only: the "About Heat" heading is its own node directly above the panel, so
-        // repeating it here would read the title twice in a row.
+        // The heading is folded in: its own text node sits above for the eye, but TV TalkBack
+        // follows input focus and never lands on plain text.
         composeRule.onNodeWithTag("details_about")
             .assertContentDescriptionEquals(
-                "Production: Regency Enterprises. Original language: EN. " +
+                "About Heat. Production: Regency Enterprises. Original language: English. " +
                     "Budget: $60,000,000. Revenue: $187,436,818",
             )
             .assertHasNoClickAction()
@@ -415,6 +426,77 @@ class MovieDetailsAccessibilityTest {
                     SemanticsMatcher.keyIsDefined(SemanticsProperties.ContentDescription),
             )
             .assertCountEquals(5)
+    }
+
+    /**
+     * TV TalkBack follows input focus and never traverses plain text, so with a spoken screen
+     * reader running the hero prose, the Overview, and Key Crew become reading stops — one
+     * cleared announcement each, with the section heading folded in, and no action to promise.
+     */
+    @Test
+    fun theReadingStopsSpeakTheProseAScreenReaderCannotOtherwiseReach() {
+        setContent(spokenAccessibilityEnabled = true)
+
+        composeRule.onNodeWithTag("details_hero_info")
+            .assertContentDescriptionEquals(
+                "Heat. A Los Angeles crime saga. Rated 8.2 out of 10, R, 4K, HDR10, " +
+                    "5.1 surround sound, subtitles available, 2 hours 50 minutes, " +
+                    "released December 15, 1995. Crime, Drama",
+            )
+            .assertHasNoClickAction()
+        composeRule.onNodeWithTag("details_overview_stop")
+            .assertContentDescriptionEquals(
+                "Overview. Obsessive master thief Neil McCauley leads a top-notch crew.",
+            )
+            .assertHasNoClickAction()
+        composeRule.onNodeWithTag("details_key_crew_stop")
+            .assertContentDescriptionEquals("Key Crew. Director: Michael Mann")
+            .assertHasNoClickAction()
+    }
+
+    @Test
+    fun theReadingStopsStayOutOfTheTreeWithoutASpokenScreenReader() {
+        setContent()
+
+        composeRule.onNodeWithTag("details_hero_info").assertDoesNotExist()
+        composeRule.onNodeWithTag("details_overview_stop").assertDoesNotExist()
+        composeRule.onNodeWithTag("details_key_crew_stop").assertDoesNotExist()
+    }
+
+    /**
+     * The resume caption under Play is plain text a TV screen reader can never reach, so Play
+     * itself carries the "N min left" state — pressing it is what resumes.
+     */
+    @Test
+    fun playCarriesTheResumeStateWhileThereIsProgress() {
+        setContent()
+
+        composeRule.onNodeWithTag("details_play")
+            .assert(
+                SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "127 min left"),
+            )
+
+        state = MovieDetailsState.Loaded(testMovieDetails(progress = null))
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("details_play")
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+    }
+
+    /** A pane-title change is spoken, so the loaded page names the film, not a generic frame. */
+    @Test
+    fun thePaneAnnouncesTheMovieOnceLoaded() {
+        setContent(MovieDetailsState.Loading)
+
+        val pane = composeRule.onNodeWithTag("movie_details")
+        pane.assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Movie details"),
+        )
+
+        state = MovieDetailsState.Loaded(testMovieDetails())
+        composeRule.waitForIdle()
+
+        pane.assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Heat"))
     }
 
     private fun isHeading() = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)

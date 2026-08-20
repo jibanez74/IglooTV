@@ -163,7 +163,7 @@ internal fun testMovieDetails(
     extraVideos = extraVideos,
     about = AboutUi(
         production = "Regency Enterprises",
-        language = "EN",
+        language = "English",
         budget = "$60,000,000",
         revenue = "$187,436,818",
     ),
@@ -197,7 +197,7 @@ internal fun testTheaterMovieDetails(
     mediaBadges = emptyList(),
     about = AboutUi(
         production = "Regency Enterprises",
-        language = "EN",
+        language = "English",
         budget = "$60,000,000",
         revenue = "$187,436,818",
         status = "Released",

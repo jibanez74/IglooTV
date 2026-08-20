@@ -183,6 +183,7 @@ Rules:
 - Avoid TalkBack focus traps.
 - Avoid custom focus behavior that breaks screen reader navigation.
 - Preserve a predictable reading and focus order.
+- TalkBack for TV follows input focus and never traverses plain text nodes.  Text a screen-reader user must hear either rides a focusable node's semantics or becomes a screen-reader-only reading stop (docs/design-system.md section 12).
 - Loading, empty, and error states should be understandable to TalkBack users.
 - State changes that matter should be announced when appropriate.
 - Do not sacrifice the visual UI/UX for accessibility, and do not sacrifice accessibility for visual cleverness.  Design both together.

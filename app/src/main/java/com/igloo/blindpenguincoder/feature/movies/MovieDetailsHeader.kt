@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +54,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
+import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
 
 /**
@@ -67,6 +69,8 @@ internal fun MovieDetailsHeader(
     overMedia: Boolean,
     actions: MovieDetailsActions,
     onPlayTrailer: (() -> Unit)?,
+    spokenAccessibilityEnabled: Boolean,
+    heroInfoRequester: FocusRequester,
     primaryRequester: FocusRequester,
     heroTrailerReturnRequester: FocusRequester,
     watchedRequester: FocusRequester,
@@ -79,7 +83,9 @@ internal fun MovieDetailsHeader(
     mutationNotice: String?,
     modifier: Modifier = Modifier,
 ) {
-    val colors = IglooTheme.colors
+    // Up from the action row reaches the hero's reading stop only while a screen reader runs;
+    // otherwise the row keeps its pinned top edge and the stop is never composed as a target.
+    val actionUpRequester = if (spokenAccessibilityEnabled) heroInfoRequester else Cancel
 
     Row(
         modifier = modifier,
@@ -92,32 +98,13 @@ internal fun MovieDetailsHeader(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         ) {
-            IglooText(
-                text = movie.title,
-                style = IglooTheme.typography.titleLarge.overMedia(overMedia),
-                color = if (overMedia) Color.White else colors.foreground,
-                maxLines = 2,
-                modifier = Modifier.semantics { heading() },
+            HeroInfo(
+                movie = movie,
+                overMedia = overMedia,
+                readingStop = spokenAccessibilityEnabled,
+                requester = heroInfoRequester,
+                downRequester = primaryRequester,
             )
-            if (movie.tagline != null) {
-                IglooText(
-                    text = "“${movie.tagline}”",
-                    style = IglooTheme.typography.bodyLarge
-                        .copy(fontStyle = FontStyle.Italic)
-                        .overMedia(overMedia),
-                    color = if (overMedia) Color.White.copy(alpha = 0.85f) else colors.mutedForeground,
-                    maxLines = 1,
-                )
-            }
-            MetadataRow(movie = movie, overMedia = overMedia)
-            if (movie.genresLine != null) {
-                IglooText(
-                    text = movie.genresLine,
-                    style = IglooTheme.typography.label.overMedia(overMedia),
-                    color = if (overMedia) Color.White.copy(alpha = 0.75f) else colors.mutedForeground,
-                    maxLines = 1,
-                )
-            }
             val actionRowModifier = Modifier.padding(top = IglooTheme.spacing.sm)
             when (actions) {
                 is MovieDetailsActions.Library -> LibraryActionRow(
@@ -128,6 +115,7 @@ internal fun MovieDetailsHeader(
                     watchedRequester = watchedRequester,
                     likeRequester = likeRequester,
                     moreRequester = moreRequester,
+                    upRequester = actionUpRequester,
                     downRequester = downRequester,
                     onActionFocused = onActionFocused,
                     onOpenMoreMenu = onOpenMoreMenu,
@@ -140,6 +128,7 @@ internal fun MovieDetailsHeader(
                         onPlayTrailer = onPlayTrailer,
                         playRequester = primaryRequester,
                         returnRequester = heroTrailerReturnRequester,
+                        upRequester = actionUpRequester,
                         downRequester = downRequester,
                         onActionFocused = onActionFocused,
                         modifier = actionRowModifier,
@@ -152,6 +141,88 @@ internal fun MovieDetailsHeader(
                     modifier = Modifier.testTag("details_mutation_notice"),
                 )
             }
+        }
+    }
+}
+
+/**
+ * The hero's prose: title, tagline, metadata chips, genres. TV TalkBack follows input focus and
+ * never traverses plain text, so while a screen reader runs this whole block is one reading stop
+ * — reachable by pressing up from the action row — that speaks everything in a single
+ * announcement. Without one it stays what it always was: text the d-pad passes by.
+ */
+@Composable
+private fun HeroInfo(
+    movie: MovieDetailsUi,
+    overMedia: Boolean,
+    readingStop: Boolean,
+    requester: FocusRequester,
+    downRequester: FocusRequester,
+) {
+    val colors = IglooTheme.colors
+    var focused by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .then(
+                if (readingStop) {
+                    Modifier
+                        .testTag("details_hero_info")
+                        // The About panel's focus treatment: a fill and ring, no scale, because
+                        // this is a focus target only and carries no action to promise. Over the
+                        // backdrop the fill is the section 3.2 black ground, not the token card.
+                        .focusRing(
+                            focused = focused,
+                            radius = IglooTheme.radius.lg,
+                            fill = when {
+                                !focused -> Color.Transparent
+                                overMedia -> Color.Black.copy(alpha = 0.45f)
+                                else -> colors.card.copy(alpha = 0.72f)
+                            },
+                            scaleOnFocus = false,
+                        )
+                        .focusRequester(requester)
+                        .focusProperties {
+                            up = Cancel
+                            left = Cancel
+                            right = Cancel
+                            down = downRequester
+                        }
+                        .onFocusChanged { focused = it.isFocused }
+                        .focusable()
+                        .clearAndSetSemantics {
+                            contentDescription = movie.heroInfoDescription
+                        }
+                } else {
+                    Modifier
+                },
+            ),
+        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+    ) {
+        IglooText(
+            text = movie.title,
+            style = IglooTheme.typography.titleLarge.overMedia(overMedia),
+            color = if (overMedia) Color.White else colors.foreground,
+            maxLines = 2,
+            modifier = Modifier.semantics { heading() },
+        )
+        if (movie.tagline != null) {
+            IglooText(
+                text = "“${movie.tagline}”",
+                style = IglooTheme.typography.bodyLarge
+                    .copy(fontStyle = FontStyle.Italic)
+                    .overMedia(overMedia),
+                color = if (overMedia) Color.White.copy(alpha = 0.85f) else colors.mutedForeground,
+                maxLines = 1,
+            )
+        }
+        MetadataRow(movie = movie, overMedia = overMedia)
+        if (movie.genresLine != null) {
+            IglooText(
+                text = movie.genresLine,
+                style = IglooTheme.typography.label.overMedia(overMedia),
+                color = if (overMedia) Color.White.copy(alpha = 0.75f) else colors.mutedForeground,
+                maxLines = 1,
+            )
         }
     }
 }
@@ -274,6 +345,7 @@ private fun TrailerActionRow(
     onPlayTrailer: () -> Unit,
     playRequester: FocusRequester,
     returnRequester: FocusRequester,
+    upRequester: FocusRequester,
     downRequester: FocusRequester?,
     onActionFocused: (FocusRequester) -> Unit,
     modifier: Modifier = Modifier,
@@ -291,7 +363,7 @@ private fun TrailerActionRow(
                 .focusRequester(playRequester)
                 .focusRequester(returnRequester)
                 .focusProperties {
-                    up = Cancel
+                    up = upRequester
                     left = Cancel
                     right = Cancel
                     down = downRequester ?: Cancel
@@ -310,6 +382,7 @@ private fun LibraryActionRow(
     watchedRequester: FocusRequester,
     likeRequester: FocusRequester,
     moreRequester: FocusRequester,
+    upRequester: FocusRequester,
     downRequester: FocusRequester?,
     onActionFocused: (FocusRequester) -> Unit,
     onOpenMoreMenu: () -> Unit,
@@ -330,7 +403,7 @@ private fun LibraryActionRow(
     // so an unpinned edge lets a spatial search land on a card the user cannot see. Down is
     // hand-wired to the first section below rather than left to a beam heuristic.
     val rowFocus = Modifier.focusProperties {
-        up = Cancel
+        up = upRequester
         down = downRequester ?: Cancel
     }
     // `ring` and `primary` are the same value, so a resting Play carries several times more
@@ -353,6 +426,9 @@ private fun LibraryActionRow(
                 onClick = actions.onPlay,
                 icon = IglooIcons.Play,
                 semanticLabel = "Play ${movie.title}",
+                // The resume caption below is plain text a TV screen reader can never reach, so
+                // Play itself carries the "N min left" state — pressing it is what resumes.
+                stateDescription = movie.progress?.minutesLeftLabel,
                 recessed = rowHasFocus && !playFocused,
                 modifier = Modifier
                     .testTag("details_play")
@@ -375,7 +451,8 @@ private fun LibraryActionRow(
             iconTint = if (watched) colors.primary else null,
             restingFill = ghostFill,
             contentColor = ghostContent,
-            semanticLabel = "Watched",
+            // The announced label is the visible one — "Watch" until watched — because a constant
+            // "Watched" against a "Not watched" state read as a contradiction under TalkBack.
             // Null until the status request lands: the button has to look like something in the
             // meantime, but announcing "Not watched" for a movie that is watched states as fact
             // something the app does not know yet.

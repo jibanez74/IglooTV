@@ -55,6 +55,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
+import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 
@@ -156,6 +157,9 @@ fun MovieDetailsScreen(
     onDismissPlaybackSettings: () -> Unit,
     mutationNotice: String? = null,
     modifier: Modifier = Modifier,
+    // Parameterized so tests can force both states: the reading-stop chain below depends on it,
+    // and a test device with TalkBack running would otherwise pin the gate open.
+    spokenAccessibilityEnabled: Boolean = rememberSpokenAccessibilityEnabled(),
 ) {
     val colors = IglooTheme.colors
     val entryRequester = remember { FocusRequester() }
@@ -187,7 +191,10 @@ fun MovieDetailsScreen(
             .background(colors.background)
             .onFocusChanged { screenHasFocus = it.hasFocus }
             .semantics {
-                paneTitle = "Movie details"
+                // The loaded pane announces the movie itself; a pane-title change is spoken, so
+                // arriving on a loaded page (or the load completing) names the film rather than
+                // a generic frame (section 12's pane rule).
+                paneTitle = (state as? MovieDetailsState.Loaded)?.movie?.title ?: "Movie details"
                 isTraversalGroup = true
             }
             .testTag("movie_details"),
@@ -210,6 +217,7 @@ fun MovieDetailsScreen(
                 state = state,
                 actions = actions,
                 mutationNotice = mutationNotice,
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 entryRequester = entryRequester,
                 onPlayVideo = onPlayVideo,
                 extrasReturnRequester = extrasReturnRequester,
@@ -287,6 +295,7 @@ private fun DetailsBody(
     state: MovieDetailsState,
     actions: MovieDetailsActions,
     mutationNotice: String?,
+    spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
     onPlayVideo: (ExtraVideoUi, VideoLaunchSite) -> Unit,
     extrasReturnRequester: FocusRequester,
@@ -331,6 +340,7 @@ private fun DetailsBody(
         is MovieDetailsState.Loaded -> DetailsContent(
             movie = state.movie,
             mutationNotice = mutationNotice,
+            spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             entryRequester = entryRequester,
             actions = actions,
             onPlayVideo = onPlayVideo,
@@ -347,6 +357,7 @@ private fun DetailsBody(
 private fun DetailsContent(
     movie: MovieDetailsUi,
     mutationNotice: String?,
+    spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
     actions: MovieDetailsActions,
     onPlayVideo: (ExtraVideoUi, VideoLaunchSite) -> Unit,
@@ -372,11 +383,15 @@ private fun DetailsContent(
         ?.let { trailer -> { onPlayVideo(trailer, VideoLaunchSite.Hero) } }
     val hasHeroActions = actions is MovieDetailsActions.Library || onPlayTrailer != null
 
-    // The screen's vertical chain, hand-wired end to end: actions -> cast -> extras -> about.
-    // Nothing is left to a spatial search, because the shell composed underneath would be a
-    // candidate.
+    // The screen's vertical chain, hand-wired end to end: actions -> cast -> extras -> about —
+    // and, while a screen reader runs, the reading stops between them: hero info above the
+    // actions, Overview and Key Crew before the cast. Nothing is left to a spatial search,
+    // because the shell composed underneath would be a candidate.
     val watchedRequester = remember { FocusRequester() }
     val likeRequester = remember { FocusRequester() }
+    val heroInfoRequester = remember { FocusRequester() }
+    val overviewStop = remember { FocusRequester() }
+    val keyCrewStop = remember { FocusRequester() }
     val castEntry = remember { FocusRequester() }
     val extrasEntry = remember { FocusRequester() }
     val about = remember { FocusRequester() }
@@ -385,23 +400,34 @@ private fun DetailsContent(
     val hasAbout = !movie.about.isEmpty
     // With no action row there is nothing in the header to anchor entry focus on, so the first
     // section below owns the anchor: the screen's requester *is* that section's entry requester,
-    // which lands entry focus there and leaves every edge wired at the section untouched. It
-    // attaches to nothing at all on a page that is only prose, which is why the entry request is
-    // made safely.
+    // which lands entry focus there and leaves every edge wired at the section untouched. With
+    // the reading stops in, the Overview stop is always that first section; without them the
+    // anchor attaches to nothing at all on a page that is only prose, which is why the entry
+    // request is made safely.
     val sectionAnchor = entryRequester.takeIf { !hasHeroActions }
-    val castEntryRequester = if (sectionAnchor != null && hasCast) sectionAnchor else castEntry
+    val stops = spokenAccessibilityEnabled
+    val overviewRequester = if (sectionAnchor != null && stops) sectionAnchor else overviewStop
+    val castEntryRequester =
+        if (sectionAnchor != null && !stops && hasCast) sectionAnchor else castEntry
     val extrasEntryRequester =
-        if (sectionAnchor != null && !hasCast && hasExtras) sectionAnchor else extrasEntry
+        if (sectionAnchor != null && !stops && !hasCast && hasExtras) sectionAnchor else extrasEntry
     val aboutRequester =
-        if (sectionAnchor != null && !hasCast && !hasExtras) sectionAnchor else about
+        if (sectionAnchor != null && !stops && !hasCast && !hasExtras) sectionAnchor else about
     // Up from the sections returns to whichever action the user left, not unconditionally to the
-    // primary one — the same focus memory the cast rail keeps for its own cards. Null while the
-    // hero has no actions, so up from the first section stays on the screen instead of pointing
-    // at a requester attached to nothing.
+    // primary one — the same focus memory the cast rail keeps for its own cards. While the hero
+    // has no actions the reading-stop chain climbs to the hero info stop instead, and with the
+    // stops out too it stays null, so up from the first section stays on the screen instead of
+    // pointing at a requester attached to nothing.
     var lastFocusedAction by remember(hasHeroActions) {
         mutableStateOf(entryRequester.takeIf { hasHeroActions })
     }
+    val upFromSections = when {
+        hasHeroActions -> lastFocusedAction
+        stops -> heroInfoRequester
+        else -> null
+    }
     val belowActions = when {
+        stops -> overviewRequester
         hasCast -> castEntryRequester
         hasExtras -> extrasEntryRequester
         hasAbout -> aboutRequester
@@ -491,6 +517,8 @@ private fun DetailsContent(
                 overMedia = overMedia,
                 actions = actions,
                 onPlayTrailer = onPlayTrailer,
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                heroInfoRequester = heroInfoRequester,
                 primaryRequester = entryRequester,
                 heroTrailerReturnRequester = heroTrailerReturnRequester,
                 watchedRequester = watchedRequester,
@@ -520,11 +548,14 @@ private fun DetailsContent(
 
         MovieDetailsSections(
             movie = movie,
+            spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+            overviewRequester = overviewRequester,
+            keyCrewRequester = keyCrewStop,
             castEntryRequester = castEntryRequester,
             extrasEntryRequester = extrasEntryRequester,
             extrasReturnRequester = extrasReturnRequester,
             aboutRequester = aboutRequester,
-            upFromSections = lastFocusedAction,
+            upFromSections = upFromSections,
             onPlayExtra = { video -> onPlayVideo(video, VideoLaunchSite.ExtrasRail) },
             // The horizontal inset is handed down rather than applied here: the prose sections
             // take it, the cast and extras rails carry it as scroll padding so their cards run

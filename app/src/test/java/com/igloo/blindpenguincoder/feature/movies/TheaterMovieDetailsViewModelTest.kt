@@ -136,7 +136,7 @@ class TheaterMovieDetailsViewModelTest {
         assertNull(movie.cast[1].photoUrl)
         assertEquals("Regency Enterprises", movie.about.production)
         assertEquals("Released", movie.about.status)
-        assertEquals("EN", movie.about.language)
+        assertEquals("English", movie.about.language)
         assertEquals("$60,000,000", movie.about.budget)
         assertEquals("$187,436,818", movie.about.revenue)
         assertEquals(
