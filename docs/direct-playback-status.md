@@ -63,13 +63,15 @@ lint run demanded.
 - **JVM tests** — all green (`./gradlew test`). New suites cover the play-request assembly
   (including the stream-order/track-index conversion and the resume-worthiness table), the
   gate decision and where its refusal message lands, and the stream URL.
-- **Instrumented tests on the local TV emulator** — all green
+- **Instrumented tests on the local TV emulator** — all 238 green
   (`./gradlew connectedAndroidTest`, Google TV API 34). New suites drive the player screen
   through a fake engine (resume prompt, transport keys, chrome auto-hide, track menus, exit
   saves, error/unauthorized paths, standby) and the shell overlay (Play opens the player,
   TalkBack traversal, Back restores focus to Play, blocked requests show the notice and open
-  nothing). One latent issue from the foundation commit was fixed on the way: an instrumented
-  test class used spaces in its method names, which the Android toolchain refuses to package.
+  nothing). Two latent issues from the foundation commit surfaced on the way, because its
+  instrumented test class had never actually run: its method names used spaces, which the
+  Android toolchain refuses to package, and one expectation guessed "7.1 surround" from a bare
+  8-channel count where the web-parity rule deliberately says just "Surround".
 - **Full build including lint** — green.
 - **Not verified on the Shield.** Deliberately skipped this pass at Jose's request. Real-device
   playback (actual video/audio output, passthrough, PGS subtitles, TalkBack on hardware) is

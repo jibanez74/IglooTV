@@ -57,7 +57,10 @@ class TrackOptionsTest {
         )
         assertEquals(
             listOf(
-                TrackOption("1:0", "English · 7.1 surround", selected = true),
+                // The generic word, not "7.1 surround": Media3 carries only a channel count, and
+                // the web's rule (ported as describeChannelLayout) names a layout solely when
+                // ffprobe reported one — a bare 8 could be 7.1 or 5.1.2.
+                TrackOption("1:0", "English · Surround", selected = true),
                 TrackOption("2:0", "Spanish · Stereo", selected = false),
             ),
             audioTrackOptions(tracks),
