@@ -19,6 +19,9 @@ import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
+import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
+import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.languageDisplayName
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -157,6 +160,8 @@ class MovieDetailsViewModel(
     private val movies: MovieRepository,
     private val serverUrl: ServerUrlProvider,
     private val onWatchedStateCommitted: () -> Unit = {},
+    /** The pre-flight gate's device capability, injected so the launch rules stay JVM-testable. */
+    private val canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MovieDetailsUiState())
@@ -293,6 +298,32 @@ class MovieDetailsViewModel(
     fun selectSubtitle(streamId: Long?) {
         playbackSelection = playbackSelection.copy(subtitleStreamId = streamId)
         publishLoaded()
+    }
+
+    /**
+     * The Play press: assembles the start request and runs the pre-flight gate. Null while the
+     * details haven't loaded, and null on a refusal — the gate's message is published through
+     * [MovieDetailsUiState.mutationNotice], the hero's existing notice surface, so the answer
+     * lands on the page the user is looking at instead of a black player.
+     */
+    fun buildPlayLaunch(): MoviePlayRequest? {
+        val details = wireDetails ?: return null
+        val request = buildMoviePlayRequest(details.movie, technical, progress, playbackSelection)
+        return when (
+            val gate = evaluatePlaybackGate(
+                mode = request.mode,
+                audioCodec = request.audioCodec,
+                audioCodecProfile = request.audioCodecProfile,
+                audioLabel = request.audioLabel,
+                canPlayMime = { mime -> canPlayAudioMime(mime, request.audioChannels) },
+            )
+        ) {
+            PlaybackGateResult.Proceed -> request
+            is PlaybackGateResult.Blocked -> {
+                _uiState.update { it.copy(mutationNotice = gate.message) }
+                null
+            }
+        }
     }
 
     private fun loadAll(movieId: Long, userInitiated: Boolean) {
@@ -594,11 +625,8 @@ class MovieDetailsViewModel(
      */
     private fun progressUi(movieId: Long): ProgressUi? {
         if (mutationState(MutationType.Watched, movieId).displayed == true) return null
-        val current = progress ?: return null
-        val progressSec = current.progressSec ?: return null
-        val durationSec = current.durationSec ?: return null
-        if (progressSec < RESUME_MIN_SEC || durationSec <= 0) return null
-        if (progressSec / durationSec >= RESUME_MAX_RATIO) return null
+        val progressSec = resumePositionSec(progress) ?: return null
+        val durationSec = progress?.durationSec ?: return null
         return ProgressUi(
             fraction = progressFraction(progressSec, durationSec),
             minutesLeftLabel = progressLabel(progressSec, durationSec),
@@ -635,8 +663,6 @@ class MovieDetailsViewModel(
     }
 
     private companion object {
-        const val RESUME_MIN_SEC = 30.0
-        const val RESUME_MAX_RATIO = 0.98
         const val SURROUND_MIN_CHANNELS = 6
     }
 }

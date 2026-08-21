@@ -1,5 +1,10 @@
 package com.igloo.blindpenguincoder
 
+import android.content.Context
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
 import com.igloo.blindpenguincoder.feature.home.HomeAlbum
 import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeHero
@@ -15,6 +20,10 @@ import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSettingsUi
 import com.igloo.blindpenguincoder.feature.movies.ProgressUi
 import com.igloo.blindpenguincoder.feature.movies.playbackSettingsUi
+import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
+import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.AudioStream
 import com.igloo.blindpenguincoder.data.model.SqlNullString
@@ -61,7 +70,6 @@ internal val testHero = HomeHero(
 
 /** No-op actions for shells whose details overlay is closed. */
 internal val inertDetailsActions = MovieDetailsActions.Library(
-    onPlay = {},
     onToggleWatched = {},
     onToggleLike = {},
     onWatchTogether = {},
@@ -73,6 +81,21 @@ internal val inertDetailsActions = MovieDetailsActions.Library(
     onSelectSubtitle = {},
     onRetry = {},
 )
+
+/**
+ * The movie player wiring for shells that never press Play: no request ever launches, saves
+ * succeed silently, and the factory hands out an inert fake so no decoder is touched.
+ */
+@Composable
+internal fun rememberInertMoviePlayerViewModel(): MoviePlayerViewModel = remember {
+    MoviePlayerViewModel(
+        saveProgress = { _, _ -> ApiResult.Success(MovieWatchProgressUpdateData(watched = false)) },
+        onWatchedStateCommitted = {},
+    )
+}
+
+internal val fakeMoviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine =
+    { _, _ -> FakeMoviePlayerEngine() }
 
 /**
  * The Playback Settings dialog through the real mapping, so fixture labels and resolution rules

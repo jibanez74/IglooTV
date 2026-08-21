@@ -73,12 +73,13 @@ sealed interface MovieDetailsActions {
     val onRetry: () -> Unit
 
     /**
-     * A library movie's hero row: Play, the two optimistic toggles, and the More menu's items
-     * (section 11.4.1). The menu's own open/close is the host's, like Back; what an item *does*
-     * is the page's contract and lives here.
+     * A library movie's hero row: the two optimistic toggles and the More menu's items
+     * (section 11.4.1). Play is not here — it opens the host-owned movie player, so it arrives
+     * as a screen parameter beside `onPlayVideo`, with its own return requester. The menu's own
+     * open/close is the host's, like Back; what an item *does* is the page's contract and lives
+     * here.
      */
     data class Library(
-        val onPlay: () -> Unit,
         val onToggleWatched: () -> Unit,
         val onToggleLike: () -> Unit,
         val onWatchTogether: () -> Unit,
@@ -125,11 +126,11 @@ enum class VideoLaunchSite { ExtrasRail, Hero }
  *
  * The backdrop opts out of the safe area (section 2.5); chrome and text keep the inset.
  *
- * [onPlayVideo] and the two return requesters come from the host rather than
- * [MovieDetailsActions] for the same reason close is not in the bag: playing a video opens a
- * host-owned overlay, and the requesters are how the host restores focus to whichever control
- * launched it — a card in the extras rail, or the hero's Play Trailer button — when that overlay
- * closes.
+ * [onPlay], [onPlayVideo] and the return requesters come from the host rather than
+ * [MovieDetailsActions] for the same reason close is not in the bag: playing the movie or a
+ * video opens a host-owned overlay, and the requesters are how the host restores focus to
+ * whichever control launched it — the hero's Play button, a card in the extras rail, or the
+ * in-theaters Play Trailer button — when that overlay closes.
  *
  * The More menu follows the same split: the host owns [moreMenuOpen] (it must gate its own Back
  * while any modal is up, section 9.3) and restores focus through [moreRequester] in
@@ -145,6 +146,8 @@ fun MovieDetailsScreen(
     state: MovieDetailsState,
     actions: MovieDetailsActions,
     isAdmin: Boolean,
+    onPlay: () -> Unit,
+    playReturnRequester: FocusRequester,
     onPlayVideo: (ExtraVideoUi, VideoLaunchSite) -> Unit,
     extrasReturnRequester: FocusRequester,
     heroTrailerReturnRequester: FocusRequester,
@@ -219,6 +222,8 @@ fun MovieDetailsScreen(
                 mutationNotice = mutationNotice,
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 entryRequester = entryRequester,
+                onPlay = onPlay,
+                playReturnRequester = playReturnRequester,
                 onPlayVideo = onPlayVideo,
                 extrasReturnRequester = extrasReturnRequester,
                 heroTrailerReturnRequester = heroTrailerReturnRequester,
@@ -297,6 +302,8 @@ private fun DetailsBody(
     mutationNotice: String?,
     spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
+    onPlay: () -> Unit,
+    playReturnRequester: FocusRequester,
     onPlayVideo: (ExtraVideoUi, VideoLaunchSite) -> Unit,
     extrasReturnRequester: FocusRequester,
     heroTrailerReturnRequester: FocusRequester,
@@ -343,6 +350,8 @@ private fun DetailsBody(
             spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             entryRequester = entryRequester,
             actions = actions,
+            onPlay = onPlay,
+            playReturnRequester = playReturnRequester,
             onPlayVideo = onPlayVideo,
             extrasReturnRequester = extrasReturnRequester,
             heroTrailerReturnRequester = heroTrailerReturnRequester,
@@ -360,6 +369,8 @@ private fun DetailsContent(
     spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
     actions: MovieDetailsActions,
+    onPlay: () -> Unit,
+    playReturnRequester: FocusRequester,
     onPlayVideo: (ExtraVideoUi, VideoLaunchSite) -> Unit,
     extrasReturnRequester: FocusRequester,
     heroTrailerReturnRequester: FocusRequester,
@@ -516,6 +527,8 @@ private fun DetailsContent(
                 movie = movie,
                 overMedia = overMedia,
                 actions = actions,
+                onPlay = onPlay,
+                playReturnRequester = playReturnRequester,
                 onPlayTrailer = onPlayTrailer,
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 heroInfoRequester = heroInfoRequester,

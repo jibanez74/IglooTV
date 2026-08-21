@@ -49,7 +49,7 @@ class TrackOptionsTest {
     private fun tracks(vararg groups: Tracks.Group) = Tracks(groups.toList())
 
     @Test
-    fun `audio options label language and channels with global-group ids`() {
+    fun audioOptionsLabelLanguageAndChannelsWithGlobalGroupIds() {
         val tracks = tracks(
             group(textFormat(), C.TRACK_TYPE_TEXT, selected = false),
             group(audioFormat("en", 8), C.TRACK_TYPE_AUDIO, selected = true),
@@ -65,7 +65,7 @@ class TrackOptionsTest {
     }
 
     @Test
-    fun `audio options fall back to track numbers and skip unknown channel counts`() {
+    fun audioOptionsFallBackToTrackNumbersAndSkipUnknownChannelCounts() {
         val tracks = tracks(
             group(audioFormat(language = null, channels = Format.NO_VALUE), C.TRACK_TYPE_AUDIO, selected = false),
         )
@@ -76,7 +76,7 @@ class TrackOptionsTest {
     }
 
     @Test
-    fun `subtitle options join language title and flags`() {
+    fun subtitleOptionsJoinLanguageTitleAndFlags() {
         val tracks = tracks(
             group(
                 textFormat("en", label = "SDH", selectionFlags = C.SELECTION_FLAG_FORCED or C.SELECTION_FLAG_DEFAULT),
@@ -95,7 +95,7 @@ class TrackOptionsTest {
     }
 
     @Test
-    fun `a title equal to the language is dropped`() {
+    fun aTitleEqualToTheLanguageIsDropped() {
         val tracks = tracks(
             group(textFormat("en", label = "English"), C.TRACK_TYPE_TEXT, selected = false),
         )
@@ -103,7 +103,7 @@ class TrackOptionsTest {
     }
 
     @Test
-    fun `type index resolves to the nth group of that type by global id`() {
+    fun typeIndexResolvesToTheNthGroupOfThatTypeByGlobalId() {
         val tracks = tracks(
             group(audioFormat("en"), C.TRACK_TYPE_AUDIO, selected = true),
             group(textFormat("en"), C.TRACK_TYPE_TEXT, selected = false),
@@ -116,7 +116,7 @@ class TrackOptionsTest {
     }
 
     @Test
-    fun `option ids parse and malformed ones do not`() {
+    fun optionIdsParseAndMalformedOnesDoNot() {
         assertEquals(3 to 1, parseTrackOptionId("3:1"))
         assertNull(parseTrackOptionId("nonsense"))
         assertNull(parseTrackOptionId("1:2:3"))

@@ -21,12 +21,14 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
+import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testTheaterMovieDetails
 import com.igloo.blindpenguincoder.testTheaterMovies
@@ -91,6 +93,9 @@ class TheaterMovieDetailsTest {
                     // The in-theaters page's only hero action is the trailer, which the screen
                     // opens through the host's own player callback, so this bag holds Retry alone.
                     detailsActions = MovieDetailsActions.Theater(onRetry = {}),
+                    onRequestPlayback = { null },
+                    moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
+                    moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
                     onRetryRail = {},
                     onMovieSelected = null,
                     onTheaterMovieSelected = {

@@ -14,15 +14,15 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
-import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
-import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
@@ -31,7 +31,8 @@ import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.inertDetailsActions
-import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testMovieDetails
@@ -41,13 +42,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The trailer player as the shell's third overlay layer (design-system.md sections 6.3 and
- * 11.8.1): an extra card opens it, the details screen underneath leaves TalkBack traversal for
- * its lifetime, and closing it restores focus to the exact card that launched playback — all
- * against the fake engine, so no test touches youtube.com.
+ * The movie player as the shell's fourth overlay layer (design-system.md sections 6.3 and
+ * 11.8): the hero's Play opens it through the gated request, the details screen underneath
+ * leaves TalkBack traversal for its lifetime, closing restores focus to the Play button, and a
+ * blocked request surfaces its notice on the page instead of opening anything.
  */
 @RunWith(AndroidJUnit4::class)
-class TrailerOverlayFocusTest {
+class MoviePlayerOverlayFocusTest {
 
     @get:Rule(order = 0)
     val animationScale = AnimationScaleRule()
@@ -66,11 +67,27 @@ class TrailerOverlayFocusTest {
         updatedAt = "2026-01-01T00:00:00Z",
     )
 
+    private val playRequest = MoviePlayRequest(
+        movieId = 1,
+        title = "Heat",
+        mimeType = "video/x-matroska",
+        mode = PlaybackMode.Direct,
+        audioTypeIndex = 0,
+        subtitleTypeIndex = null,
+        audioCodec = "dts",
+        audioCodecProfile = null,
+        audioChannels = 6,
+        audioLabel = "English · 5.1 surround",
+        resumeAtSec = null,
+        durationSec = 7200.0,
+    )
+
     private var detailsState by mutableStateOf(MovieDetailsUiState())
-    private val engines = mutableListOf<FakeTrailerPlayerEngine>()
+    private val engines = mutableListOf<FakeMoviePlayerEngine>()
     private var hostActivity: Activity? = null
 
-    private fun setShellContent() {
+    /** Null mimics the gate refusing: the message lands on the page and nothing opens. */
+    private fun setShellContent(requestPlayback: () -> MoviePlayRequest?) {
         detailsState = MovieDetailsUiState(
             openMovieId = 1,
             details = MovieDetailsState.Loaded(testMovieDetails(id = 1)),
@@ -93,9 +110,11 @@ class TrailerOverlayFocusTest {
                     ),
                     details = detailsState,
                     detailsActions = inertDetailsActions,
-                    onRequestPlayback = { null },
+                    onRequestPlayback = requestPlayback,
                     moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
-                    moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
+                    moviePlayerEngineFactory = { _, _ ->
+                        FakeMoviePlayerEngine().also { engines += it }
+                    },
                     onRetryRail = {},
                     onMovieSelected = {},
                     onTheaterMovieSelected = {},
@@ -109,9 +128,6 @@ class TrailerOverlayFocusTest {
                     onSignOut = {},
                     onSignOutConfirm = {},
                     onSignOutDismiss = {},
-                    trailerEngineFactory = { _, _ ->
-                        FakeTrailerPlayerEngine().also { engines += it }
-                    },
                 )
             }
         }
@@ -125,36 +141,35 @@ class TrailerOverlayFocusTest {
         composeRule.waitForIdle()
     }
 
-    private fun openPlayerFromSecondExtraCard() {
-        // The second card, not the rail's first: a restore that regressed to the rail's entry
-        // anchor would still pass a first-card assertion.
-        composeRule.onNodeWithTag("extra_card_202").requestFocus()
-        composeRule.onNodeWithTag("extra_card_202").assertIsFocused()
-        composeRule.onNodeWithTag("extra_card_202")
-            .performKeyInput { pressKey(Key.DirectionCenter) }
+    private fun pressPlay() {
+        // Entry focus already anchors on the hero's Play button (section 11.4).
+        val play = composeRule.onNodeWithTag("details_play")
+        play.assertIsFocused()
+        play.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
     }
 
     @Test
-    fun clickingAnExtraCardOpensThePlayerOverlay() {
-        setShellContent()
+    fun pressingPlayOpensThePlayerOverlay() {
+        setShellContent { playRequest }
 
-        openPlayerFromSecondExtraCard()
+        pressPlay()
 
-        composeRule.onNodeWithTag("trailer_player").assertExists()
-        composeRule.onNodeWithTag("trailer_play_pause").assertIsFocused()
+        composeRule.onNodeWithTag("movie_player").assertExists()
+        composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
         assertEquals(1, engines.size)
+        assertEquals(listOf("start:null"), engines.single().playbackCommands)
     }
 
     @Test
     fun theDetailsOverlayLeavesTalkBackTraversalWhileThePlayerIsUp() {
-        setShellContent()
+        setShellContent { playRequest }
         val detailsLayer = composeRule.onNodeWithTag("details_layer")
         detailsLayer.assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility),
         )
 
-        openPlayerFromSecondExtraCard()
+        pressPlay()
 
         // Hidden from traversal, but still in the tree — so the assertion is meaningful.
         detailsLayer.assert(
@@ -163,17 +178,39 @@ class TrailerOverlayFocusTest {
     }
 
     @Test
-    fun backClosesThePlayerAndRestoresFocusToTheLaunchingExtraCard() {
-        setShellContent()
-        openPlayerFromSecondExtraCard()
+    fun backClosesThePlayerAndRestoresFocusToThePlayButton() {
+        setShellContent { playRequest }
+        pressPlay()
 
         pressBack()
 
         // The player is gone and its engine torn down, the details overlay survived the Back,
-        // and focus is back on the exact card that launched playback.
-        composeRule.onNodeWithTag("trailer_player").assertDoesNotExist()
+        // and focus is back on the button that launched playback.
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
         assertEquals(true, engines.single().released)
         composeRule.onNodeWithTag("movie_details").assertExists()
-        composeRule.onNodeWithTag("extra_card_202").assertIsFocused()
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
+    }
+
+    @Test
+    fun blockedRequestShowsTheNoticeAndOpensNothing() {
+        // The view model contract in miniature: a refusal publishes the message and returns null.
+        setShellContent {
+            detailsState = detailsState.copy(
+                mutationNotice = "This TV can't play this movie's DTS audio track.",
+            )
+            null
+        }
+
+        pressPlay()
+
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        assertEquals(0, engines.size)
+        composeRule.onNodeWithTag("details_mutation_notice").assertExists()
+        composeRule
+            .onNodeWithText("This TV can't play this movie's DTS audio track.")
+            .assertExists()
+        // Focus never left the page the answer landed on.
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
     }
 }

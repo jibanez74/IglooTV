@@ -1,5 +1,10 @@
+// Media3's DataSource surface is marked unstable; this file is the one place the app builds on
+// it, and the seam above (MoviePlayerEngine) keeps the instability from spreading.
+@file:androidx.annotation.OptIn(UnstableApi::class)
+
 package com.igloo.blindpenguincoder.playback.media3
 
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource

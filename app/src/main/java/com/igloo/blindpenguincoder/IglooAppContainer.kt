@@ -27,6 +27,7 @@ import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.data.repository.ProfileRepository
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
 import com.igloo.blindpenguincoder.feature.auth.SessionManager
+import com.igloo.blindpenguincoder.playback.media3.bearerStreamDataSourceFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -49,6 +50,17 @@ class IglooAppContainer(context: Context) {
     }
     private val identity by lazy { deviceIdentity(appContext) }
     val httpClient by lazy { createIglooHttpClient(credentials, authEvents) }
+
+    /**
+     * Media3's HTTP stack for the direct stream, with the bearer resolver and the 401 bridge.
+     * Built here because [authEvents] is private on purpose: the signal is non-suspending and
+     * safe from ExoPlayer's loader thread, and [SessionManager] already collects it.
+     */
+    val streamDataSourceFactory by lazy {
+        bearerStreamDataSourceFactory(credentials, serverUrlProvider) { profileId ->
+            authEvents.signalUnauthorized(profileId)
+        }
+    }
     private val serverProbeHttpClient by lazy { createServerProbeHttpClient() }
     private val serverHealthProbe by lazy { ServerHealthProbe(serverProbeHttpClient) }
     val authApi by lazy { AuthApi(httpClient, serverUrlProvider) }

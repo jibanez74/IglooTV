@@ -33,12 +33,16 @@ import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
 import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeMovie
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
+import com.igloo.blindpenguincoder.inertDetailsActions
+import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testHomeMovies
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -46,8 +50,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
-import com.igloo.blindpenguincoder.inertDetailsActions
 
 /** Pixel assertions for the modal's authored alpha reveal and single-scrim contract. */
 @RunWith(AndroidJUnit4::class)
@@ -136,6 +138,9 @@ class IglooConfirmDialogMotionTest {
                             continueWatching = IglooRailState.Loaded(continueMovies),
                             latestMovies = IglooRailState.Loaded(testHomeMovies),
                         ),
+                        onRequestPlayback = { null },
+                        moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
+                        moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
                         onRetryRail = {},
                         onMovieSelected = null,
                         onTheaterMovieSelected = null,

@@ -1,3 +1,7 @@
+// ExoPlayer's media-source and subtitle surfaces are marked unstable; the engine seam keeps the
+// instability from spreading above this package.
+@file:androidx.annotation.OptIn(UnstableApi::class)
+
 package com.igloo.blindpenguincoder.playback.media3
 
 import android.content.Context
@@ -10,6 +14,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.text.CueGroup

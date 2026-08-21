@@ -68,6 +68,8 @@ internal fun MovieDetailsHeader(
     movie: MovieDetailsUi,
     overMedia: Boolean,
     actions: MovieDetailsActions,
+    onPlay: () -> Unit,
+    playReturnRequester: FocusRequester,
     onPlayTrailer: (() -> Unit)?,
     spokenAccessibilityEnabled: Boolean,
     heroInfoRequester: FocusRequester,
@@ -111,6 +113,8 @@ internal fun MovieDetailsHeader(
                     movie = movie,
                     overMedia = overMedia,
                     actions = actions,
+                    onPlay = onPlay,
+                    playReturnRequester = playReturnRequester,
                     playRequester = primaryRequester,
                     watchedRequester = watchedRequester,
                     likeRequester = likeRequester,
@@ -378,6 +382,8 @@ private fun LibraryActionRow(
     movie: MovieDetailsUi,
     overMedia: Boolean,
     actions: MovieDetailsActions.Library,
+    onPlay: () -> Unit,
+    playReturnRequester: FocusRequester,
     playRequester: FocusRequester,
     watchedRequester: FocusRequester,
     likeRequester: FocusRequester,
@@ -423,7 +429,7 @@ private fun LibraryActionRow(
         Column(modifier = Modifier.width(IntrinsicSize.Min)) {
             IglooButton(
                 text = "Play",
-                onClick = actions.onPlay,
+                onClick = onPlay,
                 icon = IglooIcons.Play,
                 semanticLabel = "Play ${movie.title}",
                 // The resume caption below is plain text a TV screen reader can never reach, so
@@ -433,6 +439,9 @@ private fun LibraryActionRow(
                 modifier = Modifier
                     .testTag("details_play")
                     .focusRequester(playRequester)
+                    // The node the movie player restores focus to on close — two requesters on
+                    // one button, the same pairing the trailer's action row carries.
+                    .focusRequester(playReturnRequester)
                     .then(rowFocus)
                     .focusProperties { left = Cancel }
                     .onFocusChanged {

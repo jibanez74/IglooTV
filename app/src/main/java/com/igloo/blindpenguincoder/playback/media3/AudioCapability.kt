@@ -1,9 +1,13 @@
+// AudioCapabilities is marked unstable; the capability probe is deliberately the only consumer.
+@file:androidx.annotation.OptIn(UnstableApi::class)
+
 package com.igloo.blindpenguincoder.playback.media3
 
 import android.content.Context
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import androidx.media3.common.AudioAttributes
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.exoplayer.audio.AudioCapabilities

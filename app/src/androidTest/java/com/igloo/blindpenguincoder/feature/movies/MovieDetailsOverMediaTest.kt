@@ -77,6 +77,8 @@ class MovieDetailsOverMediaTest {
                     ),
                     actions = inertDetailsActions,
                     isAdmin = false,
+                    onPlay = {},
+                    playReturnRequester = remember { FocusRequester() },
                     onPlayVideo = { _, _ -> },
                     extrasReturnRequester = remember { FocusRequester() },
                     heroTrailerReturnRequester = remember { FocusRequester() },

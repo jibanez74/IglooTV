@@ -35,6 +35,13 @@ class MovieRepositoryTest {
     }
 
     @Test
+    fun `the stream url is the contract path on the api base`() = runTest {
+        val http = TestHttp { error("the stream url is built, never fetched") }
+
+        assertEquals("$TEST_SERVER/movies/9/stream", http.movieRepository.movieStreamUrl(9))
+    }
+
+    @Test
     fun `invalid wire nulls decode to absent values`() = runTest {
         val http = TestHttp {
             jsonResponse(latestMoviesJson(latestMovieJson(posterPath = null, year = null)))

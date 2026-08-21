@@ -74,7 +74,12 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsScreen
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.movies.VideoLaunchSite
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.feature.player.MoviePlayerScreen
+import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
+import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
 
@@ -142,6 +147,54 @@ private data class TrailerRequest(
     }
 }
 
+/**
+ * What the movie player overlay is playing, saveable so the overlay survives activity
+ * recreation (the screen itself restarts the engine and re-seeks to its saved position).
+ * Nullable fields ride as "" — no title is ever blank, so the encoding is unambiguous.
+ */
+private val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Saver(
+    save = { request ->
+        if (request == null) {
+            emptyList()
+        } else {
+            listOf(
+                request.movieId.toString(),
+                request.title,
+                request.mimeType,
+                request.mode.name,
+                request.audioTypeIndex?.toString().orEmpty(),
+                request.subtitleTypeIndex?.toString().orEmpty(),
+                request.audioCodec.orEmpty(),
+                request.audioCodecProfile.orEmpty(),
+                request.audioChannels?.toString().orEmpty(),
+                request.audioLabel.orEmpty(),
+                request.resumeAtSec?.toString().orEmpty(),
+                request.durationSec?.toString().orEmpty(),
+            )
+        }
+    },
+    restore = { saved ->
+        if (saved.isEmpty()) {
+            null
+        } else {
+            MoviePlayRequest(
+                movieId = saved[0].toLong(),
+                title = saved[1],
+                mimeType = saved[2],
+                mode = PlaybackMode.valueOf(saved[3]),
+                audioTypeIndex = saved[4].toIntOrNull(),
+                subtitleTypeIndex = saved[5].toIntOrNull(),
+                audioCodec = saved[6].ifEmpty { null },
+                audioCodecProfile = saved[7].ifEmpty { null },
+                audioChannels = saved[8].toIntOrNull(),
+                audioLabel = saved[9].ifEmpty { null },
+                resumeAtSec = saved[10].toDoubleOrNull(),
+                durationSec = saved[11].toDoubleOrNull(),
+            )
+        }
+    },
+)
+
 @Composable
 fun IglooApp(
     user: AuthUser,
@@ -150,6 +203,11 @@ fun IglooApp(
     home: HomeUiState,
     details: MovieDetailsUiState,
     detailsActions: MovieDetailsActions,
+    // The Play press asks the details view model for a gated start request; null means blocked
+    // (the refusal is already on the details page) or nothing loaded, and nothing opens.
+    onRequestPlayback: () -> MoviePlayRequest?,
+    moviePlayerViewModel: MoviePlayerViewModel,
+    moviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine,
     onRetryRail: (HomeRail) -> Unit,
     onMovieSelected: ((Long) -> Unit)?,
     onTheaterMovieSelected: ((Long) -> Unit)?,
@@ -194,6 +252,13 @@ fun IglooApp(
         mutableStateOf<TrailerRequest?>(null)
     }
     val trailerOpen = trailerRequest != null
+    // The movie player is the fourth overlay layer (shell -> details -> trailer/movie player),
+    // under the same host contract: the host owns its existence and its focus restore.
+    var moviePlayRequest by rememberSaveable(stateSaver = MoviePlayRequestSaver) {
+        mutableStateOf<MoviePlayRequest?>(null)
+    }
+    val playerOpen = moviePlayRequest != null
+    val playReturnRequester = remember { FocusRequester() }
     // Parked by the extras rail on its last-focused card, so closing the player restores focus
     // to the exact card that launched it (section 6.3). The in-theaters page can launch the same
     // player from its hero instead, and parks the second requester on that button.
@@ -214,6 +279,18 @@ fun IglooApp(
         if (!detailsOpen) {
             moreMenuOpen = false
             playbackSettingsOpen = false
+            // The player must not outlive the details page it launched from — a profile switch
+            // or session revalidation that closes the overlay takes the movie with it.
+            moviePlayRequest = null
+        }
+    }
+    val closeMoviePlayer: () -> Unit = {
+        moviePlayRequest = null
+        // In the callback, not an effect, for the detach-race reason the details close
+        // documents. The Play button is still composed in every reachable case; the pane's
+        // anchor is the same last-resort fallback the other overlays use.
+        if (!playReturnRequester.requestFocusSafely()) {
+            contentStartRequester.requestFocusSafely()
         }
     }
     val closeTrailer = {
@@ -247,11 +324,11 @@ fun IglooApp(
     }
 
     // Every handler is gated explicitly rather than left to win on registration order —
-    // design-system.md section 9.3 requires the host to be deliberate about Back. While the
-    // trailer player is up, Back belongs to its own screen (chrome dismissal, then close).
+    // design-system.md section 9.3 requires the host to be deliberate about Back. While either
+    // player is up, Back belongs to its own screen (chrome dismissal, then close).
     BackHandler(
-        enabled = detailsOpen && !signOut.confirming && !trailerOpen && !moreMenuOpen &&
-            !playbackSettingsOpen,
+        enabled = detailsOpen && !signOut.confirming && !trailerOpen && !playerOpen &&
+            !moreMenuOpen && !playbackSettingsOpen,
     ) {
         val origin = detailsOrigin
         detailsOrigin = null
@@ -269,12 +346,15 @@ fun IglooApp(
             contentStartRequester.requestFocusSafely()
         }
     }
-    BackHandler(enabled = !detailsOpen && !signOut.confirming && !trailerOpen && !railHasFocus) {
+    BackHandler(
+        enabled = !detailsOpen && !signOut.confirming && !trailerOpen && !playerOpen &&
+            !railHasFocus,
+    ) {
         railOpenedByBack = true
         navigationRequesters.getValue(currentDestination).requestFocus()
     }
     BackHandler(
-        enabled = !detailsOpen && !signOut.confirming && !trailerOpen &&
+        enabled = !detailsOpen && !signOut.confirming && !trailerOpen && !playerOpen &&
             railHasFocus && !railOpenedByBack,
     ) {
         contentStartRequester.requestFocus()
@@ -337,7 +417,7 @@ fun IglooApp(
                 modifier = Modifier
                     .testTag("details_layer")
                     .then(
-                        if (trailerOpen) {
+                        if (trailerOpen || playerOpen) {
                             Modifier.semantics { hideFromAccessibility() }
                         } else {
                             Modifier
@@ -348,6 +428,12 @@ fun IglooApp(
                     state = details.details,
                     actions = detailsActions,
                     isAdmin = user.isAdmin,
+                    onPlay = {
+                        // Null means the gate refused (its message is already on the page) or
+                        // nothing has loaded; either way there is nothing to open.
+                        onRequestPlayback()?.let { moviePlayRequest = it }
+                    },
+                    playReturnRequester = playReturnRequester,
                     onPlayVideo = { video, site ->
                         // A cheap invariant, not a reachable path today — the extras rail is
                         // unfocusable while the menu is up — so a stale open flag can never
@@ -394,8 +480,9 @@ fun IglooApp(
             }
         }
 
-        // Last child: the player draws over everything, and its own BackHandler out-registers
-        // the host's gated ones while it is mounted.
+        // Last children: the players draw over everything, and their own BackHandlers
+        // out-register the host's gated ones while mounted. The two are never up together —
+        // the trailer launches from surfaces the movie player covers, and vice versa.
         trailerRequest?.let { request ->
             TrailerPlayerScreen(
                 videoKey = request.key,
@@ -403,6 +490,14 @@ fun IglooApp(
                 typeLabel = request.typeLabel,
                 onClose = closeTrailer,
                 engineFactory = trailerEngineFactory,
+            )
+        }
+        moviePlayRequest?.let { request ->
+            MoviePlayerScreen(
+                request = request,
+                viewModel = moviePlayerViewModel,
+                onClose = closeMoviePlayer,
+                engineFactory = moviePlayerEngineFactory,
             )
         }
     }
@@ -413,7 +508,7 @@ fun IglooApp(
     // card the user had just activated. Skipped entirely when something is already over the
     // shell — this effect runs after the overlay's own, so it would take focus off it.
     LaunchedEffect(Unit) {
-        if (!detailsOpen && !trailerOpen) contentStartRequester.requestFocus()
+        if (!detailsOpen && !trailerOpen && !playerOpen) contentStartRequester.requestFocus()
     }
 }
 

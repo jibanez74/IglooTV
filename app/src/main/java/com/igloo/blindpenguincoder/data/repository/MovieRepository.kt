@@ -74,6 +74,9 @@ class MovieRepository(
         },
     )
 
+    /** Absolute direct-stream URL for Media3; not an API call, so no [ApiResult]. */
+    fun movieStreamUrl(id: Long): String = api.movieStreamUrl(id)
+
     suspend fun movieWatchProgress(id: Long): ApiResult<MovieWatchProgress> = safeApiCall(
         request = { api.movieWatchProgress(id) },
         decode = { response ->

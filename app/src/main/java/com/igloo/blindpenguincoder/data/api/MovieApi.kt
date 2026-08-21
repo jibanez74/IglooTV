@@ -40,6 +40,13 @@ class MovieApi(
     suspend fun movieTechnicalDetails(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/movies/$id/technical-details")
 
+    /**
+     * Absolute URL of the direct stream. Media3 fetches it on its own HTTP stack (Range/206),
+     * not through Ktor, so this is a string rather than a request.
+     */
+    fun movieStreamUrl(id: Long): String =
+        "${serverUrl.require().apiBaseUrl}/movies/$id/stream"
+
     /** Current user's saved position and watched flag for one movie. */
     suspend fun movieWatchProgress(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/movies/$id/watch-progress")

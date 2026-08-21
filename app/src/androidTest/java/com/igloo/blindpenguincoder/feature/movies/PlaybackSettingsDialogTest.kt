@@ -27,11 +27,13 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
+import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHomeMovies
 import com.igloo.blindpenguincoder.testMovieDetails
@@ -107,7 +109,6 @@ class PlaybackSettingsDialogTest {
                     ),
                     details = detailsState,
                     detailsActions = MovieDetailsActions.Library(
-                        onPlay = {},
                         onToggleWatched = {},
                         onToggleLike = {},
                         onWatchTogether = {},
@@ -128,6 +129,9 @@ class PlaybackSettingsDialogTest {
                         },
                         onRetry = {},
                     ),
+                    onRequestPlayback = { null },
+                    moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
+                    moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
                     onRetryRail = {},
                     onMovieSelected = {},
                     onTheaterMovieSelected = null,

@@ -87,7 +87,6 @@ class MovieDetailsAccessibilityTest {
                     state = state,
                     mutationNotice = mutationNotice,
                     actions = MovieDetailsActions.Library(
-                        onPlay = { plays += 1 },
                         onToggleWatched = { watchedToggles += 1 },
                         onToggleLike = { likeToggles += 1 },
                         onWatchTogether = { menuSelections += "Watch Together" },
@@ -100,6 +99,8 @@ class MovieDetailsAccessibilityTest {
                         onRetry = { retries += 1 },
                     ),
                     isAdmin = isAdmin,
+                    onPlay = { plays += 1 },
+                    playReturnRequester = remember { FocusRequester() },
                     onPlayVideo = { video, _ -> playedExtras += video.id },
                     extrasReturnRequester = remember { FocusRequester() },
                     heroTrailerReturnRequester = remember { FocusRequester() },

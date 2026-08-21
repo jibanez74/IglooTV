@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -42,6 +43,9 @@ import com.igloo.blindpenguincoder.feature.home.SignOutViewModel
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
+import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
+import com.igloo.blindpenguincoder.playback.media3.deviceCanPlayAudioMime
+import com.igloo.blindpenguincoder.playback.media3.exoMoviePlayerEngine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -174,6 +178,7 @@ fun IglooRoot(container: IglooAppContainer) {
                             container.serverUrlProvider,
                         )
                     }
+                    val appContext = LocalContext.current.applicationContext
                     val detailsViewModel = viewModel(
                         viewModelStoreOwner = authenticatedSessionOwner,
                         key = "movie-details",
@@ -182,6 +187,23 @@ fun IglooRoot(container: IglooAppContainer) {
                             container.movieRepository,
                             container.serverUrlProvider,
                             onWatchedStateCommitted = homeViewModel::refreshContinueWatching,
+                            canPlayAudioMime = { mimeType, channels ->
+                                deviceCanPlayAudioMime(appContext, mimeType, channels)
+                            },
+                        )
+                    }
+                    val moviePlayerViewModel = viewModel(
+                        viewModelStoreOwner = authenticatedSessionOwner,
+                        key = "movie-player",
+                    ) {
+                        MoviePlayerViewModel(
+                            saveProgress = container.movieRepository::updateWatchProgress,
+                            onWatchedStateCommitted = {
+                                homeViewModel.refreshContinueWatching()
+                                // The resume strip and watched pill are current on return to
+                                // the details page; a no-op while the overlay is closed.
+                                detailsViewModel.refresh()
+                            },
                         )
                     }
                     val theaterDetailsViewModel = viewModel(
@@ -226,9 +248,6 @@ fun IglooRoot(container: IglooAppContainer) {
                             )
                         } else {
                             MovieDetailsActions.Library(
-                                // The details screen's primary action, wired to nothing until the
-                                // player lands. It is the page's contract, so it announces normally.
-                                onPlay = {},
                                 onToggleWatched = detailsViewModel::toggleWatched,
                                 onToggleLike = detailsViewModel::toggleLike,
                                 // The remaining More menu items, wired to nothing until each
@@ -241,6 +260,17 @@ fun IglooRoot(container: IglooAppContainer) {
                                 onSelectAudioTrack = detailsViewModel::selectAudioTrack,
                                 onSelectSubtitle = detailsViewModel::selectSubtitle,
                                 onRetry = detailsViewModel::retry,
+                            )
+                        },
+                        onRequestPlayback = detailsViewModel::buildPlayLaunch,
+                        moviePlayerViewModel = moviePlayerViewModel,
+                        moviePlayerEngineFactory = { context, request ->
+                            exoMoviePlayerEngine(
+                                context = context,
+                                request = request,
+                                dataSourceFactory = container.streamDataSourceFactory,
+                                streamUrl = container.movieRepository
+                                    .movieStreamUrl(request.movieId),
                             )
                         },
                         onRetryRail = homeViewModel::retry,
