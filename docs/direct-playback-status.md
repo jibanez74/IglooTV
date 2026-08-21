@@ -73,9 +73,24 @@ lint run demanded.
   Android toolchain refuses to package, and one expectation guessed "7.1 surround" from a bare
   8-channel count where the web-parity rule deliberately says just "Surround".
 - **Full build including lint** — green.
+- **End-to-end on the emulator against a real backend** (local Igloo server, fresh install,
+  quick-connect pairing):
+  - Pressing Play on a movie with a Dolby Digital Plus/Atmos track was **refused by the
+    capability gate** with the full message on the details page — the emulator genuinely has no
+    decoder for it, so this was the blocked path working for real, not a simulation.
+  - Playing *The Jungle Book* (mp4/AAC) with a seeded position showed the **resume prompt at
+    exactly 15:00**; Resume started playback at that position with video visibly rendering.
+  - The chrome auto-hid over playback, Up revealed it (title, transport, seek bar reading
+    15:21 / 1:18:27, pause glyph while playing); a media fast-forward key seeked +10 s. The
+    Audio/Subtitles buttons were correctly absent — the file has one audio track and no
+    subtitle streams, so there was no choice to offer.
+  - The **15-second progress writer saved to the real server** (position ~16:11 recorded, and
+    the file's true duration replaced the seeded guess), and **Back produced the bounded exit
+    save** seconds later, restored focus to the Play button, and the details page immediately
+    showed the updated "62 min left" resume strip.
 - **Not verified on the Shield.** Deliberately skipped this pass at Jose's request. Real-device
-  playback (actual video/audio output, passthrough, PGS subtitles, TalkBack on hardware) is
-  still an open item below.
+  playback (hardware decode, audio passthrough, PGS subtitles, TalkBack on hardware) is still
+  an open item below.
 
 ## What remains
 
