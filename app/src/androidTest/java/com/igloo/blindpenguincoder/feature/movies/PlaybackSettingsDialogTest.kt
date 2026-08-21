@@ -43,9 +43,9 @@ import org.junit.runner.RunWith
 /**
  * The Playback Settings dialog's contract through the real host wiring (section 11.4.1): the
  * More menu's item opens it with focus on the selected mode row, OK selects without dismissing
- * and the explanation follows, the direct-play audio rule resolves visibly, image-based
- * subtitle rows are focusable but inert, and Back or Done dismisses with focus restored to the
- * More trigger — never escaping the card while it is up.
+ * and the explanation follows, image-based subtitle rows are selectable under Direct but inert
+ * for every other mode, and Back or Done dismisses with focus restored to the More trigger —
+ * never escaping the card while it is up.
  *
  * Assertions are semantics-based, not announcement-based, so a Shield with TalkBack on cannot
  * flake them.
@@ -205,7 +205,8 @@ class PlaybackSettingsDialogTest {
     }
 
     @Test
-    fun aNonFirstAudioTrackResolvesDirectToRemuxWithTheNote() {
+    fun aNonFirstAudioTrackKeepsDirectPlay() {
+        // ExoPlayer selects any embedded track itself, so no remux upgrade happens on the TV.
         setShellContent()
         openDialog()
 
@@ -214,18 +215,35 @@ class PlaybackSettingsDialogTest {
         press(Key.DirectionCenter)
 
         composeRule.onNodeWithTag("audio_track_302").assertIsSelected()
-        composeRule.onNodeWithTag("playback_mode_remux").assertIsSelected()
+        composeRule.onNodeWithTag("playback_mode_direct").assertIsSelected()
         composeRule
             .onNodeWithText("Direct play always uses the first audio track", substring = true)
-            .assertExists()
+            .assertDoesNotExist()
     }
 
     @Test
-    fun anImageBasedSubtitleRowIsFocusableButInert() {
+    fun anImageBasedSubtitleRowIsSelectableUnderDirectPlay() {
         setShellContent()
         openDialog()
 
         press(Key.DirectionDown, times = 11)
+        composeRule.onNodeWithTag("subtitle_402").assertIsFocused()
+        press(Key.DirectionCenter)
+
+        composeRule.onNodeWithTag("subtitle_402").assertIsSelected()
+    }
+
+    @Test
+    fun anImageBasedSubtitleRowIsFocusableButInertOutsideDirectPlay() {
+        setShellContent()
+        openDialog()
+
+        // Move the mode to Remux first; the PGS row then loses its click action.
+        press(Key.DirectionDown)
+        composeRule.onNodeWithTag("playback_mode_remux").assertIsFocused()
+        press(Key.DirectionCenter)
+
+        press(Key.DirectionDown, times = 10)
         val row = composeRule.onNodeWithTag("subtitle_402")
         row.assertIsFocused().assertIsNotEnabled().assertHasNoClickAction()
 

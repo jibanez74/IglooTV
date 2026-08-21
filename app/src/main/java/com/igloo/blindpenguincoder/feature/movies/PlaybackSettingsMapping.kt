@@ -3,6 +3,9 @@ package com.igloo.blindpenguincoder.feature.movies
 import com.igloo.blindpenguincoder.data.model.AudioStream
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.Subtitle
+import com.igloo.blindpenguincoder.playback.model.describeChannelLayout
+import com.igloo.blindpenguincoder.playback.model.languageDisplayName
+import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import java.util.Locale
 
 /**
@@ -15,8 +18,7 @@ import java.util.Locale
 /**
  * What the user picked, session-only — reset when the overlay opens or closes, never persisted.
  * Null ids mean "no explicit choice": audio falls back to the file's default track, subtitle
- * null is "off". The mode the user *stored* can differ from the mode that would actually play —
- * see the direct-play rule in [playbackSettingsUi].
+ * null is "off".
  */
 internal data class PlaybackSelection(
     val mode: PlaybackMode = PlaybackMode.Direct,
@@ -36,9 +38,8 @@ data class PlaybackTrackOptionUi(
 
 /**
  * The dialog, render-ready. The three `selected*` fields are the *effective* choice — defaults
- * resolved, the direct-play audio rule applied — and are what the Play wiring will read when
- * playback lands: [selectedMode], [selectedAudioId] (null = the file's first/default track) and
- * [selectedSubtitleId] (null = subtitles off).
+ * resolved — and are what the Play wiring reads: [selectedMode], [selectedAudioId] (null = the
+ * file's first/default track) and [selectedSubtitleId] (null = subtitles off).
  */
 data class PlaybackSettingsUi(
     val modes: List<PlaybackModeOptionUi>,
@@ -55,15 +56,15 @@ data class PlaybackSettingsUi(
  * the technical-details request is in flight or degraded quietly — the sections then hold their
  * inert stand-ins ("Default", "None") so the focus chain and announcements stay meaningful.
  *
- * Resolution rules, all web parity:
+ * Resolution rules:
  * - Effective audio: the selected id if the file still has it, else the `is_default` stream,
  *   else the first. A selection is matched by id, so a track list that changed under a kept
- *   selection degrades to the default instead of pointing at nothing.
- * - Effective subtitle: the selected id if present and not image-based, else off. Image-based
- *   tracks (PGS/DVD/DVB) render as inert rows — the backend can only serve text tracks as VTT.
- * - Effective mode: direct play serves the raw container, which always sounds its first track,
- *   so Direct plus any other audio track resolves to Remux and the explanation says why
- *   (`resolveModeForAudioTrack` on the web).
+ *   selection degrades to the default instead of pointing at nothing. Unlike the web client,
+ *   any track works under Direct — ExoPlayer demuxes the container and selects the track
+ *   itself, so lossless audio survives on every track and no mode upgrade is needed.
+ * - Effective subtitle: the selected id if present, else off. Image-based tracks (PGS/DVD/DVB)
+ *   are selectable under Direct — ExoPlayer renders their bitmaps — but inert for every other
+ *   mode, where the backend can only serve text tracks as VTT.
  */
 internal fun playbackSettingsUi(
     audioStreams: List<AudioStream>?,
@@ -86,69 +87,51 @@ internal fun playbackSettingsUi(
         }
     }
 
+    val imageBasedSelectable = selection.mode == PlaybackMode.Direct
     val subtitleTracks = buildList {
         add(PlaybackTrackOptionUi(id = null, label = SUBTITLES_NONE_LABEL))
         subtitles.orEmpty().forEachIndexed { index, subtitle ->
-            val imageBased = isImageBasedSubtitleCodec(subtitle.codec)
+            val inert = isImageBasedSubtitleCodec(subtitle.codec) && !imageBasedSelectable
             add(
                 PlaybackTrackOptionUi(
                     id = subtitle.id,
                     label = subtitleTrackLabel(subtitle, index) +
-                        if (imageBased) IMAGE_BASED_SUFFIX else "",
-                    enabled = !imageBased,
+                        if (inert) IMAGE_BASED_SUFFIX else "",
+                    enabled = !inert,
                 ),
             )
         }
     }
     val effectiveSubtitle = subtitles.orEmpty()
         .firstOrNull { it.id == selection.subtitleStreamId }
-        ?.takeUnless { isImageBasedSubtitleCodec(it.codec) }
-
-    val audioForcesRemux = selection.mode == PlaybackMode.Direct && effectiveAudioIndex != 0
-    val effectiveMode = if (audioForcesRemux) PlaybackMode.Remux else selection.mode
+        ?.takeUnless { isImageBasedSubtitleCodec(it.codec) && !imageBasedSelectable }
 
     return PlaybackSettingsUi(
         modes = modes,
-        selectedMode = effectiveMode,
+        selectedMode = selection.mode,
         audioTracks = audioTracks,
         selectedAudioId = effectiveAudio?.id,
         subtitleTracks = subtitleTracks,
         selectedSubtitleId = effectiveSubtitle?.id,
         explanation = playbackExplanation(
-            mode = effectiveMode,
+            mode = selection.mode,
             audioLabel = effectiveAudio?.let { audioTrackLabel(it, effectiveAudioIndex) },
             subtitleLabel = effectiveSubtitle?.let {
                 subtitleTrackLabel(it, subtitles.orEmpty().indexOf(it))
             },
-            audioForcedRemux = audioForcesRemux,
         ),
     )
 }
 
 /**
- * The web's `STREAM_MODES` labels, except the first two say "Original quality" outright —
- * the user asked for the original-quality option to be unmistakable on a TV screen.
- */
-internal fun playbackModeLabel(mode: PlaybackMode): String = when (mode) {
-    PlaybackMode.Direct -> "Original quality — plays the file as-is"
-    PlaybackMode.Remux -> "Original quality — audio adjusted"
-    PlaybackMode.P2160Mbps16 -> "4K — highest quality"
-    PlaybackMode.P1080Mbps8 -> "1080p — best quality"
-    PlaybackMode.P1080Mbps6 -> "1080p — high quality"
-    PlaybackMode.P1080Mbps4 -> "1080p — balanced"
-    PlaybackMode.P720Mbps3 -> "720p — lower bandwidth"
-}
-
-/**
  * What the chosen settings will do, in one spoken-friendly line: how the video reaches the TV,
- * what will be heard, whether subtitles show — and, when the direct-play audio rule kicked in,
- * why the mode moved. TV-adapted from the web's `describePlaybackExperience`.
+ * what will be heard, whether subtitles show. TV-adapted from the web's
+ * `describePlaybackExperience`.
  */
 internal fun playbackExplanation(
     mode: PlaybackMode,
     audioLabel: String?,
     subtitleLabel: String?,
-    audioForcedRemux: Boolean = false,
 ): String = buildString {
     append(
         when (mode) {
@@ -165,12 +148,6 @@ internal fun playbackExplanation(
     )
     append(if (audioLabel != null) " You'll hear: $audioLabel." else " Default audio is used.")
     append(if (subtitleLabel != null) " Subtitles: $subtitleLabel." else " Subtitles are off.")
-    if (audioForcedRemux) {
-        append(
-            " Direct play always uses the first audio track, so playback switched to " +
-                "\"${playbackModeLabel(PlaybackMode.Remux)}.\" The picture is untouched.",
-        )
-    }
 }
 
 /** "English · 5.1 surround", or "Track 2 · Stereo" when ffprobe reported no language. */
@@ -193,37 +170,6 @@ internal fun subtitleTrackLabel(subtitle: Subtitle, index: Int): String {
     return if (parts.isNotEmpty()) parts.joinToString(" · ") else "Track ${index + 1}"
 }
 
-/** The web's `describePlaybackChannelLayout`: named layouts first, then channel-count guesses. */
-internal fun describeChannelLayout(channelLayout: String?, channels: Long): String {
-    val layout = channelLayout?.lowercase(Locale.US).orEmpty()
-    return when {
-        layout.contains("mono") || channels == 1L -> "Mono"
-        layout.contains("stereo") || channels == 2L -> "Stereo"
-        layout.contains("5.1") -> "5.1 surround"
-        layout.contains("7.1") -> "7.1 surround"
-        layout.contains("quad") || layout.contains("4.0") -> "Quad"
-        channels >= 6 -> "Surround"
-        else -> "$channels channels"
-    }
-}
-
-/**
- * ffprobe's language tag as a display name. Unlike the web's `formatLanguageName`, which slices
- * three-letter codes to two and so misses every 639-2 code whose prefix isn't its 639-1 form
- * ("spa", "deu", "zho"), this goes through the 639-2 table the web ships for its preference
- * matching. Unknown short codes surface uppercased rather than vanishing.
- */
-internal fun languageDisplayName(code: String?): String? {
-    val raw = code?.trim()?.lowercase(Locale.US)?.takeIf { it.isNotEmpty() } ?: return null
-    val two = if (raw.length == 3) ISO_639_2_TO_1[raw] else raw
-    two?.let { LANGUAGE_NAMES[it] }?.let { return it }
-    return if (raw.length <= 3) {
-        raw.uppercase(Locale.US)
-    } else {
-        raw.replaceFirstChar { it.uppercase(Locale.US) }
-    }
-}
-
 /** PGS/DVD/DVB tracks are bitmaps the backend cannot serve as VTT (web parity). */
 internal fun isImageBasedSubtitleCodec(codec: String): Boolean =
     codec.lowercase(Locale.US) in BITMAP_SUBTITLE_CODECS
@@ -237,72 +183,3 @@ private val BITMAP_SUBTITLE_CODECS = setOf(
 internal const val AUDIO_DEFAULT_LABEL = "Default"
 internal const val SUBTITLES_NONE_LABEL = "None"
 private const val IMAGE_BASED_SUFFIX = " (image-based)"
-
-/** ISO 639-2 three-letter codes → 639-1 two-letter codes (web's `ISO_639_2_TO_1`). */
-private val ISO_639_2_TO_1 = mapOf(
-    "ara" to "ar",
-    "ces" to "cs",
-    "cze" to "cs",
-    "dan" to "da",
-    "deu" to "de",
-    "ger" to "de",
-    "ell" to "el",
-    "gre" to "el",
-    "eng" to "en",
-    "spa" to "es",
-    "fin" to "fi",
-    "fra" to "fr",
-    "fre" to "fr",
-    "heb" to "he",
-    "hin" to "hi",
-    "hun" to "hu",
-    "ita" to "it",
-    "jpn" to "ja",
-    "kor" to "ko",
-    "nld" to "nl",
-    "dut" to "nl",
-    "nor" to "no",
-    "pol" to "pl",
-    "por" to "pt",
-    "ron" to "ro",
-    "rum" to "ro",
-    "rus" to "ru",
-    "swe" to "sv",
-    "tha" to "th",
-    "tur" to "tr",
-    "ukr" to "uk",
-    "vie" to "vi",
-    "zho" to "zh",
-    "chi" to "zh",
-)
-
-/** ISO 639-1 two-letter codes → English display names (web's `LANGUAGE_NAMES`). */
-private val LANGUAGE_NAMES = mapOf(
-    "ar" to "Arabic",
-    "cs" to "Czech",
-    "da" to "Danish",
-    "de" to "German",
-    "el" to "Greek",
-    "en" to "English",
-    "es" to "Spanish",
-    "fi" to "Finnish",
-    "fr" to "French",
-    "he" to "Hebrew",
-    "hi" to "Hindi",
-    "hu" to "Hungarian",
-    "it" to "Italian",
-    "ja" to "Japanese",
-    "ko" to "Korean",
-    "nl" to "Dutch",
-    "no" to "Norwegian",
-    "pl" to "Polish",
-    "pt" to "Portuguese",
-    "ro" to "Romanian",
-    "ru" to "Russian",
-    "sv" to "Swedish",
-    "th" to "Thai",
-    "tr" to "Turkish",
-    "uk" to "Ukrainian",
-    "vi" to "Vietnamese",
-    "zh" to "Chinese",
-)

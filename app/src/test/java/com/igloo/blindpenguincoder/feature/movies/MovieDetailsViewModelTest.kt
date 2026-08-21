@@ -647,7 +647,7 @@ class MovieDetailsViewModelTest {
         }
 
     @Test
-    fun `playback selections republish with the coupling and explanation applied`() = runTest {
+    fun `playback selections republish with the explanation applied`() = runTest {
         val http = routedHttp(
             technical = {
                 jsonResponse(
@@ -665,13 +665,13 @@ class MovieDetailsViewModelTest {
         viewModel.open(1)
         viewModel.awaitPlaybackSettings()
 
-        // A non-first track under Direct resolves to Remux with the note (direct play can
-        // only sound the container's first track).
+        // A non-first track under Direct stays Direct: ExoPlayer selects any embedded track
+        // itself, so no remux upgrade happens on the TV.
         viewModel.selectAudioTrack(11)
         var settings = viewModel.awaitPlaybackSettings()
-        assertEquals(PlaybackMode.Remux, settings.selectedMode)
+        assertEquals(PlaybackMode.Direct, settings.selectedMode)
         assertEquals(11L, settings.selectedAudioId)
-        assertTrue(settings.explanation.contains("Direct play always uses the first audio track"))
+        assertTrue(settings.explanation.contains("You'll hear: Spanish"))
 
         viewModel.selectPlaybackMode(PlaybackMode.P1080Mbps8)
         viewModel.selectSubtitle(20)

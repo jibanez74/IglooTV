@@ -195,7 +195,7 @@ fun TrailerPlayerScreen(
                 handlePlayerKey(
                     event = event,
                     chromeVisible = chromeVisible,
-                    phase = state.phase,
+                    controlsDisabled = state.phase == TrailerPhase.Error,
                     showChrome = showChrome,
                     togglePlayPause = togglePlayPause,
                     seekBy = seekBy,
@@ -221,10 +221,12 @@ fun TrailerPlayerScreen(
         }
 
         when (state.phase) {
-            TrailerPhase.Error -> PlayerError(
+            TrailerPhase.Error -> PlayerErrorSurface(
                 message = state.errorMessage ?: "The trailer could not be played.",
-                retryRequester = retryRequester,
-                onRetry = { reloadKey++ },
+                actionText = "Retry",
+                actionSemanticLabel = "Retry playing trailer",
+                actionRequester = retryRequester,
+                onAction = { reloadKey++ },
             )
 
             else -> PlayerChrome(
@@ -415,219 +417,15 @@ private fun PlayerChrome(
                         .testTag("trailer_forward"),
                 )
             }
-            SeekBar(state = state)
-        }
-    }
-}
-
-/**
- * An icon-only transport control on the over-media black ground (section 3.2); one cleared
- * TalkBack node whose label is also its action.
- */
-@Composable
-private fun TransportButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        modifier = modifier
-            .size(IglooTheme.sizes.controlHeight)
-            .focusRing(
-                focused = focused,
-                radius = IglooTheme.radius.pill,
-                fill = OVER_MEDIA_CONTROL_FILL,
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            )
-            .clearAndSetSemantics {
-                contentDescription = label
-                role = Role.Button
-                onClick(label = label) {
-                    onClick()
-                    true
-                }
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Image(
-            imageVector = icon,
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(Color.White),
-            modifier = Modifier.size(IglooTheme.icons.md),
-        )
-    }
-}
-
-/**
- * The progress strip and timecodes: presentation plus one cleared, non-focusable summary node.
- * Seeking is done with Left/Right on the transport, so the bar itself carries no action, and it
- * has no live region — a timer narrating every tick is section 12 noise.
- */
-@Composable
-private fun SeekBar(state: TrailerPlayerState) {
-    val colors = IglooTheme.colors
-    val fraction = progressFraction(state.currentTimeSec, state.durationSec)
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clearAndSetSemantics {
-                contentDescription =
-                    "${formatSpokenTime(state.currentTimeSec)} of ${formatSpokenTime(state.durationSec)}"
-            },
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-    ) {
-        // The resume strip's recipe: 4dp track, over-media literal ground, primary fill.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp.scaled())
-                .background(Color.Black.copy(alpha = 0.40f))
-                .testTag("trailer_seek_track"),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .fillMaxHeight()
-                    .background(colors.primary),
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            IglooText(
-                text = formatTimecode(state.currentTimeSec),
-                style = IglooTheme.typography.label.overMedia(true),
-                color = Color.White,
-            )
-            IglooText(
-                text = formatTimecode(state.durationSec),
-                style = IglooTheme.typography.label.overMedia(true),
-                color = OVER_MEDIA_TERTIARY,
+            PlayerSeekBar(
+                currentTimeSec = state.currentTimeSec,
+                durationSec = state.durationSec,
+                seekTrackTag = "trailer_seek_track",
             )
         }
     }
 }
-
-/** The details screen's error recipe: one pinned Retry, Assertive, Back handled by the host. */
-@Composable
-private fun PlayerError(
-    message: String,
-    retryRequester: FocusRequester,
-    onRetry: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(IglooTheme.layout.safeAreaHorizontal),
-        contentAlignment = Alignment.Center,
-    ) {
-        IglooInlineError(
-            message = message,
-            actionText = "Retry",
-            actionSemanticLabel = "Retry playing trailer",
-            onAction = onRetry,
-            actionModifier = Modifier
-                .focusRequester(retryRequester)
-                .pinnedToScreen(),
-            modifier = Modifier.width(IglooTheme.layout.dialogWidth),
-        )
-    }
-}
-
-/**
- * The global key map (section 11.8.1). While the chrome is hidden every handled key is swallowed
- * — the invisible focused control must not activate — and reveals the chrome; media transport
- * keys act regardless of chrome state. Everything else falls through to the focused control.
- */
-private fun handlePlayerKey(
-    event: KeyEvent,
-    chromeVisible: Boolean,
-    phase: TrailerPhase,
-    showChrome: () -> Unit,
-    togglePlayPause: () -> Unit,
-    seekBy: (Double) -> Unit,
-    focusPlayPause: () -> Unit,
-): Boolean {
-    if (event.type != KeyEventType.KeyDown) return false
-    if (phase == TrailerPhase.Error) return false
-
-    when (event.key) {
-        Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
-            togglePlayPause()
-            showChrome()
-            return true
-        }
-
-        Key.MediaRewind, Key.MediaSkipBackward -> {
-            seekBy(-SEEK_STEP_SEC)
-            showChrome()
-            return true
-        }
-
-        Key.MediaFastForward, Key.MediaSkipForward -> {
-            seekBy(SEEK_STEP_SEC)
-            showChrome()
-            return true
-        }
-
-        else -> Unit
-    }
-
-    if (!chromeVisible) {
-        return when (event.key) {
-            Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                togglePlayPause()
-                showChrome()
-                true
-            }
-
-            Key.DirectionLeft -> {
-                seekBy(-SEEK_STEP_SEC)
-                showChrome()
-                true
-            }
-
-            Key.DirectionRight -> {
-                seekBy(SEEK_STEP_SEC)
-                showChrome()
-                true
-            }
-
-            Key.DirectionUp, Key.DirectionDown -> {
-                showChrome()
-                focusPlayPause()
-                true
-            }
-
-            else -> false
-        }
-    }
-
-    // Chrome visible: the key falls through to the focused control, but still counts as
-    // interaction so the auto-hide clock restarts.
-    showChrome()
-    return false
-}
-
-// The section 3.2 over-media literals, which deliberately do not track the theme: the chrome sits
-// on video, not on a surface. The seek track keeps the progress-strip ground (0.40f) instead.
-private val OVER_MEDIA_CONTROL_FILL = Color.Black.copy(alpha = 0.45f)
-private val OVER_MEDIA_SECONDARY = Color.White.copy(alpha = 0.85f)
-private val OVER_MEDIA_TERTIARY = Color.White.copy(alpha = 0.75f)
-
-private const val SEEK_STEP_SEC = 10.0
-private const val CHROME_HIDE_MS = 4_000L
 
 // The outer net, deliberately later than the engine's in-page API-load guard: that one names the
 // narrower cause and must get to report first, this one catches everything else that stalls.
 private const val READY_WATCHDOG_MS = 12_000L
-private const val SCRIM_STRENGTH = 0.70f

@@ -13,12 +13,14 @@ import com.igloo.blindpenguincoder.data.model.MovieLikeStatusData
 import com.igloo.blindpenguincoder.data.model.MovieLikeToggleData
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
+import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.MovieWatchedData
 import com.igloo.blindpenguincoder.data.model.SetMovieWatchedRequest
 import com.igloo.blindpenguincoder.data.model.TheaterMovie
 import com.igloo.blindpenguincoder.data.model.TheaterMoviesData
 import com.igloo.blindpenguincoder.data.model.TmdbMovie
 import com.igloo.blindpenguincoder.data.model.TmdbMovieData
+import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
 import io.ktor.client.call.body
 
 class MovieRepository(
@@ -77,6 +79,17 @@ class MovieRepository(
         decode = { response ->
             response.body<ApiEnvelope<MovieWatchProgress>>().data
                 ?: error("Missing data in watch progress response")
+        },
+    )
+
+    suspend fun updateWatchProgress(
+        id: Long,
+        body: UpdateMovieWatchProgressRequest,
+    ): ApiResult<MovieWatchProgressUpdateData> = safeApiCall(
+        request = { api.updateMovieWatchProgress(id, body) },
+        decode = { response ->
+            response.body<ApiEnvelope<MovieWatchProgressUpdateData>>().data
+                ?: error("Missing data in watch progress update response")
         },
     )
 

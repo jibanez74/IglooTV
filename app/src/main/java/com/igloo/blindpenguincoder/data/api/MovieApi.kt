@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.data.api
 
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.data.model.SetMovieWatchedRequest
+import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -42,6 +43,15 @@ class MovieApi(
     /** Current user's saved position and watched flag for one movie. */
     suspend fun movieWatchProgress(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/movies/$id/watch-progress")
+
+    suspend fun updateMovieWatchProgress(
+        id: Long,
+        body: UpdateMovieWatchProgressRequest,
+    ): HttpResponse =
+        client.put("${serverUrl.require().apiBaseUrl}/movies/$id/watch-progress") {
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
 
     suspend fun setMovieWatched(id: Long, body: SetMovieWatchedRequest): HttpResponse =
         client.put("${serverUrl.require().apiBaseUrl}/movies/$id/watch-progress/watched") {

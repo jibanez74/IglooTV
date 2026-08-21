@@ -4,6 +4,7 @@ import com.igloo.blindpenguincoder.data.model.AudioStream
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
+import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -77,47 +78,6 @@ class PlaybackSettingsMappingTest {
         )
     }
 
-    // --- channel layout ---
-
-    @Test
-    fun `channel layout names known layouts and counts`() {
-        assertEquals("Mono", describeChannelLayout("mono", 1))
-        assertEquals("Mono", describeChannelLayout(null, 1))
-        assertEquals("Stereo", describeChannelLayout("stereo", 2))
-        assertEquals("Stereo", describeChannelLayout(null, 2))
-        assertEquals("5.1 surround", describeChannelLayout("5.1(side)", 6))
-        assertEquals("7.1 surround", describeChannelLayout("7.1", 8))
-        assertEquals("Quad", describeChannelLayout("quad", 4))
-        assertEquals("Quad", describeChannelLayout("4.0", 4))
-        assertEquals("Surround", describeChannelLayout(null, 6))
-        assertEquals("3 channels", describeChannelLayout(null, 3))
-    }
-
-    @Test
-    fun `channel layout wins over channel count`() {
-        // An 8-channel stream whose layout says 5.1 is described by its layout.
-        assertEquals("5.1 surround", describeChannelLayout("5.1", 8))
-    }
-
-    // --- language names ---
-
-    @Test
-    fun `language names resolve two and three letter codes`() {
-        assertEquals("English", languageDisplayName("eng"))
-        assertEquals("English", languageDisplayName("en"))
-        assertEquals("Spanish", languageDisplayName("spa"))
-        assertEquals("German", languageDisplayName("deu"))
-        assertEquals("Chinese", languageDisplayName("zho"))
-    }
-
-    @Test
-    fun `language names surface unknown codes instead of vanishing`() {
-        assertEquals("XYZ", languageDisplayName("xyz"))
-        assertEquals("Klingon", languageDisplayName("klingon"))
-        assertNull(languageDisplayName(null))
-        assertNull(languageDisplayName("  "))
-    }
-
     // --- track labels ---
 
     @Test
@@ -159,8 +119,7 @@ class PlaybackSettingsMappingTest {
             subtitles = listOf(subtitle(id = 20)),
             selection = PlaybackSelection(),
         )
-        // The default audio is the second stream, which direct play cannot sound — the mode
-        // resolves to Remux before the user has touched anything (see the forced-remux test).
+        assertEquals(PlaybackMode.Direct, ui.selectedMode)
         assertEquals(11L, ui.selectedAudioId)
         assertNull(ui.selectedSubtitleId)
         assertEquals(PlaybackMode.entries.toList(), ui.modes.map { it.mode })
@@ -190,11 +149,25 @@ class PlaybackSettingsMappingTest {
     }
 
     @Test
-    fun `image based subtitle rows are inert and cannot be the selection`() {
+    fun `image based subtitles are selectable under direct play`() {
         val ui = playbackSettingsUi(
             audioStreams = listOf(audioStream()),
             subtitles = listOf(subtitle(id = 20, codec = "hdmv_pgs_subtitle")),
-            selection = PlaybackSelection(subtitleStreamId = 20),
+            selection = PlaybackSelection(mode = PlaybackMode.Direct, subtitleStreamId = 20),
+        )
+        val row = ui.subtitleTracks.single { it.id == 20L }
+        assertTrue(row.enabled)
+        assertFalse(row.label.contains("(image-based)"))
+        assertEquals(20L, ui.selectedSubtitleId)
+        assertTrue(ui.explanation.contains("Subtitles: English."))
+    }
+
+    @Test
+    fun `image based subtitle rows are inert outside direct play`() {
+        val ui = playbackSettingsUi(
+            audioStreams = listOf(audioStream()),
+            subtitles = listOf(subtitle(id = 20, codec = "hdmv_pgs_subtitle")),
+            selection = PlaybackSelection(mode = PlaybackMode.Remux, subtitleStreamId = 20),
         )
         val row = ui.subtitleTracks.single { it.id == 20L }
         assertFalse(row.enabled)
@@ -230,30 +203,15 @@ class PlaybackSettingsMappingTest {
     }
 
     @Test
-    fun `direct with a non-first audio track resolves to remux with the note`() {
+    fun `direct with a non-first audio track stays direct`() {
+        // Unlike the web client, ExoPlayer selects any embedded track itself — no remux upgrade.
         val ui = playbackSettingsUi(
             audioStreams = listOf(audioStream(id = 10, isDefault = true), audioStream(id = 11)),
             subtitles = emptyList(),
             selection = PlaybackSelection(mode = PlaybackMode.Direct, audioStreamId = 11),
         )
-        assertEquals(PlaybackMode.Remux, ui.selectedMode)
-        assertEquals(11L, ui.selectedAudioId)
-        assertTrue(
-            ui.explanation.contains(
-                "Direct play always uses the first audio track, so playback switched to " +
-                    "\"Original quality — audio adjusted.\"",
-            ),
-        )
-    }
-
-    @Test
-    fun `direct with the first audio track stays direct without the note`() {
-        val ui = playbackSettingsUi(
-            audioStreams = listOf(audioStream(id = 10), audioStream(id = 11)),
-            subtitles = emptyList(),
-            selection = PlaybackSelection(mode = PlaybackMode.Direct, audioStreamId = 10),
-        )
         assertEquals(PlaybackMode.Direct, ui.selectedMode)
+        assertEquals(11L, ui.selectedAudioId)
         assertFalse(ui.explanation.contains("switched"))
     }
 
