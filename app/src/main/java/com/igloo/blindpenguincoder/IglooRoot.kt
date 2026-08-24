@@ -44,6 +44,7 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
+import com.igloo.blindpenguincoder.playback.media3.MoviePlaybackServices
 import com.igloo.blindpenguincoder.playback.media3.deviceCanPlayAudioMime
 import com.igloo.blindpenguincoder.playback.media3.exoMoviePlayerEngine
 import kotlinx.coroutines.delay
@@ -269,9 +270,16 @@ fun IglooRoot(container: IglooAppContainer) {
                             exoMoviePlayerEngine(
                                 context = context,
                                 request = request,
-                                dataSourceFactory = container.streamDataSourceFactory,
-                                streamUrl = container.movieRepository
-                                    .movieStreamUrl(request.movieId),
+                                services = MoviePlaybackServices(
+                                    progressiveDataSourceFactory = container.streamDataSourceFactory,
+                                    hlsDataSourceFactory = container.hlsStreamDataSourceFactory,
+                                    directStreamUrl = container.movieRepository::movieStreamUrl,
+                                    hlsSessionApi = container.movieRepository,
+                                    canPlayAudioMime = { mimeType, channels ->
+                                        deviceCanPlayAudioMime(appContext, mimeType, channels)
+                                    },
+                                    stopScope = container.applicationScope,
+                                ),
                             )
                         },
                         onRetryRail = homeViewModel::retry,

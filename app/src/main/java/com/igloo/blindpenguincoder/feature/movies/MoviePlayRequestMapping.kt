@@ -4,6 +4,8 @@ import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
+import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 
 /**
@@ -25,9 +27,10 @@ internal fun buildMoviePlayRequest(
     )
 
     val audioStreams = technical?.audioStreams.orEmpty()
-    val audioIndexInWireOrder = audioStreams.indexOfFirst { it.id == settings.selectedAudioId }
-        .takeIf { it >= 0 }
-    val effectiveAudio = audioIndexInWireOrder?.let(audioStreams::get)
+    // Sorted here for the same reason the type indexes are: `stream_index` order is the one
+    // ordering every consumer shares, and the wire lists are not trusted to arrive sorted.
+    val orderedAudio = audioStreams.sortedBy { it.streamIndex }
+    val orderedSubtitles = technical?.subtitles.orEmpty().sortedBy { it.streamIndex }
 
     return MoviePlayRequest(
         movieId = movie.id,
@@ -40,10 +43,22 @@ internal fun buildMoviePlayRequest(
             settings.selectedSubtitleId,
             technical?.subtitles.orEmpty().map { it.id to it.streamIndex },
         ),
-        audioCodec = effectiveAudio?.codec,
-        audioCodecProfile = effectiveAudio?.codecProfile?.orNull(),
-        audioChannels = effectiveAudio?.channels?.toInt(),
-        audioLabel = effectiveAudio?.let { audioTrackLabel(it, audioIndexInWireOrder) },
+        audioTracks = orderedAudio.mapIndexed { index, stream ->
+            PlayableAudioTrack(
+                label = audioTrackLabel(stream, index),
+                codec = stream.codec,
+                codecProfile = stream.codecProfile?.orNull(),
+                channels = stream.channels.toInt(),
+                isDefault = stream.isDefault,
+            )
+        },
+        subtitleTracks = orderedSubtitles.mapIndexed { index, subtitle ->
+            PlayableSubtitleTrack(
+                label = subtitleTrackLabel(subtitle, index),
+                imageBased = isImageBasedSubtitleCodec(subtitle.codec),
+            )
+        },
+        videoHeight = maxVideoHeight(technical),
         resumeAtSec = resumePositionSec(progress),
         durationSec = progress?.durationSec ?: movie.duration?.orNull(),
         // Sorted here: the player's active-chapter scan and "Chapter N" numbering assume
@@ -53,6 +68,10 @@ internal fun buildMoviePlayRequest(
             .map { PlaybackChapter(title = it.title, startTimeSec = it.startTime.toDouble()) },
     )
 }
+
+/** Tallest probed video stream — the bound on which transcode profiles are worth offering. */
+internal fun maxVideoHeight(technical: MovieTechnicalDetailsData?): Int? =
+    technical?.videoStreams?.maxOfOrNull { it.height.toInt() }
 
 /**
  * The wire id of an effective choice, as the type-relative index [MoviePlayRequest] carries:

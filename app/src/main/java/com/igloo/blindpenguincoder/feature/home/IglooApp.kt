@@ -83,6 +83,8 @@ import com.igloo.blindpenguincoder.feature.player.ProgressSyncUiState
 import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
+import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import kotlinx.serialization.json.Json
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
@@ -187,13 +189,12 @@ private val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Save
                 request.mode.name,
                 request.audioTypeIndex?.toString().orEmpty(),
                 request.subtitleTypeIndex?.toString().orEmpty(),
-                request.audioCodec.orEmpty(),
-                request.audioCodecProfile.orEmpty(),
-                request.audioChannels?.toString().orEmpty(),
-                request.audioLabel.orEmpty(),
+                // Lists have no natural slot in this flat encoding; JSON is one symmetric line.
+                Json.encodeToString(request.audioTracks),
+                Json.encodeToString(request.subtitleTracks),
+                request.videoHeight?.toString().orEmpty(),
                 request.resumeAtSec?.toString().orEmpty(),
                 request.durationSec?.toString().orEmpty(),
-                // A list has no natural slot in this flat encoding; JSON is one symmetric line.
                 Json.encodeToString(request.chapters),
             )
         }
@@ -210,13 +211,12 @@ private val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Save
                 mode = PlaybackMode.valueOf(saved[4]),
                 audioTypeIndex = saved[5].toIntOrNull(),
                 subtitleTypeIndex = saved[6].toIntOrNull(),
-                audioCodec = saved[7].ifEmpty { null },
-                audioCodecProfile = saved[8].ifEmpty { null },
-                audioChannels = saved[9].toIntOrNull(),
-                audioLabel = saved[10].ifEmpty { null },
-                resumeAtSec = saved[11].toDoubleOrNull(),
-                durationSec = saved[12].toDoubleOrNull(),
-                chapters = Json.decodeFromString<List<PlaybackChapter>>(saved[13]),
+                audioTracks = Json.decodeFromString<List<PlayableAudioTrack>>(saved[7]),
+                subtitleTracks = Json.decodeFromString<List<PlayableSubtitleTrack>>(saved[8]),
+                videoHeight = saved[9].toIntOrNull(),
+                resumeAtSec = saved[10].toDoubleOrNull(),
+                durationSec = saved[11].toDoubleOrNull(),
+                chapters = Json.decodeFromString<List<PlaybackChapter>>(saved[12]),
             )
         }
     },

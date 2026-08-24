@@ -203,4 +203,52 @@ class MoviePlayerStateMachineTest {
             .onEvent(MoviePlayerEvent.TracksChanged(emptyList(), emptyList()))
         assertTrue(failed.audioOptions.isEmpty())
     }
+
+    // --- quality options ---
+
+    @Test
+    fun `quality options replace the menu and the selected mark follows re-emits`() {
+        val first = listOf(
+            TrackOption("Direct", "Original quality — plays the file as-is", selected = true),
+            TrackOption("Remux", "Original quality — audio adjusted", selected = false),
+        )
+        val state = playing().onEvent(MoviePlayerEvent.QualityOptionsChanged(first))
+        assertEquals(first, state.qualityOptions)
+
+        val switched = first.map { it.copy(selected = it.id == "Remux") }
+        assertEquals(
+            switched,
+            state.onEvent(MoviePlayerEvent.QualityOptionsChanged(switched)).qualityOptions,
+        )
+    }
+
+    // --- status narration ---
+
+    @Test
+    fun `a status message shows while waiting and ready clears it`() {
+        val waiting = loading.onEvent(MoviePlayerEvent.StatusMessage("Waiting for the server to free up…"))
+        assertEquals("Waiting for the server to free up…", waiting.statusMessage)
+
+        val ready = waiting.onEvent(MoviePlayerEvent.Ready(3600.0))
+        assertEquals(null, ready.statusMessage)
+    }
+
+    @Test
+    fun `a null status message clears the narration`() {
+        val cleared = loading
+            .onEvent(MoviePlayerEvent.StatusMessage("Reconnecting to the stream…"))
+            .onEvent(MoviePlayerEvent.StatusMessage(null))
+        assertEquals(null, cleared.statusMessage)
+    }
+
+    @Test
+    fun `status messages never disturb a terminal phase`() {
+        val failed = playing().onEvent(MoviePlayerEvent.Error("boom"))
+            .onEvent(MoviePlayerEvent.StatusMessage("Waiting…"))
+        assertEquals(null, failed.statusMessage)
+
+        val ended = playing().onEvent(MoviePlayerEvent.Ended)
+            .onEvent(MoviePlayerEvent.StatusMessage("Waiting…"))
+        assertEquals(null, ended.statusMessage)
+    }
 }

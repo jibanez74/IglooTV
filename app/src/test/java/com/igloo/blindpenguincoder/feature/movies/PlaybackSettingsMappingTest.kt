@@ -21,11 +21,12 @@ class PlaybackSettingsMappingTest {
         language: String? = "eng",
         title: String? = null,
         isDefault: Boolean = false,
+        codec: String = "dts",
     ) = AudioStream(
         id = id,
         movieId = 1,
         streamIndex = streamIndex,
-        codec = "dts",
+        codec = codec,
         bitRate = 0,
         channels = channels,
         channelLayout = sqlString(channelLayout),
@@ -259,5 +260,77 @@ class PlaybackSettingsMappingTest {
         val text = playbackExplanation(PlaybackMode.Direct, audioLabel = null, subtitleLabel = null)
         assertTrue(text.contains("Default audio is used."))
         assertTrue(text.contains("Subtitles are off."))
+    }
+
+    // --- mode filtering (never upscale) ---
+
+    @Test
+    fun `mode rows drop transcode profiles taller than the source`() {
+        val ui = playbackSettingsUi(
+            audioStreams = listOf(audioStream()),
+            subtitles = null,
+            selection = PlaybackSelection(),
+            videoHeight = 1080,
+        )
+        assertEquals(
+            listOf(
+                PlaybackMode.Direct,
+                PlaybackMode.Remux,
+                PlaybackMode.P1080Mbps8,
+                PlaybackMode.P1080Mbps6,
+                PlaybackMode.P1080Mbps4,
+                PlaybackMode.P720Mbps3,
+            ),
+            ui.modes.map { it.mode },
+        )
+    }
+
+    @Test
+    fun `an unknown height keeps every mode on offer`() {
+        val ui = playbackSettingsUi(
+            audioStreams = listOf(audioStream()),
+            subtitles = null,
+            selection = PlaybackSelection(),
+        )
+        assertEquals(PlaybackMode.entries.toList(), ui.modes.map { it.mode })
+    }
+
+    // --- direct honored, never substituted ---
+
+    @Test
+    fun `an unplayable direct pick stays selected and the explanation says why`() {
+        val ui = playbackSettingsUi(
+            audioStreams = listOf(audioStream(codec = "truehd")),
+            subtitles = null,
+            selection = PlaybackSelection(mode = PlaybackMode.Direct),
+            canPlayAudioMime = { _, _ -> false },
+        )
+        // The choice is honored — no silent fallback to Remux.
+        assertEquals(PlaybackMode.Direct, ui.selectedMode)
+        assertTrue(ui.modes.any { it.mode == PlaybackMode.Direct })
+        assertTrue(ui.explanation.contains("Dolby TrueHD"))
+        assertTrue(ui.explanation.contains(playbackModeLabel(PlaybackMode.Remux)))
+    }
+
+    @Test
+    fun `a playable direct pick keeps the plain explanation`() {
+        val ui = playbackSettingsUi(
+            audioStreams = listOf(audioStream(codec = "truehd")),
+            subtitles = null,
+            selection = PlaybackSelection(mode = PlaybackMode.Direct),
+            canPlayAudioMime = { _, _ -> true },
+        )
+        assertTrue(!ui.explanation.contains("can't play"))
+    }
+
+    @Test
+    fun `an HLS mode never warns about the source codec`() {
+        val ui = playbackSettingsUi(
+            audioStreams = listOf(audioStream(codec = "truehd")),
+            subtitles = null,
+            selection = PlaybackSelection(mode = PlaybackMode.Remux),
+            canPlayAudioMime = { _, _ -> false },
+        )
+        assertTrue(!ui.explanation.contains("can't play"))
     }
 }

@@ -27,6 +27,7 @@ import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.data.repository.ProfileRepository
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
 import com.igloo.blindpenguincoder.feature.auth.SessionManager
+import com.igloo.blindpenguincoder.playback.hls.HLS_SEGMENT_READ_TIMEOUT_MS
 import com.igloo.blindpenguincoder.playback.media3.bearerStreamDataSourceFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,9 +58,21 @@ class IglooAppContainer(context: Context) {
      * safe from ExoPlayer's loader thread, and [SessionManager] already collects it.
      */
     val streamDataSourceFactory by lazy {
-        bearerStreamDataSourceFactory(credentials, serverUrlProvider) { profileId ->
-            authEvents.signalUnauthorized(profileId)
-        }
+        bearerStreamDataSourceFactory(
+            credentials,
+            serverUrlProvider,
+            onUnauthorized = { profileId -> authEvents.signalUnauthorized(profileId) },
+        )
+    }
+
+    /** The same stack with the patience HLS needs: segment requests long-poll up to 120s. */
+    val hlsStreamDataSourceFactory by lazy {
+        bearerStreamDataSourceFactory(
+            credentials,
+            serverUrlProvider,
+            onUnauthorized = { profileId -> authEvents.signalUnauthorized(profileId) },
+            readTimeoutMs = HLS_SEGMENT_READ_TIMEOUT_MS,
+        )
     }
     private val serverProbeHttpClient by lazy { createServerProbeHttpClient() }
     private val serverHealthProbe by lazy { ServerHealthProbe(serverProbeHttpClient) }
@@ -76,8 +89,11 @@ class IglooAppContainer(context: Context) {
         ServerRepository(serverHealthProbe, serverSettingsStore, serverUrlProvider, profileRepository)
     }
 
-    /** Outlives any screen, so a rejected credential is still noticed mid-navigation. */
-    private val applicationScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
+    /**
+     * Outlives any screen, so a rejected credential is still noticed mid-navigation and a
+     * released player's HLS stop request still reaches the server.
+     */
+    val applicationScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
 
     val sessionManager by lazy {
         SessionManager(

@@ -3,7 +3,10 @@ package com.igloo.blindpenguincoder.feature.movies
 import com.igloo.blindpenguincoder.data.model.AudioStream
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.Subtitle
+import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
+import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
 import com.igloo.blindpenguincoder.playback.model.describeChannelLayout
+import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.languageDisplayName
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import java.util.Locale
@@ -57,6 +60,10 @@ data class PlaybackSettingsUi(
  * inert stand-ins ("Default", "None") so the focus chain and announcements stay meaningful.
  *
  * Resolution rules:
+ * - Modes: [availablePlaybackModes] drops transcode profiles taller than the source ([videoHeight]).
+ *   Direct stays listed and selectable even when the selected audio track can't play on this
+ *   device — offers may be filtered, but a user's choice is never overridden; the explanation
+ *   (and the Play gate, in the same words) says why Direct would refuse.
  * - Effective audio: the selected id if the file still has it, else the `is_default` stream,
  *   else the first. A selection is matched by id, so a track list that changed under a kept
  *   selection degrades to the default instead of pointing at nothing. Unlike the web client,
@@ -70,8 +77,11 @@ internal fun playbackSettingsUi(
     audioStreams: List<AudioStream>?,
     subtitles: List<Subtitle>?,
     selection: PlaybackSelection,
+    videoHeight: Int? = null,
+    canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean = { _, _ -> true },
 ): PlaybackSettingsUi {
-    val modes = PlaybackMode.entries.map { PlaybackModeOptionUi(it, playbackModeLabel(it)) }
+    val modes = availablePlaybackModes(videoHeight)
+        .map { PlaybackModeOptionUi(it, playbackModeLabel(it)) }
 
     val audio = audioStreams.orEmpty()
     val effectiveAudioIndex = audio.indexOfFirst { it.id == selection.audioStreamId }
@@ -106,6 +116,16 @@ internal fun playbackSettingsUi(
         .firstOrNull { it.id == selection.subtitleStreamId }
         ?.takeUnless { isImageBasedSubtitleCodec(it.codec) && !imageBasedSelectable }
 
+    // The same check, in the same words, that will refuse Play — shown here so the user
+    // learns about an unplayable Direct combination while still inside the dialog.
+    val directCaution = evaluatePlaybackGate(
+        mode = selection.mode,
+        audioCodec = effectiveAudio?.codec,
+        audioCodecProfile = effectiveAudio?.codecProfile?.orNull(),
+        audioLabel = effectiveAudio?.let { audioTrackLabel(it, effectiveAudioIndex) },
+        canPlayMime = { mime -> canPlayAudioMime(mime, effectiveAudio?.channels?.toInt()) },
+    ) as? PlaybackGateResult.Blocked
+
     return PlaybackSettingsUi(
         modes = modes,
         selectedMode = selection.mode,
@@ -119,7 +139,7 @@ internal fun playbackSettingsUi(
             subtitleLabel = effectiveSubtitle?.let {
                 subtitleTrackLabel(it, subtitles.orEmpty().indexOf(it))
             },
-        ),
+        ) + directCaution?.let { " ${it.message}" }.orEmpty(),
     )
 }
 

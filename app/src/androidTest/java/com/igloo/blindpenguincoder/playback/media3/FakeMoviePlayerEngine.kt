@@ -60,6 +60,10 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
         commands += "subtitle:$optionId"
     }
 
+    override fun selectPlaybackMode(optionId: String) {
+        commands += "quality:$optionId"
+    }
+
     override fun onHostPaused() {
         commands += "hostPaused"
         emit(MoviePlayerEvent.PlayWhenReadyChanged(false))

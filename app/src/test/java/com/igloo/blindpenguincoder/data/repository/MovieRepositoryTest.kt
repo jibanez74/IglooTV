@@ -2,9 +2,13 @@ package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.playback.hls.HlsManifestResult
+import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
+import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -39,6 +43,103 @@ class MovieRepositoryTest {
         val http = TestHttp { error("the stream url is built, never fetched") }
 
         assertEquals("$TEST_SERVER/movies/9/stream", http.movieRepository.movieStreamUrl(9))
+    }
+
+    // --- HLS session plumbing ---
+
+    private fun hlsSpec(reload: Int = 0) = HlsSessionSpec(
+        movieId = 9,
+        profileId = "remux",
+        audioTypeIndex = 1,
+        startSec = 90,
+        sessionUuid = "5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1",
+        reload = reload,
+    )
+
+    @Test
+    fun `the hls playlist url carries the profile path and the session query`() = runTest {
+        val http = TestHttp { error("the playlist url is built, never fetched") }
+
+        assertEquals(
+            "$TEST_SERVER/movies/9/hls/remux/playlist.m3u8" +
+                "?playback_session=5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1&start=90&audio_track=1",
+            http.movieRepository.hlsPlaylistUrl(hlsSpec()),
+        )
+    }
+
+    @Test
+    fun `the subtitle url shifts by the session start and omits a zero start`() = runTest {
+        val http = TestHttp { error("the subtitle url is built, never fetched") }
+
+        assertEquals(
+            "$TEST_SERVER/movies/9/subtitles/2/web.vtt?start=87.417",
+            http.movieRepository.movieSubtitleUrl(9, 2, 87.417),
+        )
+        assertEquals(
+            "$TEST_SERVER/movies/9/subtitles/2/web.vtt",
+            http.movieRepository.movieSubtitleUrl(9, 2, 0.0),
+        )
+    }
+
+    @Test
+    fun `fetching the manifest sends the contract query and reads the igloo headers`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            respond(
+                content = "#EXTM3U",
+                status = HttpStatusCode.OK,
+                headers = headersOf(
+                    "X-Igloo-Effective-Profile" to listOf("1080p_8mbps"),
+                    "X-Igloo-Actual-Start" to listOf("87.417"),
+                ),
+            )
+        }
+        http.profiles.setPending("igd_test")
+
+        val result = http.movieRepository.fetchHlsManifest(hlsSpec())
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/movies/9/hls/remux/playlist.m3u8", captured.url.encodedPath)
+        assertEquals("5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1", captured.url.parameters["playback_session"])
+        assertEquals("90", captured.url.parameters["start"])
+        assertEquals("1", captured.url.parameters["audio_track"])
+        assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+        assertEquals(HlsManifestResult.Ready("1080p_8mbps", 87.417), result)
+    }
+
+    @Test
+    fun `a busy manifest surfaces the retry hint instead of failing`() = runTest {
+        val http = TestHttp {
+            respond(
+                content = "",
+                status = HttpStatusCode.ServiceUnavailable,
+                headers = headersOf("Retry-After" to listOf("5")),
+            )
+        }
+
+        assertEquals(
+            HlsManifestResult.Busy(retryAfterSec = 5),
+            http.movieRepository.fetchHlsManifest(hlsSpec()),
+        )
+    }
+
+    @Test
+    fun `stopping a session posts the uuid to the contract path`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse("""{"error":false,"message":"stopped"}""")
+        }
+
+        http.movieRepository.stopHlsSession(9, "5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1")
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/movies/9/hls/session/stop", captured.url.encodedPath)
+        assertEquals(
+            "5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1",
+            captured.url.parameters["playback_session"],
+        )
     }
 
     @Test

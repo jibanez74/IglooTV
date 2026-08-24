@@ -5,10 +5,12 @@ import java.util.Locale
 
 /**
  * The pre-flight decision made before the engine is even constructed: can this play request
- * start honestly on this device? Direct play is the only implemented mode, and standard Media3
- * cannot software-decode TrueHD or DTS — on a TV without passthrough for the selected track the
- * movie would start with silence, which is worse than a clear refusal naming the codec.
- * Capability is injected so the rules stay JVM-pure and testable.
+ * start honestly on this device? Only Direct play can be refused: standard Media3 cannot
+ * software-decode TrueHD or DTS, so on a TV without passthrough for the selected track the
+ * movie would start with silence, which is worse than a clear refusal naming the codec. HLS
+ * modes always proceed — the backend guarantees the mux is playable (AAC audio, H.264-safe
+ * video). The gate never substitutes a different mode: refusing with guidance keeps the
+ * user's choice theirs. Capability is injected so the rules stay JVM-pure and testable.
  */
 sealed interface PlaybackGateResult {
     data object Proceed : PlaybackGateResult
@@ -22,13 +24,7 @@ fun evaluatePlaybackGate(
     audioLabel: String?,
     canPlayMime: (String) -> Boolean,
 ): PlaybackGateResult {
-    if (mode != PlaybackMode.Direct) {
-        return PlaybackGateResult.Blocked(
-            "\"${playbackModeLabel(mode)}\" streaming isn't available on this TV app yet. " +
-                "Set Playback Settings to \"${playbackModeLabel(PlaybackMode.Direct)}\" " +
-                "to play this movie.",
-        )
-    }
+    if (mode != PlaybackMode.Direct) return PlaybackGateResult.Proceed
     // Unknown or unmapped codecs proceed: the gate refuses only what it can prove unplayable,
     // and the player's own error surface catches whatever it could not foresee.
     val mimeType = audioCodecToMimeType(audioCodec ?: return PlaybackGateResult.Proceed, audioCodecProfile)
@@ -38,8 +34,8 @@ fun evaluatePlaybackGate(
     return PlaybackGateResult.Blocked(
         "This TV can't play this movie's ${audioCodecDisplayName(audioCodec, audioCodecProfile)} " +
             "audio track$track — it has no decoder for it and no compatible sound system is " +
-            "connected. Try a different audio track, or " +
-            "\"${playbackModeLabel(PlaybackMode.Remux)}\" when it becomes available.",
+            "connected. Try a different audio track, or switch Playback Settings to " +
+            "\"${playbackModeLabel(PlaybackMode.Remux)}\".",
     )
 }
 

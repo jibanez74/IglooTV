@@ -56,10 +56,7 @@ class MovieMediaSessionTest {
         mode = PlaybackMode.Direct,
         audioTypeIndex = null,
         subtitleTypeIndex = null,
-        audioCodec = null,
-        audioCodecProfile = null,
-        audioChannels = null,
-        audioLabel = null,
+        videoHeight = 1080,
         resumeAtSec = null,
         durationSec = 7200.0,
     )

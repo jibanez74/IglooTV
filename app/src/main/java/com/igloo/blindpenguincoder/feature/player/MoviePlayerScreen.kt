@@ -140,6 +140,7 @@ fun MoviePlayerScreen(
     val chaptersButtonRequester = remember { FocusRequester() }
     val audioButtonRequester = remember { FocusRequester() }
     val subtitlesButtonRequester = remember { FocusRequester() }
+    val qualityButtonRequester = remember { FocusRequester() }
 
     DisposableEffect(engine) {
         onDispose { engine.release() }
@@ -347,6 +348,7 @@ fun MoviePlayerScreen(
                 chaptersButtonRequester = chaptersButtonRequester,
                 audioButtonRequester = audioButtonRequester,
                 subtitlesButtonRequester = subtitlesButtonRequester,
+                qualityButtonRequester = qualityButtonRequester,
                 progressRetryRequester = progressRetryRequester,
                 progressSyncError = progressSyncError,
                 onRetryProgressSync = viewModel::retryFailedSave,
@@ -385,6 +387,7 @@ fun MoviePlayerScreen(
                     PlayerMenu.Chapters -> chaptersButtonRequester.requestFocus()
                     PlayerMenu.Audio -> audioButtonRequester.requestFocus()
                     PlayerMenu.Subtitles -> subtitlesButtonRequester.requestFocus()
+                    PlayerMenu.Quality -> qualityButtonRequester.requestFocus()
                 }
             }
             when (menu) {
@@ -411,6 +414,16 @@ fun MoviePlayerScreen(
                     options = state.subtitleOptions,
                     noneRow = "None",
                     onSelect = { id -> engine.selectSubtitleTrack(id) },
+                    onDismiss = closeMenu,
+                )
+                // Like the track menus, selection keeps the dialog up: a quality switch
+                // rebuffers behind the scrim and the selected mark follows the engine's
+                // re-emitted options once the new session starts.
+                PlayerMenu.Quality -> TrackMenuDialog(
+                    title = "Quality",
+                    options = state.qualityOptions,
+                    noneRow = null,
+                    onSelect = { id -> engine.selectPlaybackMode(requireNotNull(id)) },
                     onDismiss = closeMenu,
                 )
             }
@@ -445,13 +458,13 @@ private tailrec fun Context.findHostActivity(): Activity? = when (this) {
 }
 
 /** The in-player menus; which one is up is plain screen state. */
-private enum class PlayerMenu { Chapters, Audio, Subtitles }
+private enum class PlayerMenu { Chapters, Audio, Subtitles, Quality }
 
 /** Where entry focus belongs for the current phase; modals place their own. */
 private enum class FocusAnchor { Transport, ErrorAction, Modal }
 
 /** The transport row's last visible control — the one whose right edge cancels. */
-private enum class LastControl { Forward, Chapters, Audio, Subtitles }
+private enum class LastControl { Forward, Chapters, Audio, Subtitles, Quality }
 
 /** The chrome: a top title bar and a bottom transport, each on its own section 3.2 scrim. */
 @Composable
@@ -465,6 +478,7 @@ private fun MoviePlayerChrome(
     chaptersButtonRequester: FocusRequester,
     audioButtonRequester: FocusRequester,
     subtitlesButtonRequester: FocusRequester,
+    qualityButtonRequester: FocusRequester,
     progressRetryRequester: FocusRequester,
     progressSyncError: String?,
     onRetryProgressSync: () -> Unit,
@@ -491,9 +505,11 @@ private fun MoviePlayerChrome(
     val showChapters = chapterCount >= 2
     val showAudio = state.audioOptions.size >= 2
     val showSubtitles = state.subtitleOptions.isNotEmpty()
+    val showQuality = state.qualityOptions.size >= 2
     // Right cancels only on the row's last visible control; derived once so the per-button
     // expressions stop compounding as optional controls are added.
     val lastControl = when {
+        showQuality -> LastControl.Quality
         showSubtitles -> LastControl.Subtitles
         showAudio -> LastControl.Audio
         showChapters -> LastControl.Chapters
@@ -553,9 +569,10 @@ private fun MoviePlayerChrome(
         }
 
         Box(modifier = Modifier.weight(1f)) {
+            // The engine's own narration (capacity waits, reconnects) outranks the generic word.
             val holdMessage = when (state.phase) {
-                MoviePlayerPhase.Loading -> "Loading movie…"
-                MoviePlayerPhase.Buffering -> "Buffering…"
+                MoviePlayerPhase.Loading -> state.statusMessage ?: "Loading movie…"
+                MoviePlayerPhase.Buffering -> state.statusMessage ?: "Buffering…"
                 else -> null
             }
             if (holdMessage != null) {
@@ -702,6 +719,20 @@ private fun MoviePlayerChrome(
                             .focusRequester(subtitlesButtonRequester)
                             .transportFocus(isLast = lastControl == LastControl.Subtitles)
                             .testTag("movie_subtitles"),
+                    )
+                }
+                if (showQuality) {
+                    IglooButton(
+                        text = "Quality",
+                        onClick = { onOpenMenu(PlayerMenu.Quality) },
+                        variant = IglooButtonVariant.Ghost,
+                        semanticLabel = "Playback quality",
+                        restingFill = OVER_MEDIA_CONTROL_FILL,
+                        contentColor = Color.White,
+                        modifier = Modifier
+                            .focusRequester(qualityButtonRequester)
+                            .transportFocus(isLast = lastControl == LastControl.Quality)
+                            .testTag("movie_quality"),
                     )
                 }
             }

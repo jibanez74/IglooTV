@@ -11,6 +11,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -89,10 +90,7 @@ class MoviePlayerScreenTest {
         mode = PlaybackMode.Direct,
         audioTypeIndex = null,
         subtitleTypeIndex = null,
-        audioCodec = null,
-        audioCodecProfile = null,
-        audioChannels = null,
-        audioLabel = null,
+        videoHeight = 1080,
         resumeAtSec = resumeAtSec,
         durationSec = 7200.0,
         chapters = chapters,
@@ -208,6 +206,26 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
     }
 
+    private fun emitQualityOptions(selectedId: String = "Direct") {
+        engine.emit(
+            MoviePlayerEvent.QualityOptionsChanged(
+                listOf(
+                    TrackOption(
+                        id = "Direct",
+                        label = "Original quality — plays the file as-is",
+                        selected = selectedId == "Direct",
+                    ),
+                    TrackOption(
+                        id = "Remux",
+                        label = "Original quality — audio adjusted",
+                        selected = selectedId == "Remux",
+                    ),
+                ),
+            ),
+        )
+        composeRule.waitForIdle()
+    }
+
     private fun pressBack() {
         composeRule.runOnUiThread {
             (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
@@ -242,7 +260,7 @@ class MoviePlayerScreenTest {
         composeRule.onNodeWithTag("movie_play_pause")
             .performKeyInput { pressKey(Key.DirectionRight) }
         var focusedTag = "movie_forward"
-        for (tag in listOf("movie_chapters", "movie_audio", "movie_subtitles")) {
+        for (tag in listOf("movie_chapters", "movie_audio", "movie_subtitles", "movie_quality")) {
             if (focusedTag == buttonTag) break
             if (composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isEmpty()) continue
             composeRule.onNodeWithTag(focusedTag)
@@ -521,6 +539,66 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
 
         assertTrue("subtitle:null" in engine.playbackCommands)
+    }
+
+    @Test
+    fun qualityButtonAppearsOnlyOnceTheEngineReportsModes() {
+        setContent()
+        startPlaying()
+
+        composeRule.onNodeWithTag("movie_quality").assertDoesNotExist()
+
+        emitQualityOptions()
+
+        composeRule.onNodeWithTag("movie_quality").assertExists()
+    }
+
+    @Test
+    fun qualityMenuSwitchesModeWithoutDismissingAndTheMarkFollowsTheEngine() {
+        setContent()
+        startPlaying()
+        emitQualityOptions()
+
+        openPlayerMenu("movie_quality")
+
+        // Entry focus lands on the current mode; selection is not dismissal.
+        composeRule.onNodeWithTag("movie_track_Direct").assertIsFocused()
+        composeRule.onNodeWithTag("movie_track_Direct")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("movie_track_Remux")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertTrue("quality:Remux" in engine.playbackCommands)
+        composeRule.onNodeWithTag("movie_track_menu").assertExists()
+
+        // The selected mark is engine truth: it moves when the new session's options arrive.
+        emitQualityOptions(selectedId = "Remux")
+        composeRule.onNodeWithTag("movie_track_Remux").assertIsSelected()
+        composeRule.onNodeWithTag("movie_track_Direct").assertIsNotSelected()
+
+        pressBack()
+
+        composeRule.onNodeWithTag("movie_track_menu").assertDoesNotExist()
+        composeRule.onNodeWithTag("movie_quality").assertIsFocused()
+    }
+
+    @Test
+    fun bufferingShowsTheEngineStatusNarrationUntilReadyClearsIt() {
+        setContent()
+        startPlaying()
+
+        engine.emit(MoviePlayerEvent.Buffering)
+        engine.emit(MoviePlayerEvent.StatusMessage("Waiting for the server to free up…"))
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Waiting for the server to free up…").assertExists()
+
+        startPlaying()
+        engine.emit(MoviePlayerEvent.Buffering)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Buffering…").assertExists()
     }
 
     @Test

@@ -10,6 +10,10 @@ import kotlinx.coroutines.flow.SharedFlow
  * reducer, chrome, focus, Back — runs against a fake in tests without touching a decoder, and
  * so another engine (VLC was named as a possible future) can slot in behind the same seam.
  * All members are main-thread only; [events] replays what a late collector missed.
+ *
+ * Positions and durations cross this seam in absolute movie seconds in every mode. An HLS
+ * session's media may begin mid-movie; the engine owns that offset so the reducer, seek bar,
+ * chapters, resume, and progress saves never learn HLS exists.
  */
 interface MoviePlayerEngine {
     val events: SharedFlow<MoviePlayerEvent>
@@ -34,6 +38,13 @@ interface MoviePlayerEngine {
 
     /** A subtitle menu id, or null for "None". */
     fun selectSubtitleTrack(optionId: String?)
+
+    /**
+     * A quality-menu id — a [com.igloo.blindpenguincoder.data.model.PlaybackMode] name. The
+     * engine swaps its source in place (a new HLS session, or back to the direct stream) and
+     * resumes from the current position.
+     */
+    fun selectPlaybackMode(optionId: String)
 
     /** Host lifecycle went to the background: stop playback — a TV in standby must be silent. */
     fun onHostPaused()

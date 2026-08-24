@@ -127,29 +127,39 @@ class MovieDetailsPlayLaunchTest {
 
         viewModel.requestPlayback()
 
-        // The fixture's default track is DTS-HD MA 5.1; the gate asked about exactly that.
-        assertEquals(listOf("audio/vnd.dts.hd" to 6), asked)
+        // The fixture's default track is DTS-HD MA 5.1; every consultation (the gate's and the
+        // settings dialog's, which shares its rule) asked about exactly that.
+        assertTrue(asked.isNotEmpty())
+        assertTrue(asked.all { it == ("audio/vnd.dts.hd" to 6) })
         val notice = requireNotNull(viewModel.uiState.value.mutationNotice)
         assertTrue(notice.contains("DTS-HD"))
         assertTrue(notice.contains("English · 5.1 surround"))
     }
 
     @Test
-    fun `a non-direct mode blocks the launch without consulting the device`() = runTest {
-        var consulted = false
-        val viewModel = viewModel(http()) { _, _ ->
-            consulted = true
-            true
-        }
+    fun `an HLS mode launches carrying the profile the user chose`() = runTest {
+        val viewModel = viewModel(http())
         viewModel.open(1)
         viewModel.awaitTracksResolved()
         viewModel.selectPlaybackMode(PlaybackMode.P1080Mbps8)
 
+        val request = viewModel.requestAndAwaitLaunch()
+
+        assertEquals(PlaybackMode.P1080Mbps8, request.mode)
+        assertNull(viewModel.uiState.value.mutationNotice)
+    }
+
+    /** An unplayable Direct pick is refused with guidance — never silently switched to Remux. */
+    @Test
+    fun `an undecodable direct track is refused, not substituted`() = runTest {
+        val viewModel = viewModel(http()) { _, _ -> false }
+        viewModel.open(1)
+        viewModel.awaitTracksResolved()
+
         viewModel.requestPlayback()
 
-        assertTrue(!consulted)
         val notice = requireNotNull(viewModel.uiState.value.mutationNotice)
-        assertTrue(notice.contains("isn't available on this TV app yet"))
+        assertTrue(notice.contains("Playback Settings"))
     }
 
     @Test
@@ -216,7 +226,6 @@ class MovieDetailsPlayLaunchTest {
     fun `cached failed reads retry together and only fresh responses can launch`() = runTest {
         var technicalAttempts = 0
         var progressAttempts = 0
-        var capabilityChecks = 0
         val releaseTechnicalRetry = CompletableDeferred<Unit>()
         val releaseProgressRetry = CompletableDeferred<Unit>()
         val http = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
@@ -265,10 +274,7 @@ class MovieDetailsPlayLaunchTest {
                 else -> error("Unrouted path: $path")
             }
         }
-        val viewModel = viewModel(http) { _, _ ->
-            capabilityChecks += 1
-            true
-        }
+        val viewModel = viewModel(http) { _, _ -> true }
         val launches = mutableListOf<com.igloo.blindpenguincoder.playback.model.MoviePlayRequest>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             viewModel.playRequests.collect { launches += it }
@@ -285,22 +291,19 @@ class MovieDetailsPlayLaunchTest {
         runCurrent()
 
         assertTrue(launches.isEmpty())
-        assertEquals(0, capabilityChecks)
         assertEquals(3, technicalAttempts)
         assertEquals(3, progressAttempts)
 
         releaseTechnicalRetry.complete(Unit)
         runCurrent()
         assertTrue(launches.isEmpty())
-        assertEquals(0, capabilityChecks)
 
         releaseProgressRetry.complete(Unit)
         runCurrent()
         assertEquals(3, technicalAttempts)
         assertEquals(3, progressAttempts)
-        assertEquals(1, capabilityChecks)
         assertEquals(1, launches.size)
         assertEquals(3600.0, launches.single().resumeAtSec)
-        assertEquals("Spanish · 5.1 surround", launches.single().audioLabel)
+        assertEquals("Spanish · 5.1 surround", launches.single().selectedAudioTrack?.label)
     }
 }

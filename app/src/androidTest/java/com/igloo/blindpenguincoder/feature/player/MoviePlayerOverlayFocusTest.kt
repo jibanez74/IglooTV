@@ -44,6 +44,7 @@ import com.igloo.blindpenguincoder.inertDetailsActions
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
+import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testMovieDetails
@@ -87,10 +88,10 @@ class MoviePlayerOverlayFocusTest {
         mode = PlaybackMode.Direct,
         audioTypeIndex = 0,
         subtitleTypeIndex = null,
-        audioCodec = "dts",
-        audioCodecProfile = null,
-        audioChannels = 6,
-        audioLabel = "English · 5.1 surround",
+        audioTracks = listOf(
+            PlayableAudioTrack(label = "English · 5.1 surround", codec = "dts", channels = 6),
+        ),
+        videoHeight = 1080,
         resumeAtSec = null,
         durationSec = 7200.0,
     )

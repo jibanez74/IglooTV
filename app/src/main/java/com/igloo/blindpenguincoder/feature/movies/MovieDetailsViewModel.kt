@@ -373,10 +373,10 @@ class MovieDetailsViewModel(
         return when (
             val gate = evaluatePlaybackGate(
                 mode = request.mode,
-                audioCodec = request.audioCodec,
-                audioCodecProfile = request.audioCodecProfile,
-                audioLabel = request.audioLabel,
-                canPlayMime = { mime -> canPlayAudioMime(mime, request.audioChannels) },
+                audioCodec = request.selectedAudioTrack?.codec,
+                audioCodecProfile = request.selectedAudioTrack?.codecProfile,
+                audioLabel = request.selectedAudioTrack?.label,
+                canPlayMime = { mime -> canPlayAudioMime(mime, request.selectedAudioTrack?.channels) },
             )
         ) {
             PlaybackGateResult.Proceed -> {
@@ -716,6 +716,8 @@ class MovieDetailsViewModel(
                 audioStreams = technical?.audioStreams,
                 subtitles = technical?.subtitles,
                 selection = playbackSelection,
+                videoHeight = maxVideoHeight(technical),
+                canPlayAudioMime = canPlayAudioMime,
             ),
         )
     }

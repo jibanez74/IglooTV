@@ -65,14 +65,20 @@ private class UnauthorizedReportingDataSource(
  * The player's HTTP stack: [DefaultHttpDataSource] (Range/206 and redirects are all a single
  * progressive stream needs), the bearer resolver, and the 401 bridge. [onUnauthorized] receives
  * the profile the rejected token belonged to; it is thread-safe to call from the loader thread.
+ * [readTimeoutMs] exists for HLS, whose segment requests long-poll server-side for up to 120
+ * seconds while FFmpeg encodes — the read timeout must outlast that or every wait "fails".
  */
 fun bearerStreamDataSourceFactory(
     credentials: DeviceCredentialSource,
     serverUrl: ServerUrlProvider,
     onUnauthorized: (Long?) -> Unit,
+    readTimeoutMs: Int = DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS,
 ): DataSource.Factory {
     val resolver = BearerResolver(credentials, serverUrl)
-    val resolving = ResolvingDataSource.Factory(DefaultHttpDataSource.Factory(), resolver)
+    val resolving = ResolvingDataSource.Factory(
+        DefaultHttpDataSource.Factory().setReadTimeoutMs(readTimeoutMs),
+        resolver,
+    )
     return DataSource.Factory {
         UnauthorizedReportingDataSource(resolving.createDataSource()) {
             onUnauthorized(resolver.attachedProfileId)

@@ -28,23 +28,22 @@ class PlaybackGateTest {
         assertEquals(PlaybackGateResult.Proceed, gate())
     }
 
+    /** The backend guarantees an HLS mux is playable, so only Direct can ever be refused. */
     @Test
-    fun `every non-direct mode is blocked with its own label and the direct hint`() {
+    fun `every non-direct mode proceeds even with an unplayable source codec`() {
         for (mode in PlaybackMode.entries.filter { it != PlaybackMode.Direct }) {
-            val result = gate(mode = mode) as PlaybackGateResult.Blocked
-            assertTrue(result.message.contains(playbackModeLabel(mode)))
-            assertTrue(result.message.contains("isn't available on this TV app yet"))
-            assertTrue(result.message.contains(playbackModeLabel(PlaybackMode.Direct)))
+            assertEquals(PlaybackGateResult.Proceed, gate(mode = mode, canPlay = false))
         }
     }
 
     // --- capability gating ---
 
     @Test
-    fun `an unplayable codec is blocked naming the codec and the track`() {
+    fun `an unplayable codec is blocked naming the codec, the track, and the remux way out`() {
         val result = gate(canPlay = false) as PlaybackGateResult.Blocked
         assertTrue(result.message.contains("Dolby TrueHD"))
         assertTrue(result.message.contains("English · 7.1 surround"))
+        assertTrue(result.message.contains("Playback Settings"))
         assertTrue(result.message.contains(playbackModeLabel(PlaybackMode.Remux)))
     }
 

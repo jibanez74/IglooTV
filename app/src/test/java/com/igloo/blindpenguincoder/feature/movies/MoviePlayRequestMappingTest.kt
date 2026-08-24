@@ -9,6 +9,9 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
+import com.igloo.blindpenguincoder.data.model.VideoStream
+import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
+import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
@@ -97,7 +100,7 @@ class MoviePlayRequestMappingTest {
         )
 
         assertEquals(1, request.audioTypeIndex)
-        assertEquals("eac3", request.audioCodec)
+        assertEquals("eac3", request.selectedAudioTrack?.codec)
     }
 
     @Test
@@ -142,9 +145,10 @@ class MoviePlayRequestMappingTest {
 
         assertNull(request.audioTypeIndex)
         assertNull(request.subtitleTypeIndex)
-        assertNull(request.audioCodec)
-        assertNull(request.audioChannels)
-        assertNull(request.audioLabel)
+        assertNull(request.selectedAudioTrack)
+        assertNull(request.videoHeight)
+        assertEquals(emptyList<PlayableAudioTrack>(), request.audioTracks)
+        assertEquals(emptyList<PlayableSubtitleTrack>(), request.subtitleTracks)
     }
 
     @Test
@@ -172,10 +176,55 @@ class MoviePlayRequestMappingTest {
             selection = PlaybackSelection(audioStreamId = 20),
         )
 
-        assertEquals("truehd", request.audioCodec)
-        assertEquals("TrueHD + Atmos", request.audioCodecProfile)
-        assertEquals(8, request.audioChannels)
-        assertEquals("English · 7.1 surround", request.audioLabel)
+        val selected = requireNotNull(request.selectedAudioTrack)
+        assertEquals("truehd", selected.codec)
+        assertEquals("TrueHD + Atmos", selected.codecProfile)
+        assertEquals(8, selected.channels)
+        assertEquals("English · 7.1 surround", selected.label)
+    }
+
+    /**
+     * The player's HLS menus and session parameters index into these lists, so their order
+     * must be `stream_index` order regardless of how the wire delivered them, and image-based
+     * subtitle rows must stay in place — their position is the backend's `trackIndex` ordinal.
+     */
+    @Test
+    fun `track summaries ride in stream_index order with labels and flags`() {
+        val tech = technical(
+            audio = listOf(
+                audioStream(id = 30, streamIndex = 3, language = "fre", channels = 2, channelLayout = "stereo"),
+                audioStream(id = 10, streamIndex = 1, isDefault = true),
+            ),
+            subtitles = listOf(
+                subtitle(id = 60, streamIndex = 6, codec = "hdmv_pgs_subtitle"),
+                subtitle(id = 50, streamIndex = 5),
+            ),
+        )
+
+        val request = buildMoviePlayRequest(
+            movie = movie(),
+            posterUrl = null,
+            technical = tech,
+            progress = null,
+            selection = PlaybackSelection(),
+        )
+
+        assertEquals(listOf("English · 5.1 surround", "French · Stereo"), request.audioTracks.map { it.label })
+        assertEquals(listOf(true, false), request.audioTracks.map { it.isDefault })
+        assertEquals(listOf(false, true), request.subtitleTracks.map { it.imageBased })
+    }
+
+    @Test
+    fun `video height is the tallest probed video stream`() {
+        val request = buildMoviePlayRequest(
+            movie = movie(),
+            posterUrl = null,
+            technical = technical(video = listOf(videoStream(height = 800), videoStream(height = 2160))),
+            progress = null,
+            selection = PlaybackSelection(),
+        )
+
+        assertEquals(2160, request.videoHeight)
     }
 
     @Test
@@ -286,12 +335,26 @@ class MoviePlayRequestMappingTest {
         audio: List<AudioStream> = listOf(audioStream(id = 1, streamIndex = 1, isDefault = true)),
         subtitles: List<Subtitle> = emptyList(),
         chapters: List<Chapter> = emptyList(),
+        video: List<VideoStream> = emptyList(),
     ) = MovieTechnicalDetailsData(
         movie = JsonObject(emptyMap()),
-        videoStreams = emptyList(),
+        videoStreams = video,
         audioStreams = audio,
         subtitles = subtitles,
         chapters = chapters,
+    )
+
+    private fun videoStream(height: Long) = VideoStream(
+        id = height,
+        movieId = 1,
+        streamIndex = 0,
+        codec = "h264",
+        bitRate = 0,
+        width = height * 16 / 9,
+        height = height,
+        frameRate = 23.976,
+        createdAt = "2026-01-01T00:00:00Z",
+        updatedAt = "2026-01-01T00:00:00Z",
     )
 
     private fun chapter(id: Long, title: String, startTime: Long) = Chapter(

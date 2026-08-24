@@ -7,8 +7,9 @@ import kotlinx.serialization.Serializable
  * Everything the player screen needs to start one movie, assembled by the details screen from
  * the movie, its technical details, the watch progress, and the session's playback selection.
  * Track choices travel as type-relative indexes — the Nth audio/subtitle stream in
- * `stream_index` order — because that ordering is what survives into the demuxed container,
- * where ExoPlayer exposes the same streams as the Nth track group of that type.
+ * `stream_index` order — because that ordering is what survives everywhere downstream: it is
+ * the demuxed container's track-group order under direct play, and the backend's
+ * `audio_track`/`trackIndex` ordinal for HLS sessions and sideloaded subtitles.
  */
 data class MoviePlayRequest(
     val movieId: Long,
@@ -21,18 +22,50 @@ data class MoviePlayRequest(
     val audioTypeIndex: Int?,
     /** Null = subtitles off. */
     val subtitleTypeIndex: Int?,
-    /** ffprobe codec of the selected audio track, for the pre-flight capability gate. */
-    val audioCodec: String?,
-    val audioCodecProfile: String?,
-    /** Channel count of the selected audio track; passthrough support can depend on it. */
-    val audioChannels: Int?,
-    /** "English · 7.1 surround" — the gate's error message names what could not play. */
-    val audioLabel: String?,
+    /** All audio streams in `stream_index` order; list position is the type index. */
+    val audioTracks: List<PlayableAudioTrack> = emptyList(),
+    /**
+     * All subtitle streams in `stream_index` order, image-based rows included — their position
+     * is the backend's `trackIndex` ordinal, so filtering here would shift every URL after them.
+     */
+    val subtitleTracks: List<PlayableSubtitleTrack> = emptyList(),
+    /** Tallest video stream in the file; bounds which transcode profiles are worth offering. */
+    val videoHeight: Int?,
     /** Null = nothing to resume; the player then starts from the beginning without asking. */
     val resumeAtSec: Double?,
     val durationSec: Double?,
     /** Ascending by start time. Empty when the file carries no chapter metadata. */
     val chapters: List<PlaybackChapter> = emptyList(),
+) {
+    /**
+     * The audio ordinal with the default resolved: HLS sessions must name a concrete
+     * `audio_track` whenever the movie has audio. Null only for a video-only movie.
+     */
+    val effectiveAudioTypeIndex: Int?
+        get() = audioTypeIndex
+            ?: audioTracks.indexOfFirst { it.isDefault }.takeIf { it >= 0 }
+            ?: if (audioTracks.isNotEmpty()) 0 else null
+
+    /** The track behind [effectiveAudioTypeIndex]; the capability gate reads its codec. */
+    val selectedAudioTrack: PlayableAudioTrack?
+        get() = effectiveAudioTypeIndex?.let(audioTracks::getOrNull)
+}
+
+/** One audio stream as the player needs it: menu label plus the capability gate's codec facts. */
+@Serializable
+data class PlayableAudioTrack(
+    val label: String,
+    val codec: String,
+    val codecProfile: String? = null,
+    val channels: Int? = null,
+    val isDefault: Boolean = false,
+)
+
+/** One subtitle stream; image-based tracks exist only for direct play and ordinal stability. */
+@Serializable
+data class PlayableSubtitleTrack(
+    val label: String,
+    val imageBased: Boolean = false,
 )
 
 /**

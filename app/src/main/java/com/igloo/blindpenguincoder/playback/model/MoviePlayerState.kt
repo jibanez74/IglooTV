@@ -28,6 +28,9 @@ data class MoviePlayerState(
     val errorMessage: String? = null,
     val audioOptions: List<TrackOption> = emptyList(),
     val subtitleOptions: List<TrackOption> = emptyList(),
+    val qualityOptions: List<TrackOption> = emptyList(),
+    /** Engine narration for long waits ("Waiting for the server…"); null = plain buffering. */
+    val statusMessage: String? = null,
 ) {
     /** The resume decision was made; the engine is starting and the chrome shows loading. */
     fun onResumeChosen(): MoviePlayerState = when (phase) {
@@ -48,8 +51,9 @@ data class MoviePlayerState(
             ready = true,
             phase = MoviePlayerPhase.Paused,
             durationSec = keptDuration(durationSec),
+            statusMessage = null,
         )
-        else -> copy(ready = true, durationSec = keptDuration(durationSec))
+        else -> copy(ready = true, durationSec = keptDuration(durationSec), statusMessage = null)
     }
 
     fun onBuffering(): MoviePlayerState = when (phase) {
@@ -101,6 +105,15 @@ data class MoviePlayerState(
         subtitles: List<TrackOption>,
     ): MoviePlayerState = copy(audioOptions = audio, subtitleOptions = subtitles)
 
+    fun onQualityOptionsChanged(options: List<TrackOption>): MoviePlayerState =
+        copy(qualityOptions = options)
+
+    /** Narration only matters while the user is still waiting for media. */
+    fun onStatusMessage(message: String?): MoviePlayerState = when (phase) {
+        MoviePlayerPhase.Error, MoviePlayerPhase.Ended -> this
+        else -> copy(statusMessage = message)
+    }
+
     /** Where a relative seek lands, clamped into the playable range. */
     fun seekTarget(deltaSec: Double): Double = clampToPlayable(currentTimeSec + deltaSec)
 
@@ -134,6 +147,10 @@ sealed interface MoviePlayerEvent {
         val audio: List<TrackOption>,
         val subtitles: List<TrackOption>,
     ) : MoviePlayerEvent
+    data class QualityOptionsChanged(val options: List<TrackOption>) : MoviePlayerEvent
+
+    /** Narration for long engine waits; null clears it. */
+    data class StatusMessage(val message: String?) : MoviePlayerEvent
 }
 
 fun MoviePlayerState.onEvent(event: MoviePlayerEvent): MoviePlayerState = when (event) {
@@ -145,4 +162,6 @@ fun MoviePlayerState.onEvent(event: MoviePlayerEvent): MoviePlayerState = when (
     is MoviePlayerEvent.Error -> onError(event.message)
     is MoviePlayerEvent.Time -> onTime(event.currentSec, event.durationSec)
     is MoviePlayerEvent.TracksChanged -> onTracksChanged(event.audio, event.subtitles)
+    is MoviePlayerEvent.QualityOptionsChanged -> onQualityOptionsChanged(event.options)
+    is MoviePlayerEvent.StatusMessage -> onStatusMessage(event.message)
 }
