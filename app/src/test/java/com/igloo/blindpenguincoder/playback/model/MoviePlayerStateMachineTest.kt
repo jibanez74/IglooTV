@@ -9,6 +9,7 @@ class MoviePlayerStateMachineTest {
     private val loading = MoviePlayerState()
 
     private fun playing(duration: Double = 600.0, position: Double = 100.0) = loading
+        .onEvent(MoviePlayerEvent.PlayWhenReadyChanged(true))
         .onEvent(MoviePlayerEvent.Ready(duration))
         .onEvent(MoviePlayerEvent.IsPlayingChanged(true))
         .onEvent(MoviePlayerEvent.Time(position, duration))
@@ -59,6 +60,20 @@ class MoviePlayerStateMachineTest {
             MoviePlayerPhase.Buffering,
             state.onEvent(MoviePlayerEvent.IsPlayingChanged(false)).phase,
         )
+    }
+
+    @Test
+    fun `buffering preserves play intent and pause cancels pending autoplay`() {
+        val buffering = playing().onEvent(MoviePlayerEvent.Buffering)
+        assertTrue(buffering.playWhenReady)
+
+        val pausedIntent = buffering.onEvent(MoviePlayerEvent.PlayWhenReadyChanged(false))
+        assertEquals(MoviePlayerPhase.Buffering, pausedIntent.phase)
+        assertTrue(!pausedIntent.playWhenReady)
+
+        val ready = pausedIntent.onEvent(MoviePlayerEvent.Ready(600.0))
+        assertEquals(MoviePlayerPhase.Paused, ready.phase)
+        assertTrue(!ready.playWhenReady)
     }
 
     @Test
@@ -123,6 +138,20 @@ class MoviePlayerStateMachineTest {
     fun `ended pins the position to the duration`() {
         val state = playing(duration = 600.0, position = 590.0).onEvent(MoviePlayerEvent.Ended)
         assertEquals(MoviePlayerPhase.Ended, state.phase)
+        assertEquals(600.0, state.currentTimeSec, 0.0)
+    }
+
+    @Test
+    fun `ended keeps the last real position when every duration is unknown`() {
+        val state = MoviePlayerState(currentTimeSec = 123.0)
+            .onEvent(MoviePlayerEvent.Ended)
+        assertEquals(123.0, state.currentTimeSec, 0.0)
+    }
+
+    @Test
+    fun `ended uses the request duration seeded into state`() {
+        val state = MoviePlayerState(currentTimeSec = 123.0, durationSec = 600.0)
+            .onEvent(MoviePlayerEvent.Ended)
         assertEquals(600.0, state.currentTimeSec, 0.0)
     }
 

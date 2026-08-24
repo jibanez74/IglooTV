@@ -13,6 +13,7 @@ enum class TrailerPhase { Loading, Playing, Paused, Buffering, Ended, Error }
 data class TrailerPlayerState(
     val phase: TrailerPhase = TrailerPhase.Loading,
     val ready: Boolean = false,
+    val playWhenReady: Boolean = true,
     val currentTimeSec: Double = 0.0,
     val durationSec: Double = 0.0,
     val errorMessage: String? = null,
@@ -32,12 +33,22 @@ data class TrailerPlayerState(
         phase == TrailerPhase.Error -> this
         else -> when (code) {
             -1, 5 -> copy(phase = TrailerPhase.Loading)
-            0 -> copy(phase = TrailerPhase.Ended)
-            1 -> copy(phase = TrailerPhase.Playing)
-            2 -> copy(phase = TrailerPhase.Paused)
+            0 -> copy(phase = TrailerPhase.Ended, playWhenReady = false)
+            1 -> copy(phase = TrailerPhase.Playing, playWhenReady = true)
+            2 -> copy(phase = TrailerPhase.Paused, playWhenReady = false)
             3 -> copy(phase = TrailerPhase.Buffering)
             else -> this
         }
+    }
+
+    fun onPlayRequested(): TrailerPlayerState = when (phase) {
+        TrailerPhase.Error, TrailerPhase.Ended -> this
+        else -> copy(playWhenReady = true)
+    }
+
+    fun onPauseRequested(): TrailerPlayerState = when (phase) {
+        TrailerPhase.Error, TrailerPhase.Ended -> this
+        else -> copy(playWhenReady = false)
     }
 
     /** An embed error code; the first failure wins and later codes never replace its message. */

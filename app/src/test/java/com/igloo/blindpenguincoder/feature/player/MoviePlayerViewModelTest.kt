@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.player
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
 import kotlinx.coroutines.Dispatchers
@@ -108,28 +109,121 @@ class MoviePlayerViewModelTest {
     }
 
     @Test
-    fun `an early exit below the floor saves nothing but still refreshes`() = test { viewModel ->
+    fun `an early exit below the floor saves nothing`() = test { viewModel ->
         viewModel.play(0.0, 10.0)
         viewModel.endSession(10.0, 600.0)
         advanceUntilIdle()
         assertTrue(requests.isEmpty())
-        assertEquals(1, refreshes)
+        assertEquals(0, refreshes)
+    }
+
+    @Test
+    fun `resume and seek followed by exit before 15 played seconds sends no write`() =
+        test { viewModel ->
+            viewModel.play(300.0, 310.0)
+            viewModel.endSession(500.0, 600.0)
+            advanceUntilIdle()
+            assertTrue(requests.isEmpty())
+        }
+
+    @Test
+    fun `a valid final save requires 15 seconds of actual playback`() = test { viewModel ->
+        viewModel.play(0.0, 16.0)
+        viewModel.endSession(300.0, 600.0)
+        advanceUntilIdle()
+        assertEquals(1, requests.size)
+        assertEquals(300.0, requests.single().progressSec, 0.0)
     }
 
     @Test
     fun `a hung exit save gives up after the timeout and still refreshes`() = test { viewModel ->
+        viewModel.play(0.0, 16.0)
         save = { _, _ -> awaitCancellation() }
         viewModel.endSession(300.0, 600.0)
         assertEquals(0, refreshes)
         advanceUntilIdle()
-        assertEquals(1, refreshes)
+        assertEquals(0, refreshes)
+        assertTrue(viewModel.progressSyncUiState.value is ProgressSyncUiState.Failed)
     }
 
     @Test
     fun `ending twice writes only once`() = test { viewModel ->
+        viewModel.play(0.0, 16.0)
         viewModel.endSession(300.0, 600.0)
         viewModel.endSession(300.0, 600.0)
         advanceUntilIdle()
         assertEquals(1, requests.size)
+    }
+
+    @Test
+    fun `periodic failure is non-blocking and a retry reuses the session with a higher sequence`() =
+        test { viewModel ->
+            save = { _, request ->
+                requests += request
+                ApiResult.Failure(AppError.Network)
+            }
+            viewModel.play(30.0, 46.0)
+            advanceUntilIdle()
+
+            val failed = viewModel.progressSyncUiState.value as ProgressSyncUiState.Failed
+            assertTrue(failed.message.contains("Couldn't reach the server"))
+
+            save = { _, request ->
+                requests += request
+                ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+            }
+            viewModel.retryFailedSave()
+            advanceUntilIdle()
+
+            assertEquals(ProgressSyncUiState.Synced, viewModel.progressSyncUiState.value)
+            assertEquals(listOf(1L, 2L), requests.map { it.saveSequence })
+            assertEquals(1, requests.map { it.saveSessionId }.distinct().size)
+            assertEquals(1, refreshes)
+        }
+
+    @Test
+    fun `a later cadence success clears a periodic error`() = test { viewModel ->
+        var fail = true
+        save = { _, request ->
+            requests += request
+            if (fail) {
+                ApiResult.Failure(AppError.Timeout)
+            } else {
+                ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+            }
+        }
+        viewModel.play(30.0, 46.0)
+        advanceUntilIdle()
+        assertTrue(viewModel.progressSyncUiState.value is ProgressSyncUiState.Failed)
+
+        fail = false
+        viewModel.play(46.0, 61.0)
+        advanceUntilIdle()
+
+        assertEquals(ProgressSyncUiState.Synced, viewModel.progressSyncUiState.value)
+        assertEquals(1, refreshes)
+    }
+
+    @Test
+    fun `exit failure remains retryable after the session ends`() = test { viewModel ->
+        save = { _, request ->
+            requests += request
+            ApiResult.Failure(AppError.Network)
+        }
+        viewModel.play(0.0, 16.0)
+        viewModel.endSession(300.0, 600.0)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.progressSyncUiState.value is ProgressSyncUiState.Failed)
+        save = { _, request ->
+            requests += request
+            ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+        }
+        viewModel.retryFailedSave()
+        advanceUntilIdle()
+
+        assertEquals(ProgressSyncUiState.Synced, viewModel.progressSyncUiState.value)
+        assertEquals(listOf(1L, 2L), requests.map { it.saveSequence })
+        assertEquals(1, refreshes)
     }
 }

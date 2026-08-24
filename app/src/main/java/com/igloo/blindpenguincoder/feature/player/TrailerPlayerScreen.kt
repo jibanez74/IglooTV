@@ -149,8 +149,16 @@ fun TrailerPlayerScreen(
         chromeVisible = true
         interactionTick++
     }
+    val play = {
+        state = state.onPlayRequested()
+        engine.play()
+    }
+    val pause = {
+        state = state.onPauseRequested()
+        engine.pause()
+    }
     val togglePlayPause = {
-        if (state.phase == TrailerPhase.Playing) engine.pause() else engine.play()
+        if (state.playWhenReady) pause() else play()
     }
     val seekBy = { deltaSec: Double ->
         val target = state.seekTarget(deltaSec)
@@ -197,6 +205,8 @@ fun TrailerPlayerScreen(
                     chromeVisible = chromeVisible,
                     controlsDisabled = state.phase == TrailerPhase.Error,
                     showChrome = showChrome,
+                    play = play,
+                    pause = pause,
                     togglePlayPause = togglePlayPause,
                     seekBy = seekBy,
                     focusPlayPause = { playPauseRequester.requestFocus() },
@@ -286,7 +296,7 @@ private fun PlayerChrome(
         animationSpec = iglooTween(IglooMotion.STANDARD_MS),
         label = "trailerChrome",
     )
-    val playing = state.phase == TrailerPhase.Playing
+    val playing = state.playWhenReady
 
     Column(
         modifier = Modifier

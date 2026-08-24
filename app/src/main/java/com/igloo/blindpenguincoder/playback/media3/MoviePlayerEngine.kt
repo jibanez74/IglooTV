@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.playback.media3
 
-import android.view.View
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import kotlinx.coroutines.flow.SharedFlow
 
@@ -13,8 +14,9 @@ import kotlinx.coroutines.flow.SharedFlow
 interface MoviePlayerEngine {
     val events: SharedFlow<MoviePlayerEvent>
 
-    /** The video surface to mount, or null when the engine draws nothing (fakes). */
-    fun surface(): View?
+    /** Draws the engine-owned video and subtitle surfaces behind Igloo's Compose chrome. */
+    @Composable
+    fun VideoSurface(modifier: Modifier = Modifier)
 
     /**
      * The resume decision was made: prepare the stream and start playing, from

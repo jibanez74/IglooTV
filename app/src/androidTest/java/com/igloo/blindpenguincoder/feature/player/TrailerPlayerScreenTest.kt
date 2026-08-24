@@ -149,6 +149,41 @@ class TrailerPlayerScreenTest {
     }
 
     @Test
+    fun centerCanPausePendingAutoplayWhileBuffering() {
+        setContent()
+
+        composeRule.onNodeWithTag("trailer_play_pause")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        assertEquals(listOf("pause"), engine.playbackCommands)
+
+        engine.emit(TrailerPlayerEvent.StateChange(1))
+        engine.emit(TrailerPlayerEvent.StateChange(3))
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("trailer_play_pause")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+
+        assertEquals(listOf("pause", "pause"), engine.playbackCommands)
+    }
+
+    @Test
+    fun dedicatedPlayPauseAndToggleKeysStayDistinct() {
+        setContent()
+        startPlaying()
+        val transport = composeRule.onNodeWithTag("trailer_play_pause")
+
+        transport.performKeyInput { pressKey(Key.MediaPause) }
+        transport.performKeyInput { pressKey(Key.MediaPause) }
+        transport.performKeyInput { pressKey(Key.MediaPlay) }
+        transport.performKeyInput { pressKey(Key.MediaPlay) }
+        transport.performKeyInput { pressKey(Key.MediaPlayPause) }
+
+        assertEquals(
+            listOf("pause", "pause", "play", "play", "pause"),
+            engine.playbackCommands,
+        )
+    }
+
+    @Test
     fun mediaTransportKeysSeekTenSecondsRegardlessOfChrome() {
         setContent()
         startPlaying()

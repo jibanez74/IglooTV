@@ -24,9 +24,12 @@ import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.languageDisplayName
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -156,6 +159,16 @@ data class MovieDetailsUiState(
     val mutationNotice: String? = null,
 )
 
+private sealed interface PlaybackRead<out T> {
+    data object Pending : PlaybackRead<Nothing>
+    data class Ready<T>(val value: T) : PlaybackRead<T>
+    data class Failed(val error: com.igloo.blindpenguincoder.core.error.AppError) :
+        PlaybackRead<Nothing>
+}
+
+private fun <T> PlaybackRead<T>.readyValueOrNull(): T? =
+    (this as? PlaybackRead.Ready<T>)?.value
+
 class MovieDetailsViewModel(
     private val movies: MovieRepository,
     private val serverUrl: ServerUrlProvider,
@@ -166,6 +179,9 @@ class MovieDetailsViewModel(
 
     private val _uiState = MutableStateFlow(MovieDetailsUiState())
     val uiState: StateFlow<MovieDetailsUiState> = _uiState.asStateFlow()
+
+    private val playRequestChannel = Channel<MoviePlayRequest>(Channel.CONFLATED)
+    val playRequests: Flow<MoviePlayRequest> = playRequestChannel.receiveAsFlow()
 
     private enum class Read { Details, Technical, Progress, Like }
 
@@ -210,8 +226,9 @@ class MovieDetailsViewModel(
     // the composed Loaded state from whatever has arrived so far. All are keyed to openMovieId:
     // open() clears them, and a response for a movie no longer open is dropped.
     private var wireDetails: MovieDetailsData? = null
-    private var technical: MovieTechnicalDetailsData? = null
-    private var progress: MovieWatchProgress? = null
+    private var technicalRead: PlaybackRead<MovieTechnicalDetailsData> = PlaybackRead.Pending
+    private var progressRead: PlaybackRead<MovieWatchProgress> = PlaybackRead.Pending
+    private var playIntentPending = false
 
     // Session-only (the user's decision): reset with the overlay, never persisted. Deliberately
     // not cleared with the fragments — a Retry of the same movie keeps the user's choices, and
@@ -301,13 +318,31 @@ class MovieDetailsViewModel(
     }
 
     /**
-     * The Play press: assembles the start request and runs the pre-flight gate. Null while the
-     * details haven't loaded, and null on a refusal — the gate's message is published through
-     * [MovieDetailsUiState.mutationNotice], the hero's existing notice surface, so the answer
-     * lands on the page the user is looking at instead of a black player.
+     * Records one Play intent. Required reads may finish in any order; a launch is emitted only
+     * after both have succeeded, and repeated presses while preparing coalesce into that launch.
      */
-    fun buildPlayLaunch(): MoviePlayRequest? {
-        val details = wireDetails ?: return null
+    fun requestPlayback() {
+        if (playIntentPending) return
+        val movieId = _uiState.value.openMovieId ?: return
+        playIntentPending = true
+        _uiState.update { it.copy(mutationNotice = null) }
+
+        if (technicalRead is PlaybackRead.Failed) {
+            technicalRead = PlaybackRead.Pending
+            loadTechnical(movieId)
+        }
+        if (progressRead is PlaybackRead.Failed) {
+            progressRead = PlaybackRead.Pending
+            loadProgress(movieId)
+        }
+        completePlayIntentIfReady()
+    }
+
+    private fun completePlayIntentIfReady() {
+        if (!playIntentPending) return
+        val details = wireDetails ?: return
+        val technical = technicalRead.readyValueOrNull() ?: return
+        val progress = progressRead.readyValueOrNull() ?: return
         val request = buildMoviePlayRequest(details.movie, technical, progress, playbackSelection)
         return when (
             val gate = evaluatePlaybackGate(
@@ -318,10 +353,14 @@ class MovieDetailsViewModel(
                 canPlayMime = { mime -> canPlayAudioMime(mime, request.audioChannels) },
             )
         ) {
-            PlaybackGateResult.Proceed -> request
+            PlaybackGateResult.Proceed -> {
+                playIntentPending = false
+                playRequestChannel.trySend(request)
+                Unit
+            }
             is PlaybackGateResult.Blocked -> {
+                playIntentPending = false
                 _uiState.update { it.copy(mutationNotice = gate.message) }
-                null
             }
         }
     }
@@ -341,30 +380,67 @@ class MovieDetailsViewModel(
                 is ApiResult.Success -> {
                     wireDetails = result.value
                     publishLoaded()
+                    completePlayIntentIfReady()
                 }
-                is ApiResult.Failure -> _uiState.update {
-                    it.copy(
-                        details = it.details.errorOrKeep(
-                            result.error.toLibraryDisplayMessage(),
-                            userInitiated,
-                        ),
-                    )
+                is ApiResult.Failure -> {
+                    playIntentPending = false
+                    _uiState.update {
+                        it.copy(
+                            details = it.details.errorOrKeep(
+                                result.error.toLibraryDisplayMessage(),
+                                userInitiated,
+                            ),
+                        )
+                    }
                 }
             }
         }
     }
 
-    private fun loadTechnical(movieId: Long) =
-        loadSecondary(movieId, Read.Technical, { movies.movieTechnicalDetails(movieId) }) {
-            technical = it
+    private fun loadTechnical(movieId: Long) {
+        launchRead(Read.Technical) {
+            val result = movies.movieTechnicalDetails(movieId)
+            if (_uiState.value.openMovieId != movieId) return@launchRead
+            technicalRead = when (result) {
+                is ApiResult.Success -> PlaybackRead.Ready(result.value)
+                is ApiResult.Failure -> PlaybackRead.Failed(result.error)
+            }
+            publishLoaded()
+            onPreparationReadSettled(result)
         }
+    }
 
     private fun loadProgress(movieId: Long) {
         val epochAtStart = mutationState(MutationType.Watched, movieId).epoch
-        loadSecondary(movieId, Read.Progress, { movies.movieWatchProgress(movieId) }) {
-            // The resume position always lands; only the toggle a write owns can be stale.
-            progress = it
-            confirmIfFresh(MutationType.Watched, movieId, epochAtStart, it.watched)
+        launchRead(Read.Progress) {
+            val result = movies.movieWatchProgress(movieId)
+            if (_uiState.value.openMovieId != movieId) return@launchRead
+            progressRead = when (result) {
+                is ApiResult.Success -> {
+                    confirmIfFresh(MutationType.Watched, movieId, epochAtStart, result.value.watched)
+                    PlaybackRead.Ready(result.value)
+                }
+                is ApiResult.Failure -> PlaybackRead.Failed(result.error)
+            }
+            publishLoaded()
+            onPreparationReadSettled(result)
+        }
+    }
+
+    private fun onPreparationReadSettled(result: ApiResult<*>) {
+        if (!playIntentPending) return
+        when (result) {
+            is ApiResult.Success -> completePlayIntentIfReady()
+            is ApiResult.Failure -> {
+                playIntentPending = false
+                _uiState.update {
+                    it.copy(
+                        mutationNotice = "Couldn't prepare playback: " +
+                            result.error.toLibraryDisplayMessage() +
+                            " Press Play to retry preparation.",
+                    )
+                }
+            }
         }
     }
 
@@ -422,8 +498,9 @@ class MovieDetailsViewModel(
 
     private fun clearFragments() {
         wireDetails = null
-        technical = null
-        progress = null
+        technicalRead = PlaybackRead.Pending
+        progressRead = PlaybackRead.Pending
+        playIntentPending = false
     }
 
     private fun mutationState(type: MutationType, movieId: Long): MutationState =
@@ -549,6 +626,7 @@ class MovieDetailsViewModel(
         // Zero-guarded like the Home hero: the scraper writes TMDB's "no data" as a valid 0.
         val ratingBadge = movie.criticRating?.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
         val certification = movie.certification?.orNullIfBlank()
+        val technical = technicalRead.readyValueOrNull()
         val badges = technical?.let(::mediaBadges).orEmpty()
         val runtimeMinutes = movie.runTime?.orNull()?.takeIf { it > 0 }
         val releaseDateText = movie.releaseDate?.orNullIfBlank()?.let(::formatReleaseDate)
@@ -625,6 +703,7 @@ class MovieDetailsViewModel(
      */
     private fun progressUi(movieId: Long): ProgressUi? {
         if (mutationState(MutationType.Watched, movieId).displayed == true) return null
+        val progress = progressRead.readyValueOrNull()
         val progressSec = resumePositionSec(progress) ?: return null
         val durationSec = progress?.durationSec ?: return null
         return ProgressUi(

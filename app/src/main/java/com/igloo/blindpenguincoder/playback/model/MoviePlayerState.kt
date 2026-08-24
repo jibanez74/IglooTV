@@ -22,6 +22,7 @@ data class TrackOption(
 data class MoviePlayerState(
     val phase: MoviePlayerPhase = MoviePlayerPhase.Loading,
     val ready: Boolean = false,
+    val playWhenReady: Boolean = false,
     val currentTimeSec: Double = 0.0,
     val durationSec: Double = 0.0,
     val errorMessage: String? = null,
@@ -30,7 +31,10 @@ data class MoviePlayerState(
 ) {
     /** The resume decision was made; the engine is starting and the chrome shows loading. */
     fun onResumeChosen(): MoviePlayerState = when (phase) {
-        MoviePlayerPhase.AwaitingResume -> copy(phase = MoviePlayerPhase.Loading)
+        MoviePlayerPhase.AwaitingResume -> copy(
+            phase = MoviePlayerPhase.Loading,
+            playWhenReady = true,
+        )
         else -> this
     }
 
@@ -64,9 +68,18 @@ data class MoviePlayerState(
         else -> this
     }
 
+    fun onPlayWhenReadyChanged(playWhenReady: Boolean): MoviePlayerState = when (phase) {
+        MoviePlayerPhase.Error, MoviePlayerPhase.Ended -> this
+        else -> copy(playWhenReady = playWhenReady)
+    }
+
     fun onEnded(): MoviePlayerState = when (phase) {
         MoviePlayerPhase.Error -> this
-        else -> copy(phase = MoviePlayerPhase.Ended, currentTimeSec = durationSec)
+        else -> copy(
+            phase = MoviePlayerPhase.Ended,
+            playWhenReady = false,
+            currentTimeSec = durationSec.takeIf { it > 0.0 } ?: currentTimeSec,
+        )
     }
 
     /** The first failure wins; later messages never replace what the user already saw. */
@@ -111,6 +124,7 @@ sealed interface MoviePlayerEvent {
     data class Ready(val durationSec: Double) : MoviePlayerEvent
     data object Buffering : MoviePlayerEvent
     data class IsPlayingChanged(val playing: Boolean) : MoviePlayerEvent
+    data class PlayWhenReadyChanged(val playWhenReady: Boolean) : MoviePlayerEvent
     data object Ended : MoviePlayerEvent
 
     /** [unauthorized] rides along so the screen can distinguish a revoked session's message. */
@@ -126,6 +140,7 @@ fun MoviePlayerState.onEvent(event: MoviePlayerEvent): MoviePlayerState = when (
     is MoviePlayerEvent.Ready -> onReady(event.durationSec)
     is MoviePlayerEvent.Buffering -> onBuffering()
     is MoviePlayerEvent.IsPlayingChanged -> onIsPlayingChanged(event.playing)
+    is MoviePlayerEvent.PlayWhenReadyChanged -> onPlayWhenReadyChanged(event.playWhenReady)
     is MoviePlayerEvent.Ended -> onEnded()
     is MoviePlayerEvent.Error -> onError(event.message)
     is MoviePlayerEvent.Time -> onTime(event.currentSec, event.durationSec)

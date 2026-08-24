@@ -7,9 +7,13 @@ package com.igloo.blindpenguincoder.playback.media3
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.view.SurfaceView
-import android.view.View
-import android.widget.FrameLayout
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -23,6 +27,8 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.SubtitleView
+import androidx.media3.ui.compose.ContentFrame
+import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -33,9 +39,8 @@ import kotlinx.coroutines.flow.asSharedFlow
  * The real engine: one ExoPlayer over one progressive stream. The renderers keep their default
  * audio configuration — `DefaultAudioSink` negotiates passthrough with the current output route
  * on its own, which is how TrueHD/DTS-HD/Atmos reach a receiver untouched; nothing here may
- * narrow that. The surface pair (video + [SubtitleView]) is engine-owned so the Compose chrome
- * stays purely declarative; [SubtitleView] renders text and PGS bitmap cues alike, in the
- * viewer's system caption style.
+ * narrow that. The engine owns both the Compose-first Media3 content frame and the system-styled
+ * [SubtitleView], leaving the screen responsible only for Igloo's chrome.
  */
 internal class ExoMoviePlayerEngine(
     context: Context,
@@ -56,27 +61,10 @@ internal class ExoMoviePlayerEngine(
         .setAudioAttributes(moviePlaybackAudioAttributes, /* handleAudioFocus= */ true)
         .build()
 
-    private val surfaceView = SurfaceView(context)
     private val subtitleView = SubtitleView(context).apply {
         setUserDefaultStyle()
         setUserDefaultTextSize()
-    }
-    private val container = FrameLayout(context).apply {
         keepScreenOn = true
-        addView(
-            surfaceView,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            ),
-        )
-        addView(
-            subtitleView,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            ),
-        )
     }
 
     private val listener = object : Player.Listener {
@@ -91,6 +79,10 @@ internal class ExoMoviePlayerEngine(
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             emit(MoviePlayerEvent.IsPlayingChanged(isPlaying))
+        }
+
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            emit(MoviePlayerEvent.PlayWhenReadyChanged(playWhenReady))
         }
 
         override fun onTracksChanged(tracks: Tracks) {
@@ -131,7 +123,6 @@ internal class ExoMoviePlayerEngine(
 
     init {
         player.addListener(listener)
-        player.setVideoSurfaceView(surfaceView)
         player.setMediaItem(
             MediaItem.Builder()
                 .setUri(streamUrl)
@@ -140,7 +131,23 @@ internal class ExoMoviePlayerEngine(
         )
     }
 
-    override fun surface(): View = container
+    @Composable
+    override fun VideoSurface(modifier: Modifier) {
+        Box(modifier = modifier) {
+            ContentFrame(
+                player = player,
+                modifier = Modifier.fillMaxSize(),
+                surfaceType = SURFACE_TYPE_SURFACE_VIEW,
+                contentScale = ContentScale.Fit,
+            )
+            AndroidView(
+                factory = { subtitleView },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusProperties { canFocus = false },
+            )
+        }
+    }
 
     override fun startPlayback(startPositionSec: Double?) {
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()

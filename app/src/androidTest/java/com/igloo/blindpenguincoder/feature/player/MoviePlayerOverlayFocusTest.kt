@@ -5,14 +5,20 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.filterToOne
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
@@ -20,8 +26,11 @@ import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
@@ -33,9 +42,10 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.inertDetailsActions
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
-import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
+import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testMovieDetails
+import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -84,6 +94,8 @@ class MoviePlayerOverlayFocusTest {
 
     private var detailsState by mutableStateOf(MovieDetailsUiState())
     private val engines = mutableListOf<FakeMoviePlayerEngine>()
+    private lateinit var playRequests: MutableSharedFlow<MoviePlayRequest>
+    private var failProgressSaves = false
     private var hostActivity: Activity? = null
 
     /** Null mimics the gate refusing: the message lands on the page and nothing opens. */
@@ -93,10 +105,24 @@ class MoviePlayerOverlayFocusTest {
             details = MovieDetailsState.Loaded(testMovieDetails(id = 1)),
         )
         engines.clear()
+        failProgressSaves = false
+        playRequests = MutableSharedFlow(extraBufferCapacity = 1)
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
+                val progressViewModel = remember {
+                    MoviePlayerViewModel(
+                        saveProgress = { _, _ ->
+                            if (failProgressSaves) {
+                                ApiResult.Failure(AppError.Network)
+                            } else {
+                                ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                            }
+                        },
+                        onWatchedStateCommitted = {},
+                    )
+                }
                 IglooApp(
                     // Pinned: the Shield test device runs TalkBack, and this suite
                     // asserts the focus chain without the reading stops.
@@ -110,8 +136,11 @@ class MoviePlayerOverlayFocusTest {
                     ),
                     details = detailsState,
                     detailsActions = inertDetailsActions,
-                    onRequestPlayback = requestPlayback,
-                    moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
+                    onRequestPlayback = {
+                        requestPlayback()?.let(playRequests::tryEmit)
+                    },
+                    playRequests = playRequests,
+                    moviePlayerViewModel = progressViewModel,
                     moviePlayerEngineFactory = { _, _ ->
                         FakeMoviePlayerEngine().also { engines += it }
                     },
@@ -159,6 +188,48 @@ class MoviePlayerOverlayFocusTest {
         composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
         assertEquals(1, engines.size)
         assertEquals(listOf("start:null"), engines.single().playbackCommands)
+    }
+
+    @Test
+    fun failedProgressSaveFollowsBackToDetailsAndRetryRestoresPlayFocus() {
+        setShellContent { playRequest }
+        pressPlay()
+        val engine = engines.single()
+        engine.emit(MoviePlayerEvent.IsPlayingChanged(true))
+        failProgressSaves = true
+        var position = 30.0
+        while (position <= 46.0) {
+            engine.emit(MoviePlayerEvent.Time(position, 7200.0))
+            position += 0.5
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("movie_progress_error").assertExists()
+        composeRule
+            .onAllNodesWithText("Couldn't save playback progress:", substring = true)
+            .filterToOne(hasAnyAncestor(hasTestTag("movie_progress_error")))
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
+
+        pressBack()
+
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        composeRule.onNodeWithTag("details_progress_error").assertExists()
+        val play = composeRule.onNodeWithTag("details_play")
+        play.assertIsFocused()
+        play.performKeyInput { pressKey(Key.DirectionDown) }
+        val retry = composeRule.onNodeWithTag("details_progress_retry")
+        retry.assertIsFocused()
+
+        failProgressSaves = false
+        retry.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("details_progress_error").assertDoesNotExist()
+        play.assertIsFocused()
     }
 
     @Test

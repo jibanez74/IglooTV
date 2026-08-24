@@ -53,9 +53,11 @@ Because the controls can be invisible, the remote works two ways:
   "clicks" a button you cannot see.
 - **While they are visible**, the d-pad moves between the buttons as normal.
 
-The dedicated media keys on a TV remote (play/pause, rewind, fast-forward) always work, whichever of
-the two states you are in. There is no volume control: on a TV, volume belongs to the remote and the
-TV itself.
+The dedicated media keys on a TV remote always work, whichever of the two states you are in. Play
+only plays, Pause only pauses, and Play/Pause toggles. That intent is remembered during buffering,
+so Pause during a rebuffer cannot turn into an accidental Play just because no frame is currently
+advancing. Rewind and fast-forward always seek. There is no volume control: on a TV, volume belongs
+to the remote and the TV itself.
 
 Press **Back** once to hide the controls, again to leave. When the video reaches its end the player
 closes itself, which is what the web client does too.

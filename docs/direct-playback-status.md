@@ -16,7 +16,7 @@ direct-stream URL (`/movies/{id}/stream`), and the app container now assembles t
 stack that attaches the bearer token to same-origin stream requests and reports a rejected
 session back to the sign-in machinery.
 
-**Play assembles a real start request.** When you press Play, the details screen gathers
+**Play assembles a real start request without racing its reads.** When you press Play, the details screen gathers
 everything the player needs — the file's format, the audio and subtitle tracks you picked in
 Playback Settings (resolved by the exact same rules the dialog shows, so what you saw is what
 plays), and your saved watch position. Before anything opens, a pre-flight check asks the TV
@@ -24,6 +24,10 @@ whether it can actually make the selected audio track audible (decoder or passth
 can't — say, a TrueHD track on a TV with no receiver attached — a clear message appears right
 on the details page naming the codec, and nothing opens. The same message surface says when a
 non-Direct quality mode is selected, since only Direct play exists so far.
+Technical details and watch progress are tracked as pending, successful, or failed rather than
+as nullable fragments. A Play press waits for both successful reads, repeated presses coalesce,
+and a failed read is the only preparation work Play retries. Empty track lists and nullable
+progress fields remain valid successful responses.
 
 **A full movie player screen exists now** (`feature/player/MoviePlayerScreen.kt`), built on the
 same patterns as the trailer player:
@@ -40,12 +44,19 @@ same patterns as the trailer player:
   A revoked session shows Close instead, since retrying a dead session can't work.
 - TalkBack support throughout: labeled controls, a polite announcement of play/pause/loading
   state, and the details page leaves the reading order while the player is on top.
+- Media3 1.11's Compose `ContentFrame` renders through a fitted `SurfaceView`, preserving source
+  aspect ratio and the TV/HDR-quality surface path; the system subtitle renderer stays over it.
+- Play intent is independent of rendered playback. Dedicated Play and Pause keys never toggle,
+  and Pause during initial load or rebuffering cancels pending autoplay.
 
 **Watch progress is saved for real.** The already-tested progress writer is now driven by the
 player: a save every 15 seconds once you've genuinely watched 15 seconds (seeking doesn't
-count), plus one final save on any exit — Back, the movie ending, an error, even the session
-being torn down. Finishing a movie records full progress so the server flips it to watched, and
-Continue Watching and the details page refresh themselves afterwards.
+count), plus an eligible final save on exit. Final writes also require 15 seconds of actual
+playback, so resuming or seeking and leaving early cannot overwrite server progress. A periodic
+failure leaves playback running and holds a polite Retry card in the chrome; exit failures and
+timeouts carry that card back to movie details. Retry preserves the session id, increments the
+sequence, and a retry or later cadence success clears the card and refreshes Continue Watching
+and details.
 
 **The shell hosts the player as its fourth overlay layer** (shell → details → trailer/movie
 player), with the same care the other overlays get: closing the player puts focus back on the
@@ -116,7 +127,7 @@ lint run demanded.
 
 - The Audio/Subtitles buttons are text-labeled; if icon glyphs are preferred, two vectors need
   to be authored for `IglooIcons`.
-- `deviceCanPlayAudioMime` runs synchronously on the Play press (cheap in practice); worth a
-  second look only if a device shows a visible pause.
+- `deviceCanPlayAudioMime` runs synchronously after preparation succeeds (cheap in practice);
+  worth a second look only if a device shows a visible pause.
 - Two `HomeViewModelTest` cases can fail when the whole JVM suite runs in one Gradle daemon and
   pass in isolation — pre-existing flakiness worth a look someday, unrelated to playback.

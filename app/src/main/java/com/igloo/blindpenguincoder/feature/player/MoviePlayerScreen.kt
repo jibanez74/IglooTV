@@ -21,7 +21,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,10 +47,10 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.iglooTween
@@ -59,12 +58,14 @@ import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooRadioRow
 import com.igloo.blindpenguincoder.core.ui.IglooScrim
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
+import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
@@ -76,8 +77,8 @@ import kotlinx.coroutines.delay
 
 /**
  * The movie player (docs/design-system.md section 11.8): a full-screen in-tree overlay whose
- * video surface is the engine's view, with all input and chrome in Compose — the surface itself
- * can never take focus. The trailer player's shape throughout; what this screen adds is the
+ * video surface is rendered by the engine, with all input and chrome in Compose. The trailer
+ * player's shape throughout; what this screen adds is the
  * resume prompt, the in-player track menus, and the progress session on [viewModel].
  *
  * The host owns close and focus restoration; this screen's own [BackHandler] handles chrome
@@ -95,6 +96,8 @@ fun MoviePlayerScreen(
     val context = LocalContext.current
     var reloadKey by remember { mutableIntStateOf(0) }
     val engine = remember(reloadKey) { engineFactory(context, request) }
+    val progressSync by viewModel.progressSyncUiState.collectAsStateWithLifecycle()
+    val progressSyncError = (progressSync as? ProgressSyncUiState.Failed)?.message
 
     // The resume decision and playback position survive recreation: a movie restarting at zero
     // because the activity recreated is an hour of the user's place lost, a trade the trailer
@@ -110,6 +113,8 @@ fun MoviePlayerScreen(
         mutableStateOf(
             MoviePlayerState(
                 phase = if (resumeDecided) MoviePlayerPhase.Loading else MoviePlayerPhase.AwaitingResume,
+                playWhenReady = resumeDecided,
+                durationSec = request.durationSec ?: 0.0,
             ),
         )
     }
@@ -122,6 +127,7 @@ fun MoviePlayerScreen(
     val playPauseRequester = remember { FocusRequester() }
     val backRequester = remember { FocusRequester() }
     val retryRequester = remember { FocusRequester() }
+    val progressRetryRequester = remember { FocusRequester() }
     val audioButtonRequester = remember { FocusRequester() }
     val subtitlesButtonRequester = remember { FocusRequester() }
 
@@ -170,17 +176,20 @@ fun MoviePlayerScreen(
         }
     }
 
-    LaunchedEffect(state.phase) {
+    LaunchedEffect(state.phase, progressSyncError) {
         when (state.phase) {
             MoviePlayerPhase.Ended -> onClose()
             // Chrome may only rest hidden over a moving picture; any other phase surfaces it.
-            MoviePlayerPhase.Playing -> Unit
+            MoviePlayerPhase.Playing -> if (progressSyncError != null) chromeVisible = true
             else -> chromeVisible = true
         }
     }
 
-    LaunchedEffect(chromeVisible, state.phase, interactionTick, trackMenu) {
-        if (chromeVisible && state.phase == MoviePlayerPhase.Playing && trackMenu == null) {
+    LaunchedEffect(chromeVisible, state.phase, interactionTick, trackMenu, progressSyncError) {
+        if (
+            chromeVisible && state.phase == MoviePlayerPhase.Playing && trackMenu == null &&
+            progressSyncError == null
+        ) {
             delay(CHROME_HIDE_MS)
             chromeVisible = false
         }
@@ -190,8 +199,10 @@ fun MoviePlayerScreen(
         chromeVisible = true
         interactionTick++
     }
+    val play = { engine.play() }
+    val pause = { engine.pause() }
     val togglePlayPause = {
-        if (state.phase == MoviePlayerPhase.Playing) engine.pause() else engine.play()
+        if (state.playWhenReady) pause() else play()
     }
     val seekBy = { deltaSec: Double ->
         val target = state.seekTarget(deltaSec)
@@ -213,11 +224,24 @@ fun MoviePlayerScreen(
             FocusAnchor.Modal -> Unit
         }
     }
+    var progressRetryFocused by remember { mutableStateOf(false) }
+    val progressRetryHadFocus = remember(progressSyncError) { progressRetryFocused }
+    LaunchedEffect(progressSyncError) {
+        if (progressSyncError == null && progressRetryHadFocus) {
+            playPauseRequester.requestFocusSafely()
+        }
+    }
 
     // The track menus and the resume prompt register their own handlers below this one, so this
     // fires only with the plain chrome up.
     BackHandler {
-        if (chromeVisible && state.phase == MoviePlayerPhase.Playing) chromeVisible = false else onClose()
+        if (
+            chromeVisible && state.phase == MoviePlayerPhase.Playing && progressSyncError == null
+        ) {
+            chromeVisible = false
+        } else {
+            onClose()
+        }
     }
 
     // Standby must silence playback; on return the user resumes deliberately.
@@ -245,6 +269,8 @@ fun MoviePlayerScreen(
                     chromeVisible = chromeVisible,
                     controlsDisabled = state.phase == MoviePlayerPhase.Error || modalUp,
                     showChrome = showChrome,
+                    play = play,
+                    pause = pause,
                     togglePlayPause = togglePlayPause,
                     seekBy = seekBy,
                     focusPlayPause = { playPauseRequester.requestFocus() },
@@ -256,17 +282,11 @@ fun MoviePlayerScreen(
             }
             .testTag("movie_player"),
     ) {
-        // The video surface, full-bleed. Fakes have no surface; the black ground stands in.
-        key(engine) {
-            engine.surface()?.let { surfaceView ->
-                AndroidView(
-                    factory = { surfaceView },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .focusProperties { canFocus = false },
-                )
-            }
-        }
+        engine.VideoSurface(
+            modifier = Modifier
+                .fillMaxSize()
+                .focusProperties { canFocus = false },
+        )
 
         if (state.phase == MoviePlayerPhase.Error) {
             PlayerErrorSurface(
@@ -291,6 +311,10 @@ fun MoviePlayerScreen(
                 backRequester = backRequester,
                 audioButtonRequester = audioButtonRequester,
                 subtitlesButtonRequester = subtitlesButtonRequester,
+                progressRetryRequester = progressRetryRequester,
+                progressSyncError = progressSyncError,
+                onRetryProgressSync = viewModel::retryFailedSave,
+                onProgressRetryFocusChanged = { progressRetryFocused = it },
                 onAnyControlFocused = { interactionTick++ },
                 onBack = onClose,
                 onTogglePlayPause = togglePlayPause,
@@ -380,6 +404,10 @@ private fun MoviePlayerChrome(
     backRequester: FocusRequester,
     audioButtonRequester: FocusRequester,
     subtitlesButtonRequester: FocusRequester,
+    progressRetryRequester: FocusRequester,
+    progressSyncError: String?,
+    onRetryProgressSync: () -> Unit,
+    onProgressRetryFocusChanged: (Boolean) -> Unit,
     onAnyControlFocused: () -> Unit,
     onBack: () -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -394,7 +422,7 @@ private fun MoviePlayerChrome(
         animationSpec = iglooTween(IglooMotion.STANDARD_MS),
         label = "moviePlayerChrome",
     )
-    val playing = state.phase == MoviePlayerPhase.Playing
+    val playing = state.playWhenReady
     // A one-track menu is a choice with no alternatives; the subtitle menu earns its place with
     // a single track because "None" is its second option.
     val showAudio = state.audioOptions.size >= 2
@@ -436,7 +464,11 @@ private fun MoviePlayerChrome(
                         left = FocusRequester.Cancel
                         right = FocusRequester.Cancel
                         up = FocusRequester.Cancel
-                        down = playPauseRequester
+                        down = if (progressSyncError != null) {
+                            progressRetryRequester
+                        } else {
+                            playPauseRequester
+                        }
                     }
                     .testTag("movie_back"),
             )
@@ -464,6 +496,32 @@ private fun MoviePlayerChrome(
                         .testTag("movie_loading"),
                 )
             }
+            if (progressSyncError != null) {
+                IglooInlineError(
+                    message = progressSyncError,
+                    actionText = "Retry",
+                    actionSemanticLabel = "Retry saving playback progress",
+                    onAction = onRetryProgressSync,
+                    actionModifier = Modifier
+                        .focusRequester(progressRetryRequester)
+                        .focusProperties {
+                            up = backRequester
+                            down = playPauseRequester
+                            left = FocusRequester.Cancel
+                            right = FocusRequester.Cancel
+                        }
+                        .onFocusChanged {
+                            onProgressRetryFocusChanged(it.isFocused)
+                            if (it.isFocused) onAnyControlFocused()
+                        }
+                        .testTag("movie_progress_retry"),
+                    liveRegionMode = LiveRegionMode.Polite,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .width(IglooTheme.layout.dialogWidth)
+                        .testTag("movie_progress_error"),
+                )
+            }
         }
 
         Column(
@@ -488,7 +546,11 @@ private fun MoviePlayerChrome(
                 .focusProperties {
                     if (isFirst) left = FocusRequester.Cancel
                     if (isLast) right = FocusRequester.Cancel
-                    up = backRequester
+                    up = if (progressSyncError != null) {
+                        progressRetryRequester
+                    } else {
+                        backRequester
+                    }
                     down = FocusRequester.Cancel
                 }
             Row(

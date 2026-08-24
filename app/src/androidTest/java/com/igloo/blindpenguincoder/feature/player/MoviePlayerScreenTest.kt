@@ -25,6 +25,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
@@ -58,6 +59,7 @@ class MoviePlayerScreenTest {
     private lateinit var viewModel: MoviePlayerViewModel
     private val savedRequests = mutableListOf<UpdateMovieWatchProgressRequest>()
     private var closes = 0
+    private var failProgressSaves = false
     private var hostActivity: Activity? = null
 
     /** The host contract: closing unmounts the screen, which is what fires the exit save. */
@@ -89,11 +91,16 @@ class MoviePlayerScreenTest {
         engine = FakeMoviePlayerEngine()
         savedRequests.clear()
         closes = 0
+        failProgressSaves = false
         open = true
         viewModel = MoviePlayerViewModel(
             saveProgress = { _, body ->
                 savedRequests += body
-                ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                if (failProgressSaves) {
+                    ApiResult.Failure(AppError.Network)
+                } else {
+                    ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                }
             },
             onWatchedStateCommitted = {},
         )
@@ -156,8 +163,16 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
     }
 
-    private fun awaitExitSave() {
-        composeRule.waitUntil(timeoutMillis = 5_000) { savedRequests.isNotEmpty() }
+    private fun awaitSaveCount(expected: Int) {
+        composeRule.waitUntil(timeoutMillis = 5_000) { savedRequests.size >= expected }
+    }
+
+    /** Delivers realistic one-second ticks so final saves meet the actual-playback floor. */
+    private fun playThrough(fromSec: Int, toSec: Int, durationSec: Double = 7200.0) {
+        (fromSec..toSec).forEach { position ->
+            engine.emit(MoviePlayerEvent.Time(position.toDouble(), durationSec))
+        }
+        composeRule.waitForIdle()
     }
 
     /** Key events land on the focused node, so a menu opens by walking focus onto its button. */
@@ -244,6 +259,45 @@ class MoviePlayerScreenTest {
         playPause.assertContentDescriptionEquals("Play")
         playPause.performKeyInput { pressKey(Key.DirectionCenter) }
         assertEquals(listOf("start:null", "pause", "play"), engine.playbackCommands)
+    }
+
+    @Test
+    fun centerCanPausePendingAutoplayDuringInitialBufferingAndRebuffering() {
+        setContent()
+
+        composeRule.onNodeWithTag("movie_play_pause")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        assertEquals(listOf("start:null", "pause"), engine.playbackCommands)
+
+        engine.emit(MoviePlayerEvent.PlayWhenReadyChanged(true))
+        engine.emit(MoviePlayerEvent.IsPlayingChanged(true))
+        engine.emit(MoviePlayerEvent.Buffering)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("movie_play_pause")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("start:null", "pause", "pause"), engine.playbackCommands)
+    }
+
+    @Test
+    fun dedicatedPlayPauseAndToggleKeysStayDistinct() {
+        setContent()
+        startPlaying()
+        val transport = composeRule.onNodeWithTag("movie_play_pause")
+
+        transport.performKeyInput { pressKey(Key.MediaPause) }
+        transport.performKeyInput { pressKey(Key.MediaPause) }
+        transport.performKeyInput { pressKey(Key.MediaPlay) }
+        transport.performKeyInput { pressKey(Key.MediaPlay) }
+        transport.performKeyInput { pressKey(Key.MediaPlayPause) }
+        composeRule.waitForIdle()
+
+        assertEquals(
+            listOf("start:null", "pause", "pause", "play", "play", "pause"),
+            engine.playbackCommands,
+        )
     }
 
     @Test
@@ -351,14 +405,15 @@ class MoviePlayerScreenTest {
     fun endedClosesThePlayerAndTheExitSaveRecordsTheEnd() {
         setContent()
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 7190.0, durationSec = 7200.0))
-        composeRule.waitForIdle()
+        // Playback below the position floor accrues real time without causing a cadence write;
+        // Ended must turn the final snapshot into the known full duration.
+        playThrough(fromSec = 0, toSec = 16)
 
         engine.emit(MoviePlayerEvent.Ended)
         composeRule.waitForIdle()
 
         assertEquals(1, closes)
-        awaitExitSave()
+        awaitSaveCount(1)
         val save = savedRequests.single()
         assertEquals(7200.0, save.progressSec, 0.001)
         assertEquals(7200.0, save.durationSec, 0.001)
@@ -368,7 +423,7 @@ class MoviePlayerScreenTest {
     fun backClosesAndTheExitSaveRecordsTheLastPosition() {
         setContent()
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        playThrough(fromSec = 584, toSec = 600)
         engine.emit(MoviePlayerEvent.IsPlayingChanged(false))
         composeRule.waitForIdle()
 
@@ -376,8 +431,11 @@ class MoviePlayerScreenTest {
         pressBack()
 
         assertEquals(1, closes)
-        awaitExitSave()
-        assertEquals(600.0, savedRequests.single().progressSec, 0.001)
+        // One cadence save becomes eligible just before exit, followed by the explicit final
+        // save with a higher sequence. The final snapshot is the assertion that matters here.
+        awaitSaveCount(2)
+        assertEquals(600.0, savedRequests.last().progressSec, 0.001)
+        assertEquals(listOf(1L, 2L), savedRequests.map { it.saveSequence })
     }
 
     @Test
@@ -439,5 +497,33 @@ class MoviePlayerScreenTest {
             engine.commands.filter { it == "hostPaused" || it == "hostResumed" },
         )
         assertEquals(transportBeforeStandby, engine.playbackCommands)
+    }
+
+    @Test
+    fun progressFailureIsPoliteReachableNonBlockingAndRetryRestoresTransportFocus() {
+        setContent()
+        startPlaying()
+        failProgressSaves = true
+        var position = 30.0
+        while (position <= 46.0) {
+            engine.emit(MoviePlayerEvent.Time(position, 7200.0))
+            position += 0.5
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("movie_progress_error").assertExists()
+        val transport = composeRule.onNodeWithTag("movie_play_pause")
+        transport.assertIsFocused()
+        transport.performKeyInput { pressKey(Key.DirectionUp) }
+        val retry = composeRule.onNodeWithTag("movie_progress_retry")
+        retry.assertIsFocused()
+
+        failProgressSaves = false
+        retry.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("movie_progress_error").assertDoesNotExist()
+        transport.assertIsFocused()
+        assertTrue(engine.playbackCommands.none { it == "pause" })
     }
 }

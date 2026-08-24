@@ -7,7 +7,6 @@ import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -75,9 +74,12 @@ class ProgressReporterTest {
         val recorder = RecordingSave(result = { ApiResult.Failure(AppError.Network) })
         val reporter = ProgressReporter(movieId = 7, save = recorder::save)
 
-        assertNull(reporter.saveNow(45.0, 600.0))
+        assertTrue(reporter.saveNow(45.0, 600.0) is ApiResult.Failure)
         recorder.result = { ApiResult.Success(MovieWatchProgressUpdateData(watched = false)) }
-        assertEquals(false, reporter.saveNow(45.0, 600.0))
+        assertEquals(
+            false,
+            (reporter.saveNow(45.0, 600.0) as ApiResult.Success).value.watched,
+        )
 
         // The retried save outsequences the failed attempt, so the server cannot drop it.
         assertEquals(listOf(1L, 2L), recorder.requests.map { it.saveSequence })
@@ -96,7 +98,10 @@ class ProgressReporterTest {
             ApiResult.Success(MovieWatchProgressUpdateData(watched = true))
         })
         val reporter = ProgressReporter(movieId = 7, save = recorder::save)
-        assertEquals(true, reporter.saveNow(590.0, 600.0))
+        assertEquals(
+            true,
+            (reporter.saveNow(590.0, 600.0) as ApiResult.Success).value.watched,
+        )
     }
 
     @Test
@@ -104,11 +109,21 @@ class ProgressReporterTest {
         val recorder = RecordingSave()
         val reporter = ProgressReporter(movieId = 7, save = recorder::save)
 
-        assertNull(reporter.saveNow(100.0, 0.0))
+        assertTrue(reporter.saveNow(100.0, 0.0) is ApiResult.Failure)
         assertTrue(recorder.requests.isEmpty())
 
         reporter.saveNow(-5.0, 600.0)
         reporter.saveNow(700.0, 600.0)
         assertEquals(listOf(0.0, 600.0), recorder.requests.map { it.progressSec })
+    }
+
+    @Test
+    fun `final save requires actual playback and a valid snapshot`() {
+        assertFalse(shouldSaveFinalProgress(14.9, 300.0, 600.0))
+        assertFalse(shouldSaveFinalProgress(15.0, 300.0, 0.0))
+        assertFalse(shouldSaveFinalProgress(15.0, -1.0, 600.0))
+        assertFalse(shouldSaveFinalProgress(15.0, Double.NaN, 600.0))
+        assertFalse(shouldSaveFinalProgress(15.0, 300.0, Double.POSITIVE_INFINITY))
+        assertTrue(shouldSaveFinalProgress(15.0, 300.0, 600.0))
     }
 }

@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.playback.media3
 
-import android.view.View
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -29,18 +30,22 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
     var released = false
         private set
 
-    override fun surface(): View? = null
+    @Composable
+    override fun VideoSurface(modifier: Modifier) = Unit
 
     override fun startPlayback(startPositionSec: Double?) {
         commands += "start:$startPositionSec"
+        emit(MoviePlayerEvent.PlayWhenReadyChanged(true))
     }
 
     override fun play() {
         commands += "play"
+        emit(MoviePlayerEvent.PlayWhenReadyChanged(true))
     }
 
     override fun pause() {
         commands += "pause"
+        emit(MoviePlayerEvent.PlayWhenReadyChanged(false))
     }
 
     override fun seekTo(seconds: Double) {
@@ -57,6 +62,7 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
 
     override fun onHostPaused() {
         commands += "hostPaused"
+        emit(MoviePlayerEvent.PlayWhenReadyChanged(false))
     }
 
     override fun onHostResumed() {

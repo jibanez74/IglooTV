@@ -159,6 +159,8 @@ fun MovieDetailsScreen(
     onOpenPlaybackSettings: () -> Unit,
     onDismissPlaybackSettings: () -> Unit,
     mutationNotice: String? = null,
+    progressSyncError: String? = null,
+    onRetryProgressSync: () -> Unit = {},
     modifier: Modifier = Modifier,
     // Parameterized so tests can force both states: the reading-stop chain below depends on it,
     // and a test device with TalkBack running would otherwise pin the gate open.
@@ -220,6 +222,8 @@ fun MovieDetailsScreen(
                 state = state,
                 actions = actions,
                 mutationNotice = mutationNotice,
+                progressSyncError = progressSyncError,
+                onRetryProgressSync = onRetryProgressSync,
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 entryRequester = entryRequester,
                 onPlay = onPlay,
@@ -300,6 +304,8 @@ private fun DetailsBody(
     state: MovieDetailsState,
     actions: MovieDetailsActions,
     mutationNotice: String?,
+    progressSyncError: String?,
+    onRetryProgressSync: () -> Unit,
     spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
     onPlay: () -> Unit,
@@ -347,6 +353,8 @@ private fun DetailsBody(
         is MovieDetailsState.Loaded -> DetailsContent(
             movie = state.movie,
             mutationNotice = mutationNotice,
+            progressSyncError = progressSyncError,
+            onRetryProgressSync = onRetryProgressSync,
             spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             entryRequester = entryRequester,
             actions = actions,
@@ -366,6 +374,8 @@ private fun DetailsBody(
 private fun DetailsContent(
     movie: MovieDetailsUi,
     mutationNotice: String?,
+    progressSyncError: String?,
+    onRetryProgressSync: () -> Unit,
     spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
     actions: MovieDetailsActions,
@@ -406,6 +416,7 @@ private fun DetailsContent(
     val castEntry = remember { FocusRequester() }
     val extrasEntry = remember { FocusRequester() }
     val about = remember { FocusRequester() }
+    val progressRetryRequester = remember { FocusRequester() }
     val hasCast = movie.cast.isNotEmpty()
     val hasExtras = movie.extraVideos.isNotEmpty()
     val hasAbout = !movie.about.isEmpty
@@ -432,17 +443,30 @@ private fun DetailsContent(
     var lastFocusedAction by remember(hasHeroActions) {
         mutableStateOf(entryRequester.takeIf { hasHeroActions })
     }
-    val upFromSections = when {
-        hasHeroActions -> lastFocusedAction
-        stops -> heroInfoRequester
-        else -> null
-    }
-    val belowActions = when {
+    val belowProgressError = when {
         stops -> overviewRequester
         hasCast -> castEntryRequester
         hasExtras -> extrasEntryRequester
         hasAbout -> aboutRequester
         else -> null
+    }
+    val belowActions = if (progressSyncError != null) {
+        progressRetryRequester
+    } else {
+        belowProgressError
+    }
+    val upFromSections = when {
+        progressSyncError != null -> progressRetryRequester
+        hasHeroActions -> lastFocusedAction
+        stops -> heroInfoRequester
+        else -> null
+    }
+    var progressRetryFocused by remember { mutableStateOf(false) }
+    val retryHadFocusWhenStateChanged = remember(progressSyncError) { progressRetryFocused }
+    LaunchedEffect(progressSyncError) {
+        if (progressSyncError == null && retryHadFocusWhenStateChanged) {
+            lastFocusedAction?.requestFocusSafely()
+        }
     }
     // The backdrop fades in on top of the token canvas instead of popping (section 7.2's
     // overlay-reveal case); under reduced motion iglooTween snaps it.
@@ -542,6 +566,12 @@ private fun DetailsContent(
                 onOpenMoreMenu = onOpenMoreMenu,
                 onMoreAnchorPositioned = onMoreAnchorPositioned,
                 mutationNotice = mutationNotice,
+                progressSyncError = progressSyncError,
+                onRetryProgressSync = onRetryProgressSync,
+                progressRetryRequester = progressRetryRequester,
+                progressRetryUpRequester = lastFocusedAction,
+                progressRetryDownRequester = belowProgressError,
+                onProgressRetryFocusChanged = { progressRetryFocused = it },
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()

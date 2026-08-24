@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.playback.progress
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
 import java.util.UUID
@@ -21,6 +22,18 @@ internal fun shouldSaveProgress(
     durationSec > 0.0 &&
     (secondsSinceLastSave == null || secondsSinceLastSave >= SAVE_INTERVAL_SEC)
 
+/** The exit write uses the same actual-playback floor as cadence writes. */
+internal fun shouldSaveFinalProgress(
+    playedSec: Double,
+    positionSec: Double,
+    durationSec: Double,
+): Boolean = playedSec >= MIN_PLAYED_SEC &&
+    positionSec.isFinite() &&
+    durationSec.isFinite() &&
+    durationSec > 0.0 &&
+    positionSec >= 0.0 &&
+    (positionSec >= MIN_POSITION_SEC || positionSec / durationSec >= COMPLETION_RATIO)
+
 /**
  * One playback session's writes to `PUT /movies/{id}/watch-progress`. The server's upsert rule:
  * a different session always wins; within the same session only a strictly higher sequence
@@ -36,23 +49,21 @@ internal class ProgressReporter(
 ) {
     private var sequence = 0L
 
-    /**
-     * Persist the position now. Returns the server's watched verdict — true once
-     * `progress/duration >= 0.98`, where the server marks the movie watched instead of
-     * storing progress — or null when the request failed.
-     */
-    suspend fun saveNow(positionSec: Double, durationSec: Double): Boolean? {
-        if (durationSec <= 0.0) return null
+    /** Persists one snapshot without discarding the server's mapped failure reason. */
+    suspend fun saveNow(
+        positionSec: Double,
+        durationSec: Double,
+    ): ApiResult<MovieWatchProgressUpdateData> {
+        if (durationSec <= 0.0) {
+            return ApiResult.Failure(AppError.Validation("Playback duration is not available."))
+        }
         val request = UpdateMovieWatchProgressRequest(
             progressSec = positionSec.coerceIn(0.0, durationSec),
             durationSec = durationSec,
             saveSessionId = sessionId,
             saveSequence = ++sequence,
         )
-        return when (val result = save(movieId, request)) {
-            is ApiResult.Success -> result.value.watched
-            is ApiResult.Failure -> null
-        }
+        return save(movieId, request)
     }
 }
 

@@ -262,7 +262,8 @@ fun IglooRoot(container: IglooAppContainer) {
                                 onRetry = detailsViewModel::retry,
                             )
                         },
-                        onRequestPlayback = detailsViewModel::buildPlayLaunch,
+                        onRequestPlayback = detailsViewModel::requestPlayback,
+                        playRequests = detailsViewModel.playRequests,
                         moviePlayerViewModel = moviePlayerViewModel,
                         moviePlayerEngineFactory = { context, request ->
                             exoMoviePlayerEngine(

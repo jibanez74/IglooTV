@@ -1614,6 +1614,13 @@ TV can verify a PIN (§11.1.2) but cannot yet set or clear one.
 Media3 / ExoPlayer. Direct play or backend-produced HLS; **never client-side transcoding**;
 preserve audio passthrough.
 
+The movie picture is Media3 1.11's Compose `ContentFrame` over a `SurfaceView`, with
+`ContentScale.Fit`. The source aspect ratio is preserved: scope movies letterbox, 4:3 movies
+pillarbox, and anamorphic/non-square-pixel sources follow Media3's reported display aspect.
+Igloo's Compose chrome remains separate, with the system-styled `SubtitleView` layered over the
+fitted picture. `SurfaceView` is required for TV-quality timing, power use, full-resolution output,
+and HDR paths; do not replace it with a hand-attached view or a texture surface for convenience.
+
 Chrome is a top bar (title + back) and a bottom control bar that **auto-hide after idle** and
 reappear on any d-pad or media-key event. Controls: seek bar, current/total time, rewind,
 play/pause, fast-forward, quality chip, chapters, volume. A **Resume** dialog offers resume vs.
@@ -1624,12 +1631,30 @@ D-pad and media-key mapping:
 | Input | Action |
 |---|---|
 | Center / Play-Pause | Play / pause |
+| Play | Play (never pauses) |
+| Pause | Pause (never plays) |
 | Left / Rewind | Seek back |
 | Right / Fast-Forward | Seek forward |
 | Up / Down | Show chrome, move between controls |
 | Back | Exit (or dismiss chrome first) |
 
-Progress saves to the backend every 15s, starting only after ~15s of real playback.
+Play is an intent, not a synonym for `isPlaying`: buffering can report no rendered playback while
+autoplay is still pending. The icon and toggle use `playWhenReady`, so Pause during initial load or
+rebuffering cancels pending autoplay and the ready transition cannot restart behind the user's
+back.
+
+The details page does not launch from partial preparation. Technical details and watch progress
+each resolve to pending, successful (including empty tracks or nullable progress), or failed. One
+Play intent waits for both successful responses regardless of arrival order; failed reads are
+retried by Play, and the capability gate and resume prompt never consume missing or failed data.
+
+Progress saves to the backend every 15s, starting only after ~15s of real playback. The final
+exit write has the same 15 seconds-of-actual-playback minimum; a resume or seek does not make an
+early exit eligible. Save failures never pause playback. They hold the chrome open with a polite,
+D-pad-reachable inline Retry and follow the user back to movie details if exit finishes first.
+Retry keeps the original save session id and takes a higher sequence. A retry or later cadence
+success clears the error, safely restores focus if Retry held it, and refreshes movie details and
+Continue Watching.
 
 **Media3 does not go through the app's Ktor client**, so playback requests carry no
 `Authorization` header and their 401s never reach the session state machine. When the player

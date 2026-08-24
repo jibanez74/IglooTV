@@ -196,6 +196,8 @@ internal fun handlePlayerKey(
     chromeVisible: Boolean,
     controlsDisabled: Boolean,
     showChrome: () -> Unit,
+    play: () -> Unit,
+    pause: () -> Unit,
     togglePlayPause: () -> Unit,
     seekBy: (Double) -> Unit,
     focusPlayPause: () -> Unit,
@@ -204,8 +206,20 @@ internal fun handlePlayerKey(
     if (controlsDisabled) return false
 
     when (event.key) {
-        Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+        Key.MediaPlayPause -> {
             togglePlayPause()
+            showChrome()
+            return true
+        }
+
+        Key.MediaPlay -> {
+            play()
+            showChrome()
+            return true
+        }
+
+        Key.MediaPause -> {
+            pause()
             showChrome()
             return true
         }

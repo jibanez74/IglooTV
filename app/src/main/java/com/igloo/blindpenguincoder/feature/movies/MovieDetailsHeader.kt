@@ -36,6 +36,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -51,6 +52,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIconButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
@@ -83,6 +85,12 @@ internal fun MovieDetailsHeader(
     onOpenMoreMenu: () -> Unit,
     onMoreAnchorPositioned: (Rect) -> Unit,
     mutationNotice: String?,
+    progressSyncError: String?,
+    onRetryProgressSync: () -> Unit,
+    progressRetryRequester: FocusRequester,
+    progressRetryUpRequester: FocusRequester?,
+    progressRetryDownRequester: FocusRequester?,
+    onProgressRetryFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Up from the action row reaches the hero's reading stop only while a screen reader runs;
@@ -143,6 +151,28 @@ internal fun MovieDetailsHeader(
                 IglooNotice(
                     text = mutationNotice,
                     modifier = Modifier.testTag("details_mutation_notice"),
+                )
+            }
+            if (progressSyncError != null) {
+                IglooInlineError(
+                    message = progressSyncError,
+                    actionText = "Retry",
+                    actionSemanticLabel = "Retry saving playback progress",
+                    onAction = onRetryProgressSync,
+                    actionModifier = Modifier
+                        .focusRequester(progressRetryRequester)
+                        .focusProperties {
+                            up = progressRetryUpRequester ?: Cancel
+                            down = progressRetryDownRequester ?: Cancel
+                            left = Cancel
+                            right = Cancel
+                        }
+                        .onFocusChanged { onProgressRetryFocusChanged(it.isFocused) }
+                        .testTag("details_progress_retry"),
+                    liveRegionMode = LiveRegionMode.Polite,
+                    modifier = Modifier
+                        .width(IglooTheme.layout.dialogWidth)
+                        .testTag("details_progress_error"),
                 )
             }
         }

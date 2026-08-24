@@ -84,54 +84,6 @@ by hand:
 
 ---
 
-## Watch progress: the player still has to own the save session identity
-
-**Found:** 2026-08-10, seeding watch progress by hand to verify the Home rails.
-**Status:** partly landed. `UpdateMovieWatchProgressRequest` matches the schema exactly
-(2026-08-13); the caller-side rules below are still unimplemented because nothing sends it yet.
-**Files:** the future playback/progress caller
-
-### What remains
-
-The model is correct now, but the two fields it gained only work if the caller manages them. The
-movie is identified by the path — `PUT /api/movies/{id}/watch-progress` — so the body carries
-four fields and no id. From `../Igloo/server/cmd/api/watch_progress_handler.go` and the
-`UpsertMovieWatchProgress` query:
-
-| Field | Type | Rule |
-| --- | --- | --- |
-| `progress_sec` | number | Clamped server-side to `[0, duration_sec]`. |
-| `duration_sec` | number | Must be `> 0`; both values must be finite (NaN/Inf are rejected). |
-| `save_session_id` | UUID string | Identifies one continuous playback session. Validated as a real UUID (36 chars, correct dashes, hex). |
-| `save_sequence` | int64 | Monotonically increasing counter **within** a session. Must be `> 0`. |
-
-The upsert applies a write only when:
-
-```sql
-WHERE movie_watch_progress.save_session_id <> excluded.save_session_id
-   OR movie_watch_progress.save_sequence   <  excluded.save_sequence
-```
-
-A different session always wins; within the same session only a strictly higher sequence wins.
-A late-arriving save from earlier in the same session is **silently dropped** — no error, so the
-client cannot detect it and must not treat a 200 as "my value is now stored".
-
-So the player must mint one UUID per playback session and increment a counter on each save, and
-the sequence must keep increasing across retries of the *same* save, or a retried write can be
-dropped by the `<` comparison. AGENTS.md sets the cadence — save every 15 seconds, first save only
-after ~15s of real playback, so in practice around 30s.
-
-One more server-side behaviour worth knowing before wiring this up: at
-`progress_sec / duration_sec >= 0.98` the server marks the movie **watched** instead of storing
-progress, and responds `{"watched": true}`. The app's `MovieWatchProgressUpdateData` already
-models that response correctly.
-
-Nothing in the app touches this yet. There is no playback code at all: Media3 is declared in
-`app/build.gradle.kts` but referenced by zero Kotlin sources, and neither `MovieApi` nor
-`MovieRepository` exposes a watch-progress method.
-
----
-
 ## Rejected: album cover URLs are absolute and must not be "resolved"
 
 **Found:** 2026-08-13, raised as a home-screen review comment and investigated.

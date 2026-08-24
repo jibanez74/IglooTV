@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooEasing
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -77,11 +78,14 @@ import com.igloo.blindpenguincoder.feature.movies.VideoLaunchSite
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerScreen
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
+import com.igloo.blindpenguincoder.feature.player.ProgressSyncUiState
 import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /** Which surface opened the details overlay, so Back can put focus back where it came from. */
 private sealed interface DetailsOrigin {
@@ -203,11 +207,10 @@ fun IglooApp(
     home: HomeUiState,
     details: MovieDetailsUiState,
     detailsActions: MovieDetailsActions,
-    // The Play press asks the details view model for a gated start request; null means blocked
-    // (the refusal is already on the details page) or nothing loaded, and nothing opens.
-    onRequestPlayback: () -> MoviePlayRequest?,
+    onRequestPlayback: () -> Unit,
     moviePlayerViewModel: MoviePlayerViewModel,
     moviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine,
+    playRequests: Flow<MoviePlayRequest> = emptyFlow(),
     onRetryRail: (HomeRail) -> Unit,
     onMovieSelected: ((Long) -> Unit)?,
     onTheaterMovieSelected: ((Long) -> Unit)?,
@@ -257,7 +260,12 @@ fun IglooApp(
     var moviePlayRequest by rememberSaveable(stateSaver = MoviePlayRequestSaver) {
         mutableStateOf<MoviePlayRequest?>(null)
     }
+    LaunchedEffect(playRequests) {
+        playRequests.collect { moviePlayRequest = it }
+    }
     val playerOpen = moviePlayRequest != null
+    val progressSync by moviePlayerViewModel.progressSyncUiState.collectAsStateWithLifecycle()
+    val progressSyncError = (progressSync as? ProgressSyncUiState.Failed)?.message
     val playReturnRequester = remember { FocusRequester() }
     // Parked by the extras rail on its last-focused card, so closing the player restores focus
     // to the exact card that launched it (section 6.3). The in-theaters page can launch the same
@@ -428,11 +436,7 @@ fun IglooApp(
                     state = details.details,
                     actions = detailsActions,
                     isAdmin = user.isAdmin,
-                    onPlay = {
-                        // Null means the gate refused (its message is already on the page) or
-                        // nothing has loaded; either way there is nothing to open.
-                        onRequestPlayback()?.let { moviePlayRequest = it }
-                    },
+                    onPlay = onRequestPlayback,
                     playReturnRequester = playReturnRequester,
                     onPlayVideo = { video, site ->
                         // A cheap invariant, not a reachable path today — the extras rail is
@@ -475,6 +479,9 @@ fun IglooApp(
                         }
                     },
                     mutationNotice = details.mutationNotice,
+                    progressSyncError = progressSyncError
+                        .takeIf { detailsActions is MovieDetailsActions.Library },
+                    onRetryProgressSync = moviePlayerViewModel::retryFailedSave,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
