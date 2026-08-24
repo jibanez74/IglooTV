@@ -75,6 +75,7 @@ class MoviePlayerScreenTest {
     private fun playRequest(resumeAtSec: Double? = null) = MoviePlayRequest(
         movieId = 7,
         title = "Heat",
+        posterUrl = null,
         mimeType = "video/x-matroska",
         mode = PlaybackMode.Direct,
         audioTypeIndex = null,
@@ -525,5 +526,63 @@ class MoviePlayerScreenTest {
         composeRule.onNodeWithTag("movie_progress_error").assertDoesNotExist()
         transport.assertIsFocused()
         assertTrue(engine.playbackCommands.none { it == "pause" })
+    }
+
+    // Transport keys must be swallowed, not just unhandled, while a modal or the error surface
+    // is up: an unhandled media key falls back to the active MediaSession and would drive
+    // playback underneath the dialog.
+
+    @Test
+    fun mediaTransportKeysAreInertDuringTheResumePrompt() {
+        setContent(playRequest(resumeAtSec = 900.0))
+
+        composeRule.onNodeWithTag("movie_resume").performKeyInput {
+            pressKey(Key.MediaPlay)
+            pressKey(Key.MediaPause)
+            pressKey(Key.MediaPlayPause)
+            pressKey(Key.MediaFastForward)
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(emptyList<String>(), engine.playbackCommands)
+        composeRule.onNodeWithTag("movie_resume_prompt").assertExists()
+    }
+
+    @Test
+    fun mediaTransportKeysAreInertWhileATrackMenuIsOpen() {
+        setContent()
+        startPlaying()
+        emitTracks()
+        openTrackMenu("movie_audio")
+        val commandsBefore = engine.playbackCommands.toList()
+
+        composeRule.onNodeWithTag("movie_track_1:0").performKeyInput {
+            pressKey(Key.MediaPause)
+            pressKey(Key.MediaPlayPause)
+            pressKey(Key.MediaRewind)
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(commandsBefore, engine.playbackCommands)
+        composeRule.onNodeWithTag("movie_track_menu").assertExists()
+    }
+
+    @Test
+    fun mediaTransportKeysAreInertOnTheErrorSurface() {
+        setContent()
+        startPlaying()
+        engine.emit(MoviePlayerEvent.Error("The movie stream stopped unexpectedly."))
+        composeRule.waitForIdle()
+        val commandsBefore = engine.playbackCommands.toList()
+
+        composeRule.onNodeWithContentDescription("Retry playing movie").performKeyInput {
+            pressKey(Key.MediaPlay)
+            pressKey(Key.MediaPlayPause)
+            pressKey(Key.MediaFastForward)
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(commandsBefore, engine.playbackCommands)
+        composeRule.onNodeWithText("The movie stream stopped unexpectedly.").assertExists()
     }
 }

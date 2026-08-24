@@ -61,6 +61,8 @@ internal class ExoMoviePlayerEngine(
         .setAudioAttributes(moviePlaybackAudioAttributes, /* handleAudioFocus= */ true)
         .build()
 
+    private val session = buildMovieMediaSession(context, player, request, dataSourceFactory)
+
     private val subtitleView = SubtitleView(context).apply {
         setUserDefaultStyle()
         setUserDefaultTextSize()
@@ -127,6 +129,7 @@ internal class ExoMoviePlayerEngine(
             MediaItem.Builder()
                 .setUri(streamUrl)
                 .setMimeType(request.mimeType)
+                .setMediaMetadata(movieMediaMetadata(request))
                 .build(),
         )
     }
@@ -204,6 +207,8 @@ internal class ExoMoviePlayerEngine(
     override fun release() {
         released = true
         handler.removeCallbacks(ticker)
+        // Media3 requires the session gone before its player.
+        session.release()
         player.release()
     }
 

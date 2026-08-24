@@ -80,6 +80,7 @@ class MoviePlayerOverlayFocusTest {
     private val playRequest = MoviePlayRequest(
         movieId = 1,
         title = "Heat",
+        posterUrl = null,
         mimeType = "video/x-matroska",
         mode = PlaybackMode.Direct,
         audioTypeIndex = 0,

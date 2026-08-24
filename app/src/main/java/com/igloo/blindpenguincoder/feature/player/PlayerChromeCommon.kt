@@ -203,7 +203,19 @@ internal fun handlePlayerKey(
     focusPlayPause: () -> Unit,
 ): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
-    if (controlsDisabled) return false
+    if (controlsDisabled) {
+        // Swallowed without acting: a transport key that fell through here would reach the
+        // active MediaSession and drive playback underneath the modal or error surface.
+        // D-pad and Enter still fall through to the modal's focused control.
+        return when (event.key) {
+            Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause,
+            Key.MediaRewind, Key.MediaSkipBackward,
+            Key.MediaFastForward, Key.MediaSkipForward,
+            -> true
+
+            else -> false
+        }
+    }
 
     when (event.key) {
         Key.MediaPlayPause -> {

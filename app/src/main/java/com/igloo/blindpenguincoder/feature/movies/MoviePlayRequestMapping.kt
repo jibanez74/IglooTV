@@ -12,6 +12,7 @@ import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
  */
 internal fun buildMoviePlayRequest(
     movie: Movie,
+    posterUrl: String?,
     technical: MovieTechnicalDetailsData?,
     progress: MovieWatchProgress?,
     selection: PlaybackSelection,
@@ -30,6 +31,7 @@ internal fun buildMoviePlayRequest(
     return MoviePlayRequest(
         movieId = movie.id,
         title = movie.title,
+        posterUrl = posterUrl,
         mimeType = movie.mimeType,
         mode = settings.selectedMode,
         audioTypeIndex = typeIndexOf(settings.selectedAudioId, audioStreams.map { it.id to it.streamIndex }),

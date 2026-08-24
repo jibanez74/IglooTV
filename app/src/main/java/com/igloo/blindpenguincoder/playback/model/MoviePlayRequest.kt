@@ -12,6 +12,8 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 data class MoviePlayRequest(
     val movieId: Long,
     val title: String,
+    /** The details page's poster, re-used as the MediaSession artwork. Null = title only. */
+    val posterUrl: String?,
     val mimeType: String,
     val mode: PlaybackMode,
     /** Null = the container's default track. */

@@ -99,6 +99,9 @@ class PinEntryAccessibilityTest {
             val spoken = tree.lineSequence()
                 .filter { it.contains("Text = ") || it.contains("ContentDescription = ") }
                 .joinToString("\n")
+                // The screen legitimately shows the server address, whose random port can
+                // contain any digit pair — mask it so the scan only sees potential PIN leaks.
+                .replace(server.apiBaseUrl.removeSuffix("/api"), "<server>")
             assertFalse(
                 "The entered PIN leaked into the semantics tree:\n$spoken",
                 spoken.contains("89") || spoken.contains("PIN: 8"),

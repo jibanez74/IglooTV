@@ -343,7 +343,18 @@ class MovieDetailsViewModel(
         val details = wireDetails ?: return
         val technical = technicalRead.readyValueOrNull() ?: return
         val progress = progressRead.readyValueOrNull() ?: return
-        val request = buildMoviePlayRequest(details.movie, technical, progress, playbackSelection)
+        val request = buildMoviePlayRequest(
+            movie = details.movie,
+            // The same poster the details page shows, re-used as the session artwork.
+            posterUrl = tmdbImageUrl(
+                serverUrl.require().apiBaseUrl,
+                TmdbImageSize.W500,
+                details.movie.posterPath?.orNull(),
+            ),
+            technical = technical,
+            progress = progress,
+            selection = playbackSelection,
+        )
         return when (
             val gate = evaluatePlaybackGate(
                 mode = request.mode,

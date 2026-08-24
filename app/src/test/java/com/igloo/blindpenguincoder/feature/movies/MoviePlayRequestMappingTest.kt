@@ -19,6 +19,7 @@ class MoviePlayRequestMappingTest {
     fun `carries the movie identity and the selected mode`() {
         val request = buildMoviePlayRequest(
             movie = movie(id = 7, title = "Heat", mimeType = "video/x-matroska"),
+            posterUrl = "https://server/api/tmdb/images/w500/heat.jpg",
             technical = technical(),
             progress = null,
             selection = PlaybackSelection(mode = PlaybackMode.Direct),
@@ -26,8 +27,22 @@ class MoviePlayRequestMappingTest {
 
         assertEquals(7L, request.movieId)
         assertEquals("Heat", request.title)
+        assertEquals("https://server/api/tmdb/images/w500/heat.jpg", request.posterUrl)
         assertEquals("video/x-matroska", request.mimeType)
         assertEquals(PlaybackMode.Direct, request.mode)
+    }
+
+    @Test
+    fun `a movie without a poster carries no artwork`() {
+        val request = buildMoviePlayRequest(
+            movie = movie(),
+            posterUrl = null,
+            technical = technical(),
+            progress = null,
+            selection = PlaybackSelection(),
+        )
+
+        assertNull(request.posterUrl)
     }
 
     /**
@@ -50,6 +65,7 @@ class MoviePlayRequestMappingTest {
 
         val request = buildMoviePlayRequest(
             movie = movie(),
+            posterUrl = null,
             technical = tech,
             progress = null,
             selection = PlaybackSelection(audioStreamId = 20, subtitleStreamId = 60),
@@ -72,6 +88,7 @@ class MoviePlayRequestMappingTest {
 
         val request = buildMoviePlayRequest(
             movie = movie(),
+            posterUrl = null,
             technical = tech,
             progress = null,
             selection = PlaybackSelection(),
@@ -89,6 +106,7 @@ class MoviePlayRequestMappingTest {
 
         val request = buildMoviePlayRequest(
             movie = movie(),
+            posterUrl = null,
             technical = tech,
             progress = null,
             selection = PlaybackSelection(audioStreamId = 999),
@@ -101,6 +119,7 @@ class MoviePlayRequestMappingTest {
     fun `no subtitle selection means subtitles off`() {
         val request = buildMoviePlayRequest(
             movie = movie(),
+            posterUrl = null,
             technical = technical(subtitles = listOf(subtitle(id = 50, streamIndex = 5))),
             progress = null,
             selection = PlaybackSelection(),
@@ -113,6 +132,7 @@ class MoviePlayRequestMappingTest {
     fun `missing technical details start with container defaults and no codec claims`() {
         val request = buildMoviePlayRequest(
             movie = movie(),
+            posterUrl = null,
             technical = null,
             progress = null,
             selection = PlaybackSelection(),
@@ -144,6 +164,7 @@ class MoviePlayRequestMappingTest {
 
         val request = buildMoviePlayRequest(
             movie = movie(),
+            posterUrl = null,
             technical = tech,
             progress = null,
             selection = PlaybackSelection(audioStreamId = 20),
@@ -172,6 +193,7 @@ class MoviePlayRequestMappingTest {
     fun `duration prefers the saved progress and falls back to the movie file`() {
         val withProgress = buildMoviePlayRequest(
             movie = movie(durationSec = 6000.0),
+            posterUrl = null,
             technical = technical(),
             progress = progress(progressSec = 60.0, durationSec = 7200.0),
             selection = PlaybackSelection(),
@@ -181,6 +203,7 @@ class MoviePlayRequestMappingTest {
 
         val withoutProgress = buildMoviePlayRequest(
             movie = movie(durationSec = 6000.0),
+            posterUrl = null,
             technical = technical(),
             progress = null,
             selection = PlaybackSelection(),
