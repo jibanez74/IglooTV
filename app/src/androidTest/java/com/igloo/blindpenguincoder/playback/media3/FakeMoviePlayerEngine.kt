@@ -33,9 +33,9 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
     @Composable
     override fun VideoSurface(modifier: Modifier) = Unit
 
-    override fun startPlayback(startPositionSec: Double?) {
-        commands += "start:$startPositionSec"
-        emit(MoviePlayerEvent.PlayWhenReadyChanged(true))
+    override fun startPlayback(startPositionSec: Double?, initialPlayWhenReady: Boolean) {
+        commands += "start:$startPositionSec:$initialPlayWhenReady"
+        emit(MoviePlayerEvent.PlayWhenReadyChanged(initialPlayWhenReady))
     }
 
     override fun play() {

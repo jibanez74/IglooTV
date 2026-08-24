@@ -188,7 +188,7 @@ class MoviePlayerOverlayFocusTest {
         composeRule.onNodeWithTag("movie_player").assertExists()
         composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
         assertEquals(1, engines.size)
-        assertEquals(listOf("start:null"), engines.single().playbackCommands)
+        assertEquals(listOf("start:null:true"), engines.single().playbackCommands)
     }
 
     @Test

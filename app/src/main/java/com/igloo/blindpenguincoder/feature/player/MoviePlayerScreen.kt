@@ -1,6 +1,8 @@
 package com.igloo.blindpenguincoder.feature.player
 
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -99,22 +101,28 @@ fun MoviePlayerScreen(
     val progressSync by viewModel.progressSyncUiState.collectAsStateWithLifecycle()
     val progressSyncError = (progressSync as? ProgressSyncUiState.Failed)?.message
 
-    // The resume decision and playback position survive recreation: a movie restarting at zero
-    // because the activity recreated is an hour of the user's place lost, a trade the trailer
-    // accepts but this screen must not. `chosenStartSec` is where the decision said to start;
-    // `lastPositionSec` overrides it once real ticks arrive (recreation, error retry). Zero
-    // stands in for "the beginning" so the saved state never holds a null.
+    // The resume decision, playback position, and transport intent survive recreation. The
+    // position prevents an hour-long movie from restarting at zero; the independent intent
+    // prevents a replacement engine from autoplaying a movie the user had paused.
     var resumeDecided by rememberSaveable { mutableStateOf(request.resumeAtSec == null) }
     var chosenStartSec by rememberSaveable { mutableStateOf(request.resumeAtSec ?: 0.0) }
     var lastPositionSec by rememberSaveable { mutableStateOf(0.0) }
     var lastDurationSec by rememberSaveable { mutableStateOf(request.durationSec ?: 0.0) }
+    var playWhenReadyIntent by rememberSaveable {
+        mutableStateOf(request.resumeAtSec == null)
+    }
+    var lifecycleSilenced by remember(engine) { mutableStateOf(false) }
+    var hostPausePending by remember(engine) { mutableStateOf(false) }
 
     var state by remember(engine) {
         mutableStateOf(
             MoviePlayerState(
                 phase = if (resumeDecided) MoviePlayerPhase.Loading else MoviePlayerPhase.AwaitingResume,
-                playWhenReady = resumeDecided,
-                durationSec = request.durationSec ?: 0.0,
+                playWhenReady = playWhenReadyIntent,
+                currentTimeSec = lastPositionSec.takeIf { it > 0.0 }
+                    ?: chosenStartSec.takeIf { resumeDecided }
+                    ?: 0.0,
+                durationSec = lastDurationSec,
             ),
         )
     }
@@ -149,6 +157,11 @@ fun MoviePlayerScreen(
             state = next
             when (event) {
                 is MoviePlayerEvent.Error -> if (event.unauthorized) unauthorized = true
+                is MoviePlayerEvent.PlayWhenReadyChanged -> {
+                    if (!lifecycleSilenced) {
+                        playWhenReadyIntent = event.playWhenReady
+                    }
+                }
                 is MoviePlayerEvent.Time -> {
                     lastPositionSec = event.currentSec
                     if (event.durationSec > 0.0) lastDurationSec = event.durationSec
@@ -172,6 +185,7 @@ fun MoviePlayerScreen(
         if (resumeDecided) {
             engine.startPlayback(
                 lastPositionSec.takeIf { it > 0.0 } ?: chosenStartSec.takeIf { it > 0.0 },
+                initialPlayWhenReady = playWhenReadyIntent,
             )
         }
     }
@@ -244,13 +258,28 @@ fun MoviePlayerScreen(
         }
     }
 
-    // Standby must silence playback; on return the user resumes deliberately.
+    // Lifecycle silence is not transport intent. Configuration teardown preserves the user's
+    // saved choice for the replacement engine; a real background/standby trip stays paused.
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(engine, lifecycleOwner) {
+    DisposableEffect(engine, lifecycleOwner, context) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_PAUSE -> engine.onHostPaused()
-                Lifecycle.Event.ON_RESUME -> engine.onHostResumed()
+                Lifecycle.Event.ON_PAUSE -> {
+                    lifecycleSilenced = true
+                    hostPausePending = true
+                    engine.onHostPaused()
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    if (context.findHostActivity()?.isChangingConfigurations != true) {
+                        playWhenReadyIntent = false
+                    }
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    if (hostPausePending) playWhenReadyIntent = false
+                    hostPausePending = false
+                    lifecycleSilenced = false
+                    engine.onHostResumed()
+                }
                 else -> Unit
             }
         }
@@ -327,11 +356,13 @@ fun MoviePlayerScreen(
             MoviePlayerPhase.AwaitingResume -> ResumePrompt(
                 resumeAtSec = requireNotNull(request.resumeAtSec),
                 onResume = {
+                    playWhenReadyIntent = true
                     resumeDecided = true
                     state = state.onResumeChosen()
                 },
                 onStartOver = {
                     chosenStartSec = 0.0
+                    playWhenReadyIntent = true
                     resumeDecided = true
                     state = state.onResumeChosen()
                 },
@@ -386,6 +417,12 @@ fun MoviePlayerScreen(
             )
         }
     }
+}
+
+private tailrec fun Context.findHostActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findHostActivity()
+    else -> null
 }
 
 /** The two in-player track menus; which one is up is plain screen state. */

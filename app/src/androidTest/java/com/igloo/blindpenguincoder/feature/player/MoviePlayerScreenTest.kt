@@ -11,6 +11,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -61,6 +62,8 @@ class MoviePlayerScreenTest {
     private var closes = 0
     private var failProgressSaves = false
     private var hostActivity: Activity? = null
+    private lateinit var restorationTester: StateRestorationTester
+    private val restorationEngines = mutableListOf<FakeMoviePlayerEngine>()
 
     /** The host contract: closing unmounts the screen, which is what fires the exit save. */
     private var open by mutableStateOf(true)
@@ -121,6 +124,47 @@ class MoviePlayerScreenTest {
                                 open = false
                             },
                             engineFactory = { _, _ -> engine },
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun setRestorableContent(request: MoviePlayRequest = playRequest()) {
+        savedRequests.clear()
+        closes = 0
+        failProgressSaves = false
+        open = true
+        restorationEngines.clear()
+        viewModel = MoviePlayerViewModel(
+            saveProgress = { _, body ->
+                savedRequests += body
+                ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+            },
+            onWatchedStateCommitted = {},
+        )
+        lifecycleOwner = TestLifecycleOwner()
+        lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
+        restorationTester = StateRestorationTester(composeRule)
+        restorationTester.setContent {
+            IglooTheme {
+                CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
+                    if (open) {
+                        MoviePlayerScreen(
+                            request = request,
+                            viewModel = viewModel,
+                            onClose = {
+                                closes += 1
+                                open = false
+                            },
+                            engineFactory = { _, _ ->
+                                FakeMoviePlayerEngine().also {
+                                    engine = it
+                                    restorationEngines += it
+                                }
+                            },
                         )
                     }
                 }
@@ -196,7 +240,7 @@ class MoviePlayerScreenTest {
     fun noResumeStartsFromTheBeginningAndFocusLandsOnPlayPause() {
         setContent()
 
-        assertEquals(listOf("start:null"), engine.playbackCommands)
+        assertEquals(listOf("start:null:true"), engine.playbackCommands)
         composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
         composeRule.onNodeWithTag("movie_loading").assertExists()
         composeRule.onNodeWithTag("movie_resume_prompt").assertDoesNotExist()
@@ -215,7 +259,7 @@ class MoviePlayerScreenTest {
         resume.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
 
-        assertEquals(listOf("start:900.0"), engine.playbackCommands)
+        assertEquals(listOf("start:900.0:true"), engine.playbackCommands)
         composeRule.onNodeWithTag("movie_resume_prompt").assertDoesNotExist()
         composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
     }
@@ -231,7 +275,63 @@ class MoviePlayerScreenTest {
         startOver.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
 
-        assertEquals(listOf("start:null"), engine.playbackCommands)
+        assertEquals(listOf("start:null:true"), engine.playbackCommands)
+    }
+
+    @Test
+    fun pausedIntentAndPositionRestoreWithoutAutoplayUntilExplicitPlay() {
+        setRestorableContent()
+        startPlaying()
+        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        composeRule.waitForIdle()
+
+        val playPause = composeRule.onNodeWithTag("movie_play_pause")
+        playPause.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        playPause.assertContentDescriptionEquals("Play")
+        val originalEngine = engine
+
+        restorationTester.emulateSavedInstanceStateRestore()
+        composeRule.waitForIdle()
+
+        assertTrue(originalEngine.released)
+        assertEquals(2, restorationEngines.size)
+        assertEquals(listOf("start:600.0:false"), engine.playbackCommands)
+        composeRule.onNodeWithText("10:00", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("movie_play_pause")
+            .assertIsFocused()
+            .assertContentDescriptionEquals("Play")
+
+        composeRule.onNodeWithTag("movie_play_pause")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("start:600.0:false", "play"), engine.playbackCommands)
+        composeRule.onNodeWithTag("movie_play_pause")
+            .assertContentDescriptionEquals("Pause")
+    }
+
+    @Test
+    fun playingIntentResumeChoiceAndPositionRestoreWithAutoplay() {
+        setRestorableContent(playRequest(resumeAtSec = 900.0))
+        composeRule.onNodeWithTag("movie_resume")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        startPlaying()
+        engine.emit(MoviePlayerEvent.Time(currentSec = 930.0, durationSec = 7200.0))
+        composeRule.waitForIdle()
+        val originalEngine = engine
+
+        restorationTester.emulateSavedInstanceStateRestore()
+        composeRule.waitForIdle()
+
+        assertTrue(originalEngine.released)
+        assertEquals(2, restorationEngines.size)
+        assertEquals(listOf("start:930.0:true"), engine.playbackCommands)
+        composeRule.onNodeWithText("15:30", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("movie_resume_prompt").assertDoesNotExist()
+        composeRule.onNodeWithTag("movie_play_pause")
+            .assertIsFocused()
+            .assertContentDescriptionEquals("Pause")
     }
 
     @Test
@@ -252,14 +352,14 @@ class MoviePlayerScreenTest {
         val playPause = composeRule.onNodeWithTag("movie_play_pause")
         playPause.assertContentDescriptionEquals("Pause")
         playPause.performKeyInput { pressKey(Key.DirectionCenter) }
-        assertEquals(listOf("start:null", "pause"), engine.playbackCommands)
+        assertEquals(listOf("start:null:true", "pause"), engine.playbackCommands)
 
         engine.emit(MoviePlayerEvent.IsPlayingChanged(false))
         composeRule.waitForIdle()
 
         playPause.assertContentDescriptionEquals("Play")
         playPause.performKeyInput { pressKey(Key.DirectionCenter) }
-        assertEquals(listOf("start:null", "pause", "play"), engine.playbackCommands)
+        assertEquals(listOf("start:null:true", "pause", "play"), engine.playbackCommands)
     }
 
     @Test
@@ -269,7 +369,7 @@ class MoviePlayerScreenTest {
         composeRule.onNodeWithTag("movie_play_pause")
             .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
-        assertEquals(listOf("start:null", "pause"), engine.playbackCommands)
+        assertEquals(listOf("start:null:true", "pause"), engine.playbackCommands)
 
         engine.emit(MoviePlayerEvent.PlayWhenReadyChanged(true))
         engine.emit(MoviePlayerEvent.IsPlayingChanged(true))
@@ -279,7 +379,7 @@ class MoviePlayerScreenTest {
             .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
 
-        assertEquals(listOf("start:null", "pause", "pause"), engine.playbackCommands)
+        assertEquals(listOf("start:null:true", "pause", "pause"), engine.playbackCommands)
     }
 
     @Test
@@ -296,7 +396,7 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
 
         assertEquals(
-            listOf("start:null", "pause", "pause", "play", "play", "pause"),
+            listOf("start:null:true", "pause", "pause", "play", "play", "pause"),
             engine.playbackCommands,
         )
     }
@@ -314,7 +414,7 @@ class MoviePlayerScreenTest {
         playPause.performKeyInput { pressKey(Key.MediaFastForward) }
 
         assertEquals(
-            listOf("start:null", "seek:20.0", "seek:30.0"),
+            listOf("start:null:true", "seek:20.0", "seek:30.0"),
             engine.playbackCommands,
         )
     }
@@ -330,7 +430,7 @@ class MoviePlayerScreenTest {
         val playPause = composeRule.onNodeWithTag("movie_play_pause")
         playPause.performKeyInput { pressKey(Key.DirectionLeft) }
 
-        assertEquals(listOf("start:null", "seek:50.0"), engine.playbackCommands)
+        assertEquals(listOf("start:null:true", "seek:50.0"), engine.playbackCommands)
         playPause.assertIsFocused()
     }
 
@@ -458,7 +558,7 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
 
         assertTrue("the failed engine must be released", failedEngine.released)
-        assertEquals(listOf("start:600.0"), engine.playbackCommands)
+        assertEquals(listOf("start:600.0:true"), engine.playbackCommands)
     }
 
     @Test
@@ -498,6 +598,11 @@ class MoviePlayerScreenTest {
             engine.commands.filter { it == "hostPaused" || it == "hostResumed" },
         )
         assertEquals(transportBeforeStandby, engine.playbackCommands)
+        val playPause = composeRule.onNodeWithTag("movie_play_pause")
+        playPause.assertContentDescriptionEquals("Play")
+        playPause.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        assertEquals(transportBeforeStandby + "play", engine.playbackCommands)
     }
 
     @Test

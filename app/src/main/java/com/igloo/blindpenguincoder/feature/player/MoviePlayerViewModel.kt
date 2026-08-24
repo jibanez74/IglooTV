@@ -28,9 +28,19 @@ private data class ProgressSnapshot(
     val durationSec: Double,
 )
 
-private data class FailedProgressSave(
+private data class ProgressSaveSession(
     val reporter: ProgressReporter,
-    val snapshot: ProgressSnapshot,
+    var nextAttemptOrder: Long = 0L,
+    var lastResolvedAttemptOrder: Long = 0L,
+    var savesInFlight: Int = 0,
+    var failedSnapshot: ProgressSnapshot? = null,
+    var failureMessage: String? = null,
+    var failureResolutionOrder: Long = 0L,
+)
+
+private data class ProgressSaveAttempt(
+    val session: ProgressSaveSession,
+    val order: Long,
 )
 
 /**
@@ -52,24 +62,28 @@ class MoviePlayerViewModel(
     val progressSyncUiState: StateFlow<ProgressSyncUiState> =
         _progressSyncUiState.asStateFlow()
 
-    private var activeReporter: ProgressReporter? = null
-    private var failedSave: FailedProgressSave? = null
+    private val saveSessions = mutableMapOf<String, ProgressSaveSession>()
+    private var activeSession: ProgressSaveSession? = null
     private var playedSec = 0.0
     private var playedAtLastSave: Double? = null
     private var lastPositionSec: Double? = null
-    private var savesInFlight = 0
-    private var nextAttempt = 0L
-    private var lastResolvedAttempt = 0L
+    private var nextFailureResolutionOrder = 0L
+    private var retryInFlight = false
 
     fun startSession(movieId: Long) {
-        activeReporter = ProgressReporter(movieId, saveProgress)
+        val previousSession = activeSession
+        val reporter = ProgressReporter(movieId, saveProgress)
+        activeSession = ProgressSaveSession(reporter).also {
+            saveSessions[reporter.sessionId] = it
+        }
+        previousSession?.let(::discardSettledSession)
         playedSec = 0.0
         playedAtLastSave = null
         lastPositionSec = null
     }
 
     fun onTick(positionSec: Double, durationSec: Double, isPlaying: Boolean) {
-        val reporter = activeReporter ?: return
+        val session = activeSession ?: return
         val previous = lastPositionSec
         lastPositionSec = positionSec
         if (isPlaying && previous != null) {
@@ -77,19 +91,17 @@ class MoviePlayerViewModel(
             if (delta > 0.0 && delta <= MAX_TICK_DELTA_SEC) playedSec += delta
         }
         val sinceLastSave = playedAtLastSave?.let { playedSec - it }
-        if (savesInFlight > 0 ||
+        if (session.savesInFlight > 0 ||
             !shouldSaveProgress(playedSec, positionSec, durationSec, sinceLastSave)
         ) {
             return
         }
         playedAtLastSave = playedSec
         val snapshot = ProgressSnapshot(positionSec, durationSec)
-        savesInFlight += 1
+        val attempt = beginSave(session)
         viewModelScope.launch {
-            try {
-                saveSnapshot(reporter, snapshot, refreshAfterSuccess = false)
-            } finally {
-                savesInFlight -= 1
+            if (saveSnapshot(attempt, snapshot, refreshAfterSuccess = false)) {
+                onWatchedStateCommitted()
             }
         }
     }
@@ -99,75 +111,116 @@ class MoviePlayerViewModel(
      * exit. A failure stays available for an explicit retry after the screen is gone.
      */
     fun endSession(finalPositionSec: Double, durationSec: Double) {
-        val reporter = activeReporter ?: return
-        activeReporter = null
+        val session = activeSession ?: return
+        activeSession = null
         val snapshot = ProgressSnapshot(finalPositionSec, durationSec)
-        if (!shouldSaveFinalProgress(playedSec, finalPositionSec, durationSec)) return
-        savesInFlight += 1
+        if (!shouldSaveFinalProgress(playedSec, finalPositionSec, durationSec)) {
+            discardSettledSession(session)
+            return
+        }
+        val attempt = beginSave(session)
         viewModelScope.launch {
-            try {
+            if (
                 saveSnapshot(
-                    reporter = reporter,
+                    attempt = attempt,
                     snapshot = snapshot,
                     refreshAfterSuccess = true,
                     timeoutMillis = EXIT_SYNC_TIMEOUT_MS,
                 )
-            } finally {
-                savesInFlight -= 1
+            ) {
+                onWatchedStateCommitted()
             }
         }
     }
 
-    /** Retries the exact failed snapshot with its original session and a higher sequence. */
+    /** Retries every session's latest failed snapshot with its original reporter. */
     fun retryFailedSave() {
-        val failed = failedSave ?: return
-        if (savesInFlight > 0) return
-        savesInFlight += 1
+        if (retryInFlight) return
+        val pendingSessions = saveSessions.values
+            .filter { it.failedSnapshot != null }
+            .sortedBy { it.failureResolutionOrder }
+        if (pendingSessions.isEmpty()) return
+        retryInFlight = true
         viewModelScope.launch {
+            var shouldRefresh = false
             try {
-                saveSnapshot(
-                    reporter = failed.reporter,
-                    snapshot = failed.snapshot,
-                    refreshAfterSuccess = true,
-                )
+                pendingSessions.forEach { session ->
+                    val snapshot = session.failedSnapshot ?: return@forEach
+                    shouldRefresh = saveSnapshot(
+                        attempt = beginSave(session),
+                        snapshot = snapshot,
+                        refreshAfterSuccess = true,
+                    ) || shouldRefresh
+                }
             } finally {
-                savesInFlight -= 1
+                retryInFlight = false
             }
+            if (shouldRefresh) onWatchedStateCommitted()
         }
+    }
+
+    private fun beginSave(session: ProgressSaveSession): ProgressSaveAttempt {
+        session.savesInFlight += 1
+        session.nextAttemptOrder += 1
+        return ProgressSaveAttempt(session, session.nextAttemptOrder)
     }
 
     private suspend fun saveSnapshot(
-        reporter: ProgressReporter,
+        attempt: ProgressSaveAttempt,
         snapshot: ProgressSnapshot,
         refreshAfterSuccess: Boolean,
         timeoutMillis: Long? = null,
-    ) {
-        val attempt = ++nextAttempt
-        val result = if (timeoutMillis == null) {
-            reporter.saveNow(snapshot.positionSec, snapshot.durationSec)
-        } else {
-            withTimeoutOrNull(timeoutMillis) {
-                reporter.saveNow(snapshot.positionSec, snapshot.durationSec)
-            } ?: ApiResult.Failure(AppError.Timeout)
-        }
-        if (attempt < lastResolvedAttempt) return
-        lastResolvedAttempt = attempt
+    ): Boolean {
+        val session = attempt.session
+        return try {
+            val result = if (timeoutMillis == null) {
+                session.reporter.saveNow(snapshot.positionSec, snapshot.durationSec)
+            } else {
+                withTimeoutOrNull(timeoutMillis) {
+                    session.reporter.saveNow(snapshot.positionSec, snapshot.durationSec)
+                } ?: ApiResult.Failure(AppError.Timeout)
+            }
+            if (attempt.order < session.lastResolvedAttemptOrder) return false
+            session.lastResolvedAttemptOrder = attempt.order
 
-        when (result) {
-            is ApiResult.Success -> {
-                val recovered = failedSave != null
-                failedSave = null
-                _progressSyncUiState.value = ProgressSyncUiState.Synced
-                if (refreshAfterSuccess || recovered || result.value.watched) {
-                    onWatchedStateCommitted()
+            when (result) {
+                is ApiResult.Success -> {
+                    val recovered = session.failedSnapshot != null
+                    session.failedSnapshot = null
+                    session.failureMessage = null
+                    updateProgressSyncUiState()
+                    refreshAfterSuccess || recovered || result.value.watched
+                }
+                is ApiResult.Failure -> {
+                    session.failedSnapshot = snapshot
+                    session.failureMessage =
+                        "Couldn't save playback progress: ${result.error.toLibraryDisplayMessage()}"
+                    session.failureResolutionOrder = ++nextFailureResolutionOrder
+                    updateProgressSyncUiState()
+                    false
                 }
             }
-            is ApiResult.Failure -> {
-                failedSave = FailedProgressSave(reporter, snapshot)
-                _progressSyncUiState.value = ProgressSyncUiState.Failed(
-                    "Couldn't save playback progress: ${result.error.toLibraryDisplayMessage()}",
-                )
-            }
+        } finally {
+            session.savesInFlight -= 1
+            discardSettledSession(session)
+        }
+    }
+
+    private fun updateProgressSyncUiState() {
+        val latestFailure = saveSessions.values
+            .filter { it.failedSnapshot != null }
+            .maxByOrNull { it.failureResolutionOrder }
+        _progressSyncUiState.value = latestFailure?.failureMessage
+            ?.let(ProgressSyncUiState::Failed)
+            ?: ProgressSyncUiState.Synced
+    }
+
+    private fun discardSettledSession(session: ProgressSaveSession) {
+        if (
+            session !== activeSession && session.savesInFlight == 0 &&
+            session.failedSnapshot == null
+        ) {
+            saveSessions.remove(session.reporter.sessionId, session)
         }
     }
 }

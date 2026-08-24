@@ -4,6 +4,7 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -11,6 +12,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
@@ -226,4 +228,154 @@ class MoviePlayerViewModelTest {
         assertEquals(listOf(1L, 2L), requests.map { it.saveSequence })
         assertEquals(1, refreshes)
     }
+
+    @Test
+    fun `movie A failure survives movie B success and retries with A session`() =
+        test { viewModel ->
+            val calls = mutableListOf<Pair<Long, UpdateMovieWatchProgressRequest>>()
+            var failMovieA = true
+            save = { movieId, request ->
+                calls += movieId to request
+                if (movieId == 7L && failMovieA) {
+                    ApiResult.Failure(AppError.Network)
+                } else {
+                    ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                }
+            }
+
+            viewModel.play(30.0, 46.0)
+            advanceUntilIdle()
+            val movieAFailure = calls.single().second
+
+            viewModel.startSession(movieId = 8)
+            viewModel.play(30.0, 46.0)
+            advanceUntilIdle()
+
+            assertTrue(viewModel.progressSyncUiState.value is ProgressSyncUiState.Failed)
+            failMovieA = false
+            viewModel.retryFailedSave()
+            advanceUntilIdle()
+
+            assertEquals(ProgressSyncUiState.Synced, viewModel.progressSyncUiState.value)
+            assertEquals(listOf(7L, 8L, 7L), calls.map { it.first })
+            val movieARetry = calls.last().second
+            assertEquals(movieAFailure.saveSessionId, movieARetry.saveSessionId)
+            assertEquals(movieAFailure.saveSequence + 1, movieARetry.saveSequence)
+            assertEquals(movieAFailure.progressSec, movieARetry.progressSec, 0.0)
+        }
+
+    @Test
+    fun `retry resends every failed session sequentially and refreshes once`() =
+        test { viewModel ->
+            val calls = mutableListOf<Pair<Long, UpdateMovieWatchProgressRequest>>()
+            var failing = true
+            save = { movieId, request ->
+                calls += movieId to request
+                if (failing) {
+                    ApiResult.Failure(AppError.Network)
+                } else {
+                    ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                }
+            }
+
+            viewModel.play(30.0, 46.0)
+            viewModel.startSession(movieId = 8)
+            viewModel.play(40.0, 56.0)
+            advanceUntilIdle()
+            val initialByMovie = calls.associate { it.first to it.second }
+
+            failing = false
+            viewModel.retryFailedSave()
+            advanceUntilIdle()
+
+            assertEquals(listOf(7L, 8L, 7L, 8L), calls.map { it.first })
+            calls.drop(2).forEach { (movieId, retry) ->
+                val initial = requireNotNull(initialByMovie[movieId])
+                assertEquals(initial.saveSessionId, retry.saveSessionId)
+                assertEquals(initial.saveSequence + 1, retry.saveSequence)
+                assertEquals(initial.progressSec, retry.progressSec, 0.0)
+            }
+            assertEquals(ProgressSyncUiState.Synced, viewModel.progressSyncUiState.value)
+            assertEquals(1, refreshes)
+        }
+
+    @Test
+    fun `a session that fails again remains pending after other retries succeed`() =
+        test { viewModel ->
+            val calls = mutableListOf<Pair<Long, UpdateMovieWatchProgressRequest>>()
+            var phase = 0
+            save = { movieId, request ->
+                calls += movieId to request
+                when {
+                    phase == 0 -> ApiResult.Failure(AppError.Network)
+                    phase == 1 && movieId == 7L -> ApiResult.Failure(AppError.Timeout)
+                    else -> ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                }
+            }
+
+            viewModel.play(30.0, 46.0)
+            viewModel.startSession(movieId = 8)
+            viewModel.play(30.0, 46.0)
+            advanceUntilIdle()
+
+            phase = 1
+            viewModel.retryFailedSave()
+            advanceUntilIdle()
+
+            assertTrue(viewModel.progressSyncUiState.value is ProgressSyncUiState.Failed)
+            assertEquals(listOf(7L, 8L, 7L, 8L), calls.map { it.first })
+
+            phase = 2
+            viewModel.retryFailedSave()
+            advanceUntilIdle()
+
+            assertEquals(7L, calls.last().first)
+            assertEquals(3L, calls.last().second.saveSequence)
+            assertEquals(ProgressSyncUiState.Synced, viewModel.progressSyncUiState.value)
+        }
+
+    @Test
+    fun `later same-session success wins when an older failure resolves last`() =
+        test { viewModel ->
+            val calls = mutableListOf<Pair<Long, UpdateMovieWatchProgressRequest>>()
+            val olderMovieAResult =
+                CompletableDeferred<ApiResult<MovieWatchProgressUpdateData>>()
+            var retrying = false
+            save = { movieId, request ->
+                calls += movieId to request
+                when {
+                    retrying -> ApiResult.Success(
+                        MovieWatchProgressUpdateData(watched = false),
+                    )
+                    movieId == 8L -> ApiResult.Failure(AppError.Timeout)
+                    request.saveSequence == 1L -> olderMovieAResult.await()
+                    else -> ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                }
+            }
+
+            viewModel.startSession(movieId = 8)
+            viewModel.play(30.0, 46.0)
+            advanceUntilIdle()
+
+            viewModel.startSession(movieId = 7)
+            viewModel.play(30.0, 46.0)
+            runCurrent()
+            viewModel.endSession(finalPositionSec = 46.0, durationSec = 600.0)
+            runCurrent()
+
+            assertEquals(listOf(1L, 2L), calls.filter { it.first == 7L }.map { it.second.saveSequence })
+            olderMovieAResult.complete(ApiResult.Failure(AppError.Network))
+            advanceUntilIdle()
+
+            val remainingFailure =
+                viewModel.progressSyncUiState.value as ProgressSyncUiState.Failed
+            assertTrue(remainingFailure.message.contains("too long"))
+
+            retrying = true
+            viewModel.retryFailedSave()
+            advanceUntilIdle()
+
+            assertEquals(8L, calls.last().first)
+            assertEquals(ProgressSyncUiState.Synced, viewModel.progressSyncUiState.value)
+        }
 }

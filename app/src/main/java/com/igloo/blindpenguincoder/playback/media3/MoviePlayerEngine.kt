@@ -19,10 +19,10 @@ interface MoviePlayerEngine {
     fun VideoSurface(modifier: Modifier = Modifier)
 
     /**
-     * The resume decision was made: prepare the stream and start playing, from
-     * [startPositionSec] or from the beginning when null. Called exactly once.
+     * The resume decision was made: prepare the stream from [startPositionSec], or from the
+     * beginning when null, and honor [initialPlayWhenReady]. Called exactly once.
      */
-    fun startPlayback(startPositionSec: Double?)
+    fun startPlayback(startPositionSec: Double?, initialPlayWhenReady: Boolean)
 
     fun play()
     fun pause()

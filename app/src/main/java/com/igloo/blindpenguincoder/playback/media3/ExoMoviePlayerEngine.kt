@@ -152,14 +152,14 @@ internal class ExoMoviePlayerEngine(
         }
     }
 
-    override fun startPlayback(startPositionSec: Double?) {
+    override fun startPlayback(startPositionSec: Double?, initialPlayWhenReady: Boolean) {
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, request.subtitleTypeIndex == null)
             .build()
         if (startPositionSec != null) {
             player.seekTo((startPositionSec * 1000).toLong())
         }
-        player.playWhenReady = true
+        player.playWhenReady = initialPlayWhenReady
         player.prepare()
         handler.post(ticker)
     }
