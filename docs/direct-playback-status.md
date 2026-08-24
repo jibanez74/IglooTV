@@ -1,6 +1,6 @@
 # Direct Playback — Status
 
-_Last updated: 2026-08-21, branch `feature/direct-playback`._
+_Last updated: 2026-08-24, branch `feature/direct-playback`._
 
 ## Where things stand
 
@@ -58,6 +58,31 @@ timeouts carry that card back to movie details. Retry preserves the session id, 
 sequence, and a retry or later cadence success clears the card and refreshes Continue Watching
 and details.
 
+**The player now has a system MediaSession.** While the movie player is open — and only then —
+the app owns a Media3 `MediaSession` bound to the engine's ExoPlayer: the system now-playing
+surface shows the movie's title and poster, and media buttons the focused window doesn't handle
+route through the session. Design decisions worth knowing:
+
+- The **default session callback is kept deliberately**: dedicated play/pause map straight onto
+  `player.play()`/`pause()` and only PLAY_PAUSE toggles — the same three-way split as the
+  on-screen key map, so a session-driven command carries the exact intent semantics the chrome
+  implements, and every resulting change reaches the screen through the engine's existing
+  listener. No ForwardingPlayer, no custom callback.
+- **Session ids are unique per engine instance.** On error-Retry the replacement engine (and its
+  session) is constructed before the old one's disposal releases it; two sessions with equal ids
+  throw. An instrumented regression test pins this.
+- The poster travels on the play request and is served to system surfaces through a
+  `DataSourceBitmapLoader` built over the player's own authenticated HTTP stack — the poster
+  proxy needs the bearer token, which the system cannot attach itself. Artwork failure degrades
+  silently to title-only.
+- One behavior change landed with this: `handlePlayerKey` now **swallows transport keys while a
+  modal or the error surface is up**. Unhandled media keys fall back to the active session, and
+  without the swallow they would drive playback underneath the resume prompt or a track menu.
+- A documented platform quirk: the legacy media-button path resolves PLAY_PAUSE against the
+  session's playback state, and only STATE_PLAYING counts — during buffering the key acts as
+  play, never pause. Harmless here: the focused player window handles the toggle itself, and
+  Assistant "pause" arrives as a controller command, not a key event.
+
 **The shell hosts the player as its fourth overlay layer** (shell → details → trailer/movie
 player), with the same care the other overlays get: closing the player puts focus back on the
 exact Play button that launched it, Back is explicitly gated at every layer, and the player
@@ -99,20 +124,46 @@ lint run demanded.
     the file's true duration replaced the seeded guess), and **Back produced the bounded exit
     save** seconds later, restored focus to the Play button, and the details page immediately
     showed the updated "62 min left" resume strip.
-- **Not verified on the Shield.** Deliberately skipped this pass at Jose's request. Real-device
-  playback (hardware decode, audio passthrough, PGS subtitles, TalkBack on hardware) is still
-  an open item below.
+- **Verified on the Shield against the live server (2026-08-24).** A device readiness audit
+  came first (HDMI encodings, surround set to manual with AC3/E-AC3/DTS/TrueHD/E-AC3-JOC
+  enabled, the AVR downstream, display override, tailnet route, storage), so every observation
+  below is attributable to the app:
+  - **All 252 instrumented tests green on Shield hardware** — including the new MediaSession
+    suite driving real media-button events.
+  - *The Prestige* (4K HDR10, DTS-HD MA 5.1, SRT + PGS subs): the gate passed it, real 4K
+    frames rendered, and audio left the box compressed — an active DIRECT audio_flinger thread
+    in `AUDIO_FORMAT_DTS`. Seeking over range requests recovered instantly, repeatedly. The
+    resume prompt appeared at the seeded 15:00; media keys pressed during the prompt did
+    nothing (the new swallow, observed for real). Text subtitles rendered from the SRT track;
+    **PGS image cues rendered** through the engine's `SubtitleView` path — the last untested
+    surface in the subtitle chain. Cadence and exit saves landed on the live server, and
+    Continue Watching showed the new position immediately.
+  - *Everything Everywhere All at Once* (DD+/Atmos — the codec class the emulator's gate
+    refused): the Shield's gate passed it and the bitstream went out as `AUDIO_FORMAT_E_AC3`
+    passthrough. Seeded to ~97%, the cadence save crossing the server's 98% threshold **flipped
+    the movie to watched mid-playback**, and when the credits hit Ended the player closed
+    itself back to details, which showed Watched with no resume strip.
+  - *1917* (TrueHD + Atmos 8ch): gate passed, `AUDIO_FORMAT_DOLBY_TRUEHD` passthrough on a
+    DIRECT thread. No library codec produced a hardware refusal — on this device with this AVR,
+    everything plays; the refusal path remains covered by the emulator run (DD+ refused there)
+    and by tests.
+  - **MediaSession on hardware**: the session is the system's media-button session while
+    playing, carries title + poster metadata, and disappears on close. Dedicated
+    play/pause keys never toggle and PLAY_PAUSE toggles — confirmed at the `dumpsys
+    media_session` level; the focused-window-first routing analysis holds on Shield firmware,
+    so the ForwardingPlayer contingency stays unbuilt.
+  - **TalkBack sweep on hardware** (TalkBack is this Shield's normal state): the green focus
+    box tracked the Continue Watching card, the details Play button, the resume prompt's
+    Resume, and each transport control over live video; pausing produced the polite
+    announcement (TalkBack's speech audio-focus cycle visible in logcat right after the key);
+    the subtitle menu opened with input focus on the selected row. One cosmetic note:
+    TalkBack's box can lag one event behind input focus when a dialog opens — input focus is
+    correct throughout.
+  - Not exercised on hardware: Assistant voice commands (no mic path over adb) and the
+    progress-retry card (would have required severing the tailnet mid-session). Both remain
+    covered by instrumented tests.
 
 ## What remains
-
-**Needs real hardware (first priority when the Shield is available again):**
-
-- Play a real movie end to end on the Shield against the live server: video/audio output,
-  seeking over HTTP range requests, audio passthrough, PGS and text subtitles, and the
-  capability gate's verdicts on real codecs.
-- A TalkBack sweep of the player chrome, resume prompt, and track menus on hardware.
-- Confirm Continue Watching reflects progress after ~30 s of playback, and that finishing a
-  movie flips it to watched.
 
 **Deferred scope (agreed before this pass):**
 
@@ -120,8 +171,6 @@ lint run demanded.
   them; no code exists yet).
 - HLS / transcoded playback modes — the gate currently refuses anything but Direct with a
   clear message.
-- MediaSession integration (system now-playing surface / remote transport), for which the
-  dependency is already declared.
 
 **Smaller follow-ups noticed during the work:**
 
@@ -131,3 +180,8 @@ lint run demanded.
   worth a second look only if a device shows a visible pause.
 - Two `HomeViewModelTest` cases can fail when the whole JVM suite runs in one Gradle daemon and
   pass in isolation — pre-existing flakiness worth a look someday, unrelated to playback.
+- `PinEntryAccessibilityTest`'s PIN-leak scan tripped on the mock server's random port
+  containing the entered digit pair; the scan now masks the server address first (fixed this
+  pass).
+- The profile PIN gate reappears whenever the app loses the foreground (launcher round-trip,
+  force-stop) — expected behavior, but worth knowing when driving the app over adb.
