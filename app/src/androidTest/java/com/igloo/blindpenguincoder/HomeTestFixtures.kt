@@ -164,7 +164,11 @@ internal fun testMovieDetails(
     title: String = "Heat",
     watched: Boolean? = false,
     liked: Boolean? = false,
-    progress: ProgressUi? = ProgressUi(fraction = 0.25f, minutesLeftLabel = "127 min left"),
+    progress: ProgressUi? = ProgressUi(
+        fraction = 0.25f,
+        minutesLeftLabel = "127 min left",
+        resumeFromLabel = "Play from 42 minutes",
+    ),
     cast: List<CastMemberUi> = testCast,
     extraVideos: List<ExtraVideoUi> = testExtraVideos,
     playbackSettings: PlaybackSettingsUi? = testPlaybackSettings(),
@@ -194,7 +198,7 @@ internal fun testMovieDetails(
     watched = watched,
     liked = liked,
     metadataDescription = "Rated 8.2 out of 10, R, 4K, HDR10, 5.1 surround sound, " +
-        "subtitles available, 2 hours 50 minutes, released December 15, 1995",
+        "subtitles available, 2 hours and 50 minutes, released December 15, 1995",
     playbackSettings = playbackSettings,
 )
 
@@ -225,7 +229,7 @@ internal fun testTheaterMovieDetails(
         revenue = "$187,436,818",
         status = "Released",
     ),
-    metadataDescription = "Rated 8.2 out of 10, R, 2 hours 50 minutes, " +
+    metadataDescription = "Rated 8.2 out of 10, R, 2 hours and 50 minutes, " +
         "released December 15, 1995",
     heroTrailer = heroTrailer,
     playbackSettings = null,

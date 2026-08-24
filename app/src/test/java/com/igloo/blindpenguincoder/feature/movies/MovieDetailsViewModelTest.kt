@@ -187,17 +187,18 @@ class MovieDetailsViewModelTest {
         assertEquals("$187,436,818", movie.about.revenue)
         assertEquals(0.176f, requireNotNull(movie.progress).fraction, 0.001f)
         assertEquals("140 min left", movie.progress.minutesLeftLabel)
+        assertEquals("Play from 30 minutes", movie.progress.resumeFromLabel)
         assertEquals(false, movie.watched)
         assertEquals(true, movie.liked)
         assertEquals(
             "Rated 8.2 out of 10, R, 4K, HDR10, 5.1 surround sound, subtitles available, " +
-                "2 hours 50 minutes, released December 15, 1995",
+                "2 hours and 50 minutes, released December 15, 1995",
             movie.metadataDescription,
         )
         assertEquals(
             "Heat. A Los Angeles crime saga. " +
                 "Rated 8.2 out of 10, R, 4K, HDR10, 5.1 surround sound, subtitles available, " +
-                "2 hours 50 minutes, released December 15, 1995. Crime, Drama",
+                "2 hours and 50 minutes, released December 15, 1995. Crime, Drama",
             movie.heroInfoDescription,
         )
     }
@@ -366,6 +367,8 @@ class MovieDetailsViewModelTest {
 
         assertNull(progressFor(29.0, 7200.0))
         assertEquals("120 min left", progressFor(30.0, 7200.0)?.minutesLeftLabel)
+        // The very first resumable position has nothing but seconds to say.
+        assertEquals("Play from 30 seconds", progressFor(30.0, 7200.0)?.resumeFromLabel)
         assertNull(progressFor(7100.0, 7200.0))
         assertNull(progressFor(null, null))
     }
@@ -592,7 +595,7 @@ class MovieDetailsViewModelTest {
 
         assertEquals("45 minutes", spoken(45))
         assertEquals("1 hour", spoken(60))
-        assertEquals("1 hour 30 minutes", spoken(90))
+        assertEquals("1 hour and 30 minutes", spoken(90))
         assertEquals("2 hours", spoken(120))
     }
 
@@ -917,7 +920,9 @@ class MovieDetailsViewModelTest {
 
         val movie = viewModel.awaitLoaded()
         assertEquals(false, movie.watched)
-        assertEquals("140 min left", requireNotNull(movie.progress).minutesLeftLabel)
+        val progress = requireNotNull(movie.progress)
+        assertEquals("140 min left", progress.minutesLeftLabel)
+        assertEquals("Play from 30 minutes", progress.resumeFromLabel)
     }
 
     @Test

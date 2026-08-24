@@ -40,15 +40,24 @@ fun formatTimecode(seconds: Double): String {
     }
 }
 
-/** `72.4` → `"1 minute 12 seconds"`; timecodes read as digits are noise for a screen reader. */
-fun formatSpokenTime(seconds: Double): String {
+/**
+ * `72.4` → `"1 minute and 12 seconds"`; timecodes read as digits are noise for a screen reader.
+ * [includeSeconds] drops the seconds part for durations a listener only cares about in minutes —
+ * except when nothing else is left to say, so a sub-minute position stays speakable.
+ */
+fun formatSpokenTime(seconds: Double, includeSeconds: Boolean = true): String {
     val (hours, minutes, rest) = hms(seconds)
     val parts = buildList {
         if (hours > 0) add(if (hours == 1L) "1 hour" else "$hours hours")
         if (minutes > 0) add(if (minutes == 1L) "1 minute" else "$minutes minutes")
-        if (rest > 0 || isEmpty()) add(if (rest == 1L) "1 second" else "$rest seconds")
+        if ((includeSeconds && rest > 0) || isEmpty()) {
+            add(if (rest == 1L) "1 second" else "$rest seconds")
+        }
     }
-    return parts.joinToString(" ")
+    return when (parts.size) {
+        1 -> parts.first()
+        else -> parts.dropLast(1).joinToString(", ") + " and " + parts.last()
+    }
 }
 
 fun progressFraction(progressSec: Double, durationSec: Double): Float =

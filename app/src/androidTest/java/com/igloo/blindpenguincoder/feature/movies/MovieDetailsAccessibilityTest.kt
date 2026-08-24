@@ -137,7 +137,7 @@ class MovieDetailsAccessibilityTest {
         composeRule
             .onNodeWithContentDescription(
                 "Rated 8.2 out of 10, R, 4K, HDR10, 5.1 surround sound, subtitles available, " +
-                    "2 hours 50 minutes, released December 15, 1995",
+                    "2 hours and 50 minutes, released December 15, 1995",
             )
             .assertExists()
         // The chips' own texts are not separate nodes.
@@ -441,7 +441,7 @@ class MovieDetailsAccessibilityTest {
         composeRule.onNodeWithTag("details_hero_info")
             .assertContentDescriptionEquals(
                 "Heat. A Los Angeles crime saga. Rated 8.2 out of 10, R, 4K, HDR10, " +
-                    "5.1 surround sound, subtitles available, 2 hours 50 minutes, " +
+                    "5.1 surround sound, subtitles available, 2 hours and 50 minutes, " +
                     "released December 15, 1995. Crime, Drama",
             )
             .assertHasNoClickAction()
@@ -465,22 +465,33 @@ class MovieDetailsAccessibilityTest {
     }
 
     /**
-     * The resume caption under Play is plain text a TV screen reader can never reach, so Play
-     * itself carries the "N min left" state — pressing it is what resumes.
+     * The resume caption under Play is plain text a TV screen reader can never reach, so Play's
+     * own label says where it resumes from — pressing it is what resumes. No state description
+     * rides along, or the position would be announced twice in two unrelated sentences.
      */
     @Test
-    fun playCarriesTheResumeStateWhileThereIsProgress() {
+    fun playSaysWhereItResumesFromWhileThereIsProgress() {
         setContent()
 
         composeRule.onNodeWithTag("details_play")
             .assert(
-                SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "127 min left"),
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.ContentDescription,
+                    listOf("Play from 42 minutes"),
+                ),
             )
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
 
         state = MovieDetailsState.Loaded(testMovieDetails(progress = null))
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("details_play")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.ContentDescription,
+                    listOf("Play Heat"),
+                ),
+            )
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
     }
 

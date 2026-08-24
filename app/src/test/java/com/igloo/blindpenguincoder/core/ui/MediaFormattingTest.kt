@@ -31,15 +31,26 @@ class MediaFormattingTest {
 
     @Test
     fun `spoken time drops empty parts and pluralizes`() {
-        assertEquals("1 minute 12 seconds", formatSpokenTime(72.4))
+        assertEquals("1 minute and 12 seconds", formatSpokenTime(72.4))
         assertEquals("2 minutes", formatSpokenTime(120.0))
-        assertEquals("1 hour 1 minute 15 seconds", formatSpokenTime(3675.0))
+        assertEquals("1 hour, 1 minute and 15 seconds", formatSpokenTime(3675.0))
         assertEquals("1 second", formatSpokenTime(1.0))
         assertEquals("0 seconds", formatSpokenTime(0.0))
         // The whole-minute singular: this is the case the details screen's own spoken runtime
         // used to get wrong ("1 minutes"), and it now formats through here.
         assertEquals("1 minute", formatSpokenTime(60.0))
         assertEquals("1 hour", formatSpokenTime(3600.0))
+        assertEquals("1 hour and 5 minutes", formatSpokenTime(3900.0))
+        assertEquals("1 hour, 30 minutes and 2 seconds", formatSpokenTime(5402.0))
+    }
+
+    @Test
+    fun `spoken time can drop the seconds it does not need`() {
+        assertEquals("28 minutes", formatSpokenTime(1690.0, includeSeconds = false))
+        assertEquals("1 hour and 5 minutes", formatSpokenTime(3915.0, includeSeconds = false))
+        // Under a minute there is nothing else to say, so seconds come back regardless.
+        assertEquals("45 seconds", formatSpokenTime(45.0, includeSeconds = false))
+        assertEquals("0 seconds", formatSpokenTime(0.0, includeSeconds = false))
     }
 
     @Test

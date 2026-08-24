@@ -8,6 +8,7 @@ import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
+import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.progressLabel
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
@@ -71,7 +72,11 @@ data class AboutUi(
 }
 
 /** The thin strip under the actions; present only while a resume position is worth showing. */
-data class ProgressUi(val fraction: Float, val minutesLeftLabel: String)
+data class ProgressUi(
+    val fraction: Float,
+    val minutesLeftLabel: String,
+    val resumeFromLabel: String,
+)
 
 /**
  * The details screen, render-ready: `SqlNull*` wrappers unwrapped, image URLs built, badges
@@ -727,6 +732,7 @@ class MovieDetailsViewModel(
         return ProgressUi(
             fraction = progressFraction(progressSec, durationSec),
             minutesLeftLabel = progressLabel(progressSec, durationSec),
+            resumeFromLabel = "Play from ${formatSpokenTime(progressSec, includeSeconds = false)}",
         )
     }
 

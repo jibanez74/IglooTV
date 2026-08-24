@@ -140,7 +140,7 @@ class TheaterMovieDetailsViewModelTest {
         assertEquals("$60,000,000", movie.about.budget)
         assertEquals("$187,436,818", movie.about.revenue)
         assertEquals(
-            "Rated 7.9 out of 10, R, 2 hours 50 minutes, released August 1, 2026",
+            "Rated 7.9 out of 10, R, 2 hours and 50 minutes, released August 1, 2026",
             movie.metadataDescription,
         )
     }

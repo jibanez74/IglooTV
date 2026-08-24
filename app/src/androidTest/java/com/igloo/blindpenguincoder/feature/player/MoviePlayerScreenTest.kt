@@ -274,6 +274,8 @@ class MoviePlayerScreenTest {
         composeRule.onNodeWithText("Resume from 15:00?").assertExists()
         val resume = composeRule.onNodeWithTag("movie_resume")
         resume.assertIsFocused()
+        // The heading shows a timecode; the button speaks it, because digits read as noise.
+        resume.assertContentDescriptionEquals("Resume from 15 minutes")
 
         resume.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
