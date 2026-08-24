@@ -11,8 +11,10 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -34,6 +36,7 @@ import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
+import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.TrackOption
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -75,7 +78,10 @@ class MoviePlayerScreenTest {
 
     private lateinit var lifecycleOwner: TestLifecycleOwner
 
-    private fun playRequest(resumeAtSec: Double? = null) = MoviePlayRequest(
+    private fun playRequest(
+        resumeAtSec: Double? = null,
+        chapters: List<PlaybackChapter> = emptyList(),
+    ) = MoviePlayRequest(
         movieId = 7,
         title = "Heat",
         posterUrl = null,
@@ -89,6 +95,14 @@ class MoviePlayerScreenTest {
         audioLabel = null,
         resumeAtSec = resumeAtSec,
         durationSec = 7200.0,
+        chapters = chapters,
+    )
+
+    /** Three chapters, one with the blank title real file metadata produces. */
+    private fun chapterFixture() = listOf(
+        PlaybackChapter(title = "Opening Credits", startTimeSec = 0.0),
+        PlaybackChapter(title = "", startTimeSec = 600.0),
+        PlaybackChapter(title = "The Heist", startTimeSec = 1800.0),
     )
 
     private fun setContent(request: MoviePlayRequest = playRequest()) {
@@ -220,15 +234,20 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
     }
 
-    /** Key events land on the focused node, so a menu opens by walking focus onto its button. */
-    private fun openTrackMenu(buttonTag: String) {
-        val playPause = composeRule.onNodeWithTag("movie_play_pause")
-        playPause.performKeyInput { pressKey(Key.DirectionRight) }
-        composeRule.onNodeWithTag("movie_forward")
+    /**
+     * Key events land on the focused node, so a menu opens by walking focus onto its button —
+     * Right through whichever of the optional buttons this request and engine put in the row.
+     */
+    private fun openPlayerMenu(buttonTag: String) {
+        composeRule.onNodeWithTag("movie_play_pause")
             .performKeyInput { pressKey(Key.DirectionRight) }
-        if (buttonTag == "movie_subtitles") {
-            composeRule.onNodeWithTag("movie_audio")
+        var focusedTag = "movie_forward"
+        for (tag in listOf("movie_chapters", "movie_audio", "movie_subtitles")) {
+            if (focusedTag == buttonTag) break
+            if (composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isEmpty()) continue
+            composeRule.onNodeWithTag(focusedTag)
                 .performKeyInput { pressKey(Key.DirectionRight) }
+            focusedTag = tag
         }
         val button = composeRule.onNodeWithTag(buttonTag)
         button.assertIsFocused()
@@ -466,7 +485,7 @@ class MoviePlayerScreenTest {
         startPlaying()
         emitTracks()
 
-        openTrackMenu("movie_audio")
+        openPlayerMenu("movie_audio")
 
         // Entry focus lands on the selected row; selection is not dismissal.
         composeRule.onNodeWithTag("movie_track_1:0").assertIsFocused()
@@ -491,7 +510,7 @@ class MoviePlayerScreenTest {
         startPlaying()
         emitTracks()
 
-        openTrackMenu("movie_subtitles")
+        openPlayerMenu("movie_subtitles")
 
         // Nothing selected, so entry focus is the "None" row.
         val none = composeRule.onNodeWithTag("movie_track_none")
@@ -500,6 +519,107 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
 
         assertTrue("subtitle:null" in engine.playbackCommands)
+    }
+
+    @Test
+    fun aSingleChapterShowsNoChaptersButton() {
+        setContent(playRequest(chapters = chapterFixture().take(1)))
+        startPlaying()
+
+        composeRule.onNodeWithTag("movie_chapters").assertDoesNotExist()
+    }
+
+    @Test
+    fun chaptersButtonIsRequestDrivenAndPresentBeforeTheEngineReportsTracks() {
+        setContent(playRequest(chapters = chapterFixture()))
+        startPlaying()
+
+        // Unlike the track buttons, which wait for TracksChanged.
+        composeRule.onNodeWithTag("movie_chapters").assertExists()
+        composeRule.onNodeWithTag("movie_audio").assertDoesNotExist()
+        composeRule.onNodeWithTag("movie_subtitles").assertDoesNotExist()
+    }
+
+    @Test
+    fun chapterMenuOpensOnTheCurrentChapterWithSpokenLabelsAndFallbackNames() {
+        setContent(playRequest(chapters = chapterFixture()))
+        startPlaying()
+        // Inside the second chapter, whose title is blank.
+        engine.emit(MoviePlayerEvent.Time(currentSec = 700.0, durationSec = 7200.0))
+        composeRule.waitForIdle()
+
+        openPlayerMenu("movie_chapters")
+
+        val current = composeRule.onNodeWithTag("movie_chapter_1")
+        current.assertIsFocused()
+        current.assertIsSelected()
+        // Spoken words, not a timecode, and no repeated title for the blank chapter.
+        current.assertContentDescriptionEquals("Chapter 2 of 3, starts at 10 minutes")
+        composeRule.onNodeWithTag("movie_chapter_2")
+            .assertContentDescriptionEquals("Chapter 3 of 3, The Heist, starts at 30 minutes")
+    }
+
+    @Test
+    fun chapterSelectionSeeksDismissesAndRestoresFocusToTheChaptersButton() {
+        setContent(playRequest(chapters = chapterFixture()))
+        startPlaying()
+
+        openPlayerMenu("movie_chapters")
+        composeRule.onNodeWithTag("movie_chapter_0").assertIsFocused()
+        composeRule.onNodeWithTag("movie_chapter_0")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("movie_chapter_1")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        // A chapter pick is a jump, so unlike a track pick it dismisses.
+        assertTrue("seek:600.0" in engine.playbackCommands)
+        composeRule.onNodeWithTag("movie_chapter_menu").assertDoesNotExist()
+        composeRule.onNodeWithTag("movie_chapters").assertIsFocused()
+    }
+
+    @Test
+    fun backDismissesTheChapterMenuWithoutSeeking() {
+        setContent(playRequest(chapters = chapterFixture()))
+        startPlaying()
+
+        openPlayerMenu("movie_chapters")
+        pressBack()
+
+        composeRule.onNodeWithTag("movie_chapter_menu").assertDoesNotExist()
+        assertTrue(engine.playbackCommands.none { it.startsWith("seek:") })
+        composeRule.onNodeWithTag("movie_chapters").assertIsFocused()
+    }
+
+    @Test
+    fun aPlaybackErrorDismissesAnOpenMenuSoRetryIsNotHiddenUnderneathIt() {
+        setContent(playRequest(chapters = chapterFixture()))
+        startPlaying()
+        openPlayerMenu("movie_chapters")
+
+        engine.emit(MoviePlayerEvent.Error("The movie stream stopped unexpectedly."))
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("movie_chapter_menu").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Retry playing movie").assertIsFocused()
+    }
+
+    @Test
+    fun mediaTransportKeysAreInertWhileTheChapterMenuIsOpen() {
+        setContent(playRequest(chapters = chapterFixture()))
+        startPlaying()
+        openPlayerMenu("movie_chapters")
+        val commandsBefore = engine.playbackCommands.toList()
+
+        composeRule.onNodeWithTag("movie_chapter_0").performKeyInput {
+            pressKey(Key.MediaPause)
+            pressKey(Key.MediaPlayPause)
+            pressKey(Key.MediaRewind)
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(commandsBefore, engine.playbackCommands)
+        composeRule.onNodeWithTag("movie_chapter_menu").assertExists()
     }
 
     @Test
@@ -658,7 +778,7 @@ class MoviePlayerScreenTest {
         setContent()
         startPlaying()
         emitTracks()
-        openTrackMenu("movie_audio")
+        openPlayerMenu("movie_audio")
         val commandsBefore = engine.playbackCommands.toList()
 
         composeRule.onNodeWithTag("movie_track_1:0").performKeyInput {

@@ -733,7 +733,7 @@ until 2026-08-19.
 | `IglooScrim` | The paint-only dim: `background @ 0.60` by default (§3.1), no `clickable`/`focusable`/`semantics`, so it can never intercept the d-pad and TalkBack does not know it exists. Used by the rail (§8.1) and the modal (§9.3) — **never both at once**. |
 | `IglooConfirmDialog` | The confirmation modal (§9.3) |
 | `IglooMenu` | The anchored menu: a `card` surface of focusable rows placed against the trigger's root-coordinate bounds — right-aligned, below it, flipping above when the bottom safe area would be breached. In-tree for §9.3's four reasons and hosted as the last child of the screen that owns the trigger; **unscrimmed**, unlike the modal — an anchored menu is local chrome, not a page-blocking decision, and §9.1 gives the scrim to the rail and the modal only. One `standard` alpha reveal, no exit animation. Focus is trapped (up/down walk the rows, everything else `Cancel`), the first row takes focus on reveal, the caller restores focus in `onDismiss` and gates its own Back (§9.3). `paneTitle` + one cleared Button node per row; a `destructive` row wears the destructive token pair, and `separatorBefore` draws a silent hairline. The covered screen leaves TalkBack traversal via `hideFromAccessibility`, the overlay-stack treatment. |
-| `IglooRadioRow` | One option row of a radio list on a card ground: the `IglooMenu` row recipe (`navItemHeight` minimum, `muted` focused fill, `spacing.md` padding, focus per §6.1) plus a drawn-only leading radio glyph — outer ring on `border` (`primary` when selected), `primary` dot when selected, unscaled 2dp stroke so the hairline stays a hairline. One cleared `RadioButton` node per row announcing label and selected state with a "Select" action. A null `onSelect` is the inert variant: still **focusable** — an unfocusable row mid-list punches a hole in a hand-wired up/down chain, the §9.3 pending-row argument — but announced disabled with no action; the label carries the reason it cannot be chosen. Focus wiring is the caller's, like the menu's rows. |
+| `IglooRadioRow` | One option row of a radio list on a card ground: the `IglooMenu` row recipe (`navItemHeight` minimum, `muted` focused fill, `spacing.md` padding, focus per §6.1) plus a drawn-only leading radio glyph — outer ring on `border` (`primary` when selected), `primary` dot when selected, unscaled 2dp stroke so the hairline stays a hairline. One cleared `RadioButton` node per row announcing label and selected state with a "Select" action. A null `onSelect` is the inert variant: still **focusable** — an unfocusable row mid-list punches a hole in a hand-wired up/down chain, the §9.3 pending-row argument — but announced disabled with no action; the label carries the reason it cannot be chosen. Optional `detail` is trailing muted text (a timecode), drawn-only; optional `semanticLabel` replaces the spoken label when the drawn one is not the sentence to read, the `IglooButton` contract. Focus wiring is the caller's, like the menu's rows. |
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
@@ -1626,6 +1626,17 @@ reappear on any d-pad or media-key event. Controls: seek bar, current/total time
 play/pause, fast-forward, quality chip, chapters, volume. A **Resume** dialog offers resume vs.
 start over.
 
+**Chapters** is a text-word button (§5.4) between Forward and the Audio/Subtitles pair — a
+chapter jump is a seek, so it sits with the seek controls. It appears only with two or more
+chapters (one chapter spans the whole movie; a one-destination menu is a choice with no
+alternatives) and is request-driven, present before the engine reports anything. The menu is the
+§9.3 recipe like the track menus: `IglooRadioRow`s labelled by title with "Chapter N" standing
+in for the blank titles real file metadata produces, a trailing start timecode, spoken labels in
+time words. The `selected` mark tracks the playhead live and entry focus lands on the current
+chapter. **Selection is dismissal** — the one deliberate departure from the track menus'
+stay-open rule, because a jump's result is the picture hidden behind the scrim, not something to
+keep adjusting; focus returns to the Chapters button.
+
 D-pad and media-key mapping:
 
 | Input | Action |
@@ -1812,6 +1823,14 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-24 — In-player chapter menu.**
+
+- **§11.8** gains the Chapters button and menu: between Forward and the track pair, gated at two
+  or more chapters, request-driven. Selection is dismissal — the recorded departure from the
+  track menus' stay-open rule — and the current chapter carries the live `selected` mark.
+- **§9.1** — `IglooRadioRow` gains optional `detail` (trailing muted drawn-only text) and
+  `semanticLabel` (spoken sentence overriding the drawn label, the `IglooButton` contract).
 
 **2026-08-19 — The app stops looking like a phone app: full-bleed everywhere.**
 

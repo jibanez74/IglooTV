@@ -167,8 +167,10 @@ lint run demanded.
 
 **Deferred scope (agreed before this pass):**
 
-- Quality chip, chapter markers, and volume controls in the player (design spec §11.8 lists
-  them; no code exists yet).
+- Quality chip, seek-bar chapter markers, and volume controls in the player (design spec
+  §11.8 lists them; no code exists yet). The chapter *menu* landed 2026-08-24 — a Chapters
+  button between Forward and Audio, seek-and-dismiss selection, hardware-verified on the
+  Shield against the live server — only the seek-bar tick marks remain deferred.
 - HLS / transcoded playback modes — the gate currently refuses anything but Direct with a
   clear message.
 

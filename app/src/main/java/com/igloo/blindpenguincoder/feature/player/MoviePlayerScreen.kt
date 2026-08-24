@@ -73,6 +73,7 @@ import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerPhase
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerState
+import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.TrackOption
 import com.igloo.blindpenguincoder.playback.model.onEvent
 import kotlinx.coroutines.delay
@@ -81,7 +82,7 @@ import kotlinx.coroutines.delay
  * The movie player (docs/design-system.md section 11.8): a full-screen in-tree overlay whose
  * video surface is rendered by the engine, with all input and chrome in Compose. The trailer
  * player's shape throughout; what this screen adds is the
- * resume prompt, the in-player track menus, and the progress session on [viewModel].
+ * resume prompt, the in-player chapter and track menus, and the progress session on [viewModel].
  *
  * The host owns close and focus restoration; this screen's own [BackHandler] handles chrome
  * dismissal and otherwise calls [onClose]. [engineFactory] has no default because the real
@@ -128,7 +129,7 @@ fun MoviePlayerScreen(
     }
     var unauthorized by remember(engine) { mutableStateOf(false) }
     var chromeVisible by remember { mutableStateOf(true) }
-    var trackMenu by remember { mutableStateOf<TrackMenu?>(null) }
+    var playerMenu by remember { mutableStateOf<PlayerMenu?>(null) }
     // Bumped by any key press or chrome focus move; each bump restarts the auto-hide clock.
     var interactionTick by remember { mutableIntStateOf(0) }
 
@@ -136,6 +137,7 @@ fun MoviePlayerScreen(
     val backRequester = remember { FocusRequester() }
     val retryRequester = remember { FocusRequester() }
     val progressRetryRequester = remember { FocusRequester() }
+    val chaptersButtonRequester = remember { FocusRequester() }
     val audioButtonRequester = remember { FocusRequester() }
     val subtitlesButtonRequester = remember { FocusRequester() }
 
@@ -191,6 +193,9 @@ fun MoviePlayerScreen(
     }
 
     LaunchedEffect(state.phase, progressSyncError) {
+        // A menu must not survive into the error surface: it would swallow the screen while
+        // entry focus lands on the Retry button hidden underneath it.
+        if (state.phase == MoviePlayerPhase.Error) playerMenu = null
         when (state.phase) {
             MoviePlayerPhase.Ended -> onClose()
             // Chrome may only rest hidden over a moving picture; any other phase surfaces it.
@@ -199,9 +204,9 @@ fun MoviePlayerScreen(
         }
     }
 
-    LaunchedEffect(chromeVisible, state.phase, interactionTick, trackMenu, progressSyncError) {
+    LaunchedEffect(chromeVisible, state.phase, interactionTick, playerMenu, progressSyncError) {
         if (
-            chromeVisible && state.phase == MoviePlayerPhase.Playing && trackMenu == null &&
+            chromeVisible && state.phase == MoviePlayerPhase.Playing && playerMenu == null &&
             progressSyncError == null
         ) {
             delay(CHROME_HIDE_MS)
@@ -218,11 +223,11 @@ fun MoviePlayerScreen(
     val togglePlayPause = {
         if (state.playWhenReady) pause() else play()
     }
-    val seekBy = { deltaSec: Double ->
-        val target = state.seekTarget(deltaSec)
-        engine.seekTo(target)
-        state = state.onSeekApplied(target)
+    val seekToSec = { targetSec: Double ->
+        engine.seekTo(targetSec)
+        state = state.onSeekApplied(targetSec)
     }
+    val seekBy = { deltaSec: Double -> seekToSec(state.seekTarget(deltaSec)) }
 
     // Entry focus: Play/Pause anchors the screen; the error surface moves it to its one action,
     // and the resume prompt and track menus request their own on composition.
@@ -287,7 +292,7 @@ fun MoviePlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val modalUp = state.phase == MoviePlayerPhase.AwaitingResume || trackMenu != null
+    val modalUp = state.phase == MoviePlayerPhase.AwaitingResume || playerMenu != null
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -336,8 +341,10 @@ fun MoviePlayerScreen(
                 title = request.title,
                 state = state,
                 visible = chromeVisible,
+                chapterCount = request.chapters.size,
                 playPauseRequester = playPauseRequester,
                 backRequester = backRequester,
+                chaptersButtonRequester = chaptersButtonRequester,
                 audioButtonRequester = audioButtonRequester,
                 subtitlesButtonRequester = subtitlesButtonRequester,
                 progressRetryRequester = progressRetryRequester,
@@ -348,7 +355,7 @@ fun MoviePlayerScreen(
                 onBack = onClose,
                 onTogglePlayPause = togglePlayPause,
                 onSeekBy = seekBy,
-                onOpenTrackMenu = { trackMenu = it },
+                onOpenMenu = { playerMenu = it },
             )
         }
 
@@ -371,23 +378,35 @@ fun MoviePlayerScreen(
             else -> Unit
         }
 
-        trackMenu?.let { menu ->
+        playerMenu?.let { menu ->
             val closeMenu: () -> Unit = {
-                trackMenu = null
+                playerMenu = null
                 when (menu) {
-                    TrackMenu.Audio -> audioButtonRequester.requestFocus()
-                    TrackMenu.Subtitles -> subtitlesButtonRequester.requestFocus()
+                    PlayerMenu.Chapters -> chaptersButtonRequester.requestFocus()
+                    PlayerMenu.Audio -> audioButtonRequester.requestFocus()
+                    PlayerMenu.Subtitles -> subtitlesButtonRequester.requestFocus()
                 }
             }
             when (menu) {
-                TrackMenu.Audio -> TrackMenuDialog(
+                PlayerMenu.Chapters -> ChapterMenuDialog(
+                    chapters = request.chapters,
+                    currentTimeSec = state.currentTimeSec,
+                    // A chapter pick dismisses, unlike the track menus: the jump's result is
+                    // the picture itself, hidden behind this scrim until the menu is gone.
+                    onSelectChapter = { startSec ->
+                        seekToSec(startSec)
+                        closeMenu()
+                    },
+                    onDismiss = closeMenu,
+                )
+                PlayerMenu.Audio -> TrackMenuDialog(
                     title = "Audio",
                     options = state.audioOptions,
                     noneRow = null,
                     onSelect = { id -> engine.selectAudioTrack(requireNotNull(id)) },
                     onDismiss = closeMenu,
                 )
-                TrackMenu.Subtitles -> TrackMenuDialog(
+                PlayerMenu.Subtitles -> TrackMenuDialog(
                     title = "Subtitles",
                     options = state.subtitleOptions,
                     noneRow = "None",
@@ -425,11 +444,14 @@ private tailrec fun Context.findHostActivity(): Activity? = when (this) {
     else -> null
 }
 
-/** The two in-player track menus; which one is up is plain screen state. */
-private enum class TrackMenu { Audio, Subtitles }
+/** The in-player menus; which one is up is plain screen state. */
+private enum class PlayerMenu { Chapters, Audio, Subtitles }
 
 /** Where entry focus belongs for the current phase; modals place their own. */
 private enum class FocusAnchor { Transport, ErrorAction, Modal }
+
+/** The transport row's last visible control — the one whose right edge cancels. */
+private enum class LastControl { Forward, Chapters, Audio, Subtitles }
 
 /** The chrome: a top title bar and a bottom transport, each on its own section 3.2 scrim. */
 @Composable
@@ -437,8 +459,10 @@ private fun MoviePlayerChrome(
     title: String,
     state: MoviePlayerState,
     visible: Boolean,
+    chapterCount: Int,
     playPauseRequester: FocusRequester,
     backRequester: FocusRequester,
+    chaptersButtonRequester: FocusRequester,
     audioButtonRequester: FocusRequester,
     subtitlesButtonRequester: FocusRequester,
     progressRetryRequester: FocusRequester,
@@ -449,7 +473,7 @@ private fun MoviePlayerChrome(
     onBack: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onSeekBy: (Double) -> Unit,
-    onOpenTrackMenu: (TrackMenu) -> Unit,
+    onOpenMenu: (PlayerMenu) -> Unit,
 ) {
     val layout = IglooTheme.layout
     // Always composed, alpha-hidden: dismissal must not detach the focused control or reshuffle
@@ -461,9 +485,20 @@ private fun MoviePlayerChrome(
     )
     val playing = state.playWhenReady
     // A one-track menu is a choice with no alternatives; the subtitle menu earns its place with
-    // a single track because "None" is its second option.
+    // a single track because "None" is its second option. Chapters follow the same rule — one
+    // chapter spans the whole movie. Unlike the track buttons, the chapter button is request-
+    // driven, so it exists before the engine reports anything.
+    val showChapters = chapterCount >= 2
     val showAudio = state.audioOptions.size >= 2
     val showSubtitles = state.subtitleOptions.isNotEmpty()
+    // Right cancels only on the row's last visible control; derived once so the per-button
+    // expressions stop compounding as optional controls are added.
+    val lastControl = when {
+        showSubtitles -> LastControl.Subtitles
+        showAudio -> LastControl.Audio
+        showChapters -> LastControl.Chapters
+        else -> LastControl.Forward
+    }
 
     Column(
         modifier = Modifier
@@ -620,36 +655,52 @@ private fun MoviePlayerChrome(
                     label = "Forward 10 seconds",
                     onClick = { onSeekBy(SEEK_STEP_SEC) },
                     modifier = Modifier
-                        .transportFocus(isLast = !showAudio && !showSubtitles)
+                        .transportFocus(isLast = lastControl == LastControl.Forward)
                         .testTag("movie_forward"),
                 )
-                // Text, not icons: IglooIcons has no audio/CC glyphs, and section 5.4 prefers a
-                // readable word over a novel symbol at TV distance.
+                // Text, not icons: IglooIcons has no chapter/audio/CC glyphs, and section 5.4
+                // prefers a readable word over a novel symbol at TV distance. Chapters sits
+                // with the seek controls — a chapter jump is a seek — ahead of the track pair,
+                // matching section 11.8's transport order.
+                if (showChapters) {
+                    IglooButton(
+                        text = "Chapters",
+                        onClick = { onOpenMenu(PlayerMenu.Chapters) },
+                        variant = IglooButtonVariant.Ghost,
+                        semanticLabel = "Chapters",
+                        restingFill = OVER_MEDIA_CONTROL_FILL,
+                        contentColor = Color.White,
+                        modifier = Modifier
+                            .focusRequester(chaptersButtonRequester)
+                            .transportFocus(isLast = lastControl == LastControl.Chapters)
+                            .testTag("movie_chapters"),
+                    )
+                }
                 if (showAudio) {
                     IglooButton(
                         text = "Audio",
-                        onClick = { onOpenTrackMenu(TrackMenu.Audio) },
+                        onClick = { onOpenMenu(PlayerMenu.Audio) },
                         variant = IglooButtonVariant.Ghost,
                         semanticLabel = "Audio track",
                         restingFill = OVER_MEDIA_CONTROL_FILL,
                         contentColor = Color.White,
                         modifier = Modifier
                             .focusRequester(audioButtonRequester)
-                            .transportFocus(isLast = !showSubtitles)
+                            .transportFocus(isLast = lastControl == LastControl.Audio)
                             .testTag("movie_audio"),
                     )
                 }
                 if (showSubtitles) {
                     IglooButton(
                         text = "Subtitles",
-                        onClick = { onOpenTrackMenu(TrackMenu.Subtitles) },
+                        onClick = { onOpenMenu(PlayerMenu.Subtitles) },
                         variant = IglooButtonVariant.Ghost,
                         semanticLabel = "Subtitles",
                         restingFill = OVER_MEDIA_CONTROL_FILL,
                         contentColor = Color.White,
                         modifier = Modifier
                             .focusRequester(subtitlesButtonRequester)
-                            .transportFocus(isLast = true)
+                            .transportFocus(isLast = lastControl == LastControl.Subtitles)
                             .testTag("movie_subtitles"),
                     )
                 }
@@ -866,6 +917,113 @@ private fun TrackMenuDialog(
                             up = rowRequesters.lastOrNull() ?: FocusRequester.Cancel
                         }
                         .testTag("movie_track_done"),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The chapter menu, on the [TrackMenuDialog] shell. Unlike a track menu, picking a row here is
+ * dismissal — a chapter pick is a jump, and its result is the picture hidden behind this scrim,
+ * not something to keep adjusting. The `selected` mark tracks the playhead live; entry focus
+ * lands on the chapter playing when the menu opened and stays put.
+ */
+@Composable
+private fun ChapterMenuDialog(
+    chapters: List<PlaybackChapter>,
+    currentTimeSec: Double,
+    onSelectChapter: (Double) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    BackHandler(onBack = onDismiss)
+
+    var visible by remember { mutableStateOf(false) }
+    val reveal by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = iglooTween(IglooMotion.STANDARD_MS),
+        label = "chapterMenuReveal",
+    )
+    LaunchedEffect(Unit) { visible = true }
+
+    val rowRequesters = remember(chapters.size) { List(chapters.size) { FocusRequester() } }
+    val doneRequester = remember { FocusRequester() }
+    val activeIndex = activeChapterIndex(chapters, currentTimeSec)
+
+    // Before the first chapter begins, no row is marked and focus falls to the first.
+    LaunchedEffect(Unit) {
+        rowRequesters.getOrNull(activeIndex.coerceAtLeast(0))?.requestFocus()
+    }
+
+    fun Modifier.rowFocus(index: Int): Modifier = this
+        .focusRequester(rowRequesters[index])
+        .focusProperties {
+            left = FocusRequester.Cancel
+            right = FocusRequester.Cancel
+            up = rowRequesters.getOrNull(index - 1) ?: FocusRequester.Cancel
+            down = rowRequesters.getOrNull(index + 1) ?: doneRequester
+        }
+
+    IglooScrim(
+        modifier = Modifier.graphicsLayer { alpha = reveal },
+        contentAlignment = Alignment.Center,
+    ) {
+        BoxWithConstraints {
+            val cardWidth = minOf(IglooTheme.layout.dialogWidth, maxWidth)
+            val cardMaxHeight = maxHeight - IglooTheme.layout.safeAreaVertical * 2
+            Column(
+                modifier = Modifier
+                    .width(cardWidth)
+                    .heightIn(max = cardMaxHeight)
+                    .iglooSurface(radius = IglooTheme.radius.xl, fill = IglooTheme.colors.card)
+                    .padding(IglooTheme.spacing.xl)
+                    .semantics {
+                        paneTitle = "Chapters"
+                        isTraversalGroup = true
+                    }
+                    .testTag("movie_chapter_menu"),
+                verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
+            ) {
+                IglooText(
+                    text = "Chapters",
+                    style = IglooTheme.typography.titleMedium,
+                    color = IglooTheme.colors.cardForeground,
+                    modifier = Modifier.semantics { heading() },
+                )
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
+                ) {
+                    chapters.forEachIndexed { index, chapter ->
+                        IglooRadioRow(
+                            label = chapterLabel(chapter, index),
+                            detail = formatTimecode(chapter.startTimeSec),
+                            selected = index == activeIndex,
+                            semanticLabel = chapterSpokenLabel(chapter, index, chapters.size),
+                            onSelect = { onSelectChapter(chapter.startTimeSec) },
+                            modifier = Modifier
+                                .rowFocus(index)
+                                .testTag("movie_chapter_$index"),
+                        )
+                    }
+                }
+
+                IglooButton(
+                    text = "Done",
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(doneRequester)
+                        .focusProperties {
+                            left = FocusRequester.Cancel
+                            right = FocusRequester.Cancel
+                            down = FocusRequester.Cancel
+                            up = rowRequesters.lastOrNull() ?: FocusRequester.Cancel
+                        }
+                        .testTag("movie_chapter_done"),
                 )
             }
         }

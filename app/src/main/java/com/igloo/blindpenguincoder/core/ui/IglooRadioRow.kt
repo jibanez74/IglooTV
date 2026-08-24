@@ -47,6 +47,10 @@ fun IglooRadioRow(
     selected: Boolean,
     onSelect: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    /** Trailing muted text (a timecode, a count) — drawn only, never announced on its own. */
+    detail: String? = null,
+    /** Spoken sentence when the drawn [label] is not it; same contract as [IglooButton]. */
+    semanticLabel: String? = null,
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
@@ -77,7 +81,7 @@ fun IglooRadioRow(
                 },
             )
             .clearAndSetSemantics {
-                contentDescription = label
+                contentDescription = semanticLabel ?: label
                 role = Role.RadioButton
                 this.selected = selected
                 if (interactive) {
@@ -98,7 +102,15 @@ fun IglooRadioRow(
             text = label,
             style = IglooTheme.typography.bodyMedium,
             color = if (interactive) colors.cardForeground else colors.mutedForeground,
+            modifier = if (detail != null) Modifier.weight(1f) else Modifier,
         )
+        if (detail != null) {
+            IglooText(
+                text = detail,
+                style = IglooTheme.typography.bodyMedium,
+                color = colors.mutedForeground,
+            )
+        }
     }
 }
 

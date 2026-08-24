@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.movies
 
 import com.igloo.blindpenguincoder.data.model.AudioStream
+import com.igloo.blindpenguincoder.data.model.Chapter
 import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
@@ -8,6 +9,7 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
+import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -177,6 +179,55 @@ class MoviePlayRequestMappingTest {
     }
 
     @Test
+    fun `chapters ride sorted by start time with raw titles and seconds as doubles`() {
+        val tech = technical(
+            chapters = listOf(
+                chapter(id = 3, title = "", startTime = 1800),
+                chapter(id = 1, title = "Opening Credits", startTime = 0),
+                chapter(id = 2, title = "The Heist", startTime = 600),
+            ),
+        )
+
+        val request = buildMoviePlayRequest(
+            movie = movie(),
+            posterUrl = null,
+            technical = tech,
+            progress = null,
+            selection = PlaybackSelection(),
+        )
+
+        assertEquals(
+            listOf(
+                PlaybackChapter(title = "Opening Credits", startTimeSec = 0.0),
+                PlaybackChapter(title = "The Heist", startTimeSec = 600.0),
+                PlaybackChapter(title = "", startTimeSec = 1800.0),
+            ),
+            request.chapters,
+        )
+    }
+
+    @Test
+    fun `no technical details or no chapters means an empty chapter list`() {
+        val withoutTechnical = buildMoviePlayRequest(
+            movie = movie(),
+            posterUrl = null,
+            technical = null,
+            progress = null,
+            selection = PlaybackSelection(),
+        )
+        assertEquals(emptyList<PlaybackChapter>(), withoutTechnical.chapters)
+
+        val withoutChapters = buildMoviePlayRequest(
+            movie = movie(),
+            posterUrl = null,
+            technical = technical(),
+            progress = null,
+            selection = PlaybackSelection(),
+        )
+        assertEquals(emptyList<PlaybackChapter>(), withoutChapters.chapters)
+    }
+
+    @Test
     fun `resume position needs thirty seconds and a position under 98 percent`() {
         assertNull(resumePositionSec(null))
         assertNull(resumePositionSec(progress(progressSec = null, durationSec = null)))
@@ -234,12 +285,19 @@ class MoviePlayRequestMappingTest {
     private fun technical(
         audio: List<AudioStream> = listOf(audioStream(id = 1, streamIndex = 1, isDefault = true)),
         subtitles: List<Subtitle> = emptyList(),
+        chapters: List<Chapter> = emptyList(),
     ) = MovieTechnicalDetailsData(
         movie = JsonObject(emptyMap()),
         videoStreams = emptyList(),
         audioStreams = audio,
         subtitles = subtitles,
-        chapters = emptyList(),
+        chapters = chapters,
+    )
+
+    private fun chapter(id: Long, title: String, startTime: Long) = Chapter(
+        id = id,
+        title = title,
+        startTime = startTime,
     )
 
     private fun audioStream(

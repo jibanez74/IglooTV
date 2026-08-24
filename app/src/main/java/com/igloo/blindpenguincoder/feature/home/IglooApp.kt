@@ -82,6 +82,8 @@ import com.igloo.blindpenguincoder.feature.player.ProgressSyncUiState
 import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
+import kotlinx.serialization.json.Json
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
 import kotlinx.coroutines.flow.Flow
@@ -175,6 +177,8 @@ private val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Save
                 request.audioLabel.orEmpty(),
                 request.resumeAtSec?.toString().orEmpty(),
                 request.durationSec?.toString().orEmpty(),
+                // A list has no natural slot in this flat encoding; JSON is one symmetric line.
+                Json.encodeToString(request.chapters),
             )
         }
     },
@@ -196,6 +200,7 @@ private val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Save
                 audioLabel = saved[10].ifEmpty { null },
                 resumeAtSec = saved[11].toDoubleOrNull(),
                 durationSec = saved[12].toDoubleOrNull(),
+                chapters = Json.decodeFromString<List<PlaybackChapter>>(saved[13]),
             )
         }
     },

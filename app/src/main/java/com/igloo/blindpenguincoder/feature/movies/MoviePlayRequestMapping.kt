@@ -4,6 +4,7 @@ import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 
 /**
  * Assembles the player's start request from the details screen's fragments. The effective track
@@ -45,6 +46,11 @@ internal fun buildMoviePlayRequest(
         audioLabel = effectiveAudio?.let { audioTrackLabel(it, audioIndexInWireOrder) },
         resumeAtSec = resumePositionSec(progress),
         durationSec = progress?.durationSec ?: movie.duration?.orNull(),
+        // Sorted here: the player's active-chapter scan and "Chapter N" numbering assume
+        // ascending start times, and the wire list is not trusted to arrive sorted.
+        chapters = technical?.chapters.orEmpty()
+            .sortedBy { it.startTime }
+            .map { PlaybackChapter(title = it.title, startTimeSec = it.startTime.toDouble()) },
     )
 }
 

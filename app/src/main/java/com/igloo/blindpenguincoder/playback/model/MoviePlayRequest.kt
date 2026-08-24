@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.playback.model
 
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import kotlinx.serialization.Serializable
 
 /**
  * Everything the player screen needs to start one movie, assembled by the details screen from
@@ -30,4 +31,17 @@ data class MoviePlayRequest(
     /** Null = nothing to resume; the player then starts from the beginning without asking. */
     val resumeAtSec: Double?,
     val durationSec: Double?,
+    /** Ascending by start time. Empty when the file carries no chapter metadata. */
+    val chapters: List<PlaybackChapter> = emptyList(),
+)
+
+/**
+ * One chapter as the player needs it. The title travels raw — file metadata leaves it blank
+ * often enough that the "Chapter N" fallback is display logic, not data. Serializable so the
+ * whole list rides one saved-state slot as JSON.
+ */
+@Serializable
+data class PlaybackChapter(
+    val title: String,
+    val startTimeSec: Double,
 )
