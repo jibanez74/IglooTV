@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -153,6 +154,21 @@ private data class TrailerRequest(
     }
 }
 
+/** One current snapshot read by the long-lived play-request collector. */
+private data class DeferredPlayContext(
+    val openMovieId: Long?,
+    val libraryDetails: Boolean,
+    val moreMenuOpen: Boolean,
+    val playbackSettingsOpen: Boolean,
+    val trailerOpen: Boolean,
+    val playerOpen: Boolean,
+    val signOutConfirming: Boolean,
+) {
+    fun accepts(request: MoviePlayRequest): Boolean =
+        libraryDetails && openMovieId == request.movieId && !moreMenuOpen &&
+            !playbackSettingsOpen && !trailerOpen && !playerOpen && !signOutConfirming
+}
+
 /**
  * What the movie player overlay is playing, saveable so the overlay survives activity
  * recreation (the screen itself restarts the engine and re-seeks to its saved position).
@@ -262,13 +278,11 @@ fun IglooApp(
         mutableStateOf<TrailerRequest?>(null)
     }
     val trailerOpen = trailerRequest != null
-    // The movie player is the fourth overlay layer (shell -> details -> trailer/movie player),
-    // under the same host contract: the host owns its existence and its focus restore.
+    // The movie player shares the details page's one player-overlay slot with the trailer. The
+    // host owns its existence and focus restore, and an older deferred Play may not replace a
+    // newer menu, dialog, or trailer action.
     var moviePlayRequest by rememberSaveable(stateSaver = MoviePlayRequestSaver) {
         mutableStateOf<MoviePlayRequest?>(null)
-    }
-    LaunchedEffect(playRequests) {
-        playRequests.collect { moviePlayRequest = it }
     }
     val playerOpen = moviePlayRequest != null
     val progressSync by moviePlayerViewModel.progressSyncUiState.collectAsStateWithLifecycle()
@@ -287,11 +301,36 @@ fun IglooApp(
     // The Playback Settings dialog is host state for the same reason the menu is; the two are
     // never up together — opening the dialog closes the menu in the same event.
     var playbackSettingsOpen by remember { mutableStateOf(false) }
+    // Ephemeral by design: activity recreation must never finish a Play press made in the old
+    // activity. Only an explicit Play activation arms it, and each emitted request consumes it.
+    var deferredPlayArmed by remember { mutableStateOf(false) }
+    val deferredPlayContext by rememberUpdatedState(
+        DeferredPlayContext(
+            openMovieId = details.openMovieId,
+            libraryDetails = detailsActions is MovieDetailsActions.Library,
+            moreMenuOpen = moreMenuOpen,
+            playbackSettingsOpen = playbackSettingsOpen,
+            trailerOpen = trailerOpen,
+            playerOpen = playerOpen,
+            signOutConfirming = signOut.confirming,
+        ),
+    )
+    LaunchedEffect(details.openMovieId, detailsActions::class) {
+        deferredPlayArmed = false
+    }
+    LaunchedEffect(playRequests) {
+        playRequests.collect { request ->
+            val eligible = deferredPlayArmed && deferredPlayContext.accepts(request)
+            deferredPlayArmed = false
+            if (eligible) moviePlayRequest = request
+        }
+    }
     // Back cannot close the details while the menu is up (its handler is gated on the flag), but
     // the overlay can still leave on its own — a session revalidation, a profile switch — and a
     // flag that outlived it would greet the next movie with a menu it never asked for.
     LaunchedEffect(detailsOpen) {
         if (!detailsOpen) {
+            deferredPlayArmed = false
             moreMenuOpen = false
             playbackSettingsOpen = false
             // The player must not outlive the details page it launched from — a profile switch
@@ -443,12 +482,16 @@ fun IglooApp(
                     state = details.details,
                     actions = detailsActions,
                     isAdmin = user.isAdmin,
-                    onPlay = onRequestPlayback,
+                    onPlay = {
+                        deferredPlayArmed = true
+                        onRequestPlayback()
+                    },
                     playReturnRequester = playReturnRequester,
                     onPlayVideo = { video, site ->
                         // A cheap invariant, not a reachable path today — the extras rail is
                         // unfocusable while the menu is up — so a stale open flag can never
                         // survive an overlay swap.
+                        deferredPlayArmed = false
                         moreMenuOpen = false
                         trailerRequest = TrailerRequest(
                             key = video.key,
@@ -460,7 +503,10 @@ fun IglooApp(
                     extrasReturnRequester = extrasReturnRequester,
                     heroTrailerReturnRequester = heroTrailerReturnRequester,
                     moreMenuOpen = moreMenuOpen,
-                    onOpenMoreMenu = { moreMenuOpen = true },
+                    onOpenMoreMenu = {
+                        deferredPlayArmed = false
+                        moreMenuOpen = true
+                    },
                     // In the callback, not an effect, like every overlay's focus restore
                     // (section 9.3). The trigger is still composed in every reachable case;
                     // the pane anchor is the same last-resort fallback the other overlays use.
@@ -476,7 +522,10 @@ fun IglooApp(
                     },
                     moreRequester = moreReturnRequester,
                     playbackSettingsOpen = playbackSettingsOpen,
-                    onOpenPlaybackSettings = { playbackSettingsOpen = true },
+                    onOpenPlaybackSettings = {
+                        deferredPlayArmed = false
+                        playbackSettingsOpen = true
+                    },
                     // The dialog's dismiss restores to the More trigger — the surviving control
                     // that led away; the menu it passed through is long gone.
                     onDismissPlaybackSettings = {

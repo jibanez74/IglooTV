@@ -1245,26 +1245,84 @@ class MovieDetailsViewModelTest {
     }
 
     @Test
-    fun `a background refresh failure keeps loaded content`() = runTest {
-        var fail = false
+    fun `failed background refreshes retain every renderable secondary value`() = runTest {
+        var detailReads = 0
+        var technicalReads = 0
+        var progressReads = 0
+        var likeReads = 0
         val http = routedHttp(
             details = {
-                if (fail) {
+                detailReads += 1
+                if (detailReads == 2) {
                     jsonResponse("""{"error":true,"message":"x"}""", HttpStatusCode.InternalServerError)
                 } else {
                     jsonResponse(populatedDetailsJson())
+                }
+            },
+            technical = {
+                technicalReads += 1
+                if (technicalReads == 2) {
+                    jsonResponse("""{"error":true,"message":"x"}""", HttpStatusCode.InternalServerError)
+                } else {
+                    jsonResponse(
+                        technicalDetailsJson(
+                            audioStreams = listOf(
+                                audioStreamJson(id = 10, language = "eng", isDefault = true),
+                                audioStreamJson(id = 11, language = "spa", isDefault = false),
+                            ),
+                            subtitles = listOf(subtitleJson(id = 20, language = "eng")),
+                        ),
+                    )
+                }
+            },
+            progress = {
+                progressReads += 1
+                if (progressReads == 2) {
+                    jsonResponse("""{"error":true,"message":"x"}""", HttpStatusCode.InternalServerError)
+                } else {
+                    jsonResponse(
+                        watchProgressJson(
+                            progressSec = 1800.0,
+                            durationSec = 10200.0,
+                            watched = false,
+                        ),
+                    )
+                }
+            },
+            likeStatus = {
+                likeReads += 1
+                if (likeReads == 2) {
+                    jsonResponse("""{"error":true,"message":"x"}""", HttpStatusCode.InternalServerError)
+                } else {
+                    jsonResponse(likeStatusJson(isLiked = true))
                 }
             },
         )
 
         val viewModel = viewModel(http)
         viewModel.open(1)
-        viewModel.awaitLoaded()
+        testScheduler.advanceUntilIdle()
+        viewModel.selectPlaybackMode(PlaybackMode.P1080Mbps8)
+        viewModel.selectAudioTrack(11)
+        viewModel.selectSubtitle(20)
+        val before = viewModel.awaitLoaded()
 
-        fail = true
         viewModel.refresh()
+        // Await every second response. Merely awaiting Loaded would return the existing page
+        // before any refresh request had settled and would not exercise the failed transitions.
+        testScheduler.advanceUntilIdle()
+        assertEquals(listOf(2, 2, 2, 2), listOf(detailReads, technicalReads, progressReads, likeReads))
+        val after = viewModel.awaitLoaded()
 
-        assertEquals("Heat", viewModel.awaitLoaded().title)
+        assertEquals(before.mediaBadges, after.mediaBadges)
+        assertEquals(before.metadataDescription, after.metadataDescription)
+        assertEquals(before.progress, after.progress)
+        assertEquals(false, after.watched)
+        assertEquals(true, after.liked)
+        val settings = requireNotNull(after.playbackSettings)
+        assertEquals(PlaybackMode.P1080Mbps8, settings.selectedMode)
+        assertEquals(11L, settings.selectedAudioId)
+        assertEquals(20L, settings.selectedSubtitleId)
     }
 
     /**

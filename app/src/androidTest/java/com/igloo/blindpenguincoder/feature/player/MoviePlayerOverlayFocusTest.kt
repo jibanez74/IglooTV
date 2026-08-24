@@ -23,6 +23,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -43,6 +44,7 @@ import com.igloo.blindpenguincoder.inertDetailsActions
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
+import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testMovieDetails
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -52,10 +54,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The movie player as the shell's fourth overlay layer (design-system.md sections 6.3 and
- * 11.8): the hero's Play opens it through the gated request, the details screen underneath
- * leaves TalkBack traversal for its lifetime, closing restores focus to the Play button, and a
- * blocked request surfaces its notice on the page instead of opening anything.
+ * The movie player in the details page's one player-overlay slot (design-system.md sections 6.3
+ * and 11.8): the hero's Play opens it through the gated request, newer overlays supersede a
+ * deferred Play, the details screen underneath leaves TalkBack traversal for its lifetime, and
+ * closing restores focus to the control that led away.
  */
 @RunWith(AndroidJUnit4::class)
 class MoviePlayerOverlayFocusTest {
@@ -95,6 +97,7 @@ class MoviePlayerOverlayFocusTest {
 
     private var detailsState by mutableStateOf(MovieDetailsUiState())
     private val engines = mutableListOf<FakeMoviePlayerEngine>()
+    private val trailerEngines = mutableListOf<FakeTrailerPlayerEngine>()
     private lateinit var playRequests: MutableSharedFlow<MoviePlayRequest>
     private var failProgressSaves = false
     private var hostActivity: Activity? = null
@@ -106,6 +109,7 @@ class MoviePlayerOverlayFocusTest {
             details = MovieDetailsState.Loaded(testMovieDetails(id = 1)),
         )
         engines.clear()
+        trailerEngines.clear()
         failProgressSaves = false
         playRequests = MutableSharedFlow(extraBufferCapacity = 1)
         composeRule.setContent {
@@ -158,6 +162,9 @@ class MoviePlayerOverlayFocusTest {
                     onSignOut = {},
                     onSignOutConfirm = {},
                     onSignOutDismiss = {},
+                    trailerEngineFactory = { _, _ ->
+                        FakeTrailerPlayerEngine().also { trailerEngines += it }
+                    },
                 )
             }
         }
@@ -176,6 +183,20 @@ class MoviePlayerOverlayFocusTest {
         val play = composeRule.onNodeWithTag("details_play")
         play.assertIsFocused()
         play.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+    }
+
+    private fun emitDelayedPlayRequest() {
+        composeRule.runOnIdle { playRequests.tryEmit(playRequest) }
+        composeRule.waitForIdle()
+    }
+
+    private fun openPlaybackSettings() {
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.onNodeWithTag("more_menu_item_0")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
     }
 
@@ -283,6 +304,53 @@ class MoviePlayerOverlayFocusTest {
             .onNodeWithText("This TV can't play this movie's DTS audio track.")
             .assertExists()
         // Focus never left the page the answer landed on.
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
+    }
+
+    @Test
+    fun delayedPlayCannotReplacePlaybackSettingsAndDismissRestoresMoreFocus() {
+        setShellContent { null }
+        pressPlay()
+        openPlaybackSettings()
+
+        emitDelayedPlayRequest()
+
+        composeRule.onNodeWithTag("playback_settings_dialog").assertExists()
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        pressBack()
+        composeRule.onNodeWithTag("playback_settings_dialog").assertDoesNotExist()
+        composeRule.onNodeWithTag("details_more").assertIsFocused()
+    }
+
+    @Test
+    fun trailerSupersedesDelayedPlayAndANewPlayStillOpensAndRestoresFocus() {
+        var playPresses = 0
+        setShellContent {
+            playPresses += 1
+            playRequest.takeIf { playPresses > 1 }
+        }
+        pressPlay()
+
+        val secondExtra = composeRule.onNodeWithTag("extra_card_202")
+        secondExtra.requestFocus()
+        secondExtra.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("trailer_player").assertExists()
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+
+        pressBack()
+        composeRule.onNodeWithTag("trailer_player").assertDoesNotExist()
+        secondExtra.assertIsFocused()
+
+        emitDelayedPlayRequest()
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        secondExtra.assertIsFocused()
+
+        composeRule.onNodeWithTag("details_play").requestFocus()
+        pressPlay()
+        composeRule.onNodeWithTag("movie_player").assertExists()
+        pressBack()
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
         composeRule.onNodeWithTag("details_play").assertIsFocused()
     }
 }

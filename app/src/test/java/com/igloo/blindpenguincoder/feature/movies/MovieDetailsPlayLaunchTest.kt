@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.TestHttp
+import com.igloo.blindpenguincoder.data.repository.audioStreamJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.likeStatusJson
 import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
@@ -212,27 +213,54 @@ class MovieDetailsPlayLaunchTest {
         }
 
     @Test
-    fun `failed preparation retries only the failed read and cannot bypass the gate`() = runTest {
+    fun `cached failed reads retry together and only fresh responses can launch`() = runTest {
         var technicalAttempts = 0
+        var progressAttempts = 0
         var capabilityChecks = 0
+        val releaseTechnicalRetry = CompletableDeferred<Unit>()
+        val releaseProgressRetry = CompletableDeferred<Unit>()
         val http = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
             val path = request.url.encodedPath
             when {
                 path.startsWith("/api/movies/details/") -> jsonResponse(movieDetailsJson())
                 path.endsWith("/technical-details") -> {
                     technicalAttempts += 1
-                    if (technicalAttempts < 3) {
-                        jsonResponse(
+                    when (technicalAttempts) {
+                        1 -> jsonResponse(technicalDetailsJson())
+                        2 -> jsonResponse(
                             """{"error":true,"message":"Probe failed"}""",
                             HttpStatusCode.InternalServerError,
                         )
-                    } else {
-                        jsonResponse(technicalDetailsJson())
+                        else -> {
+                            releaseTechnicalRetry.await()
+                            jsonResponse(
+                                technicalDetailsJson(
+                                    audioStreams = listOf(
+                                        audioStreamJson(id = 99, language = "spa"),
+                                    ),
+                                ),
+                            )
+                        }
                     }
                 }
-                path.endsWith("/watch-progress") -> jsonResponse(
-                    watchProgressJson(progressSec = 1800.0, durationSec = 7200.0),
-                )
+                path.endsWith("/watch-progress") -> {
+                    progressAttempts += 1
+                    when (progressAttempts) {
+                        1 -> jsonResponse(
+                            watchProgressJson(progressSec = 1800.0, durationSec = 7200.0),
+                        )
+                        2 -> jsonResponse(
+                            """{"error":true,"message":"Progress failed"}""",
+                            HttpStatusCode.InternalServerError,
+                        )
+                        else -> {
+                            releaseProgressRetry.await()
+                            jsonResponse(
+                                watchProgressJson(progressSec = 3600.0, durationSec = 7200.0),
+                            )
+                        }
+                    }
+                }
                 path.endsWith("/like-status") -> jsonResponse(likeStatusJson())
                 else -> error("Unrouted path: $path")
             }
@@ -248,19 +276,31 @@ class MovieDetailsPlayLaunchTest {
 
         viewModel.open(1)
         advanceUntilIdle()
-        viewModel.requestPlayback()
+        viewModel.refresh()
         advanceUntilIdle()
+
+        assertEquals(2, technicalAttempts)
+        assertEquals(2, progressAttempts)
+        viewModel.requestPlayback()
+        runCurrent()
 
         assertTrue(launches.isEmpty())
         assertEquals(0, capabilityChecks)
-        assertEquals(2, technicalAttempts)
-        assertTrue(viewModel.uiState.value.mutationNotice.orEmpty().contains("Press Play"))
-
-        viewModel.requestPlayback()
-        advanceUntilIdle()
-
         assertEquals(3, technicalAttempts)
+        assertEquals(3, progressAttempts)
+
+        releaseTechnicalRetry.complete(Unit)
+        runCurrent()
+        assertTrue(launches.isEmpty())
+        assertEquals(0, capabilityChecks)
+
+        releaseProgressRetry.complete(Unit)
+        runCurrent()
+        assertEquals(3, technicalAttempts)
+        assertEquals(3, progressAttempts)
         assertEquals(1, capabilityChecks)
-        assertEquals(1800.0, launches.single().resumeAtSec)
+        assertEquals(1, launches.size)
+        assertEquals(3600.0, launches.single().resumeAtSec)
+        assertEquals("Spanish · 5.1 surround", launches.single().audioLabel)
     }
 }

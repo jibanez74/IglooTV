@@ -159,15 +159,31 @@ data class MovieDetailsUiState(
     val mutationNotice: String? = null,
 )
 
-private sealed interface PlaybackRead<out T> {
-    data object Pending : PlaybackRead<Nothing>
-    data class Ready<T>(val value: T) : PlaybackRead<T>
-    data class Failed(val error: com.igloo.blindpenguincoder.core.error.AppError) :
-        PlaybackRead<Nothing>
-}
+private enum class PlaybackReadiness { Pending, Ready, Failed }
 
-private fun <T> PlaybackRead<T>.readyValueOrNull(): T? =
-    (this as? PlaybackRead.Ready<T>)?.value
+/**
+ * [value] is the last renderable success; [readiness] says whether that value is fresh enough
+ * to prepare playback. A failed refresh therefore leaves the page intact without letting Play
+ * launch from data the server just failed to revalidate.
+ */
+private data class PlaybackRead<T>(
+    val value: T? = null,
+    val readiness: PlaybackReadiness = PlaybackReadiness.Pending,
+) {
+    fun begin(): PlaybackRead<T> = copy(readiness = PlaybackReadiness.Pending)
+
+    fun settle(result: ApiResult<T>): PlaybackRead<T> = when (result) {
+        is ApiResult.Success -> PlaybackRead(
+            value = result.value,
+            readiness = PlaybackReadiness.Ready,
+        )
+        is ApiResult.Failure -> copy(readiness = PlaybackReadiness.Failed)
+    }
+
+    fun renderableValueOrNull(): T? = value
+
+    fun freshValueOrNull(): T? = value.takeIf { readiness == PlaybackReadiness.Ready }
+}
 
 class MovieDetailsViewModel(
     private val movies: MovieRepository,
@@ -226,8 +242,8 @@ class MovieDetailsViewModel(
     // the composed Loaded state from whatever has arrived so far. All are keyed to openMovieId:
     // open() clears them, and a response for a movie no longer open is dropped.
     private var wireDetails: MovieDetailsData? = null
-    private var technicalRead: PlaybackRead<MovieTechnicalDetailsData> = PlaybackRead.Pending
-    private var progressRead: PlaybackRead<MovieWatchProgress> = PlaybackRead.Pending
+    private var technicalRead = PlaybackRead<MovieTechnicalDetailsData>()
+    private var progressRead = PlaybackRead<MovieWatchProgress>()
     private var playIntentPending = false
 
     // Session-only (the user's decision): reset with the overlay, never persisted. Deliberately
@@ -327,22 +343,16 @@ class MovieDetailsViewModel(
         playIntentPending = true
         _uiState.update { it.copy(mutationNotice = null) }
 
-        if (technicalRead is PlaybackRead.Failed) {
-            technicalRead = PlaybackRead.Pending
-            loadTechnical(movieId)
-        }
-        if (progressRead is PlaybackRead.Failed) {
-            progressRead = PlaybackRead.Pending
-            loadProgress(movieId)
-        }
+        if (technicalRead.readiness == PlaybackReadiness.Failed) loadTechnical(movieId)
+        if (progressRead.readiness == PlaybackReadiness.Failed) loadProgress(movieId)
         completePlayIntentIfReady()
     }
 
     private fun completePlayIntentIfReady() {
         if (!playIntentPending) return
         val details = wireDetails ?: return
-        val technical = technicalRead.readyValueOrNull() ?: return
-        val progress = progressRead.readyValueOrNull() ?: return
+        val technical = technicalRead.freshValueOrNull() ?: return
+        val progress = progressRead.freshValueOrNull() ?: return
         val request = buildMoviePlayRequest(
             movie = details.movie,
             // The same poster the details page shows, re-used as the session artwork.
@@ -409,13 +419,11 @@ class MovieDetailsViewModel(
     }
 
     private fun loadTechnical(movieId: Long) {
+        technicalRead = technicalRead.begin()
         launchRead(Read.Technical) {
             val result = movies.movieTechnicalDetails(movieId)
             if (_uiState.value.openMovieId != movieId) return@launchRead
-            technicalRead = when (result) {
-                is ApiResult.Success -> PlaybackRead.Ready(result.value)
-                is ApiResult.Failure -> PlaybackRead.Failed(result.error)
-            }
+            technicalRead = technicalRead.settle(result)
             publishLoaded()
             onPreparationReadSettled(result)
         }
@@ -423,16 +431,14 @@ class MovieDetailsViewModel(
 
     private fun loadProgress(movieId: Long) {
         val epochAtStart = mutationState(MutationType.Watched, movieId).epoch
+        progressRead = progressRead.begin()
         launchRead(Read.Progress) {
             val result = movies.movieWatchProgress(movieId)
             if (_uiState.value.openMovieId != movieId) return@launchRead
-            progressRead = when (result) {
-                is ApiResult.Success -> {
-                    confirmIfFresh(MutationType.Watched, movieId, epochAtStart, result.value.watched)
-                    PlaybackRead.Ready(result.value)
-                }
-                is ApiResult.Failure -> PlaybackRead.Failed(result.error)
+            if (result is ApiResult.Success) {
+                confirmIfFresh(MutationType.Watched, movieId, epochAtStart, result.value.watched)
             }
+            progressRead = progressRead.settle(result)
             publishLoaded()
             onPreparationReadSettled(result)
         }
@@ -463,8 +469,9 @@ class MovieDetailsViewModel(
     }
 
     /**
-     * The secondary requests degrade instead of failing the screen: badges, the progress strip,
-     * and the toggle states simply stay absent, and a stale value survives a failed refresh.
+     * Like status degrades instead of failing the screen. Technical details and progress use
+     * [PlaybackRead] because their last success stays renderable after a failed refresh while
+     * playback preparation independently requires a fresh success.
      */
     private fun <T> loadSecondary(
         movieId: Long,
@@ -509,8 +516,8 @@ class MovieDetailsViewModel(
 
     private fun clearFragments() {
         wireDetails = null
-        technicalRead = PlaybackRead.Pending
-        progressRead = PlaybackRead.Pending
+        technicalRead = PlaybackRead()
+        progressRead = PlaybackRead()
         playIntentPending = false
     }
 
@@ -637,7 +644,7 @@ class MovieDetailsViewModel(
         // Zero-guarded like the Home hero: the scraper writes TMDB's "no data" as a valid 0.
         val ratingBadge = movie.criticRating?.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
         val certification = movie.certification?.orNullIfBlank()
-        val technical = technicalRead.readyValueOrNull()
+        val technical = technicalRead.renderableValueOrNull()
         val badges = technical?.let(::mediaBadges).orEmpty()
         val runtimeMinutes = movie.runTime?.orNull()?.takeIf { it > 0 }
         val releaseDateText = movie.releaseDate?.orNullIfBlank()?.let(::formatReleaseDate)
@@ -714,7 +721,7 @@ class MovieDetailsViewModel(
      */
     private fun progressUi(movieId: Long): ProgressUi? {
         if (mutationState(MutationType.Watched, movieId).displayed == true) return null
-        val progress = progressRead.readyValueOrNull()
+        val progress = progressRead.renderableValueOrNull()
         val progressSec = resumePositionSec(progress) ?: return null
         val durationSec = progress?.durationSec ?: return null
         return ProgressUi(
