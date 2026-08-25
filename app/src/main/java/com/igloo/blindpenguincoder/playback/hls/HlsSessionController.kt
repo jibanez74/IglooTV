@@ -36,6 +36,7 @@ class HlsSessionController(
     val sessionUuid: String = UUID.randomUUID().toString(),
 ) {
     private var currentSpec: HlsSessionSpec? = null
+    private var manifestRequestIssued = false
     private var reload = 0
     private var keepaliveJob: Job? = null
 
@@ -62,6 +63,7 @@ class HlsSessionController(
                 sessionUuid = sessionUuid,
                 reload = reload,
             )
+            manifestRequestIssued = true
             when (val result = api.fetchHlsManifest(spec)) {
                 is HlsManifestResult.Ready -> {
                     currentSpec = spec
@@ -133,7 +135,7 @@ class HlsSessionController(
     /** Ends the session server-side; fired on the surviving scope, best-effort by design. */
     fun releaseAndStop() {
         cancelKeepalive()
-        if (currentSpec == null) return
+        if (!manifestRequestIssued) return
         stopScope.launch {
             runCatching { api.stopHlsSession(movieId, sessionUuid) }
         }

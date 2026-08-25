@@ -9,6 +9,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotSelected
@@ -593,12 +597,36 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Waiting for the server to free up…").assertExists()
+        composeRule.onNodeWithContentDescription("Waiting for the server to free up…")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
+
+        engine.emit(MoviePlayerEvent.StatusMessage("Reconnecting to the stream…"))
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Reconnecting to the stream…")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
 
         startPlaying()
         engine.emit(MoviePlayerEvent.Buffering)
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Buffering…").assertExists()
+        composeRule.onNodeWithContentDescription("Buffering")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
     }
 
     @Test

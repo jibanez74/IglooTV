@@ -132,6 +132,19 @@ data class MoviePlayerState(
         if (incoming > 0.0) incoming else durationSec
 }
 
+/** The existing polite live region prefers actionable wait detail over generic phase copy. */
+internal fun moviePlayerAnnouncement(
+    phase: MoviePlayerPhase,
+    statusMessage: String?,
+    title: String,
+): String? = when (phase) {
+    MoviePlayerPhase.Playing -> "Playing: $title"
+    MoviePlayerPhase.Paused -> "Paused: $title"
+    MoviePlayerPhase.Loading -> statusMessage ?: "Loading movie"
+    MoviePlayerPhase.Buffering -> statusMessage ?: "Buffering"
+    else -> null
+}
+
 /** What the engine reports upward; each maps 1:1 onto a [MoviePlayerState] transition. */
 sealed interface MoviePlayerEvent {
     data class Ready(val durationSec: Double) : MoviePlayerEvent

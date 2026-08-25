@@ -5,10 +5,12 @@ import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.playback.hls.HlsManifestResult
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.HttpTimeoutCapability
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -84,10 +86,11 @@ class MovieRepositoryTest {
     @Test
     fun `fetching the manifest sends the contract query and reads the igloo headers`() = runTest {
         var request: HttpRequestData? = null
+        val body = ByteReadChannel("#EXTM3U")
         val http = TestHttp {
             request = it
             respond(
-                content = "#EXTM3U",
+                content = body,
                 status = HttpStatusCode.OK,
                 headers = headersOf(
                     "X-Igloo-Effective-Profile" to listOf("1080p_8mbps"),
@@ -105,14 +108,19 @@ class MovieRepositoryTest {
         assertEquals("90", captured.url.parameters["start"])
         assertEquals("1", captured.url.parameters["audio_track"])
         assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+        val timeouts = requireNotNull(captured.getCapabilityOrNull(HttpTimeoutCapability))
+        assertEquals(45_000L, timeouts.requestTimeoutMillis)
+        assertEquals(45_000L, timeouts.socketTimeoutMillis)
         assertEquals(HlsManifestResult.Ready("1080p_8mbps", 87.417), result)
+        assertTrue("a successful manifest body must be drained", body.isClosedForRead)
     }
 
     @Test
     fun `a busy manifest surfaces the retry hint instead of failing`() = runTest {
+        val body = ByteReadChannel("conversion capacity exhausted")
         val http = TestHttp {
             respond(
-                content = "",
+                content = body,
                 status = HttpStatusCode.ServiceUnavailable,
                 headers = headersOf("Retry-After" to listOf("5")),
             )
@@ -122,6 +130,7 @@ class MovieRepositoryTest {
             HlsManifestResult.Busy(retryAfterSec = 5),
             http.movieRepository.fetchHlsManifest(hlsSpec()),
         )
+        assertTrue("a non-success manifest body must be drained", body.isClosedForRead)
     }
 
     @Test

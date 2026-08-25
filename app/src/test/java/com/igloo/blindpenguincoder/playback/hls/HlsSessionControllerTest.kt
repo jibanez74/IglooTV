@@ -1,5 +1,8 @@
 package com.igloo.blindpenguincoder.playback.hls
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
@@ -16,9 +19,11 @@ class HlsSessionControllerTest {
         val queuedResults = ArrayDeque<HlsManifestResult>()
         val fetchedSpecs = mutableListOf<HlsSessionSpec>()
         val stops = mutableListOf<Pair<Long, String>>()
+        var fetchOverride: (suspend (HlsSessionSpec) -> HlsManifestResult)? = null
 
         override suspend fun fetchHlsManifest(spec: HlsSessionSpec): HlsManifestResult {
             fetchedSpecs += spec
+            fetchOverride?.let { return it(spec) }
             return queuedResults.removeFirstOrNull()
                 ?: HlsManifestResult.Ready("remux", spec.startSec.toDouble())
         }
@@ -148,6 +153,39 @@ class HlsSessionControllerTest {
         val api = FakeHlsApi()
         val controller = HlsSessionController(7, api, backgroundScope, this)
         controller.start("remux", 0, 0)
+
+        controller.releaseAndStop()
+        runCurrent()
+
+        assertEquals(listOf(7L to controller.sessionUuid), api.stops)
+    }
+
+    @Test
+    fun `release stops a startup canceled while its first manifest is in flight`() = runTest {
+        val api = FakeHlsApi()
+        val fetchStarted = CompletableDeferred<Unit>()
+        val manifest = CompletableDeferred<HlsManifestResult>()
+        api.fetchOverride = {
+            fetchStarted.complete(Unit)
+            manifest.await()
+        }
+        val controller = HlsSessionController(7, api, backgroundScope, this)
+        val startup = backgroundScope.launch { controller.start("remux", 0, 0) }
+        fetchStarted.await()
+
+        startup.cancelAndJoin()
+        controller.releaseAndStop()
+        runCurrent()
+
+        assertEquals(listOf(7L to controller.sessionUuid), api.stops)
+    }
+
+    @Test
+    fun `release stops a session whose startup failed after issuing a manifest`() = runTest {
+        val api = FakeHlsApi()
+        api.queuedResults += HlsManifestResult.Failed("No stream.")
+        val controller = HlsSessionController(7, api, backgroundScope, this)
+        runCatching { controller.start("remux", 0, 0) }
 
         controller.releaseAndStop()
         runCurrent()

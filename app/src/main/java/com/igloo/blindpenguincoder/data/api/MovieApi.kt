@@ -62,7 +62,10 @@ class MovieApi(
     ): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/movies/$id/hls/$profileId/playlist.m3u8") {
             query.forEach { (name, value) -> parameter(name, value) }
-            timeout { requestTimeoutMillis = HLS_MANIFEST_TIMEOUT_MS }
+            timeout {
+                requestTimeoutMillis = HLS_MANIFEST_TIMEOUT_MS
+                socketTimeoutMillis = HLS_MANIFEST_TIMEOUT_MS
+            }
         }
 
     /** Same manifest address as a string for Media3, which fetches on its own stack. */

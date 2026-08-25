@@ -75,6 +75,7 @@ import com.igloo.blindpenguincoder.playback.model.MoviePlayerPhase
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerState
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.TrackOption
+import com.igloo.blindpenguincoder.playback.model.moviePlayerAnnouncement
 import com.igloo.blindpenguincoder.playback.model.onEvent
 import kotlinx.coroutines.delay
 
@@ -431,13 +432,11 @@ fun MoviePlayerScreen(
 
         // The transport announcement for a TalkBack focus parked anywhere: play state flips are
         // otherwise silent when driven by media keys. Polite — it narrates, it never interrupts.
-        val playStateAnnouncement = when (state.phase) {
-            MoviePlayerPhase.Playing -> "Playing: ${request.title}"
-            MoviePlayerPhase.Paused -> "Paused: ${request.title}"
-            MoviePlayerPhase.Loading -> "Loading movie"
-            MoviePlayerPhase.Buffering -> "Buffering"
-            else -> null
-        }
+        val playStateAnnouncement = moviePlayerAnnouncement(
+            phase = state.phase,
+            statusMessage = state.statusMessage,
+            title = request.title,
+        )
         if (playStateAnnouncement != null) {
             Box(
                 modifier = Modifier

@@ -66,3 +66,21 @@ fun hlsLoadRetryDelayMs(responseCode: Int?, retryAfterSec: Int?, errorCount: Int
     if (responseCode != 503) return null
     return capacityRetryDelayMs(errorCount, retryAfterSec)
 }
+
+/**
+ * The complete Media3 retry decision. The public three-argument rule above remains the 503
+ * override; non-503 failures retain Media3's own delay only through its normal retry count,
+ * and a null default delay preserves Media3's immediate fail-fast classifications.
+ */
+internal fun hlsLoadRetryDelayMs(
+    responseCode: Int?,
+    retryAfterSec: Int?,
+    errorCount: Int,
+    defaultRetryCount: Int,
+    defaultRetryDelayMs: Long?,
+): Long? = when {
+    responseCode == 503 -> capacityRetryDelayMs(errorCount, retryAfterSec)
+    defaultRetryDelayMs == null -> null
+    errorCount > defaultRetryCount -> null
+    else -> defaultRetryDelayMs
+}

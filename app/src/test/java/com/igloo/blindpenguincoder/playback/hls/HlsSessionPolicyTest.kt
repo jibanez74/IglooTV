@@ -77,6 +77,52 @@ class HlsSessionPolicyTest {
         assertNull(hlsLoadRetryDelayMs(responseCode = null, retryAfterSec = null, errorCount = 1))
     }
 
+    @Test
+    fun `503 gets six retries while non-503 stops at the Media3 default threshold`() {
+        assertEquals(
+            9_000L,
+            hlsLoadRetryDelayMs(503, 9, 6, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
+        )
+        assertNull(
+            hlsLoadRetryDelayMs(503, 9, 7, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
+        )
+
+        listOf<Int?>(401, 404, 500, null).forEach { responseCode ->
+            assertEquals(
+                2_000L,
+                hlsLoadRetryDelayMs(
+                    responseCode,
+                    null,
+                    errorCount = 3,
+                    defaultRetryCount = 3,
+                    defaultRetryDelayMs = 2_000L,
+                ),
+            )
+            assertNull(
+                hlsLoadRetryDelayMs(
+                    responseCode,
+                    null,
+                    errorCount = 4,
+                    defaultRetryCount = 3,
+                    defaultRetryDelayMs = 3_000L,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `Media3 fail-fast errors stay immediate`() {
+        assertNull(
+            hlsLoadRetryDelayMs(
+                responseCode = null,
+                retryAfterSec = null,
+                errorCount = 1,
+                defaultRetryCount = 3,
+                defaultRetryDelayMs = null,
+            ),
+        )
+    }
+
     // --- constants the backend contract pins ---
 
     @Test

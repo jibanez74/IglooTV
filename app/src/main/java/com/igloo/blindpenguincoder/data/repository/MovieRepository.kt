@@ -29,6 +29,8 @@ import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
 import com.igloo.blindpenguincoder.playback.hls.hlsQueryParams
 import com.igloo.blindpenguincoder.playback.hls.parseHlsManifestResponse
 import io.ktor.client.call.body
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.utils.io.discard
 
 class MovieRepository(
     private val api: MovieApi,
@@ -91,7 +93,12 @@ class MovieRepository(
      */
     override suspend fun fetchHlsManifest(spec: HlsSessionSpec): HlsManifestResult = try {
         val response = api.movieHlsPlaylist(spec.movieId, spec.profileId, hlsQueryParams(spec))
-        parseHlsManifestResponse(response.status.value, spec) { name -> response.headers[name] }
+        val status = response.status.value
+        val headers = response.headers.entries().associate { (name, values) ->
+            name.lowercase() to values.firstOrNull()
+        }
+        response.bodyAsChannel().discard()
+        parseHlsManifestResponse(status, spec) { name -> headers[name.lowercase()] }
     } catch (cancellation: kotlinx.coroutines.CancellationException) {
         throw cancellation
     } catch (failure: Throwable) {

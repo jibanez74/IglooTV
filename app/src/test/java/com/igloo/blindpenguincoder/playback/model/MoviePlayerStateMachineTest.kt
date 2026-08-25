@@ -251,4 +251,36 @@ class MoviePlayerStateMachineTest {
             .onEvent(MoviePlayerEvent.StatusMessage("Waiting…"))
         assertEquals(null, ended.statusMessage)
     }
+
+    @Test
+    fun `detailed wait messages outrank generic loading and buffering announcements`() {
+        assertEquals(
+            "Waiting for the server to free up…",
+            moviePlayerAnnouncement(
+                MoviePlayerPhase.Loading,
+                "Waiting for the server to free up…",
+                "Heat",
+            ),
+        )
+        assertEquals(
+            "Reconnecting to the stream…",
+            moviePlayerAnnouncement(
+                MoviePlayerPhase.Buffering,
+                "Reconnecting to the stream…",
+                "Heat",
+            ),
+        )
+    }
+
+    @Test
+    fun `wait announcements fall back to the generic phase text`() {
+        assertEquals(
+            "Loading movie",
+            moviePlayerAnnouncement(MoviePlayerPhase.Loading, null, "Heat"),
+        )
+        assertEquals(
+            "Buffering",
+            moviePlayerAnnouncement(MoviePlayerPhase.Buffering, null, "Heat"),
+        )
+    }
 }

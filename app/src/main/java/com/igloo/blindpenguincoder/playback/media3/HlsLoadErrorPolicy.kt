@@ -28,12 +28,15 @@ internal class HlsLoadErrorPolicy : DefaultLoadErrorHandlingPolicy() {
         val retryAfterSec = http?.headerFields?.entries
             ?.firstOrNull { it.key?.equals("Retry-After", ignoreCase = true) == true }
             ?.value?.firstOrNull()?.toIntOrNull()
-        val delayMs = hlsLoadRetryDelayMs(http?.responseCode, retryAfterSec, loadErrorInfo.errorCount)
-        return when {
-            delayMs != null -> delayMs
-            http?.responseCode == 503 -> C.TIME_UNSET // budget exhausted: fail, don't hammer
-            else -> super.getRetryDelayMsFor(loadErrorInfo)
-        }
+        val defaultDelayMs = super.getRetryDelayMsFor(loadErrorInfo)
+        val delayMs = hlsLoadRetryDelayMs(
+            responseCode = http?.responseCode,
+            retryAfterSec = retryAfterSec,
+            errorCount = loadErrorInfo.errorCount,
+            defaultRetryCount = super.getMinimumLoadableRetryCount(loadErrorInfo.mediaLoadData.dataType),
+            defaultRetryDelayMs = defaultDelayMs.takeUnless { it == C.TIME_UNSET },
+        )
+        return delayMs ?: C.TIME_UNSET
     }
 
     override fun getMinimumLoadableRetryCount(dataType: Int): Int =
