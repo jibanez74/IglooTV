@@ -20,7 +20,6 @@ class MoviePlayRequestTest {
         subtitleTypeIndex = null,
         audioTracks = audioTracks,
         subtitleTracks = emptyList(),
-        videoHeight = 1080,
         resumeAtSec = null,
         durationSec = null,
     )

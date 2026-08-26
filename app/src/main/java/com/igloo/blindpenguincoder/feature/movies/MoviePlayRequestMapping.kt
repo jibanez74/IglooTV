@@ -58,7 +58,6 @@ internal fun buildMoviePlayRequest(
                 imageBased = isImageBasedSubtitleCodec(subtitle.codec),
             )
         },
-        videoHeight = maxVideoHeight(technical),
         resumeAtSec = resumePositionSec(progress),
         durationSec = progress?.durationSec ?: movie.duration?.orNull(),
         // Sorted here: the player's active-chapter scan and "Chapter N" numbering assume
@@ -68,10 +67,6 @@ internal fun buildMoviePlayRequest(
             .map { PlaybackChapter(title = it.title, startTimeSec = it.startTime.toDouble()) },
     )
 }
-
-/** Tallest probed video stream — the bound on which transcode profiles are worth offering. */
-internal fun maxVideoHeight(technical: MovieTechnicalDetailsData?): Int? =
-    technical?.videoStreams?.maxOfOrNull { it.height.toInt() }
 
 /**
  * The wire id of an effective choice, as the type-relative index [MoviePlayRequest] carries:

@@ -9,7 +9,6 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
-import com.igloo.blindpenguincoder.data.model.VideoStream
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
@@ -146,7 +145,6 @@ class MoviePlayRequestMappingTest {
         assertNull(request.audioTypeIndex)
         assertNull(request.subtitleTypeIndex)
         assertNull(request.selectedAudioTrack)
-        assertNull(request.videoHeight)
         assertEquals(emptyList<PlayableAudioTrack>(), request.audioTracks)
         assertEquals(emptyList<PlayableSubtitleTrack>(), request.subtitleTracks)
     }
@@ -212,19 +210,6 @@ class MoviePlayRequestMappingTest {
         assertEquals(listOf("English · 5.1 surround", "French · Stereo"), request.audioTracks.map { it.label })
         assertEquals(listOf(true, false), request.audioTracks.map { it.isDefault })
         assertEquals(listOf(false, true), request.subtitleTracks.map { it.imageBased })
-    }
-
-    @Test
-    fun `video height is the tallest probed video stream`() {
-        val request = buildMoviePlayRequest(
-            movie = movie(),
-            posterUrl = null,
-            technical = technical(video = listOf(videoStream(height = 800), videoStream(height = 2160))),
-            progress = null,
-            selection = PlaybackSelection(),
-        )
-
-        assertEquals(2160, request.videoHeight)
     }
 
     @Test
@@ -335,26 +320,12 @@ class MoviePlayRequestMappingTest {
         audio: List<AudioStream> = listOf(audioStream(id = 1, streamIndex = 1, isDefault = true)),
         subtitles: List<Subtitle> = emptyList(),
         chapters: List<Chapter> = emptyList(),
-        video: List<VideoStream> = emptyList(),
     ) = MovieTechnicalDetailsData(
         movie = JsonObject(emptyMap()),
-        videoStreams = video,
+        videoStreams = emptyList(),
         audioStreams = audio,
         subtitles = subtitles,
         chapters = chapters,
-    )
-
-    private fun videoStream(height: Long) = VideoStream(
-        id = height,
-        movieId = 1,
-        streamIndex = 0,
-        codec = "h264",
-        bitRate = 0,
-        width = height * 16 / 9,
-        height = height,
-        frameRate = 23.976,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
     )
 
     private fun chapter(id: Long, title: String, startTime: Long) = Chapter(

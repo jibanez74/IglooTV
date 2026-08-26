@@ -192,7 +192,6 @@ private val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Save
                 // Lists have no natural slot in this flat encoding; JSON is one symmetric line.
                 Json.encodeToString(request.audioTracks),
                 Json.encodeToString(request.subtitleTracks),
-                request.videoHeight?.toString().orEmpty(),
                 request.resumeAtSec?.toString().orEmpty(),
                 request.durationSec?.toString().orEmpty(),
                 Json.encodeToString(request.chapters),
@@ -213,10 +212,9 @@ private val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Save
                 subtitleTypeIndex = saved[6].toIntOrNull(),
                 audioTracks = Json.decodeFromString<List<PlayableAudioTrack>>(saved[7]),
                 subtitleTracks = Json.decodeFromString<List<PlayableSubtitleTrack>>(saved[8]),
-                videoHeight = saved[9].toIntOrNull(),
-                resumeAtSec = saved[10].toDoubleOrNull(),
-                durationSec = saved[11].toDoubleOrNull(),
-                chapters = Json.decodeFromString<List<PlaybackChapter>>(saved[12]),
+                resumeAtSec = saved[9].toDoubleOrNull(),
+                durationSec = saved[10].toDoubleOrNull(),
+                chapters = Json.decodeFromString<List<PlaybackChapter>>(saved[11]),
             )
         }
     },
@@ -560,6 +558,9 @@ fun IglooApp(
                 request = request,
                 viewModel = moviePlayerViewModel,
                 onClose = closeMoviePlayer,
+                onPlaybackModeRequested = { mode ->
+                    moviePlayRequest = moviePlayRequest?.copy(mode = mode)
+                },
                 engineFactory = moviePlayerEngineFactory,
             )
         }

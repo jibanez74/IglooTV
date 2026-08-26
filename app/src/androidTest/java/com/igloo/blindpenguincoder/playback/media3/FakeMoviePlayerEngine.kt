@@ -29,51 +29,67 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
 
     var released = false
         private set
+    var releaseCount = 0
+        private set
+    private var hostActive = true
 
     @Composable
     override fun VideoSurface(modifier: Modifier) = Unit
 
     override fun startPlayback(startPositionSec: Double?, initialPlayWhenReady: Boolean) {
+        if (released) return
         commands += "start:$startPositionSec:$initialPlayWhenReady"
         emit(MoviePlayerEvent.PlayWhenReadyChanged(initialPlayWhenReady))
     }
 
     override fun play() {
+        if (released || !hostActive) return
         commands += "play"
         emit(MoviePlayerEvent.PlayWhenReadyChanged(true))
     }
 
     override fun pause() {
+        if (released) return
         commands += "pause"
         emit(MoviePlayerEvent.PlayWhenReadyChanged(false))
     }
 
     override fun seekTo(seconds: Double) {
+        if (released) return
         commands += "seek:$seconds"
     }
 
     override fun selectAudioTrack(optionId: String) {
+        if (released) return
         commands += "audio:$optionId"
     }
 
     override fun selectSubtitleTrack(optionId: String?) {
+        if (released) return
         commands += "subtitle:$optionId"
     }
 
     override fun selectPlaybackMode(optionId: String) {
+        if (released) return
         commands += "quality:$optionId"
     }
 
     override fun onHostPaused() {
+        if (released) return
+        hostActive = false
         commands += "hostPaused"
         emit(MoviePlayerEvent.PlayWhenReadyChanged(false))
     }
 
     override fun onHostResumed() {
+        if (released) return
+        hostActive = true
         commands += "hostResumed"
     }
 
     override fun release() {
+        if (released) return
+        releaseCount++
         released = true
     }
 

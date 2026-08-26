@@ -60,8 +60,8 @@ data class PlaybackSettingsUi(
  * inert stand-ins ("Default", "None") so the focus chain and announcements stay meaningful.
  *
  * Resolution rules:
- * - Modes: [availablePlaybackModes] drops transcode profiles taller than the source ([videoHeight]).
- *   Direct stays listed and selectable even when the selected audio track can't play on this
+ * - Modes: [availablePlaybackModes] returns the normative seven-mode ladder in order. Direct
+ *   stays listed and selectable even when the selected audio track can't play on this
  *   device — offers may be filtered, but a user's choice is never overridden; the explanation
  *   (and the Play gate, in the same words) says why Direct would refuse.
  * - Effective audio: the selected id if the file still has it, else the `is_default` stream,
@@ -77,10 +77,9 @@ internal fun playbackSettingsUi(
     audioStreams: List<AudioStream>?,
     subtitles: List<Subtitle>?,
     selection: PlaybackSelection,
-    videoHeight: Int? = null,
     canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean = { _, _ -> true },
 ): PlaybackSettingsUi {
-    val modes = availablePlaybackModes(videoHeight)
+    val modes = availablePlaybackModes()
         .map { PlaybackModeOptionUi(it, playbackModeLabel(it)) }
 
     val audio = audioStreams.orEmpty()

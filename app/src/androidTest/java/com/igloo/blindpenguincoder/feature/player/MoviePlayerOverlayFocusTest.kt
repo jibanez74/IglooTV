@@ -91,7 +91,6 @@ class MoviePlayerOverlayFocusTest {
         audioTracks = listOf(
             PlayableAudioTrack(label = "English · 5.1 surround", codec = "dts", channels = 6),
         ),
-        videoHeight = 1080,
         resumeAtSec = null,
         durationSec = 7200.0,
     )

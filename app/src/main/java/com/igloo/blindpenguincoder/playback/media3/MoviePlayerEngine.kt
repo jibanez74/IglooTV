@@ -46,12 +46,12 @@ interface MoviePlayerEngine {
      */
     fun selectPlaybackMode(optionId: String)
 
-    /** Host lifecycle went to the background: stop playback — a TV in standby must be silent. */
+    /** Host lifecycle paused: silence playback and clear pending autoplay. */
     fun onHostPaused()
 
     /** Host lifecycle returned; playback stays paused for the user to resume. */
     fun onHostResumed()
 
-    /** Tear down the player; the engine is unusable afterwards. */
+    /** Idempotently tear down every player/session resource; the engine is unusable afterwards. */
     fun release()
 }

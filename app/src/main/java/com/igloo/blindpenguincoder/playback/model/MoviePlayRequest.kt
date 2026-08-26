@@ -29,8 +29,6 @@ data class MoviePlayRequest(
      * is the backend's `trackIndex` ordinal, so filtering here would shift every URL after them.
      */
     val subtitleTracks: List<PlayableSubtitleTrack> = emptyList(),
-    /** Tallest video stream in the file; bounds which transcode profiles are worth offering. */
-    val videoHeight: Int?,
     /** Null = nothing to resume; the player then starts from the beginning without asking. */
     val resumeAtSec: Double?,
     val durationSec: Double?,

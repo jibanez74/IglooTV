@@ -68,6 +68,7 @@ import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
@@ -94,6 +95,7 @@ fun MoviePlayerScreen(
     request: MoviePlayRequest,
     viewModel: MoviePlayerViewModel,
     onClose: () -> Unit,
+    onPlaybackModeRequested: (PlaybackMode) -> Unit,
     engineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine,
     modifier: Modifier = Modifier,
 ) {
@@ -115,6 +117,7 @@ fun MoviePlayerScreen(
     }
     var lifecycleSilenced by remember(engine) { mutableStateOf(false) }
     var hostPausePending by remember(engine) { mutableStateOf(false) }
+    var releasedForBackground by remember { mutableStateOf(false) }
 
     var state by remember(engine) {
         mutableStateOf(
@@ -145,6 +148,11 @@ fun MoviePlayerScreen(
 
     DisposableEffect(engine) {
         onDispose { engine.release() }
+    }
+
+    val closeAndRelease: () -> Unit = {
+        engine.release()
+        onClose()
     }
 
     // The progress session: one per screen visit, and the exit save fires on *any* unmount —
@@ -199,7 +207,7 @@ fun MoviePlayerScreen(
         // entry focus lands on the Retry button hidden underneath it.
         if (state.phase == MoviePlayerPhase.Error) playerMenu = null
         when (state.phase) {
-            MoviePlayerPhase.Ended -> onClose()
+            MoviePlayerPhase.Ended -> closeAndRelease()
             // Chrome may only rest hidden over a moving picture; any other phase surfaces it.
             MoviePlayerPhase.Playing -> if (progressSyncError != null) chromeVisible = true
             else -> chromeVisible = true
@@ -261,7 +269,7 @@ fun MoviePlayerScreen(
         ) {
             chromeVisible = false
         } else {
-            onClose()
+            closeAndRelease()
         }
     }
 
@@ -279,13 +287,23 @@ fun MoviePlayerScreen(
                 Lifecycle.Event.ON_STOP -> {
                     if (context.findHostActivity()?.isChangingConfigurations != true) {
                         playWhenReadyIntent = false
+                        releasedForBackground = true
+                        engine.release()
                     }
                 }
                 Lifecycle.Event.ON_RESUME -> {
-                    if (hostPausePending) playWhenReadyIntent = false
-                    hostPausePending = false
-                    lifecycleSilenced = false
-                    engine.onHostResumed()
+                    if (releasedForBackground) {
+                        releasedForBackground = false
+                        playWhenReadyIntent = false
+                        lifecycleSilenced = false
+                        hostPausePending = false
+                        reloadKey += 1
+                    } else {
+                        if (hostPausePending) playWhenReadyIntent = false
+                        hostPausePending = false
+                        lifecycleSilenced = false
+                        engine.onHostResumed()
+                    }
                 }
                 else -> Unit
             }
@@ -336,7 +354,16 @@ fun MoviePlayerScreen(
                 actionRequester = retryRequester,
                 // A revoked session cannot be retried into working — the host is already
                 // revalidating; Close is the only honest action it has.
-                onAction = if (unauthorized) onClose else ({ reloadKey += 1 }),
+                onAction = if (unauthorized) {
+                    closeAndRelease
+                } else {
+                    {
+                        // Retry is a fresh, explicit Play intent after the failed engine's
+                        // terminal boundary cleared every pending transport command.
+                        playWhenReadyIntent = true
+                        reloadKey += 1
+                    }
+                },
             )
         } else {
             MoviePlayerChrome(
@@ -355,7 +382,7 @@ fun MoviePlayerScreen(
                 onRetryProgressSync = viewModel::retryFailedSave,
                 onProgressRetryFocusChanged = { progressRetryFocused = it },
                 onAnyControlFocused = { interactionTick++ },
-                onBack = onClose,
+                onBack = closeAndRelease,
                 onTogglePlayPause = togglePlayPause,
                 onSeekBy = seekBy,
                 onOpenMenu = { playerMenu = it },
@@ -376,7 +403,7 @@ fun MoviePlayerScreen(
                     resumeDecided = true
                     state = state.onResumeChosen()
                 },
-                onClose = onClose,
+                onClose = closeAndRelease,
             )
             else -> Unit
         }
@@ -424,7 +451,11 @@ fun MoviePlayerScreen(
                     title = "Quality",
                     options = state.qualityOptions,
                     noneRow = null,
-                    onSelect = { id -> engine.selectPlaybackMode(requireNotNull(id)) },
+                    onSelect = { id ->
+                        val mode = PlaybackMode.valueOf(requireNotNull(id))
+                        onPlaybackModeRequested(mode)
+                        engine.selectPlaybackMode(mode.name)
+                    },
                     onDismiss = closeMenu,
                 )
             }

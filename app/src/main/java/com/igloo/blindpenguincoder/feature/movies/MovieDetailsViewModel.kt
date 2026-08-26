@@ -716,7 +716,6 @@ class MovieDetailsViewModel(
                 audioStreams = technical?.audioStreams,
                 subtitles = technical?.subtitles,
                 selection = playbackSelection,
-                videoHeight = maxVideoHeight(technical),
                 canPlayAudioMime = canPlayAudioMime,
             ),
         )

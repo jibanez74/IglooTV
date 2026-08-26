@@ -43,6 +43,7 @@ import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.TrackOption
+import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -72,6 +73,9 @@ class MoviePlayerScreenTest {
     private var hostActivity: Activity? = null
     private lateinit var restorationTester: StateRestorationTester
     private val restorationEngines = mutableListOf<FakeMoviePlayerEngine>()
+    private val engineRequests = mutableListOf<MoviePlayRequest>()
+    private val requestedModes = mutableListOf<PlaybackMode>()
+    private var currentRequest by mutableStateOf<MoviePlayRequest?>(null)
 
     /** The host contract: closing unmounts the screen, which is what fires the exit save. */
     private var open by mutableStateOf(true)
@@ -94,7 +98,6 @@ class MoviePlayerScreenTest {
         mode = PlaybackMode.Direct,
         audioTypeIndex = null,
         subtitleTypeIndex = null,
-        videoHeight = 1080,
         resumeAtSec = resumeAtSec,
         durationSec = 7200.0,
         chapters = chapters,
@@ -109,6 +112,9 @@ class MoviePlayerScreenTest {
 
     private fun setContent(request: MoviePlayRequest = playRequest()) {
         engine = FakeMoviePlayerEngine()
+        currentRequest = request
+        engineRequests.clear()
+        requestedModes.clear()
         savedRequests.clear()
         closes = 0
         failProgressSaves = false
@@ -133,13 +139,20 @@ class MoviePlayerScreenTest {
                 CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
                     if (open) {
                         MoviePlayerScreen(
-                            request = request,
+                            request = requireNotNull(currentRequest),
                             viewModel = viewModel,
                             onClose = {
                                 closes += 1
                                 open = false
                             },
-                            engineFactory = { _, _ -> engine },
+                            onPlaybackModeRequested = { mode ->
+                                requestedModes += mode
+                                currentRequest = requireNotNull(currentRequest).copy(mode = mode)
+                            },
+                            engineFactory = { _, engineRequest ->
+                                engineRequests += engineRequest
+                                engine
+                            },
                         )
                     }
                 }
@@ -153,7 +166,10 @@ class MoviePlayerScreenTest {
         closes = 0
         failProgressSaves = false
         open = true
+        currentRequest = request
         restorationEngines.clear()
+        engineRequests.clear()
+        requestedModes.clear()
         viewModel = MoviePlayerViewModel(
             saveProgress = { _, body ->
                 savedRequests += body
@@ -169,13 +185,18 @@ class MoviePlayerScreenTest {
                 CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
                     if (open) {
                         MoviePlayerScreen(
-                            request = request,
+                            request = requireNotNull(currentRequest),
                             viewModel = viewModel,
                             onClose = {
                                 closes += 1
                                 open = false
                             },
-                            engineFactory = { _, _ ->
+                            onPlaybackModeRequested = { mode ->
+                                requestedModes += mode
+                                currentRequest = requireNotNull(currentRequest).copy(mode = mode)
+                            },
+                            engineFactory = { _, engineRequest ->
+                                engineRequests += engineRequest
                                 FakeMoviePlayerEngine().also {
                                     engine = it
                                     restorationEngines += it
@@ -213,18 +234,13 @@ class MoviePlayerScreenTest {
     private fun emitQualityOptions(selectedId: String = "Direct") {
         engine.emit(
             MoviePlayerEvent.QualityOptionsChanged(
-                listOf(
+                PlaybackMode.entries.map { mode ->
                     TrackOption(
-                        id = "Direct",
-                        label = "Original quality — plays the file as-is",
-                        selected = selectedId == "Direct",
-                    ),
-                    TrackOption(
-                        id = "Remux",
-                        label = "Original quality — audio adjusted",
-                        selected = selectedId == "Remux",
-                    ),
-                ),
+                        id = mode.name,
+                        label = playbackModeLabel(mode),
+                        selected = selectedId == mode.name,
+                    )
+                },
             ),
         )
         composeRule.waitForIdle()
@@ -385,6 +401,7 @@ class MoviePlayerScreenTest {
 
         assertEquals(1, closes)
         assertEquals(emptyList<String>(), engine.playbackCommands)
+        assertTrue(engine.released)
     }
 
     @Test
@@ -487,6 +504,7 @@ class MoviePlayerScreenTest {
 
         pressBack()
         assertEquals(1, closes)
+        assertTrue(engine.released)
     }
 
     @Test
@@ -558,6 +576,19 @@ class MoviePlayerScreenTest {
     }
 
     @Test
+    fun qualityMenuShowsAllSevenModesInNormativeOrder() {
+        setContent()
+        startPlaying()
+        emitQualityOptions()
+
+        openPlayerMenu("movie_quality")
+
+        PlaybackMode.entries.forEach { mode ->
+            composeRule.onNodeWithTag("movie_track_${mode.name}").assertExists()
+        }
+    }
+
+    @Test
     fun qualityMenuSwitchesModeWithoutDismissingAndTheMarkFollowsTheEngine() {
         setContent()
         startPlaying()
@@ -574,6 +605,8 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
 
         assertTrue("quality:Remux" in engine.playbackCommands)
+        assertEquals(listOf(PlaybackMode.Remux), requestedModes)
+        assertEquals(PlaybackMode.Remux, requireNotNull(currentRequest).mode)
         composeRule.onNodeWithTag("movie_track_menu").assertExists()
 
         // The selected mark is engine truth: it moves when the new session's options arrive.
@@ -742,6 +775,7 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
 
         assertEquals(1, closes)
+        assertTrue(engine.released)
         awaitSaveCount(1)
         val save = savedRequests.single()
         assertEquals(7200.0, save.progressSec, 0.001)
@@ -760,6 +794,7 @@ class MoviePlayerScreenTest {
         pressBack()
 
         assertEquals(1, closes)
+        assertTrue(engine.released)
         // One cadence save becomes eligible just before exit, followed by the explicit final
         // save with a higher sequence. The final snapshot is the assertion that matters here.
         awaitSaveCount(2)
@@ -804,33 +839,84 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
 
         assertEquals(1, closes)
+        assertTrue(engine.released)
     }
 
     @Test
-    fun standbySilencesPlaybackAndReturningDoesNotResumeIt() {
+    fun backgroundReleasesOldEngineAndReconstructsPausedAtLastPosition() {
         setContent()
         startPlaying()
-        val transportBeforeStandby = engine.playbackCommands
+        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        composeRule.waitForIdle()
+        val oldEngine = engine
+        val transportBeforeStandby = oldEngine.playbackCommands
 
         composeRule.runOnUiThread {
             lifecycleOwner.registry.currentState = Lifecycle.State.CREATED
         }
         composeRule.waitForIdle()
+        assertTrue(oldEngine.released)
+        // A late system/media command has no path back into a released background engine.
+        oldEngine.play()
+        assertEquals(transportBeforeStandby, oldEngine.playbackCommands)
+
+        engine = FakeMoviePlayerEngine()
         composeRule.runOnUiThread {
             lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         }
         composeRule.waitForIdle()
 
         assertEquals(
-            listOf("hostResumed", "hostPaused", "hostResumed"),
-            engine.commands.filter { it == "hostPaused" || it == "hostResumed" },
+            listOf("hostResumed", "hostPaused"),
+            oldEngine.commands.filter { it == "hostPaused" || it == "hostResumed" },
         )
-        assertEquals(transportBeforeStandby, engine.playbackCommands)
+        assertEquals(listOf("hostResumed"), engine.commands.filter { it == "hostResumed" })
+        assertEquals(listOf("start:600.0:false"), engine.playbackCommands)
         val playPause = composeRule.onNodeWithTag("movie_play_pause")
         playPause.assertContentDescriptionEquals("Play")
         playPause.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
-        assertEquals(transportBeforeStandby + "play", engine.playbackCommands)
+        assertEquals(listOf("start:600.0:false", "play"), engine.playbackCommands)
+    }
+
+    @Test
+    fun requestedQualitySurvivesRetryAndSavedStateRecreation() {
+        setRestorableContent()
+        startPlaying()
+        emitQualityOptions()
+        openPlayerMenu("movie_quality")
+        composeRule.onNodeWithTag("movie_track_Direct")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("movie_track_Remux")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        restorationTester.emulateSavedInstanceStateRestore()
+        composeRule.waitForIdle()
+
+        assertEquals(PlaybackMode.Remux, engineRequests.last().mode)
+
+        val recreated = engine
+        recreated.emit(MoviePlayerEvent.Error("The movie stream stopped unexpectedly."))
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Retry playing movie")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertTrue(recreated.released)
+        assertEquals(PlaybackMode.Remux, engineRequests.last().mode)
+    }
+
+    @Test
+    fun hostDrivenUnmountReleasesTheEngineImmediately() {
+        setContent()
+        val mountedEngine = engine
+
+        composeRule.runOnUiThread { open = false }
+        composeRule.waitForIdle()
+
+        assertTrue(mountedEngine.released)
+        assertEquals(1, mountedEngine.releaseCount)
     }
 
     @Test

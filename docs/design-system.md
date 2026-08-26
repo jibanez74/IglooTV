@@ -1654,6 +1654,22 @@ autoplay is still pending. The icon and toggle use `playWhenReady`, so Pause dur
 rebuffering cancels pending autoplay and the ready transition cannot restart behind the user's
 back.
 
+The in-player **Quality** menu always lists the same seven modes as Playback Settings, in enum
+order: Direct, Remux, 2160p at 16 Mbps, 1080p at 8 Mbps, 1080p at 6 Mbps, 1080p at 4 Mbps, and
+720p at 3 Mbps. Source height and the current audio route do not remove rows. A requested mode
+remains the request even when the backend reports a different effective profile; the selected
+mark reports that effective profile without silently rewriting the user's choice. Selecting the
+active row while another switch is pending cancels the pending switch and restores the active
+source with the latest play/pause intent.
+
+Host lifecycle is a strict resource boundary. `ON_PAUSE` silences playback and clears pending
+autoplay; transport commands are ignored until the host resumes. A non-configuration `ON_STOP`
+fully releases MediaSession, ExoPlayer, loading, callbacks, keepalive, and the backend HLS
+session. Returning keeps the player overlay, reconstructs a fresh engine at the last reported
+position and latest requested quality, and starts paused. Playback resumes only after an explicit
+Play press. Configuration recreation still replaces and releases the engine through composition
+disposal, while saveable screen state preserves its position and explicit transport choice.
+
 The details page does not launch from partial preparation. Technical details and watch progress
 each resolve to pending, successful (including empty tracks or nullable progress), or failed. One
 Play intent waits for both successful responses regardless of arrival order; failed reads are
@@ -1823,6 +1839,15 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-25 — Playback lifecycle and quality are one strict contract.**
+
+- **§11.8** defines the seven always-visible in-player quality rows, requested-versus-effective
+  mode behavior, pending-switch cancellation, and pause → release → paused reconstruction across
+  a real host background trip.
+- HLS session generations now rotate synchronously on stop so delayed cleanup cannot target a
+  later session, and terminal player/preflight failures stop transport and network work before
+  surfacing the error.
 
 **2026-08-24 — In-player chapter menu.**
 

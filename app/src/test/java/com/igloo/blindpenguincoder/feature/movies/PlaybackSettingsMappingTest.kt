@@ -262,31 +262,10 @@ class PlaybackSettingsMappingTest {
         assertTrue(text.contains("Subtitles are off."))
     }
 
-    // --- mode filtering (never upscale) ---
+    // --- seven-mode contract ---
 
     @Test
-    fun `mode rows drop transcode profiles taller than the source`() {
-        val ui = playbackSettingsUi(
-            audioStreams = listOf(audioStream()),
-            subtitles = null,
-            selection = PlaybackSelection(),
-            videoHeight = 1080,
-        )
-        assertEquals(
-            listOf(
-                PlaybackMode.Direct,
-                PlaybackMode.Remux,
-                PlaybackMode.P1080Mbps8,
-                PlaybackMode.P1080Mbps6,
-                PlaybackMode.P1080Mbps4,
-                PlaybackMode.P720Mbps3,
-            ),
-            ui.modes.map { it.mode },
-        )
-    }
-
-    @Test
-    fun `an unknown height keeps every mode on offer`() {
+    fun `mode rows always contain the normative seven modes`() {
         val ui = playbackSettingsUi(
             audioStreams = listOf(audioStream()),
             subtitles = null,

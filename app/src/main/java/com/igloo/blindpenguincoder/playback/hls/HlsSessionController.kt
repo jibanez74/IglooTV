@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.playback.hls
 
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -22,9 +23,9 @@ class HlsStartException(message: String, val unauthorized: Boolean = false) : Ex
 
 /**
  * Owns one movie's HLS session lifecycle for the lifetime of one player engine: the
- * `playback_session` UUID (reused across every restart so the backend self-evicts the previous
- * session on commit), the preflight manifest fetch with its capacity/lost retry loops, the
- * keepalive that stands in for a paused player, and the best-effort stop on release.
+ * `playback_session` UUID (reused across uninterrupted HLS restarts so the backend self-evicts
+ * the previous session on commit), the preflight manifest fetch with its capacity/lost retry
+ * loops, the keepalive that stands in for a paused player, and the best-effort stop on release.
  */
 class HlsSessionController(
     private val movieId: Long,
@@ -33,12 +34,21 @@ class HlsSessionController(
     private val scope: CoroutineScope,
     /** App-lifetime scope; the stop POST must survive the engine's release. */
     private val stopScope: CoroutineScope,
-    val sessionUuid: String = UUID.randomUUID().toString(),
+    sessionUuid: String = UUID.randomUUID().toString(),
 ) {
+    var sessionUuid: String = sessionUuid
+        private set
     private var currentSpec: HlsSessionSpec? = null
     private var manifestRequestIssued = false
     private var reload = 0
     private var keepaliveJob: Job? = null
+    private var generation = 0L
+    private var generationReserved = false
+
+    /** Marks this UUID as owned by a pending HLS transition before its coroutine is dispatched. */
+    fun reserveGeneration() {
+        generationReserved = true
+    }
 
     /**
      * Establishes (or re-establishes) a session and returns where its media actually starts.
@@ -52,19 +62,25 @@ class HlsSessionController(
         startSec: Int,
         onStatus: (String?) -> Unit = {},
     ): HlsSessionStart {
+        reserveGeneration()
+        val startGeneration = generation
+        val startUuid = sessionUuid
         var busyAttempts = 0
         var lostAttempts = 0
         while (true) {
+            ensureCurrent(startGeneration, startUuid)
             val spec = HlsSessionSpec(
                 movieId = movieId,
                 profileId = profileId,
                 audioTypeIndex = audioTypeIndex,
                 startSec = startSec,
-                sessionUuid = sessionUuid,
+                sessionUuid = startUuid,
                 reload = reload,
             )
             manifestRequestIssued = true
-            when (val result = api.fetchHlsManifest(spec)) {
+            val result = api.fetchHlsManifest(spec)
+            ensureCurrent(startGeneration, startUuid)
+            when (result) {
                 is HlsManifestResult.Ready -> {
                     currentSpec = spec
                     onStatus(null)
@@ -115,11 +131,16 @@ class HlsSessionController(
      */
     fun startKeepalive(onSessionLost: () -> Unit) {
         keepaliveJob?.cancel()
+        val keepaliveGeneration = generation
+        val keepaliveUuid = sessionUuid
         keepaliveJob = scope.launch {
             while (true) {
                 delay(HLS_KEEPALIVE_INTERVAL_MS)
+                if (!isCurrent(keepaliveGeneration, keepaliveUuid)) return@launch
                 val spec = currentSpec ?: continue
-                when (api.fetchHlsManifest(spec)) {
+                val result = api.fetchHlsManifest(spec)
+                if (!isCurrent(keepaliveGeneration, keepaliveUuid)) return@launch
+                when (result) {
                     is HlsManifestResult.Lost -> onSessionLost()
                     else -> Unit
                 }
@@ -132,12 +153,35 @@ class HlsSessionController(
         keepaliveJob = null
     }
 
-    /** Ends the session server-side; fired on the surviving scope, best-effort by design. */
+    /**
+     * Invalidates the current generation synchronously, then ends its server session on the
+     * surviving scope. Rotating before the POST launches guarantees a delayed old stop can
+     * never target a later HLS session.
+     */
     fun releaseAndStop() {
         cancelKeepalive()
-        if (!manifestRequestIssued) return
-        stopScope.launch {
-            runCatching { api.stopHlsSession(movieId, sessionUuid) }
+        if (!generationReserved) return
+        val stoppedUuid = sessionUuid
+        val shouldStopServer = manifestRequestIssued
+        generation++
+        currentSpec = null
+        manifestRequestIssued = false
+        reload = 0
+        generationReserved = false
+        sessionUuid = UUID.randomUUID().toString()
+        if (shouldStopServer) {
+            stopScope.launch {
+                runCatching { api.stopHlsSession(movieId, stoppedUuid) }
+            }
         }
     }
+
+    private fun ensureCurrent(expectedGeneration: Long, expectedUuid: String) {
+        if (!isCurrent(expectedGeneration, expectedUuid)) {
+            throw CancellationException("HLS session generation was invalidated")
+        }
+    }
+
+    private fun isCurrent(expectedGeneration: Long, expectedUuid: String): Boolean =
+        generation == expectedGeneration && sessionUuid == expectedUuid
 }

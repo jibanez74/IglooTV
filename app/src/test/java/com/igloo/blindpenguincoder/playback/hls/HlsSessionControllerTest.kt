@@ -1,6 +1,8 @@
 package com.igloo.blindpenguincoder.playback.hls
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
@@ -13,6 +15,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class HlsSessionControllerTest {
 
     private class FakeHlsApi : HlsSessionApi {
@@ -56,7 +59,7 @@ class HlsSessionControllerTest {
     }
 
     @Test
-    fun `the session uuid is minted once and reused across every restart`() = runTest {
+    fun `the session uuid is reused across uninterrupted hls restarts`() = runTest {
         val api = FakeHlsApi()
         val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
 
@@ -65,6 +68,76 @@ class HlsSessionControllerTest {
 
         assertEquals(1, api.fetchedSpecs.map { it.sessionUuid }.distinct().size)
         assertEquals(controller.sessionUuid, api.fetchedSpecs.first().sessionUuid)
+    }
+
+    @Test
+    fun `stop rotates the uuid before a later start`() = runTest {
+        val api = FakeHlsApi()
+        val controller = HlsSessionController(7, api, backgroundScope, this)
+        controller.start("remux", 0, 0)
+        val stoppedUuid = controller.sessionUuid
+
+        controller.releaseAndStop()
+        val nextUuid = controller.sessionUuid
+        controller.start("1080p_8mbps", 0, 60)
+        runCurrent()
+
+        assertTrue(stoppedUuid != nextUuid)
+        assertEquals(stoppedUuid, api.stops.single().second)
+        assertEquals(nextUuid, api.fetchedSpecs.last().sessionUuid)
+    }
+
+    @Test
+    fun `a delayed old stop cannot target a newly started generation`() = runTest {
+        val api = FakeHlsApi()
+        val stopEntered = CompletableDeferred<String>()
+        val allowStop = CompletableDeferred<Unit>()
+        api.fetchOverride = { spec -> HlsManifestResult.Ready(spec.profileId, spec.startSec.toDouble()) }
+        val delayingApi = object : HlsSessionApi by api {
+            override suspend fun stopHlsSession(movieId: Long, sessionUuid: String) {
+                stopEntered.complete(sessionUuid)
+                allowStop.await()
+                api.stopHlsSession(movieId, sessionUuid)
+            }
+        }
+        val controller = HlsSessionController(7, delayingApi, backgroundScope, backgroundScope)
+        controller.start("remux", 0, 0)
+        val oldUuid = controller.sessionUuid
+
+        controller.releaseAndStop()
+        val newUuid = controller.sessionUuid
+        controller.start("1080p_8mbps", 0, 60)
+        assertEquals(oldUuid, stopEntered.await())
+        assertTrue(oldUuid != newUuid)
+        assertEquals(newUuid, api.fetchedSpecs.last().sessionUuid)
+
+        allowStop.complete(Unit)
+        runCurrent()
+        assertEquals(listOf(7L to oldUuid), api.stops)
+    }
+
+    @Test
+    fun `a start invalidated while its manifest is in flight cannot publish`() = runTest {
+        val api = FakeHlsApi()
+        val fetchStarted = CompletableDeferred<Unit>()
+        val manifest = CompletableDeferred<HlsManifestResult>()
+        api.fetchOverride = {
+            fetchStarted.complete(Unit)
+            manifest.await()
+        }
+        val controller = HlsSessionController(7, api, backgroundScope, this)
+        val result = CompletableDeferred<Result<HlsSessionStart>>()
+        backgroundScope.launch {
+            result.complete(runCatching { controller.start("remux", 0, 0) })
+        }
+        fetchStarted.await()
+
+        controller.releaseAndStop()
+        manifest.complete(HlsManifestResult.Ready("remux", 0.0))
+        runCurrent()
+
+        assertTrue(result.await().exceptionOrNull() is CancellationException)
+        assertNull(controller.currentSpec())
     }
 
     @Test
@@ -154,10 +227,11 @@ class HlsSessionControllerTest {
         val controller = HlsSessionController(7, api, backgroundScope, this)
         controller.start("remux", 0, 0)
 
+        val stoppedUuid = controller.sessionUuid
         controller.releaseAndStop()
         runCurrent()
 
-        assertEquals(listOf(7L to controller.sessionUuid), api.stops)
+        assertEquals(listOf(7L to stoppedUuid), api.stops)
     }
 
     @Test
@@ -174,10 +248,11 @@ class HlsSessionControllerTest {
         fetchStarted.await()
 
         startup.cancelAndJoin()
+        val stoppedUuid = controller.sessionUuid
         controller.releaseAndStop()
         runCurrent()
 
-        assertEquals(listOf(7L to controller.sessionUuid), api.stops)
+        assertEquals(listOf(7L to stoppedUuid), api.stops)
     }
 
     @Test
@@ -187,10 +262,11 @@ class HlsSessionControllerTest {
         val controller = HlsSessionController(7, api, backgroundScope, this)
         runCatching { controller.start("remux", 0, 0) }
 
+        val stoppedUuid = controller.sessionUuid
         controller.releaseAndStop()
         runCurrent()
 
-        assertEquals(listOf(7L to controller.sessionUuid), api.stops)
+        assertEquals(listOf(7L to stoppedUuid), api.stops)
     }
 
     @Test
@@ -202,5 +278,35 @@ class HlsSessionControllerTest {
         runCurrent()
 
         assertTrue(api.stops.isEmpty())
+    }
+
+    @Test
+    fun `a reserved generation rotates even before its manifest is issued`() = runTest {
+        val api = FakeHlsApi()
+        val controller = HlsSessionController(7, api, backgroundScope, this)
+        val reservedUuid = controller.sessionUuid
+        controller.reserveGeneration()
+
+        controller.releaseAndStop()
+        runCurrent()
+
+        assertTrue(reservedUuid != controller.sessionUuid)
+        assertTrue(api.stops.isEmpty())
+    }
+
+    @Test
+    fun `repeated stop is idempotent and keepalive stays canceled`() = runTest {
+        val api = FakeHlsApi()
+        val controller = HlsSessionController(7, api, backgroundScope, this)
+        controller.start("remux", 0, 0)
+        controller.startKeepalive { fail("keepalive must be canceled") }
+
+        controller.releaseAndStop()
+        controller.releaseAndStop()
+        runCurrent()
+        advanceTimeBy(HLS_KEEPALIVE_INTERVAL_MS + 1)
+
+        assertEquals(1, api.stops.size)
+        assertEquals(1, api.fetchedSpecs.size)
     }
 }

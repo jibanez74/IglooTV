@@ -44,10 +44,8 @@ import com.igloo.blindpenguincoder.playback.hls.hlsResumeStartSec
 import com.igloo.blindpenguincoder.playback.hls.shouldRebaseHlsSeek
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
-import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.TrackOption
 import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
-import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import kotlin.math.floor
 import kotlinx.coroutines.CoroutineScope
@@ -100,7 +98,7 @@ internal class ExoMoviePlayerEngine(
     private var restartGeneration = 0L
     private var sessionLostRecoveries = 0
     private var initialSelectionApplied = false
-    private var released = false
+    private val playbackIntent = PlaybackIntent()
 
     private val player: ExoPlayer = ExoPlayer.Builder(context)
         .setAudioAttributes(moviePlaybackAudioAttributes, /* handleAudioFocus= */ true)
@@ -140,7 +138,7 @@ internal class ExoMoviePlayerEngine(
         }
 
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-            emit(MoviePlayerEvent.PlayWhenReadyChanged(playWhenReady))
+            emitDesiredPlayWhenReady()
         }
 
         override fun onTracksChanged(tracks: Tracks) {
@@ -167,13 +165,13 @@ internal class ExoMoviePlayerEngine(
 
         override fun onPlayerError(error: PlaybackException) {
             if (isHls && recoverFromLostHlsSession(error)) return
-            emit(errorEvent(error))
+            transitionToTerminal(errorEvent(error))
         }
     }
 
     private val ticker = object : Runnable {
         override fun run() {
-            if (released) return
+            if (!playbackIntent.acceptsCommands) return
             if (player.playbackState == Player.STATE_READY ||
                 player.playbackState == Player.STATE_BUFFERING
             ) {
@@ -184,7 +182,7 @@ internal class ExoMoviePlayerEngine(
     }
 
     private val isHls: Boolean
-        get() = requestedMode != PlaybackMode.Direct
+        get() = effectiveMode != PlaybackMode.Direct
 
     init {
         player.addListener(listener)
@@ -209,6 +207,8 @@ internal class ExoMoviePlayerEngine(
     }
 
     override fun startPlayback(startPositionSec: Double?, initialPlayWhenReady: Boolean) {
+        if (!playbackIntent.start(initialPlayWhenReady)) return
+        emitDesiredPlayWhenReady()
         handler.post(ticker)
         val targetSec = when {
             !isHls -> startPositionSec ?: 0.0
@@ -216,35 +216,41 @@ internal class ExoMoviePlayerEngine(
             startPositionSec != null -> hlsResumeStartSec(startPositionSec).toDouble()
             else -> 0.0
         }
-        restartInPlace(requestedMode, currentAudioTypeIndex, targetSec, initialPlayWhenReady)
+        restartInPlace(requestedMode, currentAudioTypeIndex, targetSec)
     }
 
     override fun play() {
+        if (!playbackIntent.play()) return
+        emitDesiredPlayWhenReady()
         player.play()
     }
 
     override fun pause() {
+        if (!playbackIntent.pause()) return
+        emitDesiredPlayWhenReady()
         player.pause()
     }
 
     override fun seekTo(seconds: Double) {
+        if (!playbackIntent.acceptsCommands) return
         if (!isHls) {
             player.seekTo((seconds * 1000).toLong())
             return
         }
         if (shouldRebaseHlsSeek(seconds, timelineOffsetSec, currentAbsoluteSec())) {
-            restartInPlace(requestedMode, currentAudioTypeIndex, seconds, player.playWhenReady)
+            restartInPlace(requestedMode, currentAudioTypeIndex, seconds)
         } else {
             player.seekTo(((seconds - timelineOffsetSec) * 1000).toLong())
         }
     }
 
     override fun selectAudioTrack(optionId: String) {
+        if (!playbackIntent.acceptsCommands) return
         val hlsOrdinal = parseHlsAudioOptionId(optionId)
         if (hlsOrdinal != null) {
             // Only one audio track exists in an HLS mux; another track is another session.
             if (hlsOrdinal == effectiveAudioOrdinal()) return
-            restartInPlace(requestedMode, hlsOrdinal, currentAbsoluteSec(), player.playWhenReady)
+            restartInPlace(requestedMode, hlsOrdinal, currentAbsoluteSec())
             return
         }
         val override = overrideFor(optionId) ?: return
@@ -257,6 +263,7 @@ internal class ExoMoviePlayerEngine(
     }
 
     override fun selectSubtitleTrack(optionId: String?) {
+        if (!playbackIntent.acceptsCommands) return
         val builder = player.trackSelectionParameters.buildUpon()
         if (optionId == null) {
             currentSubtitleTypeIndex = null
@@ -272,23 +279,34 @@ internal class ExoMoviePlayerEngine(
     }
 
     override fun selectPlaybackMode(optionId: String) {
+        if (!playbackIntent.acceptsCommands) return
         val mode = PlaybackMode.entries.firstOrNull { it.name == optionId } ?: return
-        if (mode == pendingMode || mode == effectiveMode) return
-        restartInPlace(mode, currentAudioTypeIndex, currentAbsoluteSec(), player.playWhenReady)
+        if (mode == pendingMode) return
+        if (mode == effectiveMode) {
+            if (pendingMode != null) cancelPendingModeSwitch()
+            return
+        }
+        restartInPlace(mode, currentAudioTypeIndex, currentAbsoluteSec())
     }
 
     override fun onHostPaused() {
+        if (!playbackIntent.hostPaused()) return
+        emitDesiredPlayWhenReady()
         player.pause()
     }
 
     override fun onHostResumed() {
+        if (!playbackIntent.hostResumed()) return
         // Stays paused; resuming a movie that went to standby is the user's call.
     }
 
     override fun release() {
-        released = true
+        if (!playbackIntent.release()) return
+        restartGeneration++
+        pendingMode = null
         handler.removeCallbacks(ticker)
         restartJob?.cancel()
+        restartJob = null
         controller.releaseAndStop()
         scope.cancel()
         // Media3 requires the session gone before its player.
@@ -306,61 +324,97 @@ internal class ExoMoviePlayerEngine(
         mode: PlaybackMode,
         audioTypeIndex: Int?,
         targetAbsoluteSec: Double,
-        playWhenReady: Boolean,
     ) {
+        if (!playbackIntent.acceptsCommands) return
         restartJob?.cancel()
+        restartJob = null
         val generation = ++restartGeneration
         requestedMode = mode
         pendingMode = mode
         currentAudioTypeIndex = audioTypeIndex
         initialSelectionApplied = false
+        controller.cancelKeepalive()
+        // Freeze the old source while preflight runs without changing transport intent.
         player.pause()
         emit(MoviePlayerEvent.Buffering)
         if (mode == PlaybackMode.Direct) {
-            // Leaving HLS: the session is no longer needed; the UUID stays valid for a return.
+            // Leaving HLS ends and rotates that generation before Direct can later start HLS.
             controller.releaseAndStop()
             effectiveMode = PlaybackMode.Direct
             pendingMode = null
             timelineOffsetSec = 0.0
-            prepareSource(directMediaSource(), (targetAbsoluteSec * 1000).toLong(), playWhenReady)
+            prepareSource(directMediaSource(), (targetAbsoluteSec * 1000).toLong())
             emitQualityOptions()
             return
         }
         val profileId = requireNotNull(mode.hlsProfileId)
+        // Reserve synchronously so selecting Direct again can rotate even before launch runs.
+        controller.reserveGeneration()
         restartJob = scope.launch {
             try {
                 val start = controller.start(
                     profileId = profileId,
                     audioTypeIndex = audioTypeIndex ?: request.effectiveAudioTypeIndex,
                     startSec = floor(targetAbsoluteSec).toInt().coerceAtLeast(0),
-                ) { message -> emit(MoviePlayerEvent.StatusMessage(message)) }
+                ) { message ->
+                    if (isRestartCurrent(generation)) {
+                        emit(MoviePlayerEvent.StatusMessage(message))
+                    }
+                }
+                if (!isRestartCurrent(generation)) return@launch
                 effectiveMode = effectivePlaybackMode(mode, start.effectiveProfileId)
                 timelineOffsetSec = start.actualStartSec
                 val relativeMs = ((targetAbsoluteSec - start.actualStartSec).coerceAtLeast(0.0) * 1000).toLong()
-                prepareSource(hlsMediaSource(start), relativeMs, playWhenReady)
+                prepareSource(hlsMediaSource(start), relativeMs)
                 controller.startKeepalive(::onKeepaliveSessionLost)
                 emitQualityOptions()
             } catch (failure: HlsStartException) {
-                emit(
+                if (isRestartCurrent(generation)) transitionToTerminal(
                     MoviePlayerEvent.Error(
                         failure.message ?: "Playback failed.",
                         failure.unauthorized,
                     ),
                 )
             } finally {
-                if (restartGeneration == generation) pendingMode = null
+                if (restartGeneration == generation) {
+                    pendingMode = null
+                    restartJob = null
+                }
             }
         }
     }
 
-    private fun prepareSource(source: MediaSource, positionMs: Long, playWhenReady: Boolean) {
+    private fun prepareSource(source: MediaSource, positionMs: Long) {
+        if (!playbackIntent.acceptsCommands) return
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, currentSubtitleTypeIndex == null)
             .build()
         player.setMediaSource(source, positionMs)
-        player.playWhenReady = playWhenReady
+        player.playWhenReady = playbackIntent.shouldPlay
         player.prepare()
     }
+
+    /** Selecting the active row is an explicit cancellation of a different pending switch. */
+    private fun cancelPendingModeSwitch() {
+        restartJob?.cancel()
+        restartJob = null
+        restartGeneration++
+        val canceledWhileDirect = effectiveMode == PlaybackMode.Direct
+        requestedMode = effectiveMode
+        pendingMode = null
+        if (canceledWhileDirect) {
+            // The unused HLS preflight may already have reached the backend; stop and rotate it.
+            controller.releaseAndStop()
+        } else {
+            controller.startKeepalive(::onKeepaliveSessionLost)
+        }
+        player.playWhenReady = playbackIntent.shouldPlay
+        emit(MoviePlayerEvent.StatusMessage(null))
+        emitQualityOptions()
+    }
+
+    private fun isRestartCurrent(generation: Long): Boolean =
+        playbackIntent.acceptsCommands && restartGeneration == generation
 
     private fun directMediaSource(): MediaSource =
         ProgressiveMediaSource.Factory(services.progressiveDataSourceFactory)
@@ -449,30 +503,17 @@ internal class ExoMoviePlayerEngine(
     private fun effectiveAudioOrdinal(): Int? =
         currentAudioTypeIndex ?: request.effectiveAudioTypeIndex
 
-    /**
-     * The quality menu's rows. Direct is offered only when the current audio track can prove
-     * itself playable — listing a mode that would play silent is not a choice, it's a trap;
-     * the pre-play dialog still lists Direct and explains, because there the gate's refusal
-     * can be read.
-     */
+    /** The in-player menu exposes the same normative seven-mode contract as pre-play settings. */
     private fun emitQualityOptions() {
-        val audio = effectiveAudioOrdinal()?.let(request.audioTracks::getOrNull)
-        val directPlayable = evaluatePlaybackGate(
-            mode = PlaybackMode.Direct,
-            audioCodec = audio?.codec,
-            audioCodecProfile = audio?.codecProfile,
-            audioLabel = audio?.label,
-            canPlayMime = { mime -> services.canPlayAudioMime(mime, audio?.channels) },
-        ) is PlaybackGateResult.Proceed
-        val options = availablePlaybackModes(request.videoHeight, includeDirect = directPlayable)
+        val options = availablePlaybackModes()
             .map { TrackOption(id = it.name, label = playbackModeLabel(it), selected = it == effectiveMode) }
         emit(MoviePlayerEvent.QualityOptionsChanged(options))
     }
 
     private fun onKeepaliveSessionLost() {
-        if (released) return
+        if (!playbackIntent.acceptsCommands) return
         controller.noteSessionLost()
-        restartInPlace(requestedMode, currentAudioTypeIndex, currentAbsoluteSec(), player.playWhenReady)
+        restartInPlace(requestedMode, currentAudioTypeIndex, currentAbsoluteSec())
     }
 
     /**
@@ -488,7 +529,7 @@ internal class ExoMoviePlayerEngine(
         if (sessionLostRecoveries >= HLS_SESSION_LOST_MAX_ATTEMPTS) return false
         sessionLostRecoveries++
         controller.noteSessionLost()
-        restartInPlace(requestedMode, currentAudioTypeIndex, currentAbsoluteSec(), player.playWhenReady)
+        restartInPlace(requestedMode, currentAudioTypeIndex, currentAbsoluteSec())
         return true
     }
 
@@ -561,7 +602,31 @@ internal class ExoMoviePlayerEngine(
     }
 
     private fun emit(event: MoviePlayerEvent) {
+        if (playbackIntent.released) return
         _events.tryEmit(event)
+    }
+
+    private fun emitDesiredPlayWhenReady() {
+        emit(MoviePlayerEvent.PlayWhenReadyChanged(playbackIntent.shouldPlay))
+    }
+
+    /**
+     * One terminal boundary for player and HLS-start failures. The surface and session object
+     * stay alive for the error screen, but all loading, transport, keepalive, and backend work
+     * stops until the screen creates a fresh engine for an explicit Retry.
+     */
+    private fun transitionToTerminal(error: MoviePlayerEvent.Error) {
+        if (!playbackIntent.failTerminal()) return
+        restartGeneration++
+        pendingMode = null
+        handler.removeCallbacks(ticker)
+        restartJob?.cancel()
+        restartJob = null
+        controller.releaseAndStop()
+        player.stop()
+        player.clearMediaItems()
+        emitDesiredPlayWhenReady()
+        emit(error)
     }
 
     /**
@@ -581,6 +646,25 @@ internal class ExoMoviePlayerEngine(
             durationSec().takeIf { it > 0.0 }?.let { (it * 1000).toLong() } ?: super.getDuration()
 
         override fun getContentDuration(): Long = getDuration()
+
+        override fun getPlayWhenReady(): Boolean =
+            playbackIntent.shouldPlay
+
+        override fun play() {
+            this@ExoMoviePlayerEngine.play()
+        }
+
+        override fun pause() {
+            this@ExoMoviePlayerEngine.pause()
+        }
+
+        override fun setPlayWhenReady(playWhenReady: Boolean) {
+            if (playWhenReady) {
+                this@ExoMoviePlayerEngine.play()
+            } else {
+                this@ExoMoviePlayerEngine.pause()
+            }
+        }
 
         override fun seekTo(positionMs: Long) {
             this@ExoMoviePlayerEngine.seekTo(positionMs / 1000.0)

@@ -29,16 +29,3 @@ val PlaybackMode.hlsProfileId: String?
         PlaybackMode.P1080Mbps4 -> "1080p_4mbps"
         PlaybackMode.P720Mbps3 -> "720p_3mbps"
     }
-
-/**
- * Target height of a transcode profile; null for Direct and Remux, which keep the source
- * resolution. The server never upscales, so profiles taller than the source are pointless
- * to offer.
- */
-val PlaybackMode.transcodeHeight: Int?
-    get() = when (this) {
-        PlaybackMode.Direct, PlaybackMode.Remux -> null
-        PlaybackMode.P2160Mbps16 -> 2160
-        PlaybackMode.P1080Mbps8, PlaybackMode.P1080Mbps6, PlaybackMode.P1080Mbps4 -> 1080
-        PlaybackMode.P720Mbps3 -> 720
-    }
