@@ -1,5 +1,8 @@
 package com.igloo.blindpenguincoder.playback.hls
 
+import com.igloo.blindpenguincoder.playback.model.PLAYBACK_UNAUTHORIZED_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.playbackServerRefusedMessage
+
 /**
  * One HLS playback session as the backend keys it: movie + profile + audio ordinal + client
  * UUID + start second. Any change to these is a new server session (and a new FFmpeg run);
@@ -72,8 +75,8 @@ fun parseHlsManifestResponse(
     503 -> HlsManifestResult.Busy(retryAfterSec = header("Retry-After")?.toIntOrNull())
     404 -> HlsManifestResult.Lost
     401 -> HlsManifestResult.Failed(
-        message = "Your session is no longer valid. Sign in again to keep watching.",
+        message = PLAYBACK_UNAUTHORIZED_MESSAGE,
         unauthorized = true,
     )
-    else -> HlsManifestResult.Failed("The server refused the stream (HTTP $status).")
+    else -> HlsManifestResult.Failed(playbackServerRefusedMessage(status))
 }

@@ -28,6 +28,7 @@ import com.igloo.blindpenguincoder.playback.hls.HlsSessionApi
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
 import com.igloo.blindpenguincoder.playback.hls.hlsQueryParams
 import com.igloo.blindpenguincoder.playback.hls.parseHlsManifestResponse
+import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_MESSAGE
 import io.ktor.client.call.body
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.discard
@@ -90,6 +91,8 @@ class MovieRepository(
      * The manifest fetch that creates/refreshes an HLS session. Not [safeApiCall]: 503 and 404
      * are protocol states the session controller retries through, not failures. Timeouts also
      * count as "busy" — the server legitimately holds a remux manifest while FFmpeg warms up.
+     * Only transport failures are absorbed; a programming error must surface, not read as
+     * "server unreachable".
      */
     override suspend fun fetchHlsManifest(spec: HlsSessionSpec): HlsManifestResult = try {
         val response = api.movieHlsPlaylist(spec.movieId, spec.profileId, hlsQueryParams(spec))
@@ -101,12 +104,11 @@ class MovieRepository(
         parseHlsManifestResponse(status, spec) { name -> headers[name.lowercase()] }
     } catch (cancellation: kotlinx.coroutines.CancellationException) {
         throw cancellation
-    } catch (failure: Throwable) {
+    } catch (failure: Exception) {
         when (failure.toTransportError()) {
             AppError.Timeout -> HlsManifestResult.Busy(retryAfterSec = null)
-            else -> HlsManifestResult.Failed(
-                "The server could not be reached. Check the connection and try again.",
-            )
+            is AppError.Unexpected -> throw failure
+            else -> HlsManifestResult.Failed(PLAYBACK_SERVER_UNREACHABLE_MESSAGE)
         }
     }
 

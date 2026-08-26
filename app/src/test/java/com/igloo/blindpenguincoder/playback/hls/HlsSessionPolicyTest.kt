@@ -123,6 +123,45 @@ class HlsSessionPolicyTest {
         )
     }
 
+    // --- mid-play lost-session recovery ---
+
+    @Test
+    fun `only a segment 404 recovers in place`() {
+        assertTrue(shouldRecoverLostHlsSession(responseCode = 404, recoveries = 0))
+        assertFalse(shouldRecoverLostHlsSession(responseCode = 503, recoveries = 0))
+        assertFalse(shouldRecoverLostHlsSession(responseCode = 500, recoveries = 0))
+        assertFalse(shouldRecoverLostHlsSession(responseCode = null, recoveries = 0))
+    }
+
+    @Test
+    fun `recovery stops once the budget is spent`() {
+        assertTrue(shouldRecoverLostHlsSession(404, recoveries = HLS_SESSION_LOST_MAX_ATTEMPTS - 1))
+        assertFalse(shouldRecoverLostHlsSession(404, recoveries = HLS_SESSION_LOST_MAX_ATTEMPTS))
+    }
+
+    // --- Retry-After header scan ---
+
+    @Test
+    fun `Retry-After is found case-insensitively past the null-key status line`() {
+        val headers = mapOf<String?, List<String>>(
+            null to listOf("HTTP/1.1 503 Service Unavailable"),
+            "retry-after" to listOf("12"),
+        )
+        assertEquals(12, retryAfterSecondsFrom(headers))
+    }
+
+    @Test
+    fun `a missing, empty, or non-numeric Retry-After is null`() {
+        assertNull(retryAfterSecondsFrom(null))
+        assertNull(retryAfterSecondsFrom(emptyMap()))
+        assertNull(retryAfterSecondsFrom(mapOf<String?, List<String>>("Retry-After" to emptyList())))
+        assertNull(
+            retryAfterSecondsFrom(
+                mapOf<String?, List<String>>("Retry-After" to listOf("Wed, 26 Aug 2026 07:28:00 GMT")),
+            ),
+        )
+    }
+
     // --- constants the backend contract pins ---
 
     @Test

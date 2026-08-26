@@ -25,7 +25,6 @@ import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.text.CueGroup
-import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
@@ -35,13 +34,13 @@ import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.hlsProfileId
-import com.igloo.blindpenguincoder.playback.hls.HLS_SESSION_LOST_MAX_ATTEMPTS
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionController
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionStart
 import com.igloo.blindpenguincoder.playback.hls.HlsStartException
 import com.igloo.blindpenguincoder.playback.hls.effectivePlaybackMode
 import com.igloo.blindpenguincoder.playback.hls.hlsResumeStartSec
 import com.igloo.blindpenguincoder.playback.hls.shouldRebaseHlsSeek
+import com.igloo.blindpenguincoder.playback.hls.shouldRecoverLostHlsSession
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import com.igloo.blindpenguincoder.playback.model.TrackOption
@@ -406,6 +405,9 @@ internal class ExoMoviePlayerEngine(
             // The unused HLS preflight may already have reached the backend; stop and rotate it.
             controller.releaseAndStop()
         } else {
+            // The abandoned preflight may also have started a new-profile session server-side.
+            // It cannot be stopped from here — stop is keyed by the shared session UUID, so it
+            // would take the live session with it; the server's idle TTL is what reaps it.
             controller.startKeepalive(::onKeepaliveSessionLost)
         }
         player.playWhenReady = playbackIntent.shouldPlay
@@ -517,16 +519,13 @@ internal class ExoMoviePlayerEngine(
     }
 
     /**
-     * A segment 404 means the server-side session evaporated (idle eviction, restart); the
-     * manifest preflight in [restartInPlace] recreates it at the current position. Budgeted so
-     * a genuinely missing movie cannot loop forever; a successful READY resets the count.
+     * A recoverable load failure restarts the session in place at the current position via the
+     * manifest preflight in [restartInPlace]; the decision itself lives in
+     * [shouldRecoverLostHlsSession]. A successful READY resets the budget.
      */
     private fun recoverFromLostHlsSession(error: PlaybackException): Boolean {
-        val http = generateSequence<Throwable>(error) { it.cause }
-            .filterIsInstance<HttpDataSource.InvalidResponseCodeException>()
-            .firstOrNull()
-        if (http?.responseCode != 404) return false
-        if (sessionLostRecoveries >= HLS_SESSION_LOST_MAX_ATTEMPTS) return false
+        val responseCode = httpErrorCause(error)?.responseCode
+        if (!shouldRecoverLostHlsSession(responseCode, sessionLostRecoveries)) return false
         sessionLostRecoveries++
         controller.noteSessionLost()
         restartInPlace(requestedMode, currentAudioTypeIndex, currentAbsoluteSec())
@@ -559,47 +558,12 @@ internal class ExoMoviePlayerEngine(
         }
     }
 
-    /**
-     * Plain sentences, with the codec/container/network detail AGENTS.md asks for. The 401
-     * message rides `unauthorized = true` so the screen can treat a revoked session
-     * distinctly; the session state machine was already signalled by the data source.
-     */
-    private fun errorEvent(error: PlaybackException): MoviePlayerEvent.Error {
-        val http = generateSequence<Throwable>(error) { it.cause }
-            .filterIsInstance<HttpDataSource.InvalidResponseCodeException>()
-            .firstOrNull()
-        return when {
-            http?.responseCode == 401 -> MoviePlayerEvent.Error(
-                message = "Your session is no longer valid. Sign in again to keep watching.",
-                unauthorized = true,
-            )
-            http?.responseCode == 404 && isHls -> MoviePlayerEvent.Error(
-                "The playback session was lost and could not be recreated.",
-            )
-            http?.responseCode == 503 && isHls -> MoviePlayerEvent.Error(
-                "The server is busy converting other streams. Try again shortly.",
-            )
-            http != null -> MoviePlayerEvent.Error(
-                "The server refused the stream (HTTP ${http.responseCode}).",
-            )
-            error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
-                error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
-                MoviePlayerEvent.Error(
-                    "The server could not be reached. Check the connection and try again.",
-                )
-            error.errorCode in DECODING_ERROR_CODES -> MoviePlayerEvent.Error(
-                "This TV couldn't decode the movie (${error.errorCodeName}). " +
-                    "The file may use a codec this device doesn't support.",
-            )
-            error.errorCode in PARSING_ERROR_CODES -> MoviePlayerEvent.Error(
-                "The movie's ${if (isHls) "stream" else "file"} could not be read " +
-                    "(${error.errorCodeName}).",
-            )
-            else -> MoviePlayerEvent.Error(
-                "Playback failed (${error.errorCodeName}).",
-            )
-        }
-    }
+    private fun errorEvent(error: PlaybackException): MoviePlayerEvent.Error = playerErrorEvent(
+        errorCode = error.errorCode,
+        errorCodeName = error.errorCodeName,
+        httpResponseCode = httpErrorCause(error)?.responseCode,
+        isHls = isHls,
+    )
 
     private fun emit(event: MoviePlayerEvent) {
         if (playbackIntent.released) return
@@ -686,22 +650,6 @@ internal class ExoMoviePlayerEngine(
     private companion object {
         const val TICK_INTERVAL_MS = 500L
         const val SIDELOADED_SUBTITLE_ID_PREFIX = "sub:"
-
-        val DECODING_ERROR_CODES = setOf(
-            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
-            PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
-            PlaybackException.ERROR_CODE_DECODING_FAILED,
-            PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
-            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
-            PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
-        )
-
-        val PARSING_ERROR_CODES = setOf(
-            PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
-            PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
-            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
-            PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
-        )
     }
 }
 

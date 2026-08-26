@@ -222,6 +222,27 @@ class HlsSessionControllerTest {
     }
 
     @Test
+    fun `the keepalive shrugs off transient failures and keeps ticking`() = runTest {
+        val api = FakeHlsApi()
+        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        controller.start("remux", 2, 60)
+        var lost = 0
+        controller.startKeepalive { lost++ }
+
+        api.queuedResults += HlsManifestResult.Busy(retryAfterSec = 9)
+        advanceTimeBy(HLS_KEEPALIVE_INTERVAL_MS + 1)
+        api.queuedResults += HlsManifestResult.Failed("flaky proxy")
+        advanceTimeBy(HLS_KEEPALIVE_INTERVAL_MS + 1)
+
+        assertEquals(0, lost)
+        // Both failed ticks fetched, and the loop is still alive for the next interval.
+        assertEquals(3, api.fetchedSpecs.size)
+        advanceTimeBy(HLS_KEEPALIVE_INTERVAL_MS + 1)
+        assertEquals(4, api.fetchedSpecs.size)
+        assertEquals(0, lost)
+    }
+
+    @Test
     fun `release stops the started session on the surviving scope`() = runTest {
         val api = FakeHlsApi()
         val controller = HlsSessionController(7, api, backgroundScope, this)

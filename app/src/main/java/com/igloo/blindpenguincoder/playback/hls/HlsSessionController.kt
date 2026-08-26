@@ -1,5 +1,7 @@
 package com.igloo.blindpenguincoder.playback.hls
 
+import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_BUSY_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SESSION_LOST_MESSAGE
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -25,7 +27,8 @@ class HlsStartException(message: String, val unauthorized: Boolean = false) : Ex
  * Owns one movie's HLS session lifecycle for the lifetime of one player engine: the
  * `playback_session` UUID (reused across uninterrupted HLS restarts so the backend self-evicts
  * the previous session on commit), the preflight manifest fetch with its capacity/lost retry
- * loops, the keepalive that stands in for a paused player, and the best-effort stop on release.
+ * loops, the keepalive that covers the player's quiet stretches, and the best-effort stop on
+ * release.
  */
 class HlsSessionController(
     private val movieId: Long,
@@ -94,9 +97,7 @@ class HlsSessionController(
                 is HlsManifestResult.Busy -> {
                     busyAttempts++
                     val delayMs = capacityRetryDelayMs(busyAttempts, result.retryAfterSec)
-                        ?: throw HlsStartException(
-                            "The server is busy converting other streams. Try again shortly.",
-                        )
+                        ?: throw HlsStartException(PLAYBACK_SERVER_BUSY_MESSAGE)
                     onStatus("Waiting for the server to free up…")
                     delay(delayMs)
                 }
@@ -104,9 +105,7 @@ class HlsSessionController(
                     lostAttempts++
                     reload++
                     val delayMs = sessionLostRetryDelayMs(lostAttempts)
-                        ?: throw HlsStartException(
-                            "The playback session was lost and could not be recreated.",
-                        )
+                        ?: throw HlsStartException(PLAYBACK_SESSION_LOST_MESSAGE)
                     onStatus("Reconnecting to the stream…")
                     delay(delayMs)
                 }
@@ -125,9 +124,12 @@ class HlsSessionController(
     }
 
     /**
-     * Refreshes the server's 5-minute idle TTL while the player is paused or fully buffered.
-     * A lost session surfaces through [onSessionLost]; transient failures are ignored — the
-     * next tick or the player's own traffic will recover.
+     * Refreshes the server's 5-minute idle TTL for the life of the session. The refresh only
+     * matters while the player is paused or fully buffered — its own traffic covers the rest —
+     * but it deliberately runs unconditionally: one small manifest GET every two minutes is
+     * cheaper than racing the player's transport-state changes. A lost session surfaces
+     * through [onSessionLost]; transient failures are ignored — the next tick or the player's
+     * own traffic will recover.
      */
     fun startKeepalive(onSessionLost: () -> Unit) {
         keepaliveJob?.cancel()

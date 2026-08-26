@@ -16,7 +16,10 @@ const val HLS_RESUME_REWIND_BUFFER_SEC = 10.0
 /** Seeks this far past the current position leave the produced window — rebase instead. */
 const val HLS_FORWARD_REBASE_THRESHOLD_SEC = 120.0
 
-/** A paused or fully buffered player stops fetching; this keeps the 5-minute TTL refreshed. */
+/**
+ * Keepalive cadence for the whole session. A paused or fully buffered player stops fetching,
+ * and this refresh is what carries the server's 5-minute idle TTL through those stretches.
+ */
 const val HLS_KEEPALIVE_INTERVAL_MS = 120_000L
 
 /** Must exceed the server's 120s segment long-poll or every not-yet-encoded segment "fails". */
@@ -56,6 +59,26 @@ fun sessionLostRetryDelayMs(attempt: Int): Long? {
     if (attempt > HLS_SESSION_LOST_MAX_ATTEMPTS) return null
     return HLS_SESSION_LOST_MIN_DELAY_MS
 }
+
+/**
+ * Whether a mid-play load failure should recreate the session in place rather than surface as
+ * a terminal error. Only a segment 404 means "the server-side session evaporated" (idle
+ * eviction, restart); [recoveries] is how many recreations have already run since the last
+ * healthy READY, so a genuinely missing movie cannot loop forever.
+ */
+fun shouldRecoverLostHlsSession(responseCode: Int?, recoveries: Int): Boolean =
+    responseCode == 404 && recoveries < HLS_SESSION_LOST_MAX_ATTEMPTS
+
+/**
+ * `Retry-After` seconds out of an HTTP header map. HttpURLConnection's map is case-preserving
+ * and, despite its non-null declared key type, holds the status line under a null key — so the
+ * key stays nullable here and a tolerant scan beats a direct get; null for a missing or
+ * non-numeric header.
+ */
+fun retryAfterSecondsFrom(headerFields: Map<out String?, List<String>>?): Int? =
+    headerFields?.entries
+        ?.firstOrNull { it.key?.equals("Retry-After", ignoreCase = true) == true }
+        ?.value?.firstOrNull()?.toIntOrNull()
 
 /**
  * Retry delay for a failed Media3 segment/playlist load, or null to let the default policy

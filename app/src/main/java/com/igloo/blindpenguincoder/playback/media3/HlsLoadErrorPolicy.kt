@@ -5,11 +5,11 @@ package com.igloo.blindpenguincoder.playback.media3
 
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import com.igloo.blindpenguincoder.playback.hls.HLS_CAPACITY_RETRY_MAX_ATTEMPTS
 import com.igloo.blindpenguincoder.playback.hls.hlsLoadRetryDelayMs
+import com.igloo.blindpenguincoder.playback.hls.retryAfterSecondsFrom
 
 /**
  * The default policy gives a 503 three quick retries — right for a broken server, wrong for
@@ -20,18 +20,11 @@ import com.igloo.blindpenguincoder.playback.hls.hlsLoadRetryDelayMs
 internal class HlsLoadErrorPolicy : DefaultLoadErrorHandlingPolicy() {
 
     override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
-        val http = generateSequence<Throwable>(loadErrorInfo.exception) { it.cause }
-            .filterIsInstance<HttpDataSource.InvalidResponseCodeException>()
-            .firstOrNull()
-        // HttpURLConnection's header map is case-preserving and holds the status line under a
-        // null key, so a tolerant scan beats a direct get.
-        val retryAfterSec = http?.headerFields?.entries
-            ?.firstOrNull { it.key?.equals("Retry-After", ignoreCase = true) == true }
-            ?.value?.firstOrNull()?.toIntOrNull()
+        val http = httpErrorCause(loadErrorInfo.exception)
         val defaultDelayMs = super.getRetryDelayMsFor(loadErrorInfo)
         val delayMs = hlsLoadRetryDelayMs(
             responseCode = http?.responseCode,
-            retryAfterSec = retryAfterSec,
+            retryAfterSec = retryAfterSecondsFrom(http?.headerFields),
             errorCount = loadErrorInfo.errorCount,
             defaultRetryCount = super.getMinimumLoadableRetryCount(loadErrorInfo.mediaLoadData.dataType),
             defaultRetryDelayMs = defaultDelayMs.takeUnless { it == C.TIME_UNSET },
