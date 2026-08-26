@@ -1,0 +1,5 @@
+Add this bullet under `## Working rules`, immediately after the rule about dead code and temporary diagnostics:
+
+```markdown
+- Keep comments purposeful and minimal. Add a comment only to explain non-obvious intent, constraints, workarounds, or behavior that the code cannot express clearly. Do not narrate obvious code, and remove comments that are outdated, misleading, redundant, or no longer match the implementation.
+```

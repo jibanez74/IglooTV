@@ -1,844 +1,180 @@
 # AGENTS.md
 
-## Project overview
+## Project identity
 
-Igloo is a modern media center Android TV app written in Kotlin.  This repository is the official Android TV client for the Igloo platform.  It communicates with the Igloo Go backend from the main Igloo server/web repository, referenced in this file as the **main Igloo repository**.
+Igloo is a premium media-center client written in Kotlin exclusively for Android TV, Google TV, and Android-based Fire TV devices. This repository contains the official TV client for the Igloo platform; it is not a mobile, tablet, desktop, Plex, or Jellyfin client.
 
-Igloo is not a Jellyfin, Plex, or third-party media-server client.  Plex and Jellyfin may be referenced conceptually when discussing media-center behavior, but this app must not depend on them or copy their implementation.
+The application communicates with the Igloo Go backend in the main server/web repository. It is pre-production: do not preserve backward compatibility, add migrations, or create compatibility layers unless a task explicitly requires them.
 
-The app name is **Igloo**.  The package name is:
+## Sources of truth
 
-```text
-com.igloo.blindpenguincoder
-```
+- Before API work, read `docs/openapi.json`. Do not invent routes, payloads, response models, or error formats.
+- Before UI work, read `docs/design-system.md`. It defines Igloo's visual language, focus behavior, accessibility conventions, and shared screen states.
+- When either document conflicts with implemented behavior, report the conflict instead of silently choosing one.
+- The main Igloo repository may be inspected at `../Igloo` when the local API contract is incomplete or backend behavior must be confirmed.
+- Treat the main repository as read-only. Do not clone, pull, or modify it.
+- The web client may inform product behavior, but web interactions must be reinterpreted for a remote-controlled TV experience.
+- Discover ordinary build files, source directories, and existing patterns from the repository; do not rely on a preferred template from this file.
 
-The app is pre-production.  Do not preserve backward compatibility unless explicitly requested.  Do not add migrations or compatibility layers unless the task specifically requires them.
+## Working rules
 
-## Related repositories and source-of-truth files
+- Inspect relevant code and tests before changing anything.
+- Follow established project patterns unless the task requires changing them.
+- Keep changes focused on the requested outcome.
+- Do not perform broad refactors, dependency migrations, or unrelated cleanup.
+- Do not leave dead code, temporary diagnostics, or commented-out implementations.
+- Keep business, networking, storage, and playback logic out of composables.
+- Do not implement speculative future features or abstractions.
+- If requirements, contracts, or existing behavior conflict materially, stop and ask rather than guessing.
+- Keep comments purposeful and minimal. Add a comment only to explain non-obvious intent, constraints, workarounds, or behavior that the code cannot express clearly. Do not narrate obvious code, and remove comments that are outdated, misleading, redundant, or no longer match the implementation.
 
-This repository contains the Android TV client only.  The Igloo backend and web client live in the main Igloo server/web repository.
+## TV-only product requirements
 
-### Local reference paths
+Igloo is a 10-foot, landscape television experience. Every design and implementation decision must prioritize television viewing and remote control use.
 
-When working locally, prefer a sibling checkout of the main Igloo repository.
-
-Expected local layout:
-
-```text
-projects/
-  Igloo/        # main Go backend + web client
-  IglooTV/      # this Android TV client
-```
-
-From this repository, the main Igloo repo is expected at:
-
-```text
-../Igloo
-```
-
-If that path does not exist, do not guess.  Ask the user or use the in-repo API/design files.
-
-### Canonical upstream reference
-
-The main Igloo repository should be treated as the canonical implementation reference for backend behavior, API contracts, and existing web-client UX patterns.
-
-Canonical repository:
-
-```text
-https://github.com/jibanez74/Igloo
-```
-
-Do not clone, pull, or modify the main Igloo repository.
-
-### Source-of-truth files
-
-Prefer source-of-truth files checked into this repository when available:
-
-```text
-docs/openapi.json
-docs/design-system.md
-```
-
-Rules:
-
-- Use `docs/openapi.json` as the API contract for this Android TV app.
-- Use `docs/design-system.md` as the design-system reference for UI work.
-- If these files are missing or outdated, check the main Igloo repository at `../Igloo`.
-- Do not invent backend endpoints, response models, theme tokens, or screen behavior.
-- When API behavior conflicts between this repository and the main Igloo repo, stop and ask which source should win.
-
-## Non-negotiable rules
-
-- Build for Android TV, Google TV, and Android-based Fire TV devices.
-- Do not turn this into a mobile, tablet, desktop, or touch-first app.
-- Use Kotlin.  Avoid Java unless there is a strong technical reason.
-- Prioritize TalkBack, D-pad navigation, focus behavior, playback reliability, and maintainability.
-- Keep changes focused on the requested task.
-- Inspect relevant files before modifying code.
-- Do not make broad refactors unless explicitly requested.
-- Do not leave dead code behind.
-- Do not introduce Firebase, cloud messaging, analytics SDKs, CDN assumptions, or cloud-only architecture unless explicitly requested.
-- Do not add large dependencies without approval.
-- Do not hardcode production server URLs, local network IPs, Tailscale IPs, or developer-machine details.
-- Do not assume HTTPS is required.  Igloo must support self-hosted HTTP and HTTPS servers.
-- Do not commit code that logs passwords, cookies, auth tokens, QR secrets, quick-connect secrets, session tokens, or device credentials.
-
-## Target platforms
-
-Igloo targets TV platforms controlled by a remote:
-
-- Android TV
-- Google TV
-- Android-based Fire TV / Firestick devices
-- Nvidia Shield as the primary real-device development target
-- Firestick as a secondary real-device target
-- Android Studio TV emulator for fast iteration
-
-Minimum SDK:
-
-```kotlin
-minSdk = 28
-```
-
-Do not support phone/tablet layouts unless explicitly requested.  The future mobile app will be built separately, likely with React Native.
-
-During development, test on either:
-
-- Nvidia Shield connected through a Tailscale address or local network.
-- Android Studio Android TV emulator.
-
-A real Nvidia Shield test is preferred for playback, passthrough, D-pad, and TalkBack behavior.
-
-## Build system and tooling
-
-Use the Gradle wrapper for all Gradle commands.  Do not rely on globally installed Gradle.
-
-The main development machine is Ubuntu 24.04.  Assume commands are run from Linux unless the user says otherwise.
-
-Rules:
-
-- Use `./gradlew` for build and test commands.
-- Do not change Gradle, Kotlin, Android Gradle Plugin, or SDK versions unless the task requires it.
-- Do not add or modify build plugins unless necessary for the task.
-- If a build, test, install, or device command fails, report the command and the failure clearly.
-- Keep build-system changes minimal and focused.
-
-## Recommended technology stack
-
-Prefer these defaults unless existing project code establishes a different pattern:
-
-- Kotlin
-- Jetpack Compose for TV
-- AndroidX TV libraries where useful for TV-specific focus and layout behavior
-- AndroidX Media3 / ExoPlayer for video and audio playback
-- Media3 Compose UI primitives only where they fit the custom Igloo design system
-- Ktor Client with kotlinx.serialization for HTTP and WebSocket work
-- DataStore for local preferences
-- Coil or another modern Compose-compatible image loading library for posters, backdrops, cast images, crew images, production company logos, album covers, musician images, and playlist artwork
-- Manual dependency wiring at first
-
-Do not add Hilt, Koin, Room, Firebase, analytics SDKs, crash-reporting SDKs, or large logging frameworks without approval.
-
-## Design system
-
-The Igloo design system lives in `docs/design-system.md`.
-
-Before creating or modifying UI, read that document and follow it as the source of truth for:
-
-- color tokens
-- light/dark theme behavior
-- typography and spacing
-- focus states
-- motion rules
-- loading, empty, and error states
-- media card behavior
-- navigation shell patterns
-
-Rules:
-
-- Do not copy the full design system into this file.
-- Dark theme is the default unless the user has selected another preference.
-- Use the Igloo glacier focus color consistently.
-- Convert hover behavior from the web app into D-pad focus behavior on Android TV.
-- Respect reduced-motion settings.
-- Every screen must work with D-pad navigation and TalkBack.
-
-## Accessibility and TalkBack
-
-TalkBack support is mandatory.  Accessibility is a product requirement, not a later enhancement.
-
-Every screen must be usable with:
-
-- D-pad remote navigation.
-- TalkBack enabled.
-- Large-screen TV viewing distance.
-
-Rules:
-
-- Do not create unlabeled buttons, icon buttons, menus, tabs, or actionable cards.
-- Do not overload TalkBack with decorative or redundant information.
-- Decorative images should be hidden from accessibility services when they do not add meaning.
-- Interactive elements must have meaningful labels.
-- Media cards should announce the information that matters in context.  For example, a poster card in a grid may only need the title, while a detail or continue-watching card may need title, year, duration, watched state, or progress.
-- Avoid TalkBack focus traps.
-- Avoid custom focus behavior that breaks screen reader navigation.
-- Preserve a predictable reading and focus order.
-- TalkBack for TV follows input focus and never traverses plain text nodes.  Text a screen-reader user must hear either rides a focusable node's semantics or becomes a screen-reader-only reading stop (docs/design-system.md section 12).
-- Loading, empty, and error states should be understandable to TalkBack users.
-- State changes that matter should be announced when appropriate.
-- Do not sacrifice the visual UI/UX for accessibility, and do not sacrifice accessibility for visual cleverness.  Design both together.
-
-When modifying UI, reason about the accessibility tree and D-pad focus path before finishing.
-
-## Remote control and focus behavior
-
-Igloo is remote-first.  All primary interactions must work with a D-pad remote.
-
-Rules:
-
-- Do not require touch gestures.
-- Do not assume hover or mouse input.
-- Do not hide required actions behind hover-only behavior.
-- Convert hover reveals from the web design into focus reveals on TV.
-- Preserve focus when returning from detail screens, dialogs, player screens, and settings.
-- Avoid giant nested scroll containers unless necessary.
-- Manually control focus movement only when Compose defaults produce poor D-pad behavior.
-- D-pad movement should feel spatially predictable.
+- Never design a phone, tablet, touch-first, or generic responsive-mobile interface.
+- Do not use handset patterns such as bottom navigation, floating action buttons, portrait layouts, narrow content columns, or touch-only gestures.
+- Do not require a touchscreen, mouse, keyboard, hover state, swipe, or long-press gesture for primary functionality.
+- Every primary action must be reachable and operable with a standard D-pad remote.
+- Design for 16:9 displays, television viewing distance, overscan-safe spacing, and large-screen information density.
+- Prefer TV-native navigation rails, media rows, grids, hero areas, dialogs, and player controls.
+- Convert web hover behavior into deliberate D-pad focus behavior; do not copy the web UI literally.
+- D-pad movement must be spatially predictable, and focused elements must remain visibly distinct.
+- Preserve focus when returning from details, dialogs, settings, authentication, or playback.
 - Back behavior must be deliberate and consistent.
-- Dialogs and sheets must trap focus only while open and must restore focus to the previous element when closed.
-- Sidebar-to-content and content-to-sidebar movement must be predictable.
+- Dialogs must contain focus while open and restore it to the invoking control when closed.
+- Avoid nested scrolling and manual focus overrides unless Compose defaults demonstrably produce poor TV behavior.
+- Do not assume Google Play Services or the Play Store is available; core features must work on Fire TV devices.
+- Nvidia Shield is the primary real-device playback target, with Fire TV and the Android TV emulator as additional targets.
+- The minimum supported Android version is API 28 unless the project configuration explicitly changes.
 
-Main navigation should use a TV-friendly left navigation spine or equivalent TV-native shell.
+## Premium experience
+
+Igloo should feel like a polished, modern streaming platform rather than a utility application or enlarged mobile interface.
+
+- Follow `docs/design-system.md` for color, typography, spacing, artwork, focus, motion, navigation, and state treatment.
+- Use cinematic artwork, strong hierarchy, balanced spacing, clear focus treatment, and restrained motion.
+- Keep screens visually rich without making them crowded or difficult to navigate.
+- Use animation to clarify focus and state changes, not as decoration that delays interaction.
+- Respect reduced-motion preferences.
+- Avoid generic Material defaults when they conflict with Igloo's TV-specific design language.
+- Loading, empty, error, and retry experiences are part of the premium product and must not feel unfinished.
+- Performance is part of the UX: avoid unnecessary recomposition, visible jank, blocking work, wasteful image loads, and slow focus response.
+
+## TalkBack and accessibility
+
+TalkBack support is a first-class product requirement. Every screen must be fully usable with TalkBack and a D-pad while preserving Igloo's premium visual design and TV-native experience.
+
+- Accessibility must be integrated into the intended design, not delivered through a simplified, visually degraded, or functionally reduced alternative.
+- Do not remove artwork, hierarchy, motion, or rich layouts merely to make accessibility implementation easier.
+- Do not create a separate accessible version of a screen.
+- Every feature available visually must also be understandable and operable with TalkBack.
+- Treat inaccessible actions, focus traps, broken reading order, and misleading announcements as functional defects.
+- Give every actionable card, button, icon, tab, menu item, and player control meaningful semantics.
+- Hide decorative artwork from accessibility services when it conveys no additional information.
+- Avoid redundant announcements; nearby artwork and text should not repeat the same content unnecessarily.
+- Media-card announcements should include only the context that helps the user act, such as title, progress, year, or watched state.
+- Do not make every plain text element focusable. Attach important information to the relevant focusable element or provide a deliberate reading stop when required by the design system.
+- Keep traversal and D-pad focus order predictable.
+- Announce important loading, error, selection, and state changes when appropriate.
+- Ensure dialogs, menus, and overlays restore focus correctly when dismissed.
+- Reason about both the visible focus path and accessibility semantics before finishing UI work.
+- Validate TalkBack behavior on an emulator or real TV device whenever a usable target is available.
+
+## Modern technology policy
+
+- Prefer current stable, actively maintained Kotlin, AndroidX, Compose, and Media3 APIs.
+- Consult current official documentation when API behavior, recommended patterns, or version compatibility matters.
+- Prefer modern stable APIs over deprecated, legacy, or compatibility-first implementations.
+- Do not use experimental APIs by default. Use one only when it solves a concrete problem and its tradeoff is documented.
+- Respect the project's existing version catalog and dependency choices.
+- Do not perform unrelated Kotlin, Gradle, Android Gradle Plugin, SDK, or dependency upgrades.
+- If a modern implementation requires a significant upgrade or architectural change, explain the benefit and obtain approval first.
+- Use structured concurrency, lifecycle-aware state collection, immutable screen state, and unidirectional data flow.
+- Use the Gradle wrapper for every build or test command; never rely on globally installed Gradle.
+
+The established stack is Kotlin, Jetpack Compose for TV, AndroidX TV libraries where useful, AndroidX Media3/ExoPlayer, Ktor Client, kotlinx.serialization, coroutines, DataStore, and Coil. Continue using the established library for each responsibility rather than introducing a competing stack.
 
 ## Architecture
 
-Prefer simple, modern Android architecture:
+Use a simple MVVM-style flow:
 
 ```text
-UI / Compose screen
-  -> ViewModel / screen state holder
-    -> Repository
-      -> API client / local preference data source
+Compose UI -> ViewModel / screen state -> Repository -> API or local data source
 ```
 
-Rules:
-
-- Keep architecture simple.
-- Prefer MVVM-style screen state management.
-- Use ViewModels for screen state and UI logic.
-- Represent UI state with Kotlin data classes.
-- Use clear loading, success, empty, and error states.
-- Prefer unidirectional data flow.
-- Keep business/networking logic out of composables.
-- Use repositories between ViewModels and data sources.
-- Do not add a domain/use-case layer unless it removes real duplication or simplifies complex logic.
-- Do not add abstractions before they are needed.
-- Prefer existing project patterns once the project has them.
-
-Manual dependency wiring is preferred at first.  Do not add Hilt or Koin without approval.
-
-## Preferred project structure
-
-Prefer organization by feature with shared core modules/components where useful.  Keep the structure understandable for someone learning Kotlin Android development.
-
-A preferred structure is:
-
-```text
-app/
-  src/main/java/com/igloo/blindpenguin/
-    MainActivity.kt
-
-    core/
-      config/
-      design/
-      error/
-      image/
-      navigation/
-      network/
-      storage/
-      ui/
-
-    data/
-      api/
-      model/
-      repository/
-
-    feature/
-      auth/
-      home/
-      movies/
-      tvshows/
-      music/
-      settings/
-      player/
-
-    playback/
-      model/
-      media3/
-      progress/
-
-    images/
-      ImageUrlResolver.kt
-      ImageFallbacks.kt
-```
-
-Rules:
-
-- Keep screen-specific code inside its feature package.
-- Keep reusable UI components in `core/ui` or a clearly named shared UI package.
-- Keep theme tokens and design-system mapping in `core/design`.
-- Keep navigation definitions centralized enough to understand app flow.
-- Keep API models, generated clients, and repositories out of composables.
-- Keep playback-specific logic separate from ordinary screen UI.
-- Keep image URL construction and provider-specific image handling outside composables.
-- Two image packages, and they do not overlap: `core/image/` owns loader infrastructure — the image loader itself and its cache lifecycle — while `images/` owns provider URL construction and fallbacks.  A URL helper does not belong in `core/`, and cache lifecycle does not belong next to TMDB path building.
-- Do not create excessive tiny packages before the project needs them.
-- Prefer clear boundaries over heavy abstraction.
-
-## Networking and API
-
-The TV app communicates directly with the official Igloo Go backend.  It must not connect to Jellyfin, Plex, Firebase, cloud services, analytics platforms, CDNs, or third-party media servers.
-
-**One approved exception (2026-08-16):** the trailer player's WebView talks directly to `youtube.com` / `*.ytimg.com` / `*.googlevideo.com`, exclusively to host the official YouTube IFrame Player embed for a movie's extra videos — the backend stores only YouTube keys and proxies thumbnails, never video, and the web client embeds the same player.  No Igloo credentials, cookies, or tokens are ever attached to that WebView, and this exception licenses no other third-party traffic.
-
-### Server configuration
-
-The server URL is entered manually by the user during setup and persisted locally.
-
-Supported server URL formats:
-
-```text
-http://192.168.1.50:8080/api
-http://100.x.x.x:8080/api
-http://igloo.local:8080/api
-https://example.com/api
-```
-
-Rules:
-
-- Do not hardcode production server URLs.
-- Do not hardcode LAN IPs, Tailscale IPs, domains, ports, or developer-machine details.
-- Support HTTP and HTTPS.
-- Do not require HTTPS.
-- Do not assume a CDN, reverse proxy, cloud deployment, or public domain.
-- Validate the server URL before saving it.
-- Normalize trailing slashes so API paths are not accidentally built incorrectly.
-- Persist the selected server URL with DataStore or the project’s selected local preference store.
-
-### Development server URLs
-
-Use different development URLs depending on the target:
-
-```text
-Android Studio emulator -> http://10.0.2.2:8080/api
-Physical Android TV device -> LAN IP, hostname, or Tailscale address
-```
-
-Do not use `localhost` for a physical Android TV device.  On a real device, `localhost` refers to the device itself, not the developer machine.
-
-### API contract
-
-`docs/openapi.json` is the source of truth for API routes, request bodies, response bodies, and error formats in this Android TV repository.  If it is missing or appears outdated, check the main Igloo repository at `../Igloo` before creating or changing API calls.
-
-Rules:
-
-- Inspect `openapi.json` before creating or changing API calls.
-- Do not invent backend endpoints.
-- Do not create request or response models that contradict `openapi.json`.
-- Codex may generate API client code from `openapi.json`.
-- Keep generated API code isolated from handwritten application code.
-- Do not manually edit generated files unless the project explicitly chooses that approach.
-- Wrap generated clients behind repositories or service classes when that makes the app code clearer.
-- If API client generation requires a new Gradle plugin, generator, or large dependency, ask for approval first.
-
-### Response handling
-
-The backend commonly returns this shape:
-
-```json
-{
-  "message": "message to say what happened",
-  "error": true
-}
-```
-
-Successful responses may also use the same envelope pattern with `error: false`.
-
-Rules:
-
-- Normalize backend failures into app-level error models.
-- Preserve backend error messages when they are safe and useful.
-- User-facing errors should be clear and actionable.
-- Avoid generic messages like `Something went wrong` when better information is available.
-- Every recoverable API failure should provide a retry path where appropriate.
-- Do not silently ignore failed requests.
-
-### Networking implementation
-
-Prefer the networking stack selected by the project.  If no stack exists yet, prefer a modern Kotlin-friendly client that supports both HTTP and WebSockets cleanly.
-
-Rules:
-
-- Keep API and networking logic out of composables.
-- Network calls should be suspend functions or expose Flow where appropriate.
-- Do not block the main thread.
-- Keep request construction, response parsing, and error mapping in the data layer.
-- WebSocket support will be needed for shared-watch features.
-- Request and response logging must be debug-only.
-- Do not commit code that logs passwords, cookies, auth tokens, QR secrets, quick-connect secrets, session tokens, or device credentials.
-
-## Authentication and users
-
-Igloo TV should support multiple users from the start.
-
-The TV app should authenticate through the Igloo backend.  Do not implement authentication against Plex, Jellyfin, Firebase, Google accounts, Amazon accounts, or any third-party identity provider unless explicitly requested.
-
-### Pairing flow
-
-The first-time setup should support both:
-
-- Quick-connect code.
-- QR code.
-
-The user should be able to choose whichever method is easier at the moment.
-
-Rules:
-
-- Do not require typing a full username and password with a TV remote unless explicitly requested.
-- Pairing must be backed by the Igloo API.
-- Do not invent authentication endpoints.  Check `openapi.json`.
-- If the backend endpoint does not exist yet, create client-side placeholders only when the task explicitly calls for it.
-- The app should remember the selected server and authenticated user after setup.
-- The app must support logout.
-- Expired or invalid sessions should return the user to the setup/authentication flow.
-
-### Sign out
-
-One Android TV is shared by a household, so sign-out is scoped, not global.  `docs/design-system.md` §11.2 is authoritative and states the rules in full; the ones that constrain the data layer:
-
-- Sign out affects **only** the profile signing out.  Never reach for a "forget everything" path on a sign-out route — remove exactly that profile, revoke exactly the token it carried, and send that token explicitly rather than whatever the client happens to be holding.  Every other stored profile must sign back in without re-pairing.
-- Always clear the in-memory credential when removing the active profile, so no revoked token is attached to the next profile's first request — a 401 there would sign an innocent profile out.
-- The local half is unconditional and must finish even if the screen waiting on it is torn down.  Persist the removal **before** the network call, outside cancellation, and treat an undeliverable revoke as a successful local sign-out that says so on the gate.
-- A 401 on the revoke is success.  The token it would have revoked is already gone.
-- Clear user-scoped caches on the same path (see *Image loading*).
-- Verify with two real profiles against a real backend, not unit tests alone: sign out one, then confirm server-side that only that device token was revoked.
-
-### Multiple users
-
-Rules:
-
-- Support multiple users/profiles from the start.
-- Do not assume a single-user household.
-- Keep user selection usable with a D-pad remote.
-- Do not expose admin-only actions to non-admin users.
-- Treat backend permissions as the source of truth.
-
-### Credential and token storage
-
-Rules:
-
-- Never store raw user passwords.
-- Do not commit code that logs passwords, cookies, auth tokens, QR secrets, quick-connect secrets, session tokens, or device credentials.
-- Store sensitive authentication material using the project’s approved secure storage approach.
-- Use DataStore only for non-sensitive preferences unless the data is encrypted or otherwise protected.
-- Local PIN behavior may be added later for convenience, but it must not replace server-side authentication.
-
-## Local storage
-
-Use DataStore for local app preferences, such as:
-
-- Server URL.
-- Last selected server.
-- Theme preference.
-- Playback preset.
-- Lightweight app settings.
-
-Do not add Room or another local database unless explicitly approved.
-
-The backend is the source of truth for:
-
-- Media libraries.
-- Movies.
-- TV shows.
-- Music.
-- Photos, when added.
-- Watch progress.
-- Watched/unwatched state.
-- Recently watched.
-- User data and permissions.
-
-Offline browsing is out of scope for the current phase.
-
-## Media playback
-
-Media playback is a core feature of Igloo.  Do not treat it as a generic video-player screen.
-
-Rules:
-
-- Prefer AndroidX Media3 / ExoPlayer for the first implementation.
-- Do not add VLC in the first phase.
-- Design the playback layer so VLC or another external/player option can be added later if explicitly requested.
-- Support both direct playback and HLS playback.
-- Direct playback is a priority, but HLS must also be treated as a first-class playback mode.
-- Do not support DASH unless explicitly requested.
-- Do not transcode, downmix, decode, or transform media in the TV app.
-- Audio/video transformation belongs to the Igloo backend and its FFmpeg pipeline.
-- Preserve audio passthrough when possible.
-- Do not accidentally force stereo output.
-- Treat TrueHD, DTS-HD, AC3, E-AC3, and Atmos support as important.
-- Expose audio track selection.
-- Expose subtitle track selection.
-- Support embedded subtitle tracks where the device/player stack can handle them.
-- Playback settings selected by the user take priority over automatic choices.
-- The movie pre-play/details screen should allow playback settings to be adjusted before playback.
-- Save playback progress to the backend every 15 seconds.
-- Do not start saving playback progress until at least 15 seconds of actual video playback has occurred.
-- In practice, the first progress save should happen around 30 seconds of actual playback.
-- Resume position, watched status, watch history, and watched/unwatched state come from the backend.
-- Do not invent playback API routes.  Check `openapi.json`.
-
-For detailed player UX, controls, loading states, focus behavior, and visual design, read `docs/design-system.md`.
-
-## Images and metadata
-
-Igloo uses remote metadata and artwork from multiple providers.  Image handling must be reliable, cache-friendly, and accessible without overwhelming TalkBack users.
-
-### Image sources
-
-Movie-related images usually come from TMDB, including:
-
-- movie posters
-- movie backdrops
-- cast profile images
-- crew profile images
-- production company logos
-
-Music-related images usually come from Spotify, including:
-
-- album covers
-- musician / artist images
-- playlist artwork when available
-
-The Igloo backend is the source of truth for stored media metadata.  Do not call TMDB or Spotify directly from the TV app unless explicitly requested.
-
-### URL handling
-
-Rules:
-
-- Do not put TMDB API keys, Spotify credentials, or provider secrets in the TV app.
-- Use the image paths or URLs returned by the Igloo API.
-- If the backend returns TMDB paths such as `poster_path`, `backdrop_path`, `profile_path`, or `logo_path`, build the final public image URL in a shared image URL helper.
-- Do not scatter TMDB URL construction across composables.
-- If the backend returns a full Spotify image URL, use it as provided.
-- Keep provider-specific URL logic outside UI components.
-- Handle missing, empty, malformed, or unreachable image URLs gracefully.
-
-### Image loading
-
-Rules:
-
-- Use a modern Compose-compatible image loading library, preferably Coil unless the project chooses another library.
-- Enable normal image caching through the selected image library.
-- Clear the image caches when a profile signs out.  Cache entries are keyed by URL with nothing tying them back to a profile, so a signed-out user's avatar and artwork would otherwise stay on disk on a shared TV.  Clear both memory and disk; the profiles that remain simply re-fetch.
-- Use appropriately sized images for TV layouts.
-- Do not load full-resolution images when a poster, thumbnail, or medium-size image is enough.
-- Preserve visual quality for TV viewing distance.
-- Avoid image loading logic inside ViewModels unless the data layer needs to normalize provider paths.
+- Represent screen state explicitly with immutable Kotlin data classes.
+- Model loading, success, empty, and error states rather than relying on nullable data alone.
+- Keep screen-specific code inside its feature area and reusable UI in the established shared packages.
+- Keep navigation centralized enough that application flow remains understandable.
+- Keep API models, request construction, response parsing, and error mapping in the data layer.
+- Keep playback implementation separate from ordinary screen UI.
+- Keep provider-specific image URL construction and fallbacks outside composables.
+- Do not add a use-case/domain layer unless it removes real duplication or clarifies genuinely complex behavior.
+- Do not add Hilt, Koin, Room, or another architectural framework without explicit approval.
+
+## Networking and authentication
+
+- Igloo connects to a user-configured Igloo server; never hardcode hosts, ports, LAN addresses, Tailscale addresses, or production domains.
+- Preserve valid HTTP and HTTPS server support. Never disable certificate validation or install a trust-all verifier to support self-hosting.
+- Validate and normalize the server URL before saving it.
+- Keep network work off the main thread and expose suspend functions or `Flow` where appropriate.
+- Normalize backend failures into clear app-level errors and provide retry actions for recoverable failures.
+- Do not silently discard request failures.
+- Authentication is provided only by the Igloo backend. Do not add third-party identity providers.
+- Support multiple household profiles; never assume the television has only one user.
+- Store credentials using the project's approved secure storage, never ordinary unencrypted preferences.
+- Sign-out affects only the selected profile. Clear its in-memory credential and user-scoped caches without removing other profiles.
+- Backend permissions are authoritative; never expose admin-only behavior based only on client assumptions.
+- Never log passwords, cookies, tokens, pairing codes, QR secrets, device credentials, or sensitive request headers.
+- Do not call Plex, Jellyfin, TMDB, Spotify, analytics, or other third-party services directly.
+- The existing isolated YouTube trailer WebView is the only approved direct third-party media exception; it must never receive Igloo credentials or cookies.
+
+## Playback
+
+- Media playback is a core product feature, not a generic video-player screen.
+- Use AndroidX Media3/ExoPlayer and follow the existing playback architecture.
+- Treat direct playback and HLS as first-class playback modes.
+- Do not add DASH, VLC, or another player stack unless explicitly requested.
+- Never transcode, decode, downmix, or transform media in the TV client; transformation belongs to the backend FFmpeg pipeline.
+- Preserve audio passthrough when the device and media support it; never force stereo accidentally.
+- Treat TrueHD, DTS-HD, AC3, E-AC3, and Atmos behavior as important and verify it on real hardware when possible.
+- Support audio-track and subtitle-track selection.
+- Honor explicit user playback settings before automatic choices.
+- Keep player lifecycle, audio focus, resource release, and error recovery correct.
+- Resume position, watched state, history, and progress come from and return to the backend.
+- Report progress every 15 seconds of actual playback, beginning only after the initial 15-second threshold; the first periodic report normally occurs around 30 seconds.
+- Read the API contract and design system before changing playback APIs or player UX.
+
+## Images
+
+- Use backend-provided image paths or URLs; never embed TMDB or Spotify credentials.
+- Keep provider URL resolution centralized and separate from image-loader cache infrastructure.
+- Use appropriately sized artwork and normal memory/disk caching; do not load full-resolution images unnecessarily.
+- Every artwork surface requires a design-system-appropriate fallback.
+- Clear memory and disk image caches when a profile signs out so user-scoped imagery does not remain on a shared TV.
 - Do not block the UI while images load.
 
-### Fallbacks
-
-Every image surface must have a fallback.
-
-Examples:
-
-- Movie poster missing -> Igloo poster placeholder.
-- Movie backdrop missing -> themed gradient or dark surface.
-- Cast or crew profile missing -> person/avatar placeholder.
-- Production company logo missing -> text-only company name.
-- Album cover missing -> album placeholder.
-- Musician image missing -> artist/avatar placeholder.
-
-Fallbacks should follow the Igloo design system and must work in both dark and light mode.
-
-### Accessibility
-
-Not every image should be exposed to TalkBack.
-
-Rules:
-
-- Decorative backdrop images should usually be hidden from accessibility.
-- Poster/card images should not duplicate nearby readable text.
-- Interactive media cards should announce useful item information, usually the title and only extra context when it helps.
-- Cast, crew, musician, and album images should be labeled only when the image itself is the interactive element or when no adjacent text provides the same information.
-- Production company logos should not be the only accessible representation of the company.  Provide the company name as text.
-- Avoid verbose descriptions that slow down D-pad and TalkBack navigation.
-
-### Metadata display
-
-Rules:
-
-- Do not invent metadata fields that are not provided by the Igloo API.
-- Do not call TMDB or Spotify directly to fill missing metadata unless explicitly requested.
-- Prefer backend-provided metadata over client-side assumptions.
-- Display missing metadata gracefully instead of showing raw `null`, empty strings, or broken placeholders.
-- Keep metadata formatting reusable, especially for dates, runtime, genres, cast, crew, album details, and musician details.
-
-For visual treatment of posters, backdrops, cards, gradients, placeholders, focus states, and image-based layouts, read `docs/design-system.md`.
-
-## UI states
-
-Build shared composables for common states instead of recreating them inconsistently:
-
-- `IglooLoading`
-- `IglooEmpty`
-- `IglooError`
-- Skeleton/poster-grid placeholders
-- Retry actions
-
-Rules:
-
-- Every loading screen should have an error state.
-- Every recoverable error should have a retry action.
-- Skeletons should match the final layout to avoid large focus jumps when content loads.
-- Empty states should be clear and useful.
-- Error messages should provide real information without overwhelming the user.
-- Playback errors should be more detailed than ordinary list-loading errors when codec, container, or network information is useful.
-
-## Dependency policy
-
-Keep dependencies intentional and minimal.  Do not add a library just to avoid writing a small amount of straightforward Kotlin.
-
-Before adding, removing, or upgrading dependencies:
-
-- Inspect the existing Gradle files.
-- Check whether the project already has a dependency or pattern that solves the problem.
-- Prefer the existing project stack over introducing a competing library.
-- Do not change Gradle, Kotlin, Android Gradle Plugin, or SDK versions unless the task requires it.
-- Use the correct dependency scope: `implementation`, `debugImplementation`, `testImplementation`, or `androidTestImplementation`.
-- Explain why the dependency is needed when adding it.
-
-### Allowed project stack
-
-These dependencies are acceptable as part of the planned Igloo Android TV stack, unless the project later chooses a different direction:
-
-- Jetpack Compose for TV.
-- AndroidX TV libraries.
-- AndroidX Lifecycle and ViewModel libraries.
-- AndroidX Navigation / Navigation Compose.
-- AndroidX Media3 / ExoPlayer.
-- Kotlin coroutines.
-- Kotlinx serialization.
-- Ktor Client for HTTP and WebSocket work.
-- DataStore for local preferences.
-- Coil for Compose-compatible image loading.
-- Standard AndroidX testing libraries.
-- JUnit and Kotlin test tools.
-
-Do not add competing libraries for the same job without a clear reason.  For example, do not mix Ktor and Retrofit unless the project explicitly chooses to do so.
-
-### Requires approval
-
-Ask before adding dependencies that materially affect architecture, storage, build behavior, telemetry, or playback strategy.
-
-Requires approval:
-
-- Room or any local database.
-- Hilt, Koin, or another dependency injection framework.
-- Retrofit if Ktor is already being used.
-- Ktor if Retrofit is already being used.
-- VLC or another alternate media player stack.
-- OpenAPI generator Gradle plugins or generated-client tooling that changes the build.
-- Large logging frameworks.
-- Crash-reporting SDKs.
-- Analytics SDKs.
-- Background task frameworks unless the feature clearly requires them.
-- Any library that introduces cloud, account, telemetry, or external-service assumptions.
-- Any dependency that significantly increases app size or complexity.
-
-### Forbidden unless explicitly requested
-
-Do not add these by default:
-
-- Firebase.
-- Cloud messaging SDKs.
-- Analytics or tracking SDKs.
-- CDN-related SDKs or assumptions.
-- Plex, Jellyfin, or third-party media-server client libraries.
-- Abandoned, deprecated, or low-maintenance libraries.
-- Legacy packages when modern AndroidX/Kotlin alternatives exist.
-- Libraries that require a cloud-hosted backend to make core app features work.
-- Libraries that collect user data or telemetry without an explicit product decision.
-
-### OpenAPI client generation
-
-Codex may generate API client code from `openapi.json` when requested or when it clearly improves API correctness.
-
-Rules:
-
-- Keep generated code isolated from handwritten app code.
-- Do not manually edit generated files unless the project explicitly chooses that approach.
-- Wrap generated clients behind repositories or service classes when useful.
-- If generation requires a new plugin, CLI tool, or build-system change, ask for approval first.
-- Do not invent API models or endpoints that contradict `openapi.json`.
-
-### Dependency quality
-
-A dependency must be reasonably modern, maintained, and compatible with the project’s Android/Kotlin stack.
-
-Avoid dependencies that:
-
-- Have no recent maintenance activity.
-- Are poorly documented.
-- Conflict with Compose for TV or Media3.
-- Require unnecessary permissions.
-- Add background services without a clear need.
-- Make the app harder to use on Android TV, Google TV, or Android-based Fire TV devices.
-
-## Code style
-
-- Keep comments minimal.
-- Use comments only for non-obvious behavior.
-- Prefer clear names over comments.
-- Avoid clever Kotlin when readability suffers.
-- Avoid one-line wrapper functions that add no value.
-- Keep functions reasonably focused, but do not fragment code artificially.
-- Some functions may be longer when that keeps the flow easier to understand.
-- Prefer explicit types for public APIs and boundary models.
-- Keep UI code readable for someone learning Kotlin Android development.
-- Avoid over-engineering.
-- Favor accessibility, maintainability, and playback correctness over visual cleverness.
-
-## Testing and validation
-
-Testing is required.  Do not treat build success as enough, especially for UI, focus behavior, TalkBack behavior, and media playback.
-
-### Test expectations
-
-For every meaningful change, Codex should run the smallest relevant tests first, then broader validation when practical.
-
-Use the Gradle wrapper:
-
-```bash
-./gradlew test
-./gradlew build
-```
-
-For Android/device tests, use:
-
-```bash
-./gradlew connectedAndroidTest
-```
-
-Run `connectedAndroidTest` only when an emulator or physical device is available.  If it cannot be run, clearly state why.
-
-### Required test coverage
-
-Add or update tests when the change affects:
-
-- ViewModel state behavior.
-- Repository/API response handling.
-- Error handling.
-- Authentication flow.
-- Server URL validation.
-- Playback settings logic.
-- Playback progress reporting.
-- Navigation behavior.
-- Accessibility-sensitive UI behavior.
-- Focus behavior for TV remote navigation.
-
-Each feature should include happy-path and error-path coverage where practical.
-
-### Device and emulator validation
-
-Codex is expected to validate important app behavior directly on a running Android TV device or emulator when tools are available.
-
-During development, the app may be tested using:
-
-- Nvidia Shield connected through a Tailscale address or local network.
-- Android Studio Android TV emulator.
-- Android-based Fire TV device when available.
-
-When ADB MCP tools are available, Codex must use them to interact with the app directly on the device or emulator for UI and playback-related work.
-
-Use ADB MCP tools to verify:
-
-- The app installs and launches.
-- D-pad navigation works.
-- Focus moves predictably.
-- Focus does not get trapped.
-- Back button behavior is correct.
-- TalkBack/accessibility labels are reasonable where inspectable.
-- Login/setup flows are usable with a remote.
-- Media cards, rows, tabs, dialogs, and menus are reachable.
-- Player controls can be reached and operated.
-- Playback starts correctly for the tested mode.
-- Error and retry states are visible and usable.
-
-Do not rely only on static code review for TV UI changes.
-
-### Accessibility validation
-
-TalkBack support is mandatory.  For UI changes, validate accessibility behavior as much as the available tools allow.
-
-Check that:
-
-- Interactive controls have useful labels.
-- Decorative images are not unnecessarily announced.
-- Media cards do not repeat redundant information.
-- Screen order is logical.
-- Dialogs trap focus only while open and restore focus after closing.
-- Loading, empty, and error states are understandable.
-- D-pad and TalkBack navigation do not conflict.
-- Focus indicators are visually clear.
-
-### Manual validation notes
-
-When a change affects UI, playback, navigation, or accessibility, Codex must include manual validation notes in its final response.
-
-Include:
-
-- Device or emulator used, if any.
-- Commands run.
-- ADB MCP interactions performed.
-- What was verified.
-- Any tests that could not be run.
-- Any behavior that still needs real-device verification.
-
-### Screenshot tests
-
-Do not add fragile screenshot tests by default.
-
-Screenshot tests may be useful for visual regression work, but they require an explicit reason.  Prefer functional UI tests, accessibility checks, and direct device validation first.
-
-### Before finishing
-
-Before marking work complete, Codex must:
-
-- Run relevant unit tests.
-- Run a build when practical.
-- Run connected/device tests when a device or emulator is available.
-- Use ADB MCP tools for direct app interaction when the task affects UI, focus, accessibility, setup, or playback.
-- Report any command or device validation that could not be completed.
-
-## Self-hosting assumptions
-
-Igloo servers may run on:
-
-- A home server.
-- A VPS such as Linode.
-- A cloud VM such as EC2.
-- A local network address.
-- A Tailscale address.
-- A domain with or without HTTPS.
-
-Rules:
-
-- Support custom hostnames and ports.
-- Support HTTP.
-- Support HTTPS.
-- Do not require users to configure HTTPS or TLS certificates.
-- Do not assume a CDN.
-- Do not assume cloud deployment.
-- Do not assume the backend is on the same device or network.
-
+## Dependencies and security
+
+- Prefer existing dependencies and straightforward Kotlin over adding a library for a small task.
+- Ask before adding or replacing dependency injection, storage, networking, playback, code-generation, telemetry, or background-work frameworks.
+- Do not add Firebase, analytics, tracking, crash reporting, cloud messaging, CDN assumptions, or third-party media-server SDKs unless explicitly requested.
+- Do not add abandoned, deprecated, poorly maintained, or unnecessarily permission-heavy libraries.
+- Explain the purpose and impact of every new dependency.
+- Keep debug network logging redacted and disabled in release builds.
+- Never commit secrets, credentials, private endpoints, or developer-machine details.
+
+## Testing and completion
+
+- Add or update tests for meaningful state, repository, authentication, networking, playback, navigation, focus, and accessibility behavior.
+- Cover happy paths and important failure paths where practical.
+- Run the smallest relevant tests first, followed by broader validation when warranted.
+- Use the actual Gradle tasks configured by the repository. Typical checks include unit tests, debug assembly, lint, and connected Android tests.
+- Run connected tests only when a usable emulator or device is available; report when they cannot be run.
+- UI, navigation, focus, TalkBack, setup, and playback changes require emulator or real-device validation whenever tools and a target are available.
+- Use available ADB tooling to install, launch, navigate, inspect, and exercise the affected behavior directly.
+- For playback, passthrough, D-pad, and TalkBack changes, prefer real Nvidia Shield validation over emulator-only validation.
+- Do not rely on build success or static review alone for TV UI work.
+- Do not add fragile screenshot tests by default.
+- Before finishing, report commands run, device or emulator used, behavior verified, validation that could not be performed, and remaining real-device risks.
