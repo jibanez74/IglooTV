@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.playback.model
 
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -212,13 +213,13 @@ class MoviePlayerStateMachineTest {
             TrackOption("Direct", "Original quality — plays the file as-is", selected = true),
             TrackOption("Remux", "Original quality — audio adjusted", selected = false),
         )
-        val state = playing().onEvent(MoviePlayerEvent.QualityOptionsChanged(first))
+        val state = playing().onEvent(MoviePlayerEvent.QualityOptionsChanged(first, PlaybackMode.Direct))
         assertEquals(first, state.qualityOptions)
 
         val switched = first.map { it.copy(selected = it.id == "Remux") }
         assertEquals(
             switched,
-            state.onEvent(MoviePlayerEvent.QualityOptionsChanged(switched)).qualityOptions,
+            state.onEvent(MoviePlayerEvent.QualityOptionsChanged(switched, PlaybackMode.Remux)).qualityOptions,
         )
     }
 

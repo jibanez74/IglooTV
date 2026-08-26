@@ -82,7 +82,11 @@ internal fun playbackSettingsUi(
     val modes = availablePlaybackModes()
         .map { PlaybackModeOptionUi(it, playbackModeLabel(it)) }
 
-    val audio = audioStreams.orEmpty()
+    // `stream_index` order, for the same reason the play request uses it: the type ordinal is
+    // what every consumer downstream shares, and the "Track N" fallback labels are numbered from
+    // it — so a wire list that arrives unsorted must not label this dialog and the in-player
+    // menus differently.
+    val audio = audioStreams.orEmpty().sortedBy { it.streamIndex }
     val effectiveAudioIndex = audio.indexOfFirst { it.id == selection.audioStreamId }
         .takeIf { it >= 0 }
         ?: audio.indexOfFirst { it.isDefault }.takeIf { it >= 0 }
@@ -97,9 +101,10 @@ internal fun playbackSettingsUi(
     }
 
     val imageBasedSelectable = selection.mode == PlaybackMode.Direct
+    val subtitleList = subtitles.orEmpty().sortedBy { it.streamIndex }
     val subtitleTracks = buildList {
         add(PlaybackTrackOptionUi(id = null, label = SUBTITLES_NONE_LABEL))
-        subtitles.orEmpty().forEachIndexed { index, subtitle ->
+        subtitleList.forEachIndexed { index, subtitle ->
             val inert = isImageBasedSubtitleCodec(subtitle.codec) && !imageBasedSelectable
             add(
                 PlaybackTrackOptionUi(
@@ -111,7 +116,7 @@ internal fun playbackSettingsUi(
             )
         }
     }
-    val effectiveSubtitle = subtitles.orEmpty()
+    val effectiveSubtitle = subtitleList
         .firstOrNull { it.id == selection.subtitleStreamId }
         ?.takeUnless { isImageBasedSubtitleCodec(it.codec) && !imageBasedSelectable }
 
@@ -136,7 +141,7 @@ internal fun playbackSettingsUi(
             mode = selection.mode,
             audioLabel = effectiveAudio?.let { audioTrackLabel(it, effectiveAudioIndex) },
             subtitleLabel = effectiveSubtitle?.let {
-                subtitleTrackLabel(it, subtitles.orEmpty().indexOf(it))
+                subtitleTrackLabel(it, subtitleList.indexOf(it))
             },
         ) + directCaution?.let { " ${it.message}" }.orEmpty(),
     )

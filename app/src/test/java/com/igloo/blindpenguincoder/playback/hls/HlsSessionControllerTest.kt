@@ -4,6 +4,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
@@ -170,6 +171,64 @@ class HlsSessionControllerTest {
             assertTrue(expected.message!!.contains("busy"))
         }
         assertEquals(7, api.fetchedSpecs.size)
+    }
+
+    @Test
+    fun `an unanswering server gives up on the wall-clock budget, not the attempt count`() =
+        runTest {
+            val api = FakeHlsApi()
+            // Never Busy, never Ready: every attempt burns a manifest request timeout, which is
+            // exactly the shape the attempt budget alone cannot bound.
+            api.fetchOverride = {
+                delay(45_000)
+                HlsManifestResult.Busy(retryAfterSec = null)
+            }
+            val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+            val before = currentTime
+
+            try {
+                controller.start("remux", 0, 0)
+                fail("expected HlsStartException")
+            } catch (expected: HlsStartException) {
+                assertTrue(expected.message!!.contains("busy"))
+            }
+
+            assertEquals(HLS_START_TOTAL_BUDGET_MS, currentTime - before)
+            // Far short of the six attempts the capacity budget alone would have allowed.
+            assertTrue(api.fetchedSpecs.size < HLS_CAPACITY_RETRY_MAX_ATTEMPTS)
+        }
+
+    @Test
+    fun `the budget does not cut short a session that starts in time`() = runTest {
+        val api = FakeHlsApi()
+        api.queuedResults += HlsManifestResult.Busy(retryAfterSec = 3)
+        api.queuedResults += HlsManifestResult.Ready("remux", 12.0)
+        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+
+        val start = controller.start("remux", 0, 0)
+
+        assertEquals(12.0, start.actualStartSec, 0.0)
+    }
+
+    @Test
+    fun `a throwing keepalive tick neither ends the loop nor escapes the scope`() = runTest {
+        val api = FakeHlsApi()
+        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        controller.start("remux", 2, 60)
+        var lost = 0
+        controller.startKeepalive { lost++ }
+
+        // The repository deliberately rethrows programming errors; a tick must absorb them.
+        api.fetchOverride = { error("server address requested before setup completed") }
+        advanceTimeBy(HLS_KEEPALIVE_INTERVAL_MS + 1)
+        assertEquals(2, api.fetchedSpecs.size)
+
+        api.fetchOverride = null
+        api.queuedResults += HlsManifestResult.Lost
+        advanceTimeBy(HLS_KEEPALIVE_INTERVAL_MS + 1)
+
+        assertEquals(3, api.fetchedSpecs.size)
+        assertEquals(1, lost)
     }
 
     @Test

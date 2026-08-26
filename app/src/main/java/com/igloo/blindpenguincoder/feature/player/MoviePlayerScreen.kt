@@ -169,6 +169,13 @@ fun MoviePlayerScreen(
             state = next
             when (event) {
                 is MoviePlayerEvent.Error -> if (event.unauthorized) unauthorized = true
+                // The engine, not the keypress, is the authority on what mode is in force: a
+                // refused or failed switch must not leave a replacement engine rebuilding into
+                // a mode that already proved it cannot start.
+                is MoviePlayerEvent.QualityOptionsChanged ->
+                    if (event.requestedMode != request.mode) {
+                        onPlaybackModeRequested(event.requestedMode)
+                    }
                 is MoviePlayerEvent.PlayWhenReadyChanged -> {
                     if (!lifecycleSilenced) {
                         playWhenReadyIntent = event.playWhenReady
@@ -192,12 +199,15 @@ fun MoviePlayerScreen(
     }
 
     // Started once per engine, the moment the resume decision exists. A retry or recreation
-    // resumes from the last real position; before any tick that falls back to the decision.
+    // resumes from the last real position; before any tick that falls back to the decision —
+    // and only that decision is a resume point a mode may rewind before.
     LaunchedEffect(engine, resumeDecided) {
         if (resumeDecided) {
+            val watched = lastPositionSec.takeIf { it > 0.0 }
             engine.startPlayback(
-                lastPositionSec.takeIf { it > 0.0 } ?: chosenStartSec.takeIf { it > 0.0 },
+                watched ?: chosenStartSec.takeIf { it > 0.0 },
                 initialPlayWhenReady = playWhenReadyIntent,
+                rewindOnResume = watched == null,
             )
         }
     }
@@ -411,6 +421,7 @@ fun MoviePlayerScreen(
         playerMenu?.let { menu ->
             val closeMenu: () -> Unit = {
                 playerMenu = null
+                state = state.onModeRefusalDismissed()
                 when (menu) {
                     PlayerMenu.Chapters -> chaptersButtonRequester.requestFocus()
                     PlayerMenu.Audio -> audioButtonRequester.requestFocus()
@@ -451,12 +462,9 @@ fun MoviePlayerScreen(
                     title = "Quality",
                     options = state.qualityOptions,
                     noneRow = null,
-                    onSelect = { id ->
-                        val mode = PlaybackMode.valueOf(requireNotNull(id))
-                        onPlaybackModeRequested(mode)
-                        engine.selectPlaybackMode(mode.name)
-                    },
+                    onSelect = { id -> engine.selectPlaybackMode(requireNotNull(id)) },
                     onDismiss = closeMenu,
+                    footerMessage = state.modeRefusalMessage,
                 )
             }
         }
@@ -863,6 +871,10 @@ private fun ResumePrompt(
  * reveal, flat radio list, focus trapped, Back dismisses. Selection is not dismissal — OK on a
  * row switches the track and keeps focus, so the user can hear the result and keep adjusting;
  * the engine re-emits its tracks and the `selected` marks follow.
+ *
+ * [footerMessage] is a refusal the engine returned for the last pick — shown in place, below the
+ * rows, because the row that caused it is still on screen and still the user's to change. It
+ * carries no action: the choice stays theirs, and what is playing never changed.
  */
 @Composable
 private fun TrackMenuDialog(
@@ -871,6 +883,7 @@ private fun TrackMenuDialog(
     noneRow: String?,
     onSelect: (String?) -> Unit,
     onDismiss: () -> Unit,
+    footerMessage: String? = null,
 ) {
     BackHandler(onBack = onDismiss)
 
@@ -963,6 +976,16 @@ private fun TrackMenuDialog(
                                 .testTag("movie_track_${option.id}"),
                         )
                     }
+                }
+
+                if (footerMessage != null) {
+                    IglooInlineError(
+                        message = footerMessage,
+                        // Polite: the rows keep focus, and nothing the user did has failed —
+                        // the choice was declined with a reason, mid-adjustment.
+                        liveRegionMode = LiveRegionMode.Polite,
+                        modifier = Modifier.testTag("movie_track_refusal"),
+                    )
                 }
 
                 IglooButton(

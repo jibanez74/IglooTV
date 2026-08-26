@@ -36,8 +36,19 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
     @Composable
     override fun VideoSurface(modifier: Modifier) = Unit
 
-    override fun startPlayback(startPositionSec: Double?, initialPlayWhenReady: Boolean) {
+    /**
+     * Whether each [startPlayback] was told its position was a genuine resume point. Kept off
+     * [commands] so the many tests that only care *that* playback started stay readable.
+     */
+    val startRewinds = mutableListOf<Boolean>()
+
+    override fun startPlayback(
+        startPositionSec: Double?,
+        initialPlayWhenReady: Boolean,
+        rewindOnResume: Boolean,
+    ) {
         if (released) return
+        startRewinds += rewindOnResume
         commands += "start:$startPositionSec:$initialPlayWhenReady"
         emit(MoviePlayerEvent.PlayWhenReadyChanged(initialPlayWhenReady))
     }

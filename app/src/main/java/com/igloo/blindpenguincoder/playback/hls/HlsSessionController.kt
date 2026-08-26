@@ -1,13 +1,17 @@
 package com.igloo.blindpenguincoder.playback.hls
 
+import com.igloo.blindpenguincoder.playback.model.HLS_RECONNECTING_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.HLS_WAITING_FOR_CAPACITY_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_BUSY_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SESSION_LOST_MESSAGE
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 /**
  * What the controller needs from the network layer, consumer-owned so JVM tests can fake it.
@@ -68,6 +72,26 @@ class HlsSessionController(
         reserveGeneration()
         val startGeneration = generation
         val startUuid = sessionUuid
+        // The attempt budgets bound retries, not time: a server that accepts connections and
+        // never answers spends the manifest request timeout on each one. This is the ceiling
+        // the viewer actually feels, and it runs on the coroutine clock so it is testable.
+        return try {
+            withTimeout(HLS_START_TOTAL_BUDGET_MS) {
+                startLoop(startGeneration, startUuid, profileId, audioTypeIndex, startSec, onStatus)
+            }
+        } catch (_: TimeoutCancellationException) {
+            throw HlsStartException(PLAYBACK_SERVER_BUSY_MESSAGE)
+        }
+    }
+
+    private suspend fun startLoop(
+        startGeneration: Long,
+        startUuid: String,
+        profileId: String,
+        audioTypeIndex: Int?,
+        startSec: Int,
+        onStatus: (String?) -> Unit,
+    ): HlsSessionStart {
         var busyAttempts = 0
         var lostAttempts = 0
         while (true) {
@@ -98,7 +122,7 @@ class HlsSessionController(
                     busyAttempts++
                     val delayMs = capacityRetryDelayMs(busyAttempts, result.retryAfterSec)
                         ?: throw HlsStartException(PLAYBACK_SERVER_BUSY_MESSAGE)
-                    onStatus("Waiting for the server to free up…")
+                    onStatus(HLS_WAITING_FOR_CAPACITY_MESSAGE)
                     delay(delayMs)
                 }
                 is HlsManifestResult.Lost -> {
@@ -106,7 +130,7 @@ class HlsSessionController(
                     reload++
                     val delayMs = sessionLostRetryDelayMs(lostAttempts)
                         ?: throw HlsStartException(PLAYBACK_SESSION_LOST_MESSAGE)
-                    onStatus("Reconnecting to the stream…")
+                    onStatus(HLS_RECONNECTING_MESSAGE)
                     delay(delayMs)
                 }
                 is HlsManifestResult.Failed ->
@@ -140,7 +164,15 @@ class HlsSessionController(
                 delay(HLS_KEEPALIVE_INTERVAL_MS)
                 if (!isCurrent(keepaliveGeneration, keepaliveUuid)) return@launch
                 val spec = currentSpec ?: continue
-                val result = api.fetchHlsManifest(spec)
+                // A throwing tick must not end the loop, and must not reach the scope's
+                // uncaught handler: the next tick, or the player's own traffic, recovers.
+                val result = try {
+                    api.fetchHlsManifest(spec)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (_: Exception) {
+                    continue
+                }
                 if (!isCurrent(keepaliveGeneration, keepaliveUuid)) return@launch
                 when (result) {
                     is HlsManifestResult.Lost -> onSessionLost()

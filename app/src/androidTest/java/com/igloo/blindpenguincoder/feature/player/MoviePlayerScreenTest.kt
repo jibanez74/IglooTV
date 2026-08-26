@@ -90,12 +90,13 @@ class MoviePlayerScreenTest {
     private fun playRequest(
         resumeAtSec: Double? = null,
         chapters: List<PlaybackChapter> = emptyList(),
+        mode: PlaybackMode = PlaybackMode.Direct,
     ) = MoviePlayRequest(
         movieId = 7,
         title = "Heat",
         posterUrl = null,
         mimeType = "video/x-matroska",
-        mode = PlaybackMode.Direct,
+        mode = mode,
         audioTypeIndex = null,
         subtitleTypeIndex = null,
         resumeAtSec = resumeAtSec,
@@ -231,7 +232,10 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
     }
 
-    private fun emitQualityOptions(selectedId: String = "Direct") {
+    private fun emitQualityOptions(
+        selectedId: String = "Direct",
+        requestedMode: PlaybackMode = PlaybackMode.valueOf(selectedId),
+    ) {
         engine.emit(
             MoviePlayerEvent.QualityOptionsChanged(
                 PlaybackMode.entries.map { mode ->
@@ -241,6 +245,7 @@ class MoviePlayerScreenTest {
                         selected = selectedId == mode.name,
                     )
                 },
+                requestedMode,
             ),
         )
         composeRule.waitForIdle()
@@ -605,14 +610,17 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
 
         assertTrue("quality:Remux" in engine.playbackCommands)
-        assertEquals(listOf(PlaybackMode.Remux), requestedModes)
-        assertEquals(PlaybackMode.Remux, requireNotNull(currentRequest).mode)
         composeRule.onNodeWithTag("movie_track_menu").assertExists()
+        // The press asks; it does not decide. Nothing is persisted until the engine says so.
+        assertEquals(emptyList<PlaybackMode>(), requestedModes)
+        assertEquals(PlaybackMode.Direct, requireNotNull(currentRequest).mode)
 
         // The selected mark is engine truth: it moves when the new session's options arrive.
         emitQualityOptions(selectedId = "Remux")
         composeRule.onNodeWithTag("movie_track_Remux").assertIsSelected()
         composeRule.onNodeWithTag("movie_track_Direct").assertIsNotSelected()
+        assertEquals(listOf(PlaybackMode.Remux), requestedModes)
+        assertEquals(PlaybackMode.Remux, requireNotNull(currentRequest).mode)
 
         pressBack()
 
@@ -890,6 +898,7 @@ class MoviePlayerScreenTest {
         composeRule.onNodeWithTag("movie_track_Remux")
             .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
+        emitQualityOptions(selectedId = "Remux")
 
         restorationTester.emulateSavedInstanceStateRestore()
         composeRule.waitForIdle()
@@ -905,6 +914,98 @@ class MoviePlayerScreenTest {
 
         assertTrue(recreated.released)
         assertEquals(PlaybackMode.Remux, engineRequests.last().mode)
+    }
+
+    @Test
+    fun aRefusedQualityLeavesPlaybackAndTheSavedRequestAlone() {
+        setContent(playRequest(mode = PlaybackMode.Remux))
+        startPlaying()
+        emitQualityOptions(selectedId = "Remux")
+        openPlayerMenu("movie_quality")
+
+        composeRule.onNodeWithTag("movie_track_Remux")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movie_track_Direct")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        engine.emit(MoviePlayerEvent.ModeRefused(REFUSAL))
+        composeRule.waitForIdle()
+
+        // The refusal is shown in place, politely, without dismissing or seizing focus.
+        composeRule.onNodeWithTag("movie_track_refusal").assertExists()
+        composeRule.onNodeWithText(REFUSAL).assertExists()
+        composeRule.onNodeWithTag("movie_track_menu").assertExists()
+        composeRule.onNodeWithTag("movie_track_Direct").assertIsFocused()
+        // What is playing, and what a replacement engine would rebuild, are untouched.
+        composeRule.onNodeWithTag("movie_track_Remux").assertIsSelected()
+        assertEquals(emptyList<PlaybackMode>(), requestedModes)
+        assertEquals(PlaybackMode.Remux, requireNotNull(currentRequest).mode)
+
+        pressBack()
+        openPlayerMenu("movie_quality")
+
+        // A refusal belongs to the visit that earned it.
+        composeRule.onNodeWithTag("movie_track_refusal").assertDoesNotExist()
+    }
+
+    @Test
+    fun anAcceptedSwitchClearsAStandingRefusal() {
+        setContent()
+        startPlaying()
+        emitQualityOptions()
+        openPlayerMenu("movie_quality")
+        engine.emit(MoviePlayerEvent.ModeRefused(REFUSAL))
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("movie_track_refusal").assertExists()
+
+        emitQualityOptions(selectedId = "Remux")
+
+        composeRule.onNodeWithTag("movie_track_refusal").assertDoesNotExist()
+    }
+
+    @Test
+    fun anEffectiveProfileNeverRewritesTheRequestedMode() {
+        setContent()
+        startPlaying()
+
+        // The remux safety gate answered a Remux request with a transcode profile: the mark
+        // reports what ran, the saved request keeps what the user asked for.
+        emitQualityOptions(selectedId = "P1080Mbps8", requestedMode = PlaybackMode.Remux)
+
+        assertEquals(listOf(PlaybackMode.Remux), requestedModes)
+        assertEquals(PlaybackMode.Remux, requireNotNull(currentRequest).mode)
+        openPlayerMenu("movie_quality")
+        composeRule.onNodeWithTag("movie_track_P1080Mbps8").assertIsSelected()
+    }
+
+    @Test
+    fun repeatedBackgroundTripsDoNotRewindTheMovie() {
+        setContent(playRequest(resumeAtSec = 600.0))
+        composeRule.onNodeWithTag("movie_resume").performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        // The resume point came from the backend, so a mode may rewind before it.
+        assertEquals(listOf("start:600.0:true"), engine.playbackCommands)
+        assertEquals(listOf(true), engine.startRewinds)
+
+        repeat(2) {
+            engine.emit(MoviePlayerEvent.Time(currentSec = 900.0, durationSec = 7200.0))
+            composeRule.waitForIdle()
+            composeRule.runOnUiThread {
+                lifecycleOwner.registry.currentState = Lifecycle.State.CREATED
+            }
+            composeRule.waitForIdle()
+            engine = FakeMoviePlayerEngine()
+            composeRule.runOnUiThread {
+                lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
+            }
+            composeRule.waitForIdle()
+
+            // This visit's own playhead is not a resume point; rewinding before it again would
+            // walk the movie backwards one buffer per Home press.
+            assertEquals(listOf("start:900.0:false"), engine.playbackCommands)
+            assertEquals(listOf(false), engine.startRewinds)
+        }
     }
 
     @Test
@@ -1003,5 +1104,11 @@ class MoviePlayerScreenTest {
 
         assertEquals(commandsBefore, engine.playbackCommands)
         composeRule.onNodeWithText("The movie stream stopped unexpectedly.").assertExists()
+    }
+
+    private companion object {
+        /** The pre-play gate's shape, as the engine hands it back for an in-player Direct pick. */
+        const val REFUSAL = "This TV can't play this movie's Dolby TrueHD audio track (English) — " +
+            "it has no decoder for it and no compatible sound system is connected."
     }
 }

@@ -1,5 +1,7 @@
 package com.igloo.blindpenguincoder.playback.model
 
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
+
 /** The movie player's phases; the chrome renders exactly one of these at a time. */
 enum class MoviePlayerPhase { AwaitingResume, Loading, Playing, Paused, Buffering, Ended, Error }
 
@@ -31,6 +33,11 @@ data class MoviePlayerState(
     val qualityOptions: List<TrackOption> = emptyList(),
     /** Engine narration for long waits ("Waiting for the server…"); null = plain buffering. */
     val statusMessage: String? = null,
+    /**
+     * Why the engine declined the last quality choice, shown inside the open Quality menu.
+     * A refusal is not a playback failure: the current source keeps playing untouched.
+     */
+    val modeRefusalMessage: String? = null,
 ) {
     /** The resume decision was made; the engine is starting and the chrome shows loading. */
     fun onResumeChosen(): MoviePlayerState = when (phase) {
@@ -105,8 +112,17 @@ data class MoviePlayerState(
         subtitles: List<TrackOption>,
     ): MoviePlayerState = copy(audioOptions = audio, subtitleOptions = subtitles)
 
+    /** An accepted switch re-emits the ladder, which is also what clears a stale refusal. */
     fun onQualityOptionsChanged(options: List<TrackOption>): MoviePlayerState =
-        copy(qualityOptions = options)
+        copy(qualityOptions = options, modeRefusalMessage = null)
+
+    fun onModeRefused(message: String): MoviePlayerState = copy(modeRefusalMessage = message)
+
+    /** Closing the Quality menu retires its refusal; the next visit starts clean. */
+    fun onModeRefusalDismissed(): MoviePlayerState = when (modeRefusalMessage) {
+        null -> this
+        else -> copy(modeRefusalMessage = null)
+    }
 
     /** Narration only matters while the user is still waiting for media. */
     fun onStatusMessage(message: String?): MoviePlayerState = when (phase) {
@@ -160,7 +176,18 @@ sealed interface MoviePlayerEvent {
         val audio: List<TrackOption>,
         val subtitles: List<TrackOption>,
     ) : MoviePlayerEvent
-    data class QualityOptionsChanged(val options: List<TrackOption>) : MoviePlayerEvent
+    /**
+     * The quality ladder plus the mode the engine is currently *asking* for. The two differ
+     * when the backend answers a request with another profile: the selected row reports the
+     * effective profile, while [requestedMode] is what a later engine must be rebuilt with.
+     */
+    data class QualityOptionsChanged(
+        val options: List<TrackOption>,
+        val requestedMode: PlaybackMode,
+    ) : MoviePlayerEvent
+
+    /** The engine declined a quality choice and kept playing; [message] says why. */
+    data class ModeRefused(val message: String) : MoviePlayerEvent
 
     /** Narration for long engine waits; null clears it. */
     data class StatusMessage(val message: String?) : MoviePlayerEvent
@@ -176,5 +203,6 @@ fun MoviePlayerState.onEvent(event: MoviePlayerEvent): MoviePlayerState = when (
     is MoviePlayerEvent.Time -> onTime(event.currentSec, event.durationSec)
     is MoviePlayerEvent.TracksChanged -> onTracksChanged(event.audio, event.subtitles)
     is MoviePlayerEvent.QualityOptionsChanged -> onQualityOptionsChanged(event.options)
+    is MoviePlayerEvent.ModeRefused -> onModeRefused(event.message)
     is MoviePlayerEvent.StatusMessage -> onStatusMessage(event.message)
 }

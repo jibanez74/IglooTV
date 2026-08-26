@@ -28,6 +28,14 @@ const val HLS_SEGMENT_READ_TIMEOUT_MS = 150_000
 const val HLS_CAPACITY_RETRY_MAX_ATTEMPTS = 6
 private const val HLS_CAPACITY_RETRY_DEFAULT_DELAY_SEC = 5
 
+/**
+ * Wall-clock ceiling on one [HlsSessionController.start], attempt budgets included. The attempt
+ * counts alone bound nothing useful: a server that accepts connections but never answers spends
+ * the manifest request timeout on every attempt, so six attempts can hold the viewer for minutes
+ * on a loading screen whose only escape is Back.
+ */
+const val HLS_START_TOTAL_BUDGET_MS = 90_000L
+
 const val HLS_SESSION_LOST_MAX_ATTEMPTS = 3
 private const val HLS_SESSION_LOST_MIN_DELAY_MS = 2_000L
 
@@ -81,19 +89,11 @@ fun retryAfterSecondsFrom(headerFields: Map<out String?, List<String>>?): Int? =
         ?.value?.firstOrNull()?.toIntOrNull()
 
 /**
- * Retry delay for a failed Media3 segment/playlist load, or null to let the default policy
- * decide. Only 503 gets special treatment: it means "not encoded yet" or "no capacity", both
- * worth patient retries honoring `Retry-After` rather than the default three quick attempts.
- */
-fun hlsLoadRetryDelayMs(responseCode: Int?, retryAfterSec: Int?, errorCount: Int): Long? {
-    if (responseCode != 503) return null
-    return capacityRetryDelayMs(errorCount, retryAfterSec)
-}
-
-/**
- * The complete Media3 retry decision. The public three-argument rule above remains the 503
- * override; non-503 failures retain Media3's own delay only through its normal retry count,
- * and a null default delay preserves Media3's immediate fail-fast classifications.
+ * Retry delay for a failed Media3 segment/playlist load, or null to fail the load. Only 503 gets
+ * special treatment: it means "not encoded yet" or "no capacity", both worth patient retries
+ * honoring `Retry-After` rather than Media3's three quick attempts. Non-503 failures retain
+ * Media3's own delay only through its normal retry count, and a null default delay preserves
+ * Media3's immediate fail-fast classifications.
  */
 internal fun hlsLoadRetryDelayMs(
     responseCode: Int?,

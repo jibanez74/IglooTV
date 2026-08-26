@@ -6,6 +6,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.Tracks
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.TrackOption
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -32,11 +33,13 @@ class TrackOptionsTest {
         language: String? = "en",
         label: String? = null,
         selectionFlags: Int = 0,
+        id: String? = null,
     ) = Format.Builder()
         .setSampleMimeType(MimeTypes.APPLICATION_SUBRIP)
         .setLanguage(language)
         .setLabel(label)
         .setSelectionFlags(selectionFlags)
+        .setId(id)
         .build()
 
     private fun group(format: Format, type: Int, selected: Boolean): Tracks.Group = Tracks.Group(
@@ -124,5 +127,89 @@ class TrackOptionsTest {
         assertNull(parseTrackOptionId("nonsense"))
         assertNull(parseTrackOptionId("1:2:3"))
         assertNull(parseTrackOptionId("a:0"))
+    }
+
+    // --- HLS ---
+
+    private fun wireAudio(label: String) = PlayableAudioTrack(label = label, codec = "eac3")
+
+    @Test
+    fun hlsAudioOptionsComeFromTheWireBecauseTheMuxCarriesOnlyOne() {
+        // The session muxes one track, so ExoPlayer's Tracks cannot list the alternatives.
+        val options = hlsAudioTrackOptions(
+            listOf(wireAudio("English · Surround"), wireAudio("Spanish · Stereo")),
+            selectedTypeIndex = 1,
+        )
+        assertEquals(
+            listOf(
+                TrackOption("audio:0", "English · Surround", selected = false),
+                TrackOption("audio:1", "Spanish · Stereo", selected = true),
+            ),
+            options,
+        )
+    }
+
+    @Test
+    fun aVideoOnlyMovieOffersNoHlsAudioRowsAndMarksNothing() {
+        assertEquals(emptyList<TrackOption>(), hlsAudioTrackOptions(emptyList(), selectedTypeIndex = null))
+        assertEquals(
+            listOf(TrackOption("audio:0", "English", selected = false)),
+            hlsAudioTrackOptions(listOf(wireAudio("English")), selectedTypeIndex = null),
+        )
+    }
+
+    @Test
+    fun anHlsAudioIdIsDistinguishableFromAnExoPlayerSelectionId() {
+        // The two id shapes are how the engine tells a session restart from a selection override.
+        assertEquals(2, parseHlsAudioOptionId("audio:2"))
+        assertNull(parseHlsAudioOptionId("1:0"))
+        assertNull(parseHlsAudioOptionId("audio:x"))
+        assertNull(parseHlsAudioOptionId("audio"))
+    }
+
+    @Test
+    fun aSideloadedSubtitleIsFoundByItsStampedIdNotItsGroupPosition() {
+        // The wire list is [0] image-based, [1] text, [2] text. Only text tracks are sideloaded,
+        // so group position and wire ordinal disagree — matching by position would pick track 2
+        // when the user asked for track 1.
+        val tracks = tracks(
+            group(audioFormat("en"), C.TRACK_TYPE_AUDIO, selected = true),
+            group(textFormat("en", id = "sub:1"), C.TRACK_TYPE_TEXT, selected = false),
+            group(textFormat("es", id = "sub:2"), C.TRACK_TYPE_TEXT, selected = false),
+        )
+
+        assertEquals("1:0", trackOptionIdForFormatId(tracks, C.TRACK_TYPE_TEXT, "sub:1"))
+        assertEquals("2:0", trackOptionIdForFormatId(tracks, C.TRACK_TYPE_TEXT, "sub:2"))
+        // The image-based track was never sideloaded, so nothing carries its ordinal.
+        assertNull(trackOptionIdForFormatId(tracks, C.TRACK_TYPE_TEXT, "sub:0"))
+        assertNull(trackOptionIdForFormatId(tracks, C.TRACK_TYPE_AUDIO, "sub:1"))
+    }
+
+    @Test
+    fun aSubtitleSelectionMapsBackToItsWireOrdinal() {
+        val tracks = tracks(
+            group(audioFormat("en"), C.TRACK_TYPE_AUDIO, selected = true),
+            group(textFormat("es", id = "sub:2"), C.TRACK_TYPE_TEXT, selected = true),
+        )
+
+        assertEquals("sub:2", formatIdForOptionId(tracks, "1:0"))
+        assertNull(formatIdForOptionId(tracks, "1:5"))
+        assertNull(formatIdForOptionId(tracks, "9:0"))
+        assertNull(formatIdForOptionId(tracks, "nonsense"))
+    }
+
+    @Test
+    fun aDirectSelectionKeepsItsTypeOrdinalForALaterHlsSession() {
+        val tracks = tracks(
+            group(audioFormat("en"), C.TRACK_TYPE_AUDIO, selected = true),
+            group(textFormat("en"), C.TRACK_TYPE_TEXT, selected = false),
+            group(audioFormat("es"), C.TRACK_TYPE_AUDIO, selected = false),
+        )
+
+        assertEquals(0, typeIndexForOptionId(tracks, C.TRACK_TYPE_AUDIO, "0:0"))
+        assertEquals(1, typeIndexForOptionId(tracks, C.TRACK_TYPE_AUDIO, "2:0"))
+        assertEquals(0, typeIndexForOptionId(tracks, C.TRACK_TYPE_TEXT, "1:0"))
+        // A text group is not the Nth audio group.
+        assertNull(typeIndexForOptionId(tracks, C.TRACK_TYPE_AUDIO, "1:0"))
     }
 }

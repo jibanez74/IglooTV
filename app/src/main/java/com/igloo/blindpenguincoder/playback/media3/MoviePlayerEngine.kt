@@ -24,9 +24,18 @@ interface MoviePlayerEngine {
 
     /**
      * The resume decision was made: prepare the stream from [startPositionSec], or from the
-     * beginning when null, and honor [initialPlayWhenReady]. Called exactly once.
+     * beginning when null, and honor [initialPlayWhenReady]. Called exactly once per engine.
+     *
+     * [rewindOnResume] marks [startPositionSec] as a genuine resume point — a position carried
+     * in from the backend rather than one this screen visit just watched past. Only then may a
+     * mode rewind before it; a replacement engine rebuilt at its own playhead must not, or
+     * repeated background trips walk the movie backwards.
      */
-    fun startPlayback(startPositionSec: Double?, initialPlayWhenReady: Boolean)
+    fun startPlayback(
+        startPositionSec: Double?,
+        initialPlayWhenReady: Boolean,
+        rewindOnResume: Boolean,
+    )
 
     fun play()
     fun pause()

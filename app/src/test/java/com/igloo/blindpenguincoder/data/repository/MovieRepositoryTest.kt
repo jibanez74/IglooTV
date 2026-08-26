@@ -4,6 +4,9 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.playback.hls.HlsManifestResult
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
+import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.PLAYBACK_UNAUTHORIZED_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.playbackServerRefusedMessage
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.HttpTimeoutCapability
 import io.ktor.client.request.HttpRequestData
@@ -11,10 +14,12 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.utils.io.ByteReadChannel
+import java.io.IOException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class MovieRepositoryTest {
@@ -131,6 +136,71 @@ class MovieRepositoryTest {
             http.movieRepository.fetchHlsManifest(hlsSpec()),
         )
         assertTrue("a non-success manifest body must be drained", body.isClosedForRead)
+    }
+
+    @Test
+    fun `a lost session is a protocol state the controller can retry, not a failure`() = runTest {
+        val http = TestHttp {
+            respond(
+                content = ByteReadChannel("""{"error":true,"message":"not found"}"""),
+                status = HttpStatusCode.NotFound,
+            )
+        }
+
+        assertEquals(HlsManifestResult.Lost, http.movieRepository.fetchHlsManifest(hlsSpec()))
+    }
+
+    @Test
+    fun `a rejected credential fails the manifest as unauthorized`() = runTest {
+        val http = TestHttp {
+            respond(
+                content = ByteReadChannel("""{"error":true,"message":"unauthorized"}"""),
+                status = HttpStatusCode.Unauthorized,
+            )
+        }
+
+        val result = http.movieRepository.fetchHlsManifest(hlsSpec())
+
+        val failed = result as HlsManifestResult.Failed
+        assertTrue(failed.unauthorized)
+        assertEquals(PLAYBACK_UNAUTHORIZED_MESSAGE, failed.message)
+    }
+
+    @Test
+    fun `any other refusal carries its status into the message`() = runTest {
+        val http = TestHttp {
+            respond(
+                content = ByteReadChannel("""{"error":true,"message":"boom"}"""),
+                status = HttpStatusCode.InternalServerError,
+            )
+        }
+
+        assertEquals(
+            HlsManifestResult.Failed(playbackServerRefusedMessage(500)),
+            http.movieRepository.fetchHlsManifest(hlsSpec()),
+        )
+    }
+
+    @Test
+    fun `a transport failure reads as unreachable rather than crashing the player`() = runTest {
+        val http = TestHttp { throw IOException("connection reset") }
+
+        assertEquals(
+            HlsManifestResult.Failed(PLAYBACK_SERVER_UNREACHABLE_MESSAGE),
+            http.movieRepository.fetchHlsManifest(hlsSpec()),
+        )
+    }
+
+    @Test
+    fun `a programming error surfaces instead of masquerading as a transport failure`() = runTest {
+        val http = TestHttp { error("server address requested before setup completed") }
+
+        try {
+            http.movieRepository.fetchHlsManifest(hlsSpec())
+            fail("expected the programming error to surface")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("server address"))
+        }
     }
 
     @Test

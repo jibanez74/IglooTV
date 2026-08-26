@@ -196,7 +196,7 @@ class TrailerPlayerScreenTest {
 
         assertEquals(listOf("seek:20.0", "seek:30.0"), engine.playbackCommands)
         // The optimistic seek moved the bar without waiting for the next engine tick.
-        composeRule.onNodeWithContentDescription("30 seconds of 2 minutes 23 seconds")
+        composeRule.onNodeWithContentDescription("30 seconds of 2 minutes and 23 seconds")
             .assertExists()
     }
 

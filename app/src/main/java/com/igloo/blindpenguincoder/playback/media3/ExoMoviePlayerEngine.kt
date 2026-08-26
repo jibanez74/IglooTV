@@ -43,10 +43,13 @@ import com.igloo.blindpenguincoder.playback.hls.shouldRebaseHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRecoverLostHlsSession
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
+import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.TrackOption
 import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
+import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import kotlin.math.floor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -171,8 +174,14 @@ internal class ExoMoviePlayerEngine(
     private val ticker = object : Runnable {
         override fun run() {
             if (!playbackIntent.acceptsCommands) return
-            if (player.playbackState == Player.STATE_READY ||
-                player.playbackState == Player.STATE_BUFFERING
+            // A pending switch leaves the outgoing source frozen at a position that is no longer
+            // where the viewer is going; reporting it snaps the seek bar back and feeds the
+            // progress cadence a stale second.
+            if (pendingMode == null &&
+                (
+                    player.playbackState == Player.STATE_READY ||
+                        player.playbackState == Player.STATE_BUFFERING
+                    )
             ) {
                 emit(MoviePlayerEvent.Time(currentAbsoluteSec(), durationSec()))
             }
@@ -205,14 +214,22 @@ internal class ExoMoviePlayerEngine(
         }
     }
 
-    override fun startPlayback(startPositionSec: Double?, initialPlayWhenReady: Boolean) {
+    override fun startPlayback(
+        startPositionSec: Double?,
+        initialPlayWhenReady: Boolean,
+        rewindOnResume: Boolean,
+    ) {
         if (!playbackIntent.start(initialPlayWhenReady)) return
         emitDesiredPlayWhenReady()
         handler.post(ticker)
         val targetSec = when {
             !isHls -> startPositionSec ?: 0.0
             // Resuming over HLS rewinds a little; the session then starts right at the target.
-            startPositionSec != null -> hlsResumeStartSec(startPositionSec).toDouble()
+            // Only a genuine resume earns it — a reconstruction already knows this visit's own
+            // playhead, and rewinding again on every one walks the movie backwards.
+            startPositionSec != null && rewindOnResume ->
+                hlsResumeStartSec(startPositionSec).toDouble()
+            startPositionSec != null -> startPositionSec
             else -> 0.0
         }
         restartInPlace(requestedMode, currentAudioTypeIndex, targetSec)
@@ -221,6 +238,9 @@ internal class ExoMoviePlayerEngine(
     override fun play() {
         if (!playbackIntent.play()) return
         emitDesiredPlayWhenReady()
+        // A pending switch deliberately holds the outgoing source frozen on screen; resuming it
+        // would play media the viewer is already leaving. `prepareSource` applies the intent.
+        if (pendingMode != null) return
         player.play()
     }
 
@@ -285,7 +305,29 @@ internal class ExoMoviePlayerEngine(
             if (pendingMode != null) cancelPendingModeSwitch()
             return
         }
+        refusalFor(mode)?.let { message ->
+            emit(MoviePlayerEvent.ModeRefused(message))
+            return
+        }
         restartInPlace(mode, currentAudioTypeIndex, currentAbsoluteSec())
+    }
+
+    /**
+     * Why this mode cannot start, or null to proceed. The same pre-play gate, over the audio
+     * track this session would actually use: switching to Direct is the one in-player choice
+     * that can land on a track this TV has no decoder and no passthrough for, and silent video
+     * is worse than the refusal that names the codec. The mode is never substituted.
+     */
+    private fun refusalFor(mode: PlaybackMode): String? {
+        val track = effectiveAudioOrdinal()?.let(request.audioTracks::getOrNull)
+        val gate = evaluatePlaybackGate(
+            mode = mode,
+            audioCodec = track?.codec,
+            audioCodecProfile = track?.codecProfile,
+            audioLabel = track?.label,
+            canPlayMime = { mime -> services.canPlayAudioMime(mime, track?.channels) },
+        )
+        return (gate as? PlaybackGateResult.Blocked)?.message
     }
 
     override fun onHostPaused() {
@@ -372,6 +414,17 @@ internal class ExoMoviePlayerEngine(
                     MoviePlayerEvent.Error(
                         failure.message ?: "Playback failed.",
                         failure.unauthorized,
+                    ),
+                )
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Exception) {
+                // The repository deliberately rethrows programming errors rather than dressing
+                // them as transport failures. They still belong on the error surface: this scope
+                // has no exception handler, so an escape would kill the app mid-movie.
+                if (isRestartCurrent(generation)) transitionToTerminal(
+                    MoviePlayerEvent.Error(
+                        failure.message?.let { "Playback failed ($it)." } ?: "Playback failed.",
                     ),
                 )
             } finally {
@@ -509,7 +562,7 @@ internal class ExoMoviePlayerEngine(
     private fun emitQualityOptions() {
         val options = availablePlaybackModes()
             .map { TrackOption(id = it.name, label = playbackModeLabel(it), selected = it == effectiveMode) }
-        emit(MoviePlayerEvent.QualityOptionsChanged(options))
+        emit(MoviePlayerEvent.QualityOptionsChanged(options, requestedMode))
     }
 
     private fun onKeepaliveSessionLost() {

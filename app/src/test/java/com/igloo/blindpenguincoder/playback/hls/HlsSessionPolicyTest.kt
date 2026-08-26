@@ -66,15 +66,33 @@ class HlsSessionPolicyTest {
         assertNull(sessionLostRetryDelayMs(attempt = 4))
     }
 
+    // --- start budget ---
+
+    @Test
+    fun `the start budget is shorter than the attempt budgets it bounds`() {
+        // Six capacity attempts alone permit six manifest request timeouts back to back; the
+        // wall-clock ceiling is what keeps that off a loading screen the viewer is watching.
+        val attemptsOnly = HLS_CAPACITY_RETRY_MAX_ATTEMPTS * 5_000L
+        assertTrue(HLS_START_TOTAL_BUDGET_MS > attemptsOnly)
+        assertTrue(HLS_START_TOTAL_BUDGET_MS < HLS_CAPACITY_RETRY_MAX_ATTEMPTS * 50_000L)
+    }
+
     // --- Media3 load-error delays ---
 
     @Test
-    fun `only 503 gets the patient load retry`() {
-        assertEquals(9_000L, hlsLoadRetryDelayMs(responseCode = 503, retryAfterSec = 9, errorCount = 1))
-        assertEquals(5_000L, hlsLoadRetryDelayMs(responseCode = 503, retryAfterSec = null, errorCount = 6))
-        assertNull(hlsLoadRetryDelayMs(responseCode = 503, retryAfterSec = null, errorCount = 7))
-        assertNull(hlsLoadRetryDelayMs(responseCode = 404, retryAfterSec = null, errorCount = 1))
-        assertNull(hlsLoadRetryDelayMs(responseCode = null, retryAfterSec = null, errorCount = 1))
+    fun `503 honors Retry-After and outlasts the Media3 default delay`() {
+        // Media3's own delay is ignored for a 503: "not encoded yet" is worth the server's word.
+        assertEquals(
+            9_000L,
+            hlsLoadRetryDelayMs(503, 9, errorCount = 1, defaultRetryCount = 3, defaultRetryDelayMs = 0L),
+        )
+        assertEquals(
+            5_000L,
+            hlsLoadRetryDelayMs(503, null, errorCount = 6, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
+        )
+        assertNull(
+            hlsLoadRetryDelayMs(503, null, errorCount = 7, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
+        )
     }
 
     @Test
