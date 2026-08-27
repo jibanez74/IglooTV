@@ -23,9 +23,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -96,12 +98,16 @@ fun MoviePlayerScreen(
     viewModel: MoviePlayerViewModel,
     onClose: () -> Unit,
     onPlaybackModeRequested: (PlaybackMode) -> Unit,
+    onTrackSelectionChanged: (audioTypeIndex: Int?, subtitleTypeIndex: Int?) -> Unit,
     engineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var reloadKey by remember { mutableIntStateOf(0) }
     val engine = remember(reloadKey) { engineFactory(context, request) }
+    val latestRequest by rememberUpdatedState(request)
+    val latestOnPlaybackModeRequested by rememberUpdatedState(onPlaybackModeRequested)
+    val latestOnTrackSelectionChanged by rememberUpdatedState(onTrackSelectionChanged)
     val progressSync by viewModel.progressSyncUiState.collectAsStateWithLifecycle()
     val progressSyncError = (progressSync as? ProgressSyncUiState.Failed)?.message
 
@@ -146,11 +152,27 @@ fun MoviePlayerScreen(
     val subtitlesButtonRequester = remember { FocusRequester() }
     val qualityButtonRequester = remember { FocusRequester() }
 
+    val persistTrackSelection: (MoviePlayerEngine) -> Unit = { source ->
+        val audioTypeIndex = source.currentAudioTypeIndex
+        val subtitleTypeIndex = source.currentSubtitleTypeIndex
+        val saved = latestRequest
+        if (
+            audioTypeIndex != saved.audioTypeIndex ||
+            subtitleTypeIndex != saved.subtitleTypeIndex
+        ) {
+            latestOnTrackSelectionChanged(audioTypeIndex, subtitleTypeIndex)
+        }
+    }
+
     DisposableEffect(engine) {
-        onDispose { engine.release() }
+        onDispose {
+            persistTrackSelection(engine)
+            engine.release()
+        }
     }
 
     val closeAndRelease: () -> Unit = {
+        persistTrackSelection(engine)
         engine.release()
         onClose()
     }
@@ -164,6 +186,10 @@ fun MoviePlayerScreen(
     }
 
     LaunchedEffect(engine) {
+        // An engine replacement is a new player surface and focus context. In-place source
+        // switches keep the same engine, so their open menu deliberately survives.
+        playerMenu = null
+        if (resumeDecided) playPauseRequester.requestFocusSafely()
         engine.events.collect { event ->
             val next = state.onEvent(event)
             state = next
@@ -173,9 +199,10 @@ fun MoviePlayerScreen(
                 // refused or failed switch must not leave a replacement engine rebuilding into
                 // a mode that already proved it cannot start.
                 is MoviePlayerEvent.QualityOptionsChanged ->
-                    if (event.requestedMode != request.mode) {
-                        onPlaybackModeRequested(event.requestedMode)
+                    if (event.requestedMode != latestRequest.mode) {
+                        latestOnPlaybackModeRequested(event.requestedMode)
                     }
+                is MoviePlayerEvent.TracksChanged -> persistTrackSelection(engine)
                 is MoviePlayerEvent.PlayWhenReadyChanged -> {
                     if (!lifecycleSilenced) {
                         playWhenReadyIntent = event.playWhenReady
@@ -296,6 +323,7 @@ fun MoviePlayerScreen(
                 }
                 Lifecycle.Event.ON_STOP -> {
                     if (context.findHostActivity()?.isChangingConfigurations != true) {
+                        persistTrackSelection(engine)
                         playWhenReadyIntent = false
                         releasedForBackground = true
                         engine.release()
@@ -346,11 +374,13 @@ fun MoviePlayerScreen(
             }
             .testTag("movie_player"),
     ) {
-        engine.VideoSurface(
-            modifier = Modifier
-                .fillMaxSize()
-                .focusProperties { canFocus = false },
-        )
+        key(engine) {
+            engine.VideoSurface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusProperties { canFocus = false },
+            )
+        }
 
         if (state.phase == MoviePlayerPhase.Error) {
             PlayerErrorSurface(
@@ -370,6 +400,7 @@ fun MoviePlayerScreen(
                     {
                         // Retry is a fresh, explicit Play intent after the failed engine's
                         // terminal boundary cleared every pending transport command.
+                        persistTrackSelection(engine)
                         playWhenReadyIntent = true
                         reloadKey += 1
                     }
@@ -445,14 +476,20 @@ fun MoviePlayerScreen(
                     title = "Audio",
                     options = state.audioOptions,
                     noneRow = null,
-                    onSelect = { id -> engine.selectAudioTrack(requireNotNull(id)) },
+                    onSelect = { id ->
+                        engine.selectAudioTrack(requireNotNull(id))
+                        persistTrackSelection(engine)
+                    },
                     onDismiss = closeMenu,
                 )
                 PlayerMenu.Subtitles -> TrackMenuDialog(
                     title = "Subtitles",
                     options = state.subtitleOptions,
                     noneRow = "None",
-                    onSelect = { id -> engine.selectSubtitleTrack(id) },
+                    onSelect = { id ->
+                        engine.selectSubtitleTrack(id)
+                        persistTrackSelection(engine)
+                    },
                     onDismiss = closeMenu,
                 )
                 // Like the track menus, selection keeps the dialog up: a quality switch

@@ -18,6 +18,12 @@ import kotlinx.coroutines.flow.SharedFlow
 interface MoviePlayerEngine {
     val events: SharedFlow<MoviePlayerEvent>
 
+    /** Engine-authoritative type ordinal; null keeps the container's default audio. */
+    val currentAudioTypeIndex: Int?
+
+    /** Engine-authoritative type ordinal; null means subtitles are off. */
+    val currentSubtitleTypeIndex: Int?
+
     /** Draws the engine-owned video and subtitle surfaces behind Igloo's Compose chrome. */
     @Composable
     fun VideoSurface(modifier: Modifier = Modifier)

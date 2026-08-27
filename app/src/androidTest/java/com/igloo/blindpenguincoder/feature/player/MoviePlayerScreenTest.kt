@@ -150,8 +150,18 @@ class MoviePlayerScreenTest {
                                 requestedModes += mode
                                 currentRequest = requireNotNull(currentRequest).copy(mode = mode)
                             },
+                            onTrackSelectionChanged = { audioTypeIndex, subtitleTypeIndex ->
+                                currentRequest = requireNotNull(currentRequest).copy(
+                                    audioTypeIndex = audioTypeIndex,
+                                    subtitleTypeIndex = subtitleTypeIndex,
+                                )
+                            },
                             engineFactory = { _, engineRequest ->
                                 engineRequests += engineRequest
+                                engine.setCurrentTrackSelection(
+                                    engineRequest.audioTypeIndex,
+                                    engineRequest.subtitleTypeIndex,
+                                )
                                 engine
                             },
                         )
@@ -182,6 +192,8 @@ class MoviePlayerScreenTest {
         lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         restorationTester = StateRestorationTester(composeRule)
         restorationTester.setContent {
+            val context = LocalContext.current
+            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
                     if (open) {
@@ -196,9 +208,19 @@ class MoviePlayerScreenTest {
                                 requestedModes += mode
                                 currentRequest = requireNotNull(currentRequest).copy(mode = mode)
                             },
+                            onTrackSelectionChanged = { audioTypeIndex, subtitleTypeIndex ->
+                                currentRequest = requireNotNull(currentRequest).copy(
+                                    audioTypeIndex = audioTypeIndex,
+                                    subtitleTypeIndex = subtitleTypeIndex,
+                                )
+                            },
                             engineFactory = { _, engineRequest ->
                                 engineRequests += engineRequest
                                 FakeMoviePlayerEngine().also {
+                                    it.setCurrentTrackSelection(
+                                        engineRequest.audioTypeIndex,
+                                        engineRequest.subtitleTypeIndex,
+                                    )
                                     engine = it
                                     restorationEngines += it
                                 }
@@ -218,14 +240,30 @@ class MoviePlayerScreenTest {
     }
 
     private fun emitTracks() {
+        engine.audioTypeIndices["1:0"] = 0
+        engine.audioTypeIndices["2:0"] = 1
+        engine.subtitleTypeIndices["3:0"] = 0
         engine.emit(
             MoviePlayerEvent.TracksChanged(
                 audio = listOf(
-                    TrackOption(id = "1:0", label = "English · 5.1 surround", selected = true),
-                    TrackOption(id = "2:0", label = "Spanish · Stereo", selected = false),
+                    TrackOption(
+                        id = "1:0",
+                        label = "English · 5.1 surround",
+                        selected = engine.currentAudioTypeIndex == null ||
+                            engine.currentAudioTypeIndex == 0,
+                    ),
+                    TrackOption(
+                        id = "2:0",
+                        label = "Spanish · Stereo",
+                        selected = engine.currentAudioTypeIndex == 1,
+                    ),
                 ),
                 subtitles = listOf(
-                    TrackOption(id = "3:0", label = "English", selected = false),
+                    TrackOption(
+                        id = "3:0",
+                        label = "English",
+                        selected = engine.currentSubtitleTypeIndex == 0,
+                    ),
                 ),
             ),
         )
@@ -622,10 +660,31 @@ class MoviePlayerScreenTest {
         assertEquals(listOf(PlaybackMode.Remux), requestedModes)
         assertEquals(PlaybackMode.Remux, requireNotNull(currentRequest).mode)
 
+        // The collector must compare with the latest host request, not the Direct request it
+        // captured when this engine was created. Otherwise the return to Direct is discarded.
+        composeRule.onNodeWithTag("movie_track_Remux")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movie_track_Direct")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        emitQualityOptions(selectedId = "Direct", requestedMode = PlaybackMode.Direct)
+        assertEquals(listOf(PlaybackMode.Remux, PlaybackMode.Direct), requestedModes)
+        assertEquals(PlaybackMode.Direct, requireNotNull(currentRequest).mode)
+
         pressBack()
 
         composeRule.onNodeWithTag("movie_track_menu").assertDoesNotExist()
         composeRule.onNodeWithTag("movie_quality").assertIsFocused()
+
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.CREATED
+        }
+        composeRule.waitForIdle()
+        engine = FakeMoviePlayerEngine()
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
+        }
+        composeRule.waitForIdle()
+        assertEquals(PlaybackMode.Direct, engineRequests.last().mode)
     }
 
     @Test
@@ -857,6 +916,7 @@ class MoviePlayerScreenTest {
         engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
         composeRule.waitForIdle()
         val oldEngine = engine
+        assertEquals(1, oldEngine.surfaceCreateCount)
         val transportBeforeStandby = oldEngine.playbackCommands
 
         composeRule.runOnUiThread {
@@ -880,6 +940,10 @@ class MoviePlayerScreenTest {
         )
         assertEquals(listOf("hostResumed"), engine.commands.filter { it == "hostResumed" })
         assertEquals(listOf("start:600.0:false"), engine.playbackCommands)
+        // AndroidView reuses its hosted View at a stable call site. Keying the complete subtree
+        // to engine identity is what makes the replacement attach fresh video/subtitle views.
+        assertEquals(1, oldEngine.surfaceCreateCount)
+        assertEquals(1, engine.surfaceCreateCount)
         val playPause = composeRule.onNodeWithTag("movie_play_pause")
         playPause.assertContentDescriptionEquals("Play")
         playPause.performKeyInput { pressKey(Key.DirectionCenter) }
@@ -914,6 +978,78 @@ class MoviePlayerScreenTest {
 
         assertTrue(recreated.released)
         assertEquals(PlaybackMode.Remux, engineRequests.last().mode)
+    }
+
+    @Test
+    fun audioSubtitleAndSubtitlesOffSurviveSavedStateRecreation() {
+        setRestorableContent()
+        startPlaying()
+        emitTracks()
+
+        openPlayerMenu("movie_audio")
+        composeRule.onNodeWithTag("movie_track_1:0")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("movie_track_2:0")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        pressBack()
+
+        openPlayerMenu("movie_subtitles")
+        composeRule.onNodeWithTag("movie_track_none")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("movie_track_3:0")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        pressBack()
+
+        assertEquals(1, requireNotNull(currentRequest).audioTypeIndex)
+        assertEquals(0, requireNotNull(currentRequest).subtitleTypeIndex)
+        restorationTester.emulateSavedInstanceStateRestore()
+        composeRule.waitForIdle()
+        assertEquals(1, engineRequests.last().audioTypeIndex)
+        assertEquals(0, engineRequests.last().subtitleTypeIndex)
+
+        startPlaying()
+        emitTracks()
+        openPlayerMenu("movie_subtitles")
+        composeRule.onNodeWithTag("movie_track_3:0")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movie_track_none")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        pressBack()
+
+        restorationTester.emulateSavedInstanceStateRestore()
+        composeRule.waitForIdle()
+        assertEquals(1, engineRequests.last().audioTypeIndex)
+        assertEquals(null, engineRequests.last().subtitleTypeIndex)
+    }
+
+    @Test
+    fun backgroundWithAnOpenMenuPersistsTracksDismissesItAndFocusesPlayPause() {
+        setContent()
+        startPlaying()
+        emitTracks()
+
+        openPlayerMenu("movie_audio")
+        composeRule.onNodeWithTag("movie_track_1:0")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("movie_track_2:0")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        val oldEngine = engine
+
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.CREATED
+        }
+        composeRule.waitForIdle()
+        assertTrue(oldEngine.released)
+
+        engine = FakeMoviePlayerEngine()
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(1, engineRequests.last().audioTypeIndex)
+        composeRule.onNodeWithTag("movie_track_menu").assertDoesNotExist()
+        composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
     }
 
     @Test

@@ -39,6 +39,14 @@ const val HLS_START_TOTAL_BUDGET_MS = 90_000L
 const val HLS_SESSION_LOST_MAX_ATTEMPTS = 3
 private const val HLS_SESSION_LOST_MIN_DELAY_MS = 2_000L
 
+private val MOVIE_HLS_REQUEST_PATH = Regex(
+    "^/api/movies/[^/]+/hls/[^/]+/(?:playlist\\.m3u8|init\\.mp4|segment_[0-9]+\\.m4s)$",
+)
+
+/** True only for the movie HLS routes whose assets are owned by an ephemeral FFmpeg session. */
+fun isMovieHlsRequestPath(path: String?): Boolean =
+    path != null && MOVIE_HLS_REQUEST_PATH.matches(path)
+
 /** Session start second for a resume at [requestedSec], rewound and clamped at zero. */
 fun hlsResumeStartSec(requestedSec: Double): Int =
     floor(max(0.0, requestedSec - HLS_RESUME_REWIND_BUFFER_SEC)).toInt()
@@ -70,12 +78,17 @@ fun sessionLostRetryDelayMs(attempt: Int): Long? {
 
 /**
  * Whether a mid-play load failure should recreate the session in place rather than surface as
- * a terminal error. Only a segment 404 means "the server-side session evaporated" (idle
- * eviction, restart); [recoveries] is how many recreations have already run since the last
- * healthy READY, so a genuinely missing movie cannot loop forever.
+ * a terminal error. Only a 404 from an ephemeral movie HLS playlist/init/segment means "the
+ * server-side session evaporated" (idle eviction, restart). Sideloaded WebVTT and unrelated
+ * endpoints retain ordinary HTTP handling. [recoveries] is how many recreations have already
+ * run since the last healthy READY, so a genuinely missing movie cannot loop forever.
  */
-fun shouldRecoverLostHlsSession(responseCode: Int?, recoveries: Int): Boolean =
-    responseCode == 404 && recoveries < HLS_SESSION_LOST_MAX_ATTEMPTS
+fun shouldRecoverLostHlsSession(
+    responseCode: Int?,
+    requestPath: String?,
+    recoveries: Int,
+): Boolean = responseCode == 404 && isMovieHlsRequestPath(requestPath) &&
+    recoveries < HLS_SESSION_LOST_MAX_ATTEMPTS
 
 /**
  * `Retry-After` seconds out of an HTTP header map. HttpURLConnection's map is case-preserving

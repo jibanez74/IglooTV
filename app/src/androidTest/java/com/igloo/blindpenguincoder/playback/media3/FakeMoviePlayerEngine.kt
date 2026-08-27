@@ -1,7 +1,9 @@
 package com.igloo.blindpenguincoder.playback.media3
 
+import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -16,6 +18,15 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
 
     private val _events = MutableSharedFlow<MoviePlayerEvent>(replay = 64)
     override val events: SharedFlow<MoviePlayerEvent> = _events
+    override var currentAudioTypeIndex: Int? = null
+        private set
+    override var currentSubtitleTypeIndex: Int? = null
+        private set
+
+    val audioTypeIndices = mutableMapOf<String, Int>()
+    val subtitleTypeIndices = mutableMapOf<String, Int>()
+    var surfaceCreateCount = 0
+        private set
 
     val commands = mutableListOf<String>()
 
@@ -34,7 +45,15 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
     private var hostActive = true
 
     @Composable
-    override fun VideoSurface(modifier: Modifier) = Unit
+    override fun VideoSurface(modifier: Modifier) {
+        AndroidView(
+            factory = { context ->
+                surfaceCreateCount++
+                View(context)
+            },
+            modifier = modifier,
+        )
+    }
 
     /**
      * Whether each [startPlayback] was told its position was a genuine resume point. Kept off
@@ -72,12 +91,19 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
 
     override fun selectAudioTrack(optionId: String) {
         if (released) return
+        audioTypeIndices[optionId]?.let { currentAudioTypeIndex = it }
         commands += "audio:$optionId"
     }
 
     override fun selectSubtitleTrack(optionId: String?) {
         if (released) return
+        currentSubtitleTypeIndex = optionId?.let(subtitleTypeIndices::get)
         commands += "subtitle:$optionId"
+    }
+
+    fun setCurrentTrackSelection(audioTypeIndex: Int?, subtitleTypeIndex: Int?) {
+        currentAudioTypeIndex = audioTypeIndex
+        currentSubtitleTypeIndex = subtitleTypeIndex
     }
 
     override fun selectPlaybackMode(optionId: String) {

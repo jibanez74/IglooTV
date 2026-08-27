@@ -31,12 +31,13 @@ class HlsLoadErrorPolicyTest {
     private fun httpError(
         responseCode: Int,
         retryAfter: String? = null,
+        path: String = "/api/movies/7/hls/remux/segment_1.m4s",
     ): HttpDataSource.InvalidResponseCodeException = HttpDataSource.InvalidResponseCodeException(
         responseCode,
         /* responseMessage= */ null,
         /* cause= */ null,
         retryAfter?.let { mapOf("Retry-After" to listOf(it)) } ?: emptyMap(),
-        DataSpec(android.net.Uri.parse("https://server/segment_1.m4s")),
+        DataSpec(android.net.Uri.parse("https://server$path")),
         ByteArray(0),
     )
 
@@ -61,6 +62,20 @@ class HlsLoadErrorPolicyTest {
         // 503 is the documented "segment not encoded yet / no capacity" answer, and the header
         // is the server telling us how long FFmpeg needs.
         assertEquals(9_000L, policy.getRetryDelayMsFor(errorInfo(httpError(503, "9"), errorCount = 1)))
+    }
+
+    @Test
+    fun everyMovieHlsAssetGetsPatient503Handling() {
+        listOf(
+            "/api/movies/7/hls/remux/playlist.m3u8",
+            "/api/movies/7/hls/remux/init.mp4",
+            "/api/movies/7/hls/remux/segment_1.m4s",
+        ).forEach { path ->
+            assertEquals(
+                5_000L,
+                policy.getRetryDelayMsFor(errorInfo(httpError(503, path = path), errorCount = 1)),
+            )
+        }
     }
 
     @Test
@@ -92,6 +107,16 @@ class HlsLoadErrorPolicyTest {
             C.TIME_UNSET,
             policy.getRetryDelayMsFor(errorInfo(httpError(404), errorCount = 99)),
         )
+    }
+
+    @Test
+    fun aWebVtt503KeepsMedia3sOrdinaryHandling() {
+        val failure = errorInfo(
+            httpError(503, path = "/api/movies/7/subtitles/0/web.vtt"),
+            errorCount = 1,
+        )
+        val default = DefaultLoadErrorHandlingPolicyProbe()
+        assertEquals(default.retryDelayMsFor(failure), policy.getRetryDelayMsFor(failure))
     }
 
     @Test

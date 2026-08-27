@@ -561,6 +561,21 @@ fun IglooApp(
                 onPlaybackModeRequested = { mode ->
                     moviePlayRequest = moviePlayRequest?.copy(mode = mode)
                 },
+                onTrackSelectionChanged = { audioTypeIndex, subtitleTypeIndex ->
+                    moviePlayRequest = moviePlayRequest?.let { current ->
+                        if (
+                            current.audioTypeIndex == audioTypeIndex &&
+                            current.subtitleTypeIndex == subtitleTypeIndex
+                        ) {
+                            current
+                        } else {
+                            current.copy(
+                                audioTypeIndex = audioTypeIndex,
+                                subtitleTypeIndex = subtitleTypeIndex,
+                            )
+                        }
+                    }
+                },
                 engineFactory = moviePlayerEngineFactory,
             )
         }

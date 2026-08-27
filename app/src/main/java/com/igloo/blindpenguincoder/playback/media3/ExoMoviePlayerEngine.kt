@@ -39,6 +39,7 @@ import com.igloo.blindpenguincoder.playback.hls.HlsSessionStart
 import com.igloo.blindpenguincoder.playback.hls.HlsStartException
 import com.igloo.blindpenguincoder.playback.hls.effectivePlaybackMode
 import com.igloo.blindpenguincoder.playback.hls.hlsResumeStartSec
+import com.igloo.blindpenguincoder.playback.hls.isMovieHlsRequestPath
 import com.igloo.blindpenguincoder.playback.hls.shouldRebaseHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRecoverLostHlsSession
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
@@ -92,8 +93,10 @@ internal class ExoMoviePlayerEngine(
     private var pendingMode: PlaybackMode? = null
     /** What the prepared source actually uses; the Quality menu reports this truth. */
     private var effectiveMode = request.mode
-    private var currentAudioTypeIndex = request.audioTypeIndex
-    private var currentSubtitleTypeIndex = request.subtitleTypeIndex
+    override var currentAudioTypeIndex: Int? = request.audioTypeIndex
+        private set
+    override var currentSubtitleTypeIndex: Int? = request.subtitleTypeIndex
+        private set
     /** Absolute movie second where the prepared source's own zero sits; 0 for direct play. */
     private var timelineOffsetSec = 0.0
     private var restartJob: Job? = null
@@ -577,8 +580,14 @@ internal class ExoMoviePlayerEngine(
      * [shouldRecoverLostHlsSession]. A successful READY resets the budget.
      */
     private fun recoverFromLostHlsSession(error: PlaybackException): Boolean {
-        val responseCode = httpErrorCause(error)?.responseCode
-        if (!shouldRecoverLostHlsSession(responseCode, sessionLostRecoveries)) return false
+        val http = httpErrorCause(error)
+        if (
+            !shouldRecoverLostHlsSession(
+                responseCode = http?.responseCode,
+                requestPath = http?.dataSpec?.uri?.path,
+                recoveries = sessionLostRecoveries,
+            )
+        ) return false
         sessionLostRecoveries++
         controller.noteSessionLost()
         restartInPlace(requestedMode, currentAudioTypeIndex, currentAbsoluteSec())
@@ -611,12 +620,16 @@ internal class ExoMoviePlayerEngine(
         }
     }
 
-    private fun errorEvent(error: PlaybackException): MoviePlayerEvent.Error = playerErrorEvent(
-        errorCode = error.errorCode,
-        errorCodeName = error.errorCodeName,
-        httpResponseCode = httpErrorCause(error)?.responseCode,
-        isHls = isHls,
-    )
+    private fun errorEvent(error: PlaybackException): MoviePlayerEvent.Error {
+        val http = httpErrorCause(error)
+        return playerErrorEvent(
+            errorCode = error.errorCode,
+            errorCodeName = error.errorCodeName,
+            httpResponseCode = http?.responseCode,
+            isHls = isHls,
+            httpRequestPath = http?.dataSpec?.uri?.path,
+        )
+    }
 
     private fun emit(event: MoviePlayerEvent) {
         if (playbackIntent.released) return

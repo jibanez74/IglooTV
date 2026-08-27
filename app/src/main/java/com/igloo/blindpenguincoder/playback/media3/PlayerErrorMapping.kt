@@ -6,6 +6,7 @@ package com.igloo.blindpenguincoder.playback.media3
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
+import com.igloo.blindpenguincoder.playback.hls.isMovieHlsRequestPath
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_BUSY_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_MESSAGE
@@ -31,13 +32,16 @@ internal fun playerErrorEvent(
     errorCodeName: String,
     httpResponseCode: Int?,
     isHls: Boolean,
+    httpRequestPath: String?,
 ): MoviePlayerEvent.Error = when {
     httpResponseCode == 401 -> MoviePlayerEvent.Error(
         message = PLAYBACK_UNAUTHORIZED_MESSAGE,
         unauthorized = true,
     )
-    httpResponseCode == 404 && isHls -> MoviePlayerEvent.Error(PLAYBACK_SESSION_LOST_MESSAGE)
-    httpResponseCode == 503 && isHls -> MoviePlayerEvent.Error(PLAYBACK_SERVER_BUSY_MESSAGE)
+    httpResponseCode == 404 && isMovieHlsRequestPath(httpRequestPath) ->
+        MoviePlayerEvent.Error(PLAYBACK_SESSION_LOST_MESSAGE)
+    httpResponseCode == 503 && isMovieHlsRequestPath(httpRequestPath) ->
+        MoviePlayerEvent.Error(PLAYBACK_SERVER_BUSY_MESSAGE)
     httpResponseCode != null -> MoviePlayerEvent.Error(
         playbackServerRefusedMessage(httpResponseCode),
     )

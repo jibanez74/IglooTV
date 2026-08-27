@@ -17,7 +17,12 @@ class PlayerErrorMappingTest {
         errorCodeName: String = "ERROR_CODE_UNSPECIFIED",
         httpResponseCode: Int? = null,
         isHls: Boolean = false,
-    ) = playerErrorEvent(errorCode, errorCodeName, httpResponseCode, isHls)
+        httpRequestPath: String? = if (isHls && httpResponseCode != null) {
+            "/api/movies/7/hls/remux/segment_1.m4s"
+        } else {
+            null
+        },
+    ) = playerErrorEvent(errorCode, errorCodeName, httpResponseCode, isHls, httpRequestPath)
 
     // --- HTTP statuses outrank error codes ---
 
@@ -45,6 +50,30 @@ class PlayerErrorMappingTest {
         assertEquals(
             "The server refused the stream (HTTP 503).",
             event(httpResponseCode = 503, isHls = false).message,
+        )
+    }
+
+    @Test
+    fun `a WebVTT 404 keeps ordinary HTTP handling during hls playback`() {
+        assertEquals(
+            "The server refused the stream (HTTP 404).",
+            event(
+                httpResponseCode = 404,
+                isHls = true,
+                httpRequestPath = "/api/movies/7/subtitles/0/web.vtt",
+            ).message,
+        )
+    }
+
+    @Test
+    fun `a WebVTT 503 keeps ordinary HTTP handling during hls playback`() {
+        assertEquals(
+            "The server refused the stream (HTTP 503).",
+            event(
+                httpResponseCode = 503,
+                isHls = true,
+                httpRequestPath = "/api/movies/7/subtitles/0/web.vtt",
+            ).message,
         )
     }
 

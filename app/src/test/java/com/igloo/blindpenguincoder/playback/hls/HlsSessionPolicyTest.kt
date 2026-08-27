@@ -144,17 +144,43 @@ class HlsSessionPolicyTest {
     // --- mid-play lost-session recovery ---
 
     @Test
-    fun `only a segment 404 recovers in place`() {
-        assertTrue(shouldRecoverLostHlsSession(responseCode = 404, recoveries = 0))
-        assertFalse(shouldRecoverLostHlsSession(responseCode = 503, recoveries = 0))
-        assertFalse(shouldRecoverLostHlsSession(responseCode = 500, recoveries = 0))
-        assertFalse(shouldRecoverLostHlsSession(responseCode = null, recoveries = 0))
+    fun `only movie HLS asset 404s recover in place`() {
+        listOf(
+            "/api/movies/7/hls/remux/playlist.m3u8",
+            "/api/movies/7/hls/remux/init.mp4",
+            "/api/movies/7/hls/remux/segment_42.m4s",
+        ).forEach { path ->
+            assertTrue(shouldRecoverLostHlsSession(404, path, recoveries = 0))
+        }
+        assertFalse(
+            shouldRecoverLostHlsSession(
+                404,
+                "/api/movies/7/subtitles/0/web.vtt",
+                recoveries = 0,
+            ),
+        )
+        assertFalse(shouldRecoverLostHlsSession(404, "/api/watch-rooms/7/hls/playlist.m3u8", 0))
+        assertFalse(shouldRecoverLostHlsSession(503, MOVIE_SEGMENT_PATH, recoveries = 0))
+        assertFalse(shouldRecoverLostHlsSession(500, MOVIE_SEGMENT_PATH, recoveries = 0))
+        assertFalse(shouldRecoverLostHlsSession(null, MOVIE_SEGMENT_PATH, recoveries = 0))
     }
 
     @Test
     fun `recovery stops once the budget is spent`() {
-        assertTrue(shouldRecoverLostHlsSession(404, recoveries = HLS_SESSION_LOST_MAX_ATTEMPTS - 1))
-        assertFalse(shouldRecoverLostHlsSession(404, recoveries = HLS_SESSION_LOST_MAX_ATTEMPTS))
+        assertTrue(
+            shouldRecoverLostHlsSession(
+                404,
+                MOVIE_SEGMENT_PATH,
+                recoveries = HLS_SESSION_LOST_MAX_ATTEMPTS - 1,
+            ),
+        )
+        assertFalse(
+            shouldRecoverLostHlsSession(
+                404,
+                MOVIE_SEGMENT_PATH,
+                recoveries = HLS_SESSION_LOST_MAX_ATTEMPTS,
+            ),
+        )
     }
 
     // --- Retry-After header scan ---
@@ -190,5 +216,9 @@ class HlsSessionPolicyTest {
     @Test
     fun `the keepalive beats the server's five minute idle TTL`() {
         assertTrue(HLS_KEEPALIVE_INTERVAL_MS < 300_000L)
+    }
+
+    private companion object {
+        const val MOVIE_SEGMENT_PATH = "/api/movies/7/hls/remux/segment_1.m4s"
     }
 }
