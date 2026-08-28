@@ -725,7 +725,7 @@ until 2026-08-19.
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
 | `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `restingFill` / `contentColor` carry the §3.2 over-media ground where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
-| `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, `progressLabel` ("43 min left", rounded up, floored at one minute), `formatTimecode` ("1:01:15") and `formatSpokenTime` ("1 hour 1 minute 15 seconds") for the player's clock and its spoken form. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
+| `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, `progressLabel` ("43 min left", rounded up, floored at one minute), `formatTimecode` ("1:01:15"), sparse `formatSpokenTime` ("1 hour and 15 seconds"), and exact `formatSpokenTimeThroughSeconds` ("1 hour, 0 minutes, and 15 seconds"). The exact form floors to the last completed second and includes every unit from the largest relevant one through seconds, never a leading zero hour. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
 | `IglooNotice` | One announced line — `bodyMedium` / `mutedForeground`, `liveRegion = Polite`. For a message the user did not ask for and cannot act on: what a gate says after an action that already happened (§10, §11.1.1). Not an error card; no Retry. |
@@ -1357,6 +1357,13 @@ player, not this screen. A partially watched movie shows a 4dp strip (`primary` 
 `Black @ 0.40` track) and an "N min left" caption, from 30 seconds in until the position stops
 meaning anything — the server flips to watched at 98% — and never once the movie is watched.
 
+The visible caption stays deliberately coarse; Play's semantics carry the exact resume point.
+With progress, its content description is "Play", its `stateDescription` is "Resume from 1 hour,
+3 minutes, and 17 seconds", and its click action label is "Play". The state floors a fractional
+position to the last completed second and speaks every unit from the largest relevant one through
+seconds, including zero intermediate units. Without progress, the content description remains
+"Play {title}", the state is absent, and the click action label remains "Play".
+
 The strip belongs to **Play**, and is laid out to say so: Play and the strip share a column
 inside the action row, sized to Play's own intrinsic width, so the strip is exactly as wide as
 the button whose progress it reports. It sits `sm` below, which also clears Play's focus ring at
@@ -1509,8 +1516,8 @@ carries text the d-pad otherwise passes by:
 
 Without a spoken service the stops are not composed as targets and the chain is exactly the
 paragraph above — two extra presses between the actions and the cast rail would tax the most
-common path for no sighted benefit. Two companions to the same rule: the resume caption's
-"N min left" rides Play as its `stateDescription` (the caption's text node is unreachable), and
+common path for no sighted benefit. Two companions to the same rule: Play carries its exact
+"Resume from …" position as `stateDescription` (the coarse caption's text node is unreachable), and
 the pane title becomes the movie's own title once Loaded — a pane-title change is announced
 (§12), so the page names the film on arrival instead of the generic "Movie details" the loading
 and error states keep.

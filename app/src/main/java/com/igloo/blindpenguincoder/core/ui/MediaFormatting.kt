@@ -40,23 +40,34 @@ fun formatTimecode(seconds: Double): String {
     }
 }
 
-/**
- * `72.4` → `"1 minute and 12 seconds"`; timecodes read as digits are noise for a screen reader.
- * [includeSeconds] drops the seconds part for durations a listener only cares about in minutes —
- * except when nothing else is left to say, so a sub-minute position stays speakable.
- */
-fun formatSpokenTime(seconds: Double, includeSeconds: Boolean = true): String {
+/** `72.4` → `"1 minute and 12 seconds"`; empty units are omitted. */
+fun formatSpokenTime(seconds: Double): String = formatSpokenTime(seconds, throughSeconds = false)
+
+/** `3617.9` → `"1 hour, 0 minutes, and 17 seconds"`; exact through completed seconds. */
+fun formatSpokenTimeThroughSeconds(seconds: Double): String =
+    formatSpokenTime(seconds, throughSeconds = true)
+
+private fun formatSpokenTime(seconds: Double, throughSeconds: Boolean): String {
     val (hours, minutes, rest) = hms(seconds)
-    val parts = buildList {
-        if (hours > 0) add(if (hours == 1L) "1 hour" else "$hours hours")
-        if (minutes > 0) add(if (minutes == 1L) "1 minute" else "$minutes minutes")
-        if ((includeSeconds && rest > 0) || isEmpty()) {
-            add(if (rest == 1L) "1 second" else "$rest seconds")
+    val units = listOf(
+        hours to "hour",
+        minutes to "minute",
+        rest to "second",
+    )
+    val firstRelevantUnit = units.indexOfFirst { it.first > 0 }.takeIf { it >= 0 }
+        ?: units.lastIndex
+    val parts = units
+        .filterIndexed { index, unit ->
+            if (throughSeconds) index >= firstRelevantUnit else unit.first > 0
         }
-    }
+        .ifEmpty { listOf(units.last()) }
+        .map { (value, unit) ->
+            if (value == 1L) "1 $unit" else "$value ${unit}s"
+        }
     return when (parts.size) {
         1 -> parts.first()
-        else -> parts.dropLast(1).joinToString(", ") + " and " + parts.last()
+        2 -> parts.joinToString(" and ")
+        else -> parts.dropLast(1).joinToString(", ") + ", and " + parts.last()
     }
 }
 

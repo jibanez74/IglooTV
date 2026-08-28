@@ -33,7 +33,7 @@ class MediaFormattingTest {
     fun `spoken time drops empty parts and pluralizes`() {
         assertEquals("1 minute and 12 seconds", formatSpokenTime(72.4))
         assertEquals("2 minutes", formatSpokenTime(120.0))
-        assertEquals("1 hour, 1 minute and 15 seconds", formatSpokenTime(3675.0))
+        assertEquals("1 hour, 1 minute, and 15 seconds", formatSpokenTime(3675.0))
         assertEquals("1 second", formatSpokenTime(1.0))
         assertEquals("0 seconds", formatSpokenTime(0.0))
         // The whole-minute singular: this is the case the details screen's own spoken runtime
@@ -41,16 +41,34 @@ class MediaFormattingTest {
         assertEquals("1 minute", formatSpokenTime(60.0))
         assertEquals("1 hour", formatSpokenTime(3600.0))
         assertEquals("1 hour and 5 minutes", formatSpokenTime(3900.0))
-        assertEquals("1 hour, 30 minutes and 2 seconds", formatSpokenTime(5402.0))
+        assertEquals("1 hour, 30 minutes, and 2 seconds", formatSpokenTime(5402.0))
     }
 
     @Test
-    fun `spoken time can drop the seconds it does not need`() {
-        assertEquals("28 minutes", formatSpokenTime(1690.0, includeSeconds = false))
-        assertEquals("1 hour and 5 minutes", formatSpokenTime(3915.0, includeSeconds = false))
-        // Under a minute there is nothing else to say, so seconds come back regardless.
-        assertEquals("45 seconds", formatSpokenTime(45.0, includeSeconds = false))
-        assertEquals("0 seconds", formatSpokenTime(0.0, includeSeconds = false))
+    fun `exact spoken time includes every unit through completed seconds`() {
+        assertEquals("17 seconds", formatSpokenTimeThroughSeconds(17.9))
+        assertEquals("1 minute and 0 seconds", formatSpokenTimeThroughSeconds(60.9))
+        assertEquals(
+            "1 hour, 3 minutes, and 17 seconds",
+            formatSpokenTimeThroughSeconds(3797.9),
+        )
+        assertEquals(
+            "1 hour, 0 minutes, and 2 seconds",
+            formatSpokenTimeThroughSeconds(3602.0),
+        )
+    }
+
+    @Test
+    fun `exact spoken time pluralizes and clamps negative input`() {
+        assertEquals(
+            "1 hour, 1 minute, and 1 second",
+            formatSpokenTimeThroughSeconds(3661.0),
+        )
+        assertEquals(
+            "2 hours, 0 minutes, and 2 seconds",
+            formatSpokenTimeThroughSeconds(7202.0),
+        )
+        assertEquals("0 seconds", formatSpokenTimeThroughSeconds(-3.8))
     }
 
     @Test

@@ -462,8 +462,10 @@ private fun LibraryActionRow(
                 onClick = onPlay,
                 icon = IglooIcons.Play,
                 // The resume caption below is plain text a TV screen reader can never reach, so
-                // Play's own label says where it resumes from — pressing it is what resumes.
-                semanticLabel = movie.progress?.resumeFromLabel ?: "Play ${movie.title}",
+                // Play carries the exact resume point as state while its label stays the action.
+                semanticLabel = if (movie.progress != null) "Play" else "Play ${movie.title}",
+                stateDescription = movie.progress?.resumeStateDescription,
+                actionLabel = "Play",
                 recessed = rowHasFocus && !playFocused,
                 modifier = Modifier
                     .testTag("details_play")

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -26,6 +27,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.compose.ui.text.TextLayoutResult
 import com.igloo.blindpenguincoder.AnimationScaleRule
@@ -466,33 +469,41 @@ class MovieDetailsAccessibilityTest {
 
     /**
      * The resume caption under Play is plain text a TV screen reader can never reach, so Play's
-     * own label says where it resumes from — pressing it is what resumes. No state description
-     * rides along, or the position would be announced twice in two unrelated sentences.
+     * state carries the exact position while its name and action stay "Play". The coarse visible
+     * minutes-left caption does not ride the node and compete with the exact state.
      */
     @Test
-    fun playSaysWhereItResumesFromWhileThereIsProgress() {
+    fun playCarriesItsExactResumeStateWhileThereIsProgress() {
         setContent()
 
-        composeRule.onNodeWithTag("details_play")
+        val play = composeRule.onNodeWithTag("details_play")
+        play
+            .assertContentDescriptionEquals("Play")
+            .assertIsFocused()
             .assert(
                 SemanticsMatcher.expectValue(
-                    SemanticsProperties.ContentDescription,
-                    listOf("Play from 42 minutes"),
+                    SemanticsProperties.StateDescription,
+                    "Resume from 1 hour, 3 minutes, and 17 seconds",
                 ),
             )
-            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        assertEquals("Play", play.clickActionLabel())
+        composeRule.onAllNodes(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                "Resume from 1 hour, 3 minutes, and 17 seconds",
+            ),
+        ).assertCountEquals(1)
+
+        play.performKeyInput { pressKey(Key.DirectionCenter) }
+        assertEquals(1, plays)
 
         state = MovieDetailsState.Loaded(testMovieDetails(progress = null))
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("details_play")
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.ContentDescription,
-                    listOf("Play Heat"),
-                ),
-            )
+        play
+            .assertContentDescriptionEquals("Play Heat")
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+        assertEquals("Play", play.clickActionLabel())
     }
 
     /** A pane-title change is spoken, so the loaded page names the film, not a generic frame. */

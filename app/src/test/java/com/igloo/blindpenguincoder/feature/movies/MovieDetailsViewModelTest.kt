@@ -187,7 +187,7 @@ class MovieDetailsViewModelTest {
         assertEquals("$187,436,818", movie.about.revenue)
         assertEquals(0.176f, requireNotNull(movie.progress).fraction, 0.001f)
         assertEquals("140 min left", movie.progress.minutesLeftLabel)
-        assertEquals("Play from 30 minutes", movie.progress.resumeFromLabel)
+        assertEquals("Resume from 30 minutes and 0 seconds", movie.progress.resumeStateDescription)
         assertEquals(false, movie.watched)
         assertEquals(true, movie.liked)
         assertEquals(
@@ -368,7 +368,17 @@ class MovieDetailsViewModelTest {
         assertNull(progressFor(29.0, 7200.0))
         assertEquals("120 min left", progressFor(30.0, 7200.0)?.minutesLeftLabel)
         // The very first resumable position has nothing but seconds to say.
-        assertEquals("Play from 30 seconds", progressFor(30.0, 7200.0)?.resumeFromLabel)
+        assertEquals(
+            "Resume from 30 seconds",
+            progressFor(30.0, 7200.0)?.resumeStateDescription,
+        )
+        val exact = requireNotNull(progressFor(3797.9, 7200.0))
+        assertEquals(3797.9f / 7200f, exact.fraction, 0.0001f)
+        assertEquals("57 min left", exact.minutesLeftLabel)
+        assertEquals(
+            "Resume from 1 hour, 3 minutes, and 17 seconds",
+            exact.resumeStateDescription,
+        )
         assertNull(progressFor(7100.0, 7200.0))
         assertNull(progressFor(null, null))
     }
@@ -922,7 +932,7 @@ class MovieDetailsViewModelTest {
         assertEquals(false, movie.watched)
         val progress = requireNotNull(movie.progress)
         assertEquals("140 min left", progress.minutesLeftLabel)
-        assertEquals("Play from 30 minutes", progress.resumeFromLabel)
+        assertEquals("Resume from 30 minutes and 0 seconds", progress.resumeStateDescription)
     }
 
     @Test

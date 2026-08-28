@@ -167,7 +167,7 @@ internal fun testMovieDetails(
     progress: ProgressUi? = ProgressUi(
         fraction = 0.25f,
         minutesLeftLabel = "127 min left",
-        resumeFromLabel = "Play from 42 minutes",
+        resumeStateDescription = "Resume from 1 hour, 3 minutes, and 17 seconds",
     ),
     cast: List<CastMemberUi> = testCast,
     extraVideos: List<ExtraVideoUi> = testExtraVideos,

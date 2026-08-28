@@ -8,7 +8,7 @@ import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
-import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
+import com.igloo.blindpenguincoder.core.ui.formatSpokenTimeThroughSeconds
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.progressLabel
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
@@ -75,7 +75,7 @@ data class AboutUi(
 data class ProgressUi(
     val fraction: Float,
     val minutesLeftLabel: String,
-    val resumeFromLabel: String,
+    val resumeStateDescription: String,
 )
 
 /**
@@ -733,7 +733,8 @@ class MovieDetailsViewModel(
         return ProgressUi(
             fraction = progressFraction(progressSec, durationSec),
             minutesLeftLabel = progressLabel(progressSec, durationSec),
-            resumeFromLabel = "Play from ${formatSpokenTime(progressSec, includeSeconds = false)}",
+            resumeStateDescription =
+                "Resume from ${formatSpokenTimeThroughSeconds(progressSec)}",
         )
     }
 
