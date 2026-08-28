@@ -52,6 +52,7 @@ import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.hlsAudioConversionFor
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
+import com.igloo.blindpenguincoder.playback.model.subtitleRenderableInMode
 import kotlin.math.floor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -166,7 +167,14 @@ internal class ExoMoviePlayerEngine(
                         isHls -> hlsAudioTrackOptions(request.audioTracks, effectiveAudioOrdinal())
                         else -> audioTrackOptions(tracks)
                     },
-                    subtitles = subtitleTrackOptions(tracks),
+                    subtitles = when {
+                        isHls -> hlsSubtitleTrackOptions(
+                            tracks,
+                            request.subtitleTracks,
+                            currentSubtitleTypeIndex,
+                        )
+                        else -> subtitleTrackOptions(tracks)
+                    },
                 ),
             )
         }
@@ -305,8 +313,12 @@ internal class ExoMoviePlayerEngine(
             builder.clearOverridesOfType(C.TRACK_TYPE_TEXT)
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
         } else {
+            // Resolve the ordinal before committing anything: an id that maps to no wire
+            // ordinal must not half-apply, or the remembered choice gets corrupted to null
+            // while a track still renders.
+            val typeIndex = subtitleTypeIndexForOption(player.currentTracks, optionId) ?: return
             val override = overrideFor(optionId) ?: return
-            currentSubtitleTypeIndex = subtitleTypeIndexForOption(player.currentTracks, optionId)
+            currentSubtitleTypeIndex = typeIndex
             builder.setOverrideForType(override)
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
         }
@@ -395,6 +407,8 @@ internal class ExoMoviePlayerEngine(
         val generation = ++restartGeneration
         pendingMode = mode
         currentAudioTypeIndex = audioTypeIndex
+        // currentSubtitleTypeIndex is deliberately not reassigned: it is the cross-mode memory
+        // of the user's choice, and prepareSource decides per source whether it can render.
         initialSelectionApplied = false
         controller.cancelKeepalive()
         // Freeze the old source while preflight runs without changing transport intent.
@@ -471,8 +485,14 @@ internal class ExoMoviePlayerEngine(
 
     private fun prepareSource(source: MediaSource, positionMs: Long) {
         if (!playbackIntent.acceptsCommands) return
+        // The chosen ordinal may name a stream this source cannot serve (an image-based
+        // subtitle under HLS). Then the text renderer goes off outright and the stale override
+        // is dropped: leaving the type enabled with no resolvable override would let Media3
+        // auto-select an unrelated sideloaded track.
+        val subtitleOn = request.subtitleRenderableInMode(currentSubtitleTypeIndex, isHls)
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, currentSubtitleTypeIndex == null)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !subtitleOn)
+            .apply { if (!subtitleOn) clearOverridesOfType(C.TRACK_TYPE_TEXT) }
             .build()
         player.setMediaSource(source, positionMs)
         player.playWhenReady = playbackIntent.shouldPlay
@@ -564,6 +584,10 @@ internal class ExoMoviePlayerEngine(
                 ?.let { overrideFor(it, tracks) }
                 ?.let(builder::setOverrideForType)
         }
+        // A null option id here is the deterministic-off path, not a gap: under HLS a
+        // remembered image-based ordinal matches no sideloaded group, and prepareSource has
+        // already disabled the text type for it. Back under Direct the container's Nth text
+        // group re-resolves and the override below restores the choice.
         currentSubtitleTypeIndex
             ?.let { subtitleOptionIdFor(tracks, it) }
             ?.let { overrideFor(it, tracks) }
@@ -771,9 +795,11 @@ internal class ExoMoviePlayerEngine(
         }
     }
 
+    /** Instrumentation seam: the deterministic subtitle off/on contract is asserted on these. */
+    internal val currentTrackSelectionParameters get() = player.trackSelectionParameters
+
     private companion object {
         const val TICK_INTERVAL_MS = 500L
-        const val SIDELOADED_SUBTITLE_ID_PREFIX = "sub:"
     }
 }
 

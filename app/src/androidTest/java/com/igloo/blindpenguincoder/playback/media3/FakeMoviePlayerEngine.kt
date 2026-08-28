@@ -97,7 +97,13 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
 
     override fun selectSubtitleTrack(optionId: String?) {
         if (released) return
-        currentSubtitleTypeIndex = optionId?.let(subtitleTypeIndices::get)
+        // Mirrors the real engine: null is an explicit "off"; an id that resolves to no wire
+        // ordinal never corrupts the remembered choice.
+        if (optionId == null) {
+            currentSubtitleTypeIndex = null
+        } else {
+            subtitleTypeIndices[optionId]?.let { currentSubtitleTypeIndex = it }
+        }
         commands += "subtitle:$optionId"
     }
 

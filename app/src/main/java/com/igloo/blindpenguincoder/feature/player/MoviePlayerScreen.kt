@@ -1009,7 +1009,9 @@ private fun TrackMenuDialog(
                         IglooRadioRow(
                             label = option.label,
                             selected = option.selected,
-                            onSelect = { onSelect(option.id) },
+                            // Inert rows (an image-based subtitle under HLS) stay focusable
+                            // and announced but never activate — matching the pre-play dialog.
+                            onSelect = if (option.enabled) ({ onSelect(option.id) }) else null,
                             modifier = Modifier
                                 .rowFocus(row++)
                                 .testTag("movie_track_${option.id}"),

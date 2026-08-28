@@ -8,6 +8,9 @@ import java.util.Locale
  * wire model or a Media3 Format.
  */
 
+/** Marks a subtitle row the current mode cannot serve, pre-play and in-player alike. */
+internal const val IMAGE_BASED_SUFFIX = " (image-based)"
+
 /** The web's `describePlaybackChannelLayout`: named layouts first, then channel-count guesses. */
 internal fun describeChannelLayout(channelLayout: String?, channels: Long): String {
     val layout = channelLayout?.lowercase(Locale.US).orEmpty()

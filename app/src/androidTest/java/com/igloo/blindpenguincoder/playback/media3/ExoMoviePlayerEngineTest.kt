@@ -3,6 +3,8 @@
 package com.igloo.blindpenguincoder.playback.media3
 
 import android.os.SystemClock
+import androidx.media3.common.C
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -23,6 +25,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -85,6 +88,8 @@ class ExoMoviePlayerEngineTest {
             PlayableAudioTrack(label = "English · Surround", codec = "eac3", isDefault = true),
             PlayableAudioTrack(label = "Spanish · Stereo", codec = "aac"),
         ),
+        subtitleTypeIndex: Int? = null,
+        subtitleTracks: List<PlayableSubtitleTrack> = listOf(PlayableSubtitleTrack(label = "English")),
     ) = MoviePlayRequest(
         movieId = 7,
         title = "Heat",
@@ -92,9 +97,9 @@ class ExoMoviePlayerEngineTest {
         mimeType = "video/x-matroska",
         mode = mode,
         audioTypeIndex = null,
-        subtitleTypeIndex = null,
+        subtitleTypeIndex = subtitleTypeIndex,
         audioTracks = audioTracks,
-        subtitleTracks = listOf(PlayableSubtitleTrack(label = "English")),
+        subtitleTracks = subtitleTracks,
         resumeAtSec = null,
         durationSec = 7200.0,
     )
@@ -533,6 +538,117 @@ class ExoMoviePlayerEngineTest {
         onMain { engine.selectAudioTrack("audio:0") }
         waitFor("the switch back") { api.fetched.size == 3 }
         assertEquals(HlsAudioProfile.DolbyDigitalPlus, api.fetched[2].audioProfile)
+    }
+
+    // --- the subtitle choice across Direct/HLS swaps ---
+
+    /** The wire list of a movie mixing text and image-based streams; ordinal 1 is the bitmap. */
+    private fun mixedSubtitles() = listOf(
+        PlayableSubtitleTrack(label = "English"),
+        PlayableSubtitleTrack(label = "English · PGS", imageBased = true),
+        PlayableSubtitleTrack(label = "Spanish"),
+    )
+
+    private fun selectedQualityId(engine: MoviePlayerEngine): String? =
+        engine.events.replayCache
+            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .lastOrNull()
+            ?.options
+            ?.singleOrNull { it.selected }
+            ?.id
+
+    /** Reads the live selection parameters on the main thread via the instrumentation seam. */
+    private fun selectionParameters(engine: MoviePlayerEngine): TrackSelectionParameters {
+        lateinit var params: TrackSelectionParameters
+        onMain { params = (engine as ExoMoviePlayerEngine).currentTrackSelectionParameters }
+        return params
+    }
+
+    private fun hasTextOverride(params: TrackSelectionParameters): Boolean =
+        params.overrides.keys.any { it.type == C.TRACK_TYPE_TEXT }
+
+    @Test
+    fun switchingToHlsWithABitmapSubtitleGoesDeterministicallyOffAndKeepsTheChoice() {
+        val api = FakeHlsApi()
+        val engine = engine(
+            playRequest(subtitleTypeIndex = 1, subtitleTracks = mixedSubtitles()),
+            api,
+        )
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the direct source") { selectedQualityId(engine) == PlaybackMode.Direct.name }
+
+        onMain { engine.selectPlaybackMode(PlaybackMode.Remux.name) }
+        waitFor("the committed remux source") { selectedQualityId(engine) == PlaybackMode.Remux.name }
+
+        // The choice survives, but nothing may render for it: text off, no stale override left
+        // for Media3 to trade against a sideloaded VTT.
+        assertEquals(1, engine.currentSubtitleTypeIndex)
+        val params = selectionParameters(engine)
+        assertTrue(params.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+        assertFalse(hasTextOverride(params))
+    }
+
+    @Test
+    fun reconstructingIntoHlsWithABitmapOrdinalStaysOffButKeepsTheOrdinal() {
+        // The lifecycle path: a rebuilt engine is seeded straight from the persisted request.
+        val api = FakeHlsApi()
+        val engine = engine(
+            playRequest(mode = PlaybackMode.Remux, subtitleTypeIndex = 1, subtitleTracks = mixedSubtitles()),
+            api,
+        )
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = false) }
+        waitFor("the committed remux source") { selectedQualityId(engine) == PlaybackMode.Remux.name }
+
+        assertEquals(1, engine.currentSubtitleTypeIndex)
+        val params = selectionParameters(engine)
+        assertTrue(params.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+        assertFalse(hasTextOverride(params))
+    }
+
+    @Test
+    fun returningToDirectReenablesTextForTheRememberedChoice() {
+        // The override itself needs real track groups, which the TEST-NET fixture never
+        // produces; that mapping leg is covered by TrackOptionsTest. What the engine owns is
+        // keeping the ordinal and re-enabling the text type for the swap-apply to use.
+        val api = FakeHlsApi()
+        val engine = engine(
+            playRequest(mode = PlaybackMode.Remux, subtitleTypeIndex = 1, subtitleTracks = mixedSubtitles()),
+            api,
+        )
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = false) }
+        waitFor("the committed remux source") { selectedQualityId(engine) == PlaybackMode.Remux.name }
+
+        onMain { engine.selectPlaybackMode(PlaybackMode.Direct.name) }
+        waitFor("the direct source") { selectedQualityId(engine) == PlaybackMode.Direct.name }
+
+        assertEquals(1, engine.currentSubtitleTypeIndex)
+        assertFalse(selectionParameters(engine).disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+    }
+
+    @Test
+    fun aTextOrdinalKeepsTextEnabledUnderHls() {
+        val api = FakeHlsApi()
+        val engine = engine(
+            playRequest(mode = PlaybackMode.Remux, subtitleTypeIndex = 0, subtitleTracks = mixedSubtitles()),
+            api,
+        )
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = false) }
+        waitFor("the committed remux source") { selectedQualityId(engine) == PlaybackMode.Remux.name }
+
+        assertEquals(0, engine.currentSubtitleTypeIndex)
+        assertFalse(selectionParameters(engine).disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+    }
+
+    @Test
+    fun anUnresolvableSubtitleOptionIdIsANoOp() {
+        // An id that maps to no wire ordinal must not half-apply and corrupt the memory.
+        val engine = engine(playRequest(subtitleTypeIndex = 1, subtitleTracks = mixedSubtitles()))
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the direct source") { selectedQualityId(engine) == PlaybackMode.Direct.name }
+
+        onMain { engine.selectSubtitleTrack("5:0") }
+        instrumentation.waitForIdleSync()
+        assertEquals(1, engine.currentSubtitleTypeIndex)
     }
 
     // --- failing honestly ---

@@ -21,7 +21,12 @@ interface MoviePlayerEngine {
     /** Engine-authoritative type ordinal; null keeps the container's default audio. */
     val currentAudioTypeIndex: Int?
 
-    /** Engine-authoritative type ordinal; null means subtitles are off. */
+    /**
+     * The user's chosen subtitle type ordinal — engine-authoritative, null means subtitles are
+     * off. Product policy: the choice may name an image-based stream the current HLS source
+     * cannot serve; then nothing renders (never a substituted track), but the choice is kept,
+     * persisted, and restored when a source that can serve it returns.
+     */
     val currentSubtitleTypeIndex: Int?
 
     /** Draws the engine-owned video and subtitle surfaces behind Igloo's Compose chrome. */

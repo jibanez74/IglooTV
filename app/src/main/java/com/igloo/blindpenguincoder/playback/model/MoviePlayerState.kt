@@ -5,11 +5,16 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 /** The movie player's phases; the chrome renders exactly one of these at a time. */
 enum class MoviePlayerPhase { AwaitingResume, Loading, Playing, Paused, Buffering, Ended, Error }
 
-/** One row of an in-player track menu. [id] is engine-opaque ("group:track" for ExoPlayer). */
+/**
+ * One row of an in-player track menu. [id] is engine-opaque ("group:track" for ExoPlayer).
+ * A row with [enabled] false is rendered inert — focusable and announced, but not activatable —
+ * for a stream the current source cannot serve (an image-based subtitle under HLS).
+ */
 data class TrackOption(
     val id: String,
     val label: String,
     val selected: Boolean,
+    val enabled: Boolean = true,
 )
 
 /**

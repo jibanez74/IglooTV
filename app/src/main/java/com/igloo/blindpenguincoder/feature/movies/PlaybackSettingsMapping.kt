@@ -7,6 +7,7 @@ import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.audioCodecDisplayName
 import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
 import com.igloo.blindpenguincoder.playback.model.describeChannelLayout
+import com.igloo.blindpenguincoder.playback.model.IMAGE_BASED_SUFFIX
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.isUnreliableHlsAudio
 import com.igloo.blindpenguincoder.playback.model.languageDisplayName
@@ -222,4 +223,3 @@ private val BITMAP_SUBTITLE_CODECS = setOf(
 
 internal const val AUDIO_DEFAULT_LABEL = "Default"
 internal const val SUBTITLES_NONE_LABEL = "None"
-private const val IMAGE_BASED_SUFFIX = " (image-based)"

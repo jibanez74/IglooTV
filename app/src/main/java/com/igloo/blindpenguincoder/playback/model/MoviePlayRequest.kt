@@ -49,6 +49,21 @@ data class MoviePlayRequest(
         get() = effectiveAudioTypeIndex?.let(audioTracks::getOrNull)
 }
 
+/**
+ * Whether the chosen subtitle ordinal can actually render on a source in the given mode. The
+ * chosen ordinal is remembered even where it cannot render — an HLS session only serves the
+ * text streams as sideloaded VTT — so the player must disable the text renderer outright
+ * rather than leave Media3 free to auto-select an unrelated track. Direct trusts the container
+ * over [MoviePlayRequest.subtitleTracks]: the wire list can be degraded or empty while the
+ * demuxed file still carries the stream.
+ */
+internal fun MoviePlayRequest.subtitleRenderableInMode(typeIndex: Int?, hls: Boolean): Boolean =
+    when {
+        typeIndex == null -> false
+        !hls -> true
+        else -> subtitleTracks.getOrNull(typeIndex)?.imageBased == false
+    }
+
 /** One audio stream as the player needs it: menu label plus the capability gate's codec facts. */
 @Serializable
 data class PlayableAudioTrack(

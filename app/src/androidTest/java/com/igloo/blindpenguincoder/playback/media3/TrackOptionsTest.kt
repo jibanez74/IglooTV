@@ -7,6 +7,7 @@ import androidx.media3.common.TrackGroup
 import androidx.media3.common.Tracks
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
+import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.TrackOption
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -196,6 +197,60 @@ class TrackOptionsTest {
         assertNull(formatIdForOptionId(tracks, "1:5"))
         assertNull(formatIdForOptionId(tracks, "9:0"))
         assertNull(formatIdForOptionId(tracks, "nonsense"))
+    }
+
+    private val mixedWire = listOf(
+        PlayableSubtitleTrack(label = "English · PGS", imageBased = true),
+        PlayableSubtitleTrack(label = "English"),
+        PlayableSubtitleTrack(label = "Spanish"),
+    )
+
+    @Test
+    fun hlsSubtitleRowsInterleaveInertBitmapRowsInWireOrder() {
+        val tracks = tracks(
+            group(audioFormat("en"), C.TRACK_TYPE_AUDIO, selected = true),
+            group(textFormat("en", id = "sub:1"), C.TRACK_TYPE_TEXT, selected = true),
+            group(textFormat("es", id = "sub:2"), C.TRACK_TYPE_TEXT, selected = false),
+        )
+        assertEquals(
+            listOf(
+                TrackOption("image:0", "English · PGS (image-based)", selected = false, enabled = false),
+                TrackOption("1:0", "English", selected = true),
+                TrackOption("2:0", "Spanish", selected = false),
+            ),
+            hlsSubtitleTrackOptions(tracks, mixedWire, chosenTypeIndex = 1),
+        )
+    }
+
+    @Test
+    fun aRememberedBitmapChoiceMarksItsInertRowSelected() {
+        // Nothing renders for the choice — prepareSource disabled the text type — but the menu
+        // still shows it as the selected row, so the user sees their choice was kept.
+        val tracks = tracks(
+            group(textFormat("en", id = "sub:1"), C.TRACK_TYPE_TEXT, selected = false),
+            group(textFormat("es", id = "sub:2"), C.TRACK_TYPE_TEXT, selected = false),
+        )
+        val options = hlsSubtitleTrackOptions(tracks, mixedWire, chosenTypeIndex = 0)
+        assertEquals(
+            TrackOption("image:0", "English · PGS (image-based)", selected = true, enabled = false),
+            options.first(),
+        )
+        assertEquals(listOf(false, false), options.drop(1).map { it.selected })
+    }
+
+    @Test
+    fun aTextRowWhoseSideloadHasNotResolvedIsOmittedForThatEmission() {
+        // Only sub:2 has resolved so far; the next tracks change re-emits the full list.
+        val tracks = tracks(
+            group(textFormat("es", id = "sub:2"), C.TRACK_TYPE_TEXT, selected = false),
+        )
+        assertEquals(
+            listOf(
+                TrackOption("image:0", "English · PGS (image-based)", selected = false, enabled = false),
+                TrackOption("0:0", "Spanish", selected = false),
+            ),
+            hlsSubtitleTrackOptions(tracks, mixedWire, chosenTypeIndex = null),
+        )
     }
 
     @Test

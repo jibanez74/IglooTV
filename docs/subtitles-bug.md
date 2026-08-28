@@ -1,6 +1,6 @@
 # Bitmap subtitle state can survive an HLS switch
 
-- Status: Open / deferred
+- Status: Fixed (2026-08-28)
 - Recorded: 2026-08-28
 - Scope: Movie playback subtitle selection during Direct-to-HLS source changes
 
@@ -35,19 +35,51 @@ serve them. HLS supports only text subtitle tracks extracted by the backend as W
 preserve the original type-relative stream ordinals because those ordinals are also backend track
 indexes; filtering the request model would shift later subtitle URLs.
 
-This issue is documentation-only in the current work. No subtitle implementation or test behavior
-is changed here.
+## Resolution
 
-## Future acceptance criteria
+Product policy, chosen explicitly: **the user's subtitle choice is remembered and restored, never
+silently substituted.**
 
-- Entering HLS with a selected bitmap subtitle produces an explicit, deterministic subtitle state;
-  it never relies on Media3 auto-selection.
+- `currentSubtitleTypeIndex` is redefined as the user's *chosen* ordinal, not the rendered one
+  (`MoviePlayerEngine` KDoc carries the contract). It survives in-place source swaps, host
+  persistence, and engine reconstruction unchanged.
+- Whether the choice can render on the current source is decided per prepare by
+  `MoviePlayRequest.subtitleRenderableInMode`: under HLS a bitmap (or out-of-range) ordinal
+  disables the text track type outright and clears any text override, so nothing renders and
+  Media3 has no room to auto-select a sideloaded VTT. Returning to Direct re-enables the text
+  type and the swap-apply restores the bitmap group override.
+- The in-player Subtitles menu under HLS is built from the wire list
+  (`hlsSubtitleTrackOptions`): text rows map to their sideloaded `sub:<ordinal>` groups, and
+  image-based rows appear inert — focusable and TalkBack-announced with the same
+  `(image-based)` suffix as the pre-play dialog, never activatable — with a remembered bitmap
+  choice shown as the selected row.
+- Selecting "None" or a real VTT row under HLS is an explicit new choice and replaces the
+  remembered bitmap ordinal. An option id that resolves to no wire ordinal is a no-op and can
+  no longer corrupt the remembered state.
+- The wire list is never filtered, so text ordinals and generated
+  `/subtitles/{trackIndex}/web.vtt` URLs stay correct with interleaved bitmap and text streams.
+
+## Acceptance criteria → coverage
+
+- Entering HLS with a selected bitmap subtitle produces an explicit, deterministic subtitle
+  state; never Media3 auto-selection —
+  `ExoMoviePlayerEngineTest.switchingToHlsWithABitmapSubtitleGoesDeterministicallyOffAndKeepsTheChoice`,
+  `…reconstructingIntoHlsWithABitmapOrdinalStaysOffButKeepsTheOrdinal`,
+  `MoviePlayRequestTest` (`subtitleRenderableInMode` cases).
 - `currentSubtitleTypeIndex`, the visible selected row, and the rendered player state agree
-  after every Direct/HLS source swap.
-- An unavailable bitmap choice cannot cause an unrelated VTT track to become selected.
-- Returning to Direct or reconstructing the engine does not resurrect a subtitle unless that is an
-  explicitly chosen and documented product policy.
-- Text subtitle ordinals and generated `/subtitles/{trackIndex}/web.vtt` URLs remain correct when
-  bitmap and text streams are interleaved.
-- Instrumentation coverage exercises Direct bitmap selection, the HLS transition, the return to
-  Direct, and lifecycle reconstruction with TalkBack-visible menu state intact.
+  after every Direct/HLS source swap —
+  `TrackOptionsTest.aRememberedBitmapChoiceMarksItsInertRowSelected`,
+  `ExoMoviePlayerEngineTest.aTextOrdinalKeepsTextEnabledUnderHls`.
+- An unavailable bitmap choice cannot cause an unrelated VTT track to become selected —
+  the deterministic-off engine tests above, plus
+  `ExoMoviePlayerEngineTest.anUnresolvableSubtitleOptionIdIsANoOp`.
+- Restoring the choice on return to Direct is the documented product policy —
+  `ExoMoviePlayerEngineTest.returningToDirectReenablesTextForTheRememberedChoice`,
+  `MoviePlayerScreenTest.aBitmapSubtitleChoiceSurvivesSavedStateRecreationUnderHls`.
+- Text subtitle ordinals and generated `/subtitles/{trackIndex}/web.vtt` URLs remain correct
+  when bitmap and text streams are interleaved —
+  `TrackOptionsTest.hlsSubtitleRowsInterleaveInertBitmapRowsInWireOrder`,
+  `…aSideloadedSubtitleIsFoundByItsStampedIdNotItsGroupPosition`.
+- Menu state is visible and TalkBack-reachable through the transition —
+  `MoviePlayerScreenTest.anInertImageBasedSubtitleRowIsFocusableSelectedAndNotActivatable`,
+  `…selectingARealVttUnderHlsReplacesTheBitmapMemory`.
