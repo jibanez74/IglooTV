@@ -74,11 +74,36 @@ private fun formatSpokenTime(seconds: Double, throughSeconds: Boolean): String {
 fun progressFraction(progressSec: Double, durationSec: Double): Float =
     if (durationSec > 0) (progressSec / durationSec).toFloat().coerceIn(0f, 1f) else 0f
 
-/** The contract always sends a positive duration; the fallback is defensive only. */
-fun progressLabel(progressSec: Double, durationSec: Double): String {
-    if (durationSec <= 0) return "In progress"
-    val minutesLeft = ceil((durationSec - progressSec).coerceAtLeast(0.0) / 60.0)
-        .toInt()
-        .coerceAtLeast(1)
-    return "$minutesLeft min left"
+/** Compact remaining time for TV display; partial minutes round up. */
+fun formatRemainingTime(progressSec: Double, durationSec: Double): String {
+    val secondsLeft = remainingSeconds(progressSec, durationSec) ?: return "In progress"
+    if (secondsLeft < 60.0) return "Less than 1m left"
+    val minutesLeft = ceil(secondsLeft / 60.0).toLong()
+    val hours = minutesLeft / 60
+    val minutes = minutesLeft % 60
+    return when {
+        hours == 0L -> "${minutes}m left"
+        minutes == 0L -> "${hours}h left"
+        else -> "${hours}h ${minutes}m left"
+    }
+}
+
+/** Unabbreviated remaining time for TalkBack; partial minutes round up. */
+fun formatSpokenRemainingTime(progressSec: Double, durationSec: Double): String {
+    val secondsLeft = remainingSeconds(progressSec, durationSec) ?: return "In progress"
+    if (secondsLeft < 60.0) return "Less than 1 minute remaining"
+    val minutesLeft = ceil(secondsLeft / 60.0).toLong()
+    val hours = minutesLeft / 60
+    val minutes = minutesLeft % 60
+    val parts = buildList {
+        if (hours > 0) add(if (hours == 1L) "1 hour" else "$hours hours")
+        if (minutes > 0) add(if (minutes == 1L) "1 minute" else "$minutes minutes")
+    }
+    return "${parts.joinToString(" and ")} remaining"
+}
+
+/** The contract sends a positive duration; null is the defensive invalid-data fallback. */
+private fun remainingSeconds(progressSec: Double, durationSec: Double): Double? {
+    if (!durationSec.isFinite() || durationSec <= 0 || !progressSec.isFinite()) return null
+    return (durationSec - progressSec).coerceAtLeast(0.0)
 }

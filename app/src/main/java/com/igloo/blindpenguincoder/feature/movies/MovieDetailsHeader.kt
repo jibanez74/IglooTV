@@ -552,9 +552,10 @@ private val TOGGLE_WATCHED_LABELS = listOf("Watch", "Watched")
 private val TOGGLE_LIKE_LABELS = listOf("Like", "Liked")
 
 /**
- * The thin resume strip and its minutes-left caption. The strip repeats what the caption says,
- * so only the caption's text node speaks. It fills the column Play sizes, so it is exactly as
- * wide as the button it belongs to; the top gap clears Play's focus ring at its 1.05x scale.
+ * The thin resume strip and its remaining-time caption. The strip itself stays silent; Play's
+ * state carries the exact resume point and spoken remaining time. It fills the column Play sizes,
+ * so it is exactly as wide as the button it belongs to; the top gap clears Play's focus ring at
+ * its 1.05x scale.
  *
  * The slot is composed even with no [progress] — invisible and silent — because the progress
  * request lands after first paint and toggling Watched removes the strip: either would reflow
@@ -596,7 +597,7 @@ internal fun ResumeProgress(
             )
         }
         IglooText(
-            text = progress?.minutesLeftLabel ?: "",
+            text = progress?.remainingTimeLabel ?: "",
             style = IglooTheme.typography.label.overMedia(overMedia),
             color = if (overMedia) Color.White.copy(alpha = 0.85f) else colors.mutedForeground,
             maxLines = 1,

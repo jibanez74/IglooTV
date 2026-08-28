@@ -7,10 +7,11 @@ import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
+import com.igloo.blindpenguincoder.core.ui.formatRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
+import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTimeThroughSeconds
 import com.igloo.blindpenguincoder.core.ui.progressFraction
-import com.igloo.blindpenguincoder.core.ui.progressLabel
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
@@ -74,7 +75,7 @@ data class AboutUi(
 /** The thin strip under the actions; present only while a resume position is worth showing. */
 data class ProgressUi(
     val fraction: Float,
-    val minutesLeftLabel: String,
+    val remainingTimeLabel: String,
     val resumeStateDescription: String,
 )
 
@@ -732,9 +733,10 @@ class MovieDetailsViewModel(
         val durationSec = progress?.durationSec ?: return null
         return ProgressUi(
             fraction = progressFraction(progressSec, durationSec),
-            minutesLeftLabel = progressLabel(progressSec, durationSec),
+            remainingTimeLabel = formatRemainingTime(progressSec, durationSec),
             resumeStateDescription =
-                "Resume from ${formatSpokenTimeThroughSeconds(progressSec)}",
+                "Resume from ${formatSpokenTimeThroughSeconds(progressSec)}; " +
+                    formatSpokenRemainingTime(progressSec, durationSec),
         )
     }
 

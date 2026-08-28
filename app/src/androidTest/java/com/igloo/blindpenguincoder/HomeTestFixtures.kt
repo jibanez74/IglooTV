@@ -40,9 +40,21 @@ internal val testHomeMovies = listOf(
 )
 
 internal val testContinueMovies = listOf(
-    HomeContinueMovie(testHomeMovies[0], progressFraction = 0.25f, progressLabel = "127 min left"),
-    HomeContinueMovie(testHomeMovies[1], progressFraction = 0.5f, progressLabel = "58 min left"),
-    HomeContinueMovie(testHomeMovies[2], progressFraction = 0.9f, progressLabel = "16 min left"),
+    HomeContinueMovie(
+        testHomeMovies[0],
+        progressFraction = 0.25f,
+        progressDescription = "2 hours and 7 minutes remaining",
+    ),
+    HomeContinueMovie(
+        testHomeMovies[1],
+        progressFraction = 0.5f,
+        progressDescription = "58 minutes remaining",
+    ),
+    HomeContinueMovie(
+        testHomeMovies[2],
+        progressFraction = 0.9f,
+        progressDescription = "16 minutes remaining",
+    ),
 )
 
 /** Cover-less for the same reason: the Music glyph fallback needs no network. */
@@ -166,8 +178,9 @@ internal fun testMovieDetails(
     liked: Boolean? = false,
     progress: ProgressUi? = ProgressUi(
         fraction = 0.25f,
-        minutesLeftLabel = "127 min left",
-        resumeStateDescription = "Resume from 1 hour, 3 minutes, and 17 seconds",
+        remainingTimeLabel = "2h 20m left",
+        resumeStateDescription = "Resume from 1 hour, 3 minutes, and 17 seconds; " +
+            "2 hours and 20 minutes remaining",
     ),
     cast: List<CastMemberUi> = testCast,
     extraVideos: List<ExtraVideoUi> = testExtraVideos,

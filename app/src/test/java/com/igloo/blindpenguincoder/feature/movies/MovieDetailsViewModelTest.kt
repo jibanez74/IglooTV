@@ -186,8 +186,11 @@ class MovieDetailsViewModelTest {
         assertEquals("$60,000,000", movie.about.budget)
         assertEquals("$187,436,818", movie.about.revenue)
         assertEquals(0.176f, requireNotNull(movie.progress).fraction, 0.001f)
-        assertEquals("140 min left", movie.progress.minutesLeftLabel)
-        assertEquals("Resume from 30 minutes and 0 seconds", movie.progress.resumeStateDescription)
+        assertEquals("2h 20m left", movie.progress.remainingTimeLabel)
+        assertEquals(
+            "Resume from 30 minutes and 0 seconds; 2 hours and 20 minutes remaining",
+            movie.progress.resumeStateDescription,
+        )
         assertEquals(false, movie.watched)
         assertEquals(true, movie.liked)
         assertEquals(
@@ -366,17 +369,17 @@ class MovieDetailsViewModelTest {
         }
 
         assertNull(progressFor(29.0, 7200.0))
-        assertEquals("120 min left", progressFor(30.0, 7200.0)?.minutesLeftLabel)
+        assertEquals("2h left", progressFor(30.0, 7200.0)?.remainingTimeLabel)
         // The very first resumable position has nothing but seconds to say.
         assertEquals(
-            "Resume from 30 seconds",
+            "Resume from 30 seconds; 2 hours remaining",
             progressFor(30.0, 7200.0)?.resumeStateDescription,
         )
         val exact = requireNotNull(progressFor(3797.9, 7200.0))
         assertEquals(3797.9f / 7200f, exact.fraction, 0.0001f)
-        assertEquals("57 min left", exact.minutesLeftLabel)
+        assertEquals("57m left", exact.remainingTimeLabel)
         assertEquals(
-            "Resume from 1 hour, 3 minutes, and 17 seconds",
+            "Resume from 1 hour, 3 minutes, and 17 seconds; 57 minutes remaining",
             exact.resumeStateDescription,
         )
         assertNull(progressFor(7100.0, 7200.0))
@@ -931,8 +934,11 @@ class MovieDetailsViewModelTest {
         val movie = viewModel.awaitLoaded()
         assertEquals(false, movie.watched)
         val progress = requireNotNull(movie.progress)
-        assertEquals("140 min left", progress.minutesLeftLabel)
-        assertEquals("Resume from 30 minutes and 0 seconds", progress.resumeStateDescription)
+        assertEquals("2h 20m left", progress.remainingTimeLabel)
+        assertEquals(
+            "Resume from 30 minutes and 0 seconds; 2 hours and 20 minutes remaining",
+            progress.resumeStateDescription,
+        )
     }
 
     @Test

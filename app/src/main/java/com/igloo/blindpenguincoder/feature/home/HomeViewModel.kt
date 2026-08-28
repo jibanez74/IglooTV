@@ -5,9 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
 import com.igloo.blindpenguincoder.core.ui.progressFraction
-import com.igloo.blindpenguincoder.core.ui.progressLabel
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
@@ -37,7 +37,7 @@ data class HomeMovie(
 data class HomeContinueMovie(
     val movie: HomeMovie,
     val progressFraction: Float,
-    val progressLabel: String,
+    val progressDescription: String,
 )
 
 /** An album ready to render: nullable wire fields resolved, cover taken as the backend sends it. */
@@ -143,7 +143,10 @@ class HomeViewModel(
                             apiBaseUrl = apiBaseUrl,
                         ),
                         progressFraction = progressFraction(movie.progressSec, movie.durationSec),
-                        progressLabel = progressLabel(movie.progressSec, movie.durationSec),
+                        progressDescription = formatSpokenRemainingTime(
+                            movie.progressSec,
+                            movie.durationSec,
+                        ),
                     )
                 }
             }

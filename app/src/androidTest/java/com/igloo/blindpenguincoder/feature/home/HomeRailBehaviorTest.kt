@@ -329,8 +329,9 @@ class HomeRailBehaviorTest {
         // Design-system section 12: a continue-watching card announces title, year, and
         // progress in its one cleared node.
         continueCard(1)
-            .assertContentDescriptionEquals("Heat, 1995, 127 min left")
+            .assertContentDescriptionEquals("Heat, 1995, 2 hours and 7 minutes remaining")
             .assert(hasClickAction())
+        composeRule.onAllNodesWithText("2 hours and 7 minutes remaining").assertCountEquals(0)
     }
 
     @Test
@@ -351,7 +352,7 @@ class HomeRailBehaviorTest {
         // "double tap to Open Heat" would promise a screen reader an action nobody implements.
         // It stays focusable, because the rails' focus model needs every card to be a landing site.
         continueCard(1)
-            .assertContentDescriptionEquals("Heat, 1995, 127 min left")
+            .assertContentDescriptionEquals("Heat, 1995, 2 hours and 7 minutes remaining")
             .assertHasNoClickAction()
         continueCard(1).assertIsFocused()
         continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }

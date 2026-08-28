@@ -363,7 +363,7 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `continue watching maps to cards with progress fraction and minutes left`() = runTest {
+    fun `continue watching maps to bar-only cards with spoken remaining time`() = runTest {
         val http = routedHttp(
             continueWatching = {
                 jsonResponse(
@@ -393,7 +393,7 @@ class HomeViewModelTest {
                         "http://igloo.test:8080/api/tmdb/images/w500/heat.jpg",
                     ),
                     progressFraction = (1800.0 / 10200.0).toFloat(),
-                    progressLabel = "140 min left",
+                    progressDescription = "2 hours and 20 minutes remaining",
                 ),
             ),
             state.items,
@@ -417,9 +417,9 @@ class HomeViewModelTest {
 
         val (overshot, zeroDuration) = state.items
         assertEquals(1f, overshot.progressFraction, 0f)
-        assertEquals("1 min left", overshot.progressLabel)
+        assertEquals("Less than 1 minute remaining", overshot.progressDescription)
         assertEquals(0f, zeroDuration.progressFraction, 0f)
-        assertEquals("In progress", zeroDuration.progressLabel)
+        assertEquals("In progress", zeroDuration.progressDescription)
     }
 
     @Test

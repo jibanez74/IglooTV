@@ -81,7 +81,13 @@ class IglooConfirmDialogMotionTest {
             HomeMovie(id = 4, title = "Solaris", year = 1972, posterUrl = null),
             HomeMovie(id = 5, title = "Alien", year = 1979, posterUrl = null),
         )
-        ).map { HomeContinueMovie(it, progressFraction = 0.2f, progressLabel = "90 min left") }
+        ).map {
+            HomeContinueMovie(
+                it,
+                progressFraction = 0.2f,
+                progressDescription = "1 hour and 30 minutes remaining",
+            )
+        }
 
     @Test
     fun revealStartsTransparentAndReachesFullOpacityAfterStandardDuration() {

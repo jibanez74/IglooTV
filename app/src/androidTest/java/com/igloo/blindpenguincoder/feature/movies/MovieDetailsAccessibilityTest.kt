@@ -477,8 +477,8 @@ class MovieDetailsAccessibilityTest {
 
     /**
      * The resume caption under Play is plain text a TV screen reader can never reach, so Play's
-     * state carries the exact position while its name and action stay "Play". The coarse visible
-     * minutes-left caption does not ride the node and compete with the exact state.
+     * state carries the exact position and spoken remaining time while its name and action stay
+     * "Play". The compact visible caption does not ride the node and compete with that state.
      */
     @Test
     fun playCarriesItsExactResumeStateWhileThereIsProgress() {
@@ -491,14 +491,16 @@ class MovieDetailsAccessibilityTest {
             .assert(
                 SemanticsMatcher.expectValue(
                     SemanticsProperties.StateDescription,
-                    "Resume from 1 hour, 3 minutes, and 17 seconds",
+                    "Resume from 1 hour, 3 minutes, and 17 seconds; " +
+                        "2 hours and 20 minutes remaining",
                 ),
             )
         assertEquals("Play", play.clickActionLabel())
         composeRule.onAllNodes(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription,
-                "Resume from 1 hour, 3 minutes, and 17 seconds",
+                "Resume from 1 hour, 3 minutes, and 17 seconds; " +
+                    "2 hours and 20 minutes remaining",
             ),
         ).assertCountEquals(1)
 
@@ -512,6 +514,13 @@ class MovieDetailsAccessibilityTest {
             .assertContentDescriptionEquals("Play Heat")
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
         assertEquals("Play", play.clickActionLabel())
+    }
+
+    @Test
+    fun theCompactRemainingTimeCaptionRendersUnderPlay() {
+        setContent()
+
+        composeRule.onNodeWithText("2h 20m left").assertExists()
     }
 
     /** A pane-title change is spoken, so the loaded page names the film, not a generic frame. */

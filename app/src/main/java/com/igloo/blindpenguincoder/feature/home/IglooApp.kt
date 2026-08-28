@@ -912,7 +912,7 @@ private fun HomeRails(
                 onClick = openMovie?.let { open ->
                     { open(DetailsOrigin.Rail(HomeRail.ContinueWatching), item.movie.id) }
                 },
-                progress = PosterCardProgress(item.progressFraction, item.progressLabel),
+                progress = PosterCardProgress(item.progressFraction, item.progressDescription),
                 aspect = cardAspect,
                 modifier = itemModifier.testTag("continue_card_${item.movie.id}"),
             )

@@ -725,7 +725,7 @@ until 2026-08-19.
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
 | `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `restingFill` / `contentColor` carry the §3.2 over-media ground where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
-| `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, `progressLabel` ("43 min left", rounded up, floored at one minute), `formatTimecode` ("1:01:15"), sparse `formatSpokenTime` ("1 hour and 15 seconds"), and exact `formatSpokenTimeThroughSeconds` ("1 hour, 0 minutes, and 15 seconds"). The exact form floors to the last completed second and includes every unit from the largest relevant one through seconds, never a leading zero hour. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
+| `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, compact `formatRemainingTime` ("2h 20m left"), spoken `formatSpokenRemainingTime` ("2 hours and 20 minutes remaining"), `formatTimecode` ("1:01:15"), sparse `formatSpokenTime` ("1 hour and 15 seconds"), and exact `formatSpokenTimeThroughSeconds` ("1 hour, 0 minutes, and 15 seconds"). Both remaining-time forms clamp overshoot and round partial minutes up; they use "Less than 1m left" / "Less than 1 minute remaining" below one minute and defensively fall back to "In progress" for an invalid duration. The exact resume form floors to the last completed second and includes every unit from the largest relevant one through seconds, never a leading zero hour. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
 | `IglooNotice` | One announced line — `bodyMedium` / `mutedForeground`, `liveRegion = Polite`. For a message the user did not ask for and cannot act on: what a gate says after an action that already happened (§10, §11.1.1). Not an error card; no Retry. |
@@ -737,7 +737,7 @@ until 2026-08-19.
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
-| `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg`, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose description joins the cleared node ("Title, Year, N min left", §12) so the bar can never render unannounced. |
+| `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg`, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose fully spoken remaining-time description joins the cleared node ("Title, Year, 2 hours and 20 minutes remaining", §12) so the bar can never render unannounced. The description is semantic only; no numeric percentage or remaining-time caption renders on the card. |
 | `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), minimal `IglooEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). Takes the pane's `contentInset` and splits it by node per §8.3 — heading and non-scrolling states pad, the `LazyRow` carries it as `contentPadding` so cards bleed off the panel edge. |
 | `IglooEmpty` | §10 empty state, minimal variant only: faded icon + one announced line. The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
 
@@ -1276,7 +1276,7 @@ rails fail, retry, and refresh independently (§12's polite live regions depend 
 
 | Rail | Endpoint | Card | Empty copy |
 |---|---|---|---|
-| Continue Watching | `GET /api/movies/continue-watching` | poster + progress bar | "Nothing in progress yet. Movies you start watching appear here." |
+| Continue Watching | `GET /api/movies/continue-watching` | poster + progress bar; fully spoken remaining time in card semantics only | "Nothing in progress yet. Movies you start watching appear here." |
 | Recently Added Movies | `GET /api/movies/latest` | poster, year below | "No movies in your library yet. Add a movies folder on the server and run a scan." |
 | Recently Added Albums | `GET /api/music/albums/latest` | `albumAspect` cover, musician below, `Music` glyph fallback | "No albums in your library yet. Add a music folder on the server and run a scan." |
 | Now Playing in Theaters | `GET /api/tmdb/movies/in-theaters` | 2:3 poster, title + year over a bottom scrim, rating badge top-right (§3.2) | "No movies are playing in theaters right now. Check back later." |
@@ -1368,15 +1368,18 @@ with the abbreviations spelled out — eight two-character stops would be noise 
 
 **Resume.** The Play button is always labelled "Play"; the resume decision belongs to the
 player, not this screen. A partially watched movie shows a 4dp strip (`primary` on the §3.2
-`Black @ 0.40` track) and an "N min left" caption, from 30 seconds in until the position stops
-meaning anything — the server flips to watched at 98% — and never once the movie is watched.
+`Black @ 0.40` track) and a compact remaining-time caption such as "2h 20m left", from 30
+seconds in until the position stops meaning anything — the server flips to watched at 98% — and
+never once the movie is watched. Whole hours drop the empty minute part, sub-hour values use
+minutes alone, partial minutes round up, and a sub-minute remainder reads "Less than 1m left".
 
-The visible caption stays deliberately coarse; Play's semantics carry the exact resume point.
-With progress, its content description is "Play", its `stateDescription` is "Resume from 1 hour,
-3 minutes, and 17 seconds", and its click action label is "Play". The state floors a fractional
-position to the last completed second and speaks every unit from the largest relevant one through
-seconds, including zero intermediate units. Without progress, the content description remains
-"Play {title}", the state is absent, and the click action label remains "Play".
+Play's semantics carry both the exact resume point and an unabbreviated remaining time. With
+progress, its content description is "Play", its `stateDescription` is "Resume from 1 hour, 3
+minutes, and 17 seconds; 2 hours and 20 minutes remaining", and its click action label is
+"Play". The resume position floors a fractional value to the last completed second and speaks
+every unit from the largest relevant one through seconds, including zero intermediate units; the
+remaining time rounds partial minutes up. Without progress, the content description remains "Play
+{title}", the state is absent, and the click action label remains "Play".
 
 The strip belongs to **Play**, and is laid out to say so: Play and the strip share a column
 inside the action row, sized to Play's own intrinsic width, so the strip is exactly as wide as
@@ -1532,10 +1535,10 @@ carries text the d-pad otherwise passes by:
 Without a spoken service the stops are not composed as targets and the chain is exactly the
 paragraph above — two extra presses between the actions and the cast rail would tax the most
 common path for no sighted benefit. Two companions to the same rule: Play carries its exact
-"Resume from …" position as `stateDescription` (the coarse caption's text node is unreachable), and
-the pane title becomes the movie's own title once Loaded — a pane-title change is announced
-(§12), so the page names the film on arrival instead of the generic "Movie details" the loading
-and error states keep.
+"Resume from …" position plus fully spoken remaining time as one `stateDescription` (the compact
+caption's text node is unreachable), and the pane title becomes the movie's own title once Loaded
+— a pane-title change is announced (§12), so the page names the film on arrival instead of the
+generic "Movie details" the loading and error states keep.
 
 Because it is reachable but not actionable, it wears the focus treatment as a **panel** rather
 than a control: `radius.xl` — the §3 radius scale's step for cards, panels and surfaces — instead
@@ -1770,8 +1773,8 @@ Non-negotiable. `AGENTS.md` §Accessibility governs; this section covers the des
   always visible, never ambiguous (§6.1).
 - **Labels**: every actionable element has a meaningful content description. Media cards
   announce what matters *in context* — a poster in a grid may need only its title, while a
-  continue-watching card needs title, year, and progress. Decorative images are hidden from
-  the accessibility tree.
+  continue-watching card needs title, year, and fully spoken remaining time even though it stays
+  visually bar-only. Decorative images are hidden from the accessibility tree.
 - **No focus traps**, and no custom focus handling that breaks screen-reader traversal.
 - **TalkBack for TV follows input focus.** It does not linearly traverse non-focusable text the
   way handset TalkBack does — a plain text node is unreachable, and unspoken, on a TV. Text a

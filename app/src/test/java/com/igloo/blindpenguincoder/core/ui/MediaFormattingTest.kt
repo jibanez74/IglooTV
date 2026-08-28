@@ -79,11 +79,35 @@ class MediaFormattingTest {
     }
 
     @Test
-    fun `progress label rounds up and floors at one minute`() {
-        assertEquals("90 min left", progressLabel(1800.0, 7200.0))
-        // 59.5 minutes left rounds up, not down.
-        assertEquals("60 min left", progressLabel(3630.0, 7200.0))
-        assertEquals("1 min left", progressLabel(7199.0, 7200.0))
-        assertEquals("In progress", progressLabel(10.0, 0.0))
+    fun `remaining time uses compact hours and rounds partial minutes up`() {
+        assertEquals("2h 20m left", formatRemainingTime(1800.0, 10200.0))
+        assertEquals("35m left", formatRemainingTime(0.0, 2100.0))
+        assertEquals("2h left", formatRemainingTime(30.0, 7230.0))
+        // 59.5 minutes left rounds up to the exact-hour form.
+        assertEquals("1h left", formatRemainingTime(3630.0, 7200.0))
+        assertEquals("2m left", formatRemainingTime(7080.1, 7200.0))
+        assertEquals("1m left", formatRemainingTime(7140.0, 7200.0))
+    }
+
+    @Test
+    fun `remaining time handles sub-minute overshot and invalid values`() {
+        assertEquals("Less than 1m left", formatRemainingTime(7199.0, 7200.0))
+        assertEquals("Less than 1m left", formatRemainingTime(7300.0, 7200.0))
+        assertEquals("In progress", formatRemainingTime(10.0, 0.0))
+        assertEquals("In progress", formatRemainingTime(10.0, Double.NaN))
+    }
+
+    @Test
+    fun `spoken remaining time uses unabbreviated pluralized units`() {
+        assertEquals(
+            "2 hours and 20 minutes remaining",
+            formatSpokenRemainingTime(1800.0, 10200.0),
+        )
+        assertEquals("35 minutes remaining", formatSpokenRemainingTime(0.0, 2100.0))
+        assertEquals("2 hours remaining", formatSpokenRemainingTime(30.0, 7230.0))
+        assertEquals("1 hour and 1 minute remaining", formatSpokenRemainingTime(0.0, 3660.0))
+        assertEquals("1 minute remaining", formatSpokenRemainingTime(7140.0, 7200.0))
+        assertEquals("Less than 1 minute remaining", formatSpokenRemainingTime(7300.0, 7200.0))
+        assertEquals("In progress", formatSpokenRemainingTime(10.0, 0.0))
     }
 }
