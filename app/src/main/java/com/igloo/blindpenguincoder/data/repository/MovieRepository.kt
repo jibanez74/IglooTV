@@ -30,6 +30,7 @@ import com.igloo.blindpenguincoder.playback.hls.hlsQueryParams
 import com.igloo.blindpenguincoder.playback.hls.parseHlsManifestResponse
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_MESSAGE
 import io.ktor.client.call.body
+import io.ktor.client.network.sockets.ConnectTimeoutException
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.discard
 
@@ -89,10 +90,10 @@ class MovieRepository(
 
     /**
      * The manifest fetch that creates/refreshes an HLS session. Not [safeApiCall]: 503 and 404
-     * are protocol states the session controller retries through, not failures. Timeouts also
-     * count as "busy" — the server legitimately holds a remux manifest while FFmpeg warms up.
-     * Only transport failures are absorbed; a programming error must surface, not read as
-     * "server unreachable".
+     * are protocol states the session controller retries through, not failures. Established
+     * request/socket timeouts count as "busy" because the server may legitimately hold a remux
+     * manifest while FFmpeg warms up; a connection timeout means the server was never reached.
+     * Only transport failures are absorbed, and programming errors must surface.
      */
     override suspend fun fetchHlsManifest(spec: HlsSessionSpec): HlsManifestResult = try {
         val response = api.movieHlsPlaylist(spec.movieId, spec.profileId, hlsQueryParams(spec))
@@ -105,12 +106,21 @@ class MovieRepository(
     } catch (cancellation: kotlinx.coroutines.CancellationException) {
         throw cancellation
     } catch (failure: Exception) {
-        when (failure.toTransportError()) {
-            AppError.Timeout -> HlsManifestResult.Busy(retryAfterSec = null)
-            is AppError.Unexpected -> throw failure
-            else -> HlsManifestResult.Failed(PLAYBACK_SERVER_UNREACHABLE_MESSAGE)
+        if (failure.hasConnectionTimeoutCause()) {
+            HlsManifestResult.Failed(PLAYBACK_SERVER_UNREACHABLE_MESSAGE)
+        } else {
+            when (failure.toTransportError()) {
+                AppError.Timeout -> HlsManifestResult.Busy(retryAfterSec = null)
+                is AppError.Unexpected -> throw failure
+                else -> HlsManifestResult.Failed(PLAYBACK_SERVER_UNREACHABLE_MESSAGE)
+            }
         }
     }
+
+    private fun Throwable.hasConnectionTimeoutCause(): Boolean =
+        generateSequence<Throwable>(this) { it.cause }
+            .take(HLS_CAUSE_CHAIN_LIMIT)
+            .any { it is ConnectTimeoutException }
 
     /** Best-effort session teardown; the server's idle TTL is the real backstop. */
     override suspend fun stopHlsSession(movieId: Long, sessionUuid: String) {
@@ -165,4 +175,8 @@ class MovieRepository(
                 ?: error("Missing data in like toggle response")
         },
     )
+
+    private companion object {
+        const val HLS_CAUSE_CHAIN_LIMIT = 8
+    }
 }

@@ -274,20 +274,23 @@ class MoviePlayerScreenTest {
         selectedId: String = "Direct",
         requestedMode: PlaybackMode = PlaybackMode.valueOf(selectedId),
     ) {
-        engine.emit(
-            MoviePlayerEvent.QualityOptionsChanged(
-                PlaybackMode.entries.map { mode ->
-                    TrackOption(
-                        id = mode.name,
-                        label = playbackModeLabel(mode),
-                        selected = selectedId == mode.name,
-                    )
-                },
-                requestedMode,
-            ),
-        )
+        engine.emit(qualityOptionsEvent(selectedId, requestedMode))
         composeRule.waitForIdle()
     }
+
+    private fun qualityOptionsEvent(
+        selectedId: String,
+        requestedMode: PlaybackMode,
+    ) = MoviePlayerEvent.QualityOptionsChanged(
+        PlaybackMode.entries.map { mode ->
+            TrackOption(
+                id = mode.name,
+                label = playbackModeLabel(mode),
+                selected = selectedId == mode.name,
+            )
+        },
+        requestedMode,
+    )
 
     private fun pressBack() {
         composeRule.runOnUiThread {
@@ -949,6 +952,54 @@ class MoviePlayerScreenTest {
         playPause.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
         assertEquals(listOf("start:600.0:false", "play"), engine.playbackCommands)
+    }
+
+    @Test
+    fun backgroundDuringPendingQualityReconstructsThatRequestPaused() {
+        setContent()
+        startPlaying()
+        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        emitQualityOptions()
+        emitQualityOptions(selectedId = "Direct", requestedMode = PlaybackMode.Remux)
+        assertEquals(PlaybackMode.Remux, requireNotNull(currentRequest).mode)
+        val oldEngine = engine
+
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.CREATED
+        }
+        composeRule.waitForIdle()
+        assertTrue(oldEngine.released)
+
+        engine = FakeMoviePlayerEngine()
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(PlaybackMode.Remux, engineRequests.last().mode)
+        assertEquals(listOf("start:600.0:false"), engine.playbackCommands)
+    }
+
+    @Test
+    fun terminalQualityFailureRestoresTheCommittedRequestBeforeRetry() {
+        setContent()
+        startPlaying()
+        emitQualityOptions()
+        engine.emit(qualityOptionsEvent("Direct", PlaybackMode.Remux))
+        engine.emit(qualityOptionsEvent("Direct", PlaybackMode.Direct))
+        engine.emit(MoviePlayerEvent.Error("The server refused the stream."))
+        composeRule.waitForIdle()
+        assertEquals(listOf(PlaybackMode.Remux, PlaybackMode.Direct), requestedModes)
+        assertEquals(PlaybackMode.Direct, requireNotNull(currentRequest).mode)
+
+        val failedEngine = engine
+        engine = FakeMoviePlayerEngine()
+        composeRule.onNodeWithContentDescription("Retry playing movie")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertTrue(failedEngine.released)
+        assertEquals(PlaybackMode.Direct, engineRequests.last().mode)
     }
 
     @Test

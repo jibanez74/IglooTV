@@ -9,7 +9,9 @@ import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_ME
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_UNAUTHORIZED_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.playbackServerRefusedMessage
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.network.sockets.ConnectTimeoutException
 import io.ktor.client.plugins.HttpTimeoutCapability
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -206,6 +208,40 @@ class MovieRepositoryTest {
 
         assertEquals(
             HlsManifestResult.Failed(PLAYBACK_SERVER_UNREACHABLE_MESSAGE),
+            http.movieRepository.fetchHlsManifest(hlsSpec()),
+        )
+    }
+
+    @Test
+    fun `a connection timeout fails immediately as unreachable`() = runTest {
+        val http = TestHttp { throw ConnectTimeoutException(TEST_SERVER) }
+
+        assertEquals(
+            HlsManifestResult.Failed(PLAYBACK_SERVER_UNREACHABLE_MESSAGE),
+            http.movieRepository.fetchHlsManifest(hlsSpec()),
+        )
+    }
+
+    @Test
+    fun `a wrapped connection timeout fails immediately as unreachable`() = runTest {
+        val http = TestHttp {
+            throw RuntimeException("engine failed", ConnectTimeoutException(TEST_SERVER))
+        }
+
+        assertEquals(
+            HlsManifestResult.Failed(PLAYBACK_SERVER_UNREACHABLE_MESSAGE),
+            http.movieRepository.fetchHlsManifest(hlsSpec()),
+        )
+    }
+
+    @Test
+    fun `a request timeout remains busy for capacity retry`() = runTest {
+        val http = TestHttp {
+            throw HttpRequestTimeoutException(TEST_SERVER, 45_000L)
+        }
+
+        assertEquals(
+            HlsManifestResult.Busy(retryAfterSec = null),
             http.movieRepository.fetchHlsManifest(hlsSpec()),
         )
     }

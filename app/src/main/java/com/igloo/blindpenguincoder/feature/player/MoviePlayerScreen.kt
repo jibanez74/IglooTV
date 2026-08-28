@@ -108,6 +108,7 @@ fun MoviePlayerScreen(
     val latestRequest by rememberUpdatedState(request)
     val latestOnPlaybackModeRequested by rememberUpdatedState(onPlaybackModeRequested)
     val latestOnTrackSelectionChanged by rememberUpdatedState(onTrackSelectionChanged)
+    var reconstructedMode by remember(engine) { mutableStateOf(request.mode) }
     val progressSync by viewModel.progressSyncUiState.collectAsStateWithLifecycle()
     val progressSyncError = (progressSync as? ProgressSyncUiState.Failed)?.message
 
@@ -195,11 +196,12 @@ fun MoviePlayerScreen(
             state = next
             when (event) {
                 is MoviePlayerEvent.Error -> if (event.unauthorized) unauthorized = true
-                // The engine, not the keypress, is the authority on what mode is in force: a
-                // refused or failed switch must not leave a replacement engine rebuilding into
-                // a mode that already proved it cannot start.
+                // Accepted pending requests are published before HLS preflight so background
+                // reconstruction can preserve them. A terminal failure publishes the prior
+                // committed request first, while refused choices never reach this event.
                 is MoviePlayerEvent.QualityOptionsChanged ->
-                    if (event.requestedMode != latestRequest.mode) {
+                    if (event.requestedMode != reconstructedMode) {
+                        reconstructedMode = event.requestedMode
                         latestOnPlaybackModeRequested(event.requestedMode)
                     }
                 is MoviePlayerEvent.TracksChanged -> persistTrackSelection(engine)

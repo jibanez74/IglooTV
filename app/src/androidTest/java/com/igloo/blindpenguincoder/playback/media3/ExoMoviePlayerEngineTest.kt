@@ -16,6 +16,7 @@ import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -59,11 +60,12 @@ class ExoMoviePlayerEngineTest {
         val stopped = mutableListOf<String>()
         var result: HlsManifestResult = HlsManifestResult.Ready("remux", 0.0)
         var throwOnFetch: (() -> Nothing)? = null
+        var suspendedResult: CompletableDeferred<HlsManifestResult>? = null
 
         override suspend fun fetchHlsManifest(spec: HlsSessionSpec): HlsManifestResult {
             fetched += spec
             throwOnFetch?.invoke()
-            return result
+            return suspendedResult?.await() ?: result
         }
 
         override suspend fun stopHlsSession(movieId: Long, sessionUuid: String) {
@@ -273,6 +275,98 @@ class ExoMoviePlayerEngineTest {
         assertEquals(PlaybackMode.Remux, ladder.requestedMode)
     }
 
+    @Test
+    fun pendingQualityPublishesBeforePreflightThenSuccessCommitsAndFailureRollsBack() {
+        val api = FakeHlsApi()
+        val engine = engine(playRequest(), api)
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the direct quality options") {
+            engine.events.replayCache.any { it is MoviePlayerEvent.QualityOptionsChanged }
+        }
+
+        val firstPreflight = CompletableDeferred<HlsManifestResult>()
+        api.suspendedResult = firstPreflight
+        onMain { engine.selectPlaybackMode(PlaybackMode.P1080Mbps8.name) }
+        waitFor("the suspended preflight") { api.fetched.size == 1 }
+
+        val pending = engine.events.replayCache
+            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .last()
+        assertEquals(PlaybackMode.P1080Mbps8, pending.requestedMode)
+        assertEquals(PlaybackMode.Direct.name, pending.options.single { it.selected }.id)
+
+        firstPreflight.complete(HlsManifestResult.Ready("1080p_8mbps", 0.0))
+        waitFor("the committed quality") {
+            engine.events.replayCache
+                .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+                .last()
+                .options
+                .single { it.selected }
+                .id == PlaybackMode.P1080Mbps8.name
+        }
+
+        val secondPreflight = CompletableDeferred<HlsManifestResult>()
+        api.suspendedResult = secondPreflight
+        onMain { engine.selectPlaybackMode(PlaybackMode.P720Mbps3.name) }
+        waitFor("the second suspended preflight") { api.fetched.size == 2 }
+        assertEquals(
+            PlaybackMode.P720Mbps3,
+            engine.events.replayCache
+                .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+                .last()
+                .requestedMode,
+        )
+
+        secondPreflight.complete(HlsManifestResult.Failed("The server refused the stream."))
+        waitFor("the terminal failure") { engine.errors().isNotEmpty() }
+
+        val events = engine.events.replayCache
+        val errorIndex = events.indexOfLast { it is MoviePlayerEvent.Error }
+        val rollbackIndex = events.indexOfLast {
+            it is MoviePlayerEvent.QualityOptionsChanged &&
+                it.requestedMode == PlaybackMode.P1080Mbps8
+        }
+        assertTrue("the committed request must be restored before the error", rollbackIndex in 0 until errorIndex)
+        val rollback = events[rollbackIndex] as MoviePlayerEvent.QualityOptionsChanged
+        assertEquals(PlaybackMode.P1080Mbps8.name, rollback.options.single { it.selected }.id)
+    }
+
+    @Test
+    fun selectingTheEffectiveRowCancelsPendingWithoutRewritingTheCommittedRequest() {
+        val api = FakeHlsApi()
+        api.result = HlsManifestResult.Ready("1080p_8mbps", 0.0)
+        val engine = engine(playRequest(mode = PlaybackMode.Remux), api)
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the effective source") {
+            engine.events.replayCache
+                .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+                .lastOrNull()
+                ?.options
+                ?.single { it.selected }
+                ?.id == PlaybackMode.P1080Mbps8.name
+        }
+
+        val preflight = CompletableDeferred<HlsManifestResult>()
+        api.suspendedResult = preflight
+        onMain { engine.selectPlaybackMode(PlaybackMode.P720Mbps3.name) }
+        waitFor("the pending source") { api.fetched.size == 2 }
+        onMain { engine.selectPlaybackMode(PlaybackMode.P1080Mbps8.name) }
+
+        val restored = engine.events.replayCache
+            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .last()
+        assertEquals(PlaybackMode.Remux, restored.requestedMode)
+        assertEquals(PlaybackMode.P1080Mbps8.name, restored.options.single { it.selected }.id)
+
+        preflight.complete(HlsManifestResult.Ready("720p_3mbps", 0.0))
+        instrumentation.waitForIdleSync()
+        val afterLateCompletion = engine.events.replayCache
+            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .last()
+        assertEquals(restored, afterLateCompletion)
+        assertTrue(engine.errors().isEmpty())
+    }
+
     // --- refusing rather than substituting ---
 
     @Test
@@ -299,6 +393,13 @@ class ExoMoviePlayerEngineTest {
         assertTrue(api.stopped.isEmpty())
         assertEquals(1, api.fetched.size)
         assertTrue(engine.errors().isEmpty())
+        assertEquals(
+            PlaybackMode.Remux,
+            engine.events.replayCache
+                .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+                .last()
+                .requestedMode,
+        )
     }
 
     @Test

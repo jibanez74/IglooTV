@@ -177,9 +177,9 @@ sealed interface MoviePlayerEvent {
         val subtitles: List<TrackOption>,
     ) : MoviePlayerEvent
     /**
-     * The quality ladder plus the mode the engine is currently *asking* for. The two differ
-     * when the backend answers a request with another profile: the selected row reports the
-     * effective profile, while [requestedMode] is what a later engine must be rebuilt with.
+     * The quality ladder plus the accepted requested mode. During HLS preflight this is the
+     * pending request so lifecycle reconstruction can preserve it; otherwise it is the last
+     * successfully committed request. The selected row always reports the effective source.
      */
     data class QualityOptionsChanged(
         val options: List<TrackOption>,
