@@ -72,7 +72,11 @@ private fun formatSpokenTime(seconds: Double, throughSeconds: Boolean): String {
 }
 
 fun progressFraction(progressSec: Double, durationSec: Double): Float =
-    if (durationSec > 0) (progressSec / durationSec).toFloat().coerceIn(0f, 1f) else 0f
+    if (progressSec.isFinite() && durationSec.isFinite() && durationSec > 0) {
+        (progressSec / durationSec).toFloat().coerceIn(0f, 1f)
+    } else {
+        0f
+    }
 
 /** Compact remaining time for TV display; partial minutes round up. */
 fun formatRemainingTime(progressSec: Double, durationSec: Double): String {

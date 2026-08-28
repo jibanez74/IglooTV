@@ -270,8 +270,39 @@ class MoviePlayRequestMappingTest {
             30.0,
             resumePositionSec(progress(progressSec = 30.0, durationSec = 7200.0)),
         )
-        assertNull(resumePositionSec(progress(progressSec = 7100.0, durationSec = 7200.0)))
+        assertEquals(
+            7055.999,
+            resumePositionSec(progress(progressSec = 7055.999, durationSec = 7200.0)),
+        )
+        assertNull(resumePositionSec(progress(progressSec = 7056.0, durationSec = 7200.0)))
         assertNull(resumePositionSec(progress(progressSec = 100.0, durationSec = 0.0)))
+        assertNull(resumePositionSec(progress(progressSec = 100.0, durationSec = -1.0)))
+    }
+
+    @Test
+    fun `resume position rejects non-finite progress and duration`() {
+        assertNull(resumePositionSec(progress(progressSec = Double.NaN, durationSec = 7200.0)))
+        assertNull(
+            resumePositionSec(
+                progress(progressSec = Double.POSITIVE_INFINITY, durationSec = 7200.0),
+            ),
+        )
+        assertNull(
+            resumePositionSec(
+                progress(progressSec = Double.NEGATIVE_INFINITY, durationSec = 7200.0),
+            ),
+        )
+        assertNull(resumePositionSec(progress(progressSec = 100.0, durationSec = Double.NaN)))
+        assertNull(
+            resumePositionSec(
+                progress(progressSec = 100.0, durationSec = Double.POSITIVE_INFINITY),
+            ),
+        )
+        assertNull(
+            resumePositionSec(
+                progress(progressSec = 100.0, durationSec = Double.NEGATIVE_INFINITY),
+            ),
+        )
     }
 
     @Test

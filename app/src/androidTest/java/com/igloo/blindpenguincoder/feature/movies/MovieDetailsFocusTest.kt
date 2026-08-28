@@ -9,7 +9,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
@@ -21,6 +23,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.width
@@ -42,6 +45,7 @@ import com.igloo.blindpenguincoder.testHero
 import com.igloo.blindpenguincoder.testHomeMovies
 import com.igloo.blindpenguincoder.testMovieDetails
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -70,6 +74,12 @@ class MovieDetailsFocusTest {
         hasPin = false,
         createdAt = "2026-01-01T00:00:00Z",
         updatedAt = "2026-01-01T00:00:00Z",
+    )
+    private val subMinuteProgress = ProgressUi(
+        fraction = 0.99f,
+        remainingTimeLabel = "Less than 1m left",
+        resumeStateDescription = "Resume from 1 hour, 59 minutes, and 31 seconds; " +
+            "Less than 1 minute remaining",
     )
 
     private var detailsState by mutableStateOf(MovieDetailsUiState())
@@ -543,13 +553,14 @@ class MovieDetailsFocusTest {
         composeRule.onNodeWithTag("details_resume_track").assertDoesNotExist()
         val before = composeRule.onNodeWithTag("details_play").getUnclippedBoundsInRoot()
 
-        detailsState = loadedState(testMovieDetails())
+        detailsState = loadedState(testMovieDetails(progress = subMinuteProgress))
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("details_resume_track").assertExists()
         val with = composeRule.onNodeWithTag("details_play").getUnclippedBoundsInRoot()
         assertEquals(before.top.value, with.top.value, 0.5f)
         assertEquals(before.left.value, with.left.value, 0.5f)
+        assertEquals(before.right.value, with.right.value, 0.5f)
 
         detailsState = loadedState(testMovieDetails(watched = true, progress = null))
         composeRule.waitForIdle()
@@ -558,6 +569,7 @@ class MovieDetailsFocusTest {
         val without = composeRule.onNodeWithTag("details_play").getUnclippedBoundsInRoot()
         assertEquals(before.top.value, without.top.value, 0.5f)
         assertEquals(before.left.value, without.left.value, 0.5f)
+        assertEquals(before.right.value, without.right.value, 0.5f)
     }
 
     /**
@@ -736,10 +748,10 @@ class MovieDetailsFocusTest {
     }
 
     @Test
-    fun theResumeStripIsExactlyAsWideAsPlay() {
+    fun theLongestResumeCaptionStaysInsideThePlayColumn() {
         // It reads as Play's progress only if it matches Play. It used to be a sibling of the
         // whole row capped at a fixed width, which ran it out under Watch, Like and More.
-        setShellContent(loadedState())
+        setShellContent(loadedState(testMovieDetails(progress = subMinuteProgress)))
 
         // Measured with focus parked elsewhere: focus scales Play 1.05x about its centre, which
         // walks its reported left edge out by half the growth and would fail the alignment check
@@ -749,9 +761,16 @@ class MovieDetailsFocusTest {
 
         val play = composeRule.onNodeWithTag("details_play").getUnclippedBoundsInRoot()
         val track = composeRule.onNodeWithTag("details_resume_track").getUnclippedBoundsInRoot()
+        val captionLayouts = mutableListOf<TextLayoutResult>()
+        composeRule.onNodeWithTag("details_resume_caption")
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) {
+                it(captionLayouts)
+            }
 
         assertEquals(play.width.value, track.width.value, 0.5f)
         assertEquals(play.left.value, track.left.value, 0.5f)
+        assertEquals(1, captionLayouts.single().lineCount)
+        assertFalse(captionLayouts.single().hasVisualOverflow)
 
         // And it stops well short of the next control, rather than running under the whole row.
         val watched = composeRule.onNodeWithTag("details_watched").getUnclippedBoundsInRoot()

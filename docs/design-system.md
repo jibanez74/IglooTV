@@ -1381,18 +1381,20 @@ every unit from the largest relevant one through seconds, including zero interme
 remaining time rounds partial minutes up. Without progress, the content description remains "Play
 {title}", the state is absent, and the click action label remains "Play".
 
-The strip belongs to **Play**, and is laid out to say so: Play and the strip share a column
-inside the action row, sized to Play's own intrinsic width, so the strip is exactly as wide as
-the button whose progress it reports. It sits `sm` below, which also clears Play's focus ring at
-its 1.05x scale. A width of its own — the strip was once a sibling of the whole row capped at a
-fixed max — runs it out under Watched and Like, where it reads as the row's progress rather
-than Play's, and a fixed value drifts from the button the moment the label is localised.
+The strip belongs to **Play**, and is laid out to say so: Play, the strip, and an invisible
+"Less than 1m left" width reservation share an intrinsic-width column inside the action row.
+Play and the strip fill that typography-derived width, so the strip is exactly as wide as the
+button whose progress it reports and the longest caption neither wraps nor pushes toward Watch.
+It sits `sm` below, which also clears Play's focus ring at its 1.05x scale. A width of its own —
+the strip was once a sibling of the whole row capped at a fixed max — runs it out under Watched
+and Like, where it reads as the row's progress rather than Play's; a fixed value would drift the
+moment the label or typography is localised.
 
-The strip's **slot is reserved from first paint**, invisible and silent while there is no
-progress: the progress request lands after the hero is on screen, and marking a movie watched
-removes the strip, and either would reflow the bottom-anchored hero under the user's eye if the
-slot came and went with it. The skeleton's Play stub reserves the same slot so the
-loading→loaded swap does not move the anchor focus is sitting on.
+The strip's **slot and longest-caption width are reserved from first paint**, invisible and
+silent while there is no progress: the progress request lands after the hero is on screen, and
+marking a movie watched removes the strip, and either would reflow the bottom-anchored hero under
+the user's eye if the slot came and went with it. The skeleton's Play stub reserves the same slot
+so the loading→loaded swap does not move the anchor focus is sitting on.
 
 **Focus.** Play takes entry focus, including through the loading→loaded swap, where the
 skeleton's Play-slot stub holds the anchor. The vertical chain — actions → cast → extra videos

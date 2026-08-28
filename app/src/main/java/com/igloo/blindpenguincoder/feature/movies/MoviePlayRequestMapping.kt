@@ -91,6 +91,7 @@ private fun typeIndexOf(selectedId: Long?, idsWithStreamIndex: List<Pair<Long, L
 internal fun resumePositionSec(progress: MovieWatchProgress?): Double? {
     val progressSec = progress?.progressSec ?: return null
     val durationSec = progress.durationSec ?: return null
+    if (!progressSec.isFinite() || !durationSec.isFinite()) return null
     if (progressSec < RESUME_MIN_SEC || durationSec <= 0) return null
     if (progressSec / durationSec >= RESUME_MAX_RATIO) return null
     return progressSec

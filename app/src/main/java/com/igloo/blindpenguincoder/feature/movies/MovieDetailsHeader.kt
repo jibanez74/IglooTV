@@ -443,9 +443,9 @@ private fun LibraryActionRow(
         down = downRequester ?: Cancel
     }
     // `ring` and `primary` are the same value, so a resting Play carries several times more
-    // glacier than the ring on whatever is actually focused — the eye lands on Play and the
-    // press toggles watched. Play steps back while a sibling holds focus so the focused control
-    // is the strongest thing in the row.
+    // glacier than the ring on whatever is actually focused — the eye lands on Play even when
+    // the remote press will activate a sibling. Play steps back while a sibling holds focus so
+    // the focused control is the strongest thing in the row.
     var rowHasFocus by remember { mutableStateOf(false) }
     var playFocused by remember { mutableStateOf(false) }
 
@@ -453,16 +453,17 @@ private fun LibraryActionRow(
         modifier = modifier.onFocusChanged { rowHasFocus = it.hasFocus },
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
     ) {
-        // Play and its resume strip share a column sized to Play, so the strip reads as Play's
-        // progress rather than the whole row's. Width comes from the button's own intrinsic
-        // width — a fixed value would drift the moment the label is localised.
-        Column(modifier = Modifier.width(IntrinsicSize.Min)) {
+        // Play, its strip, and the reserved longest caption share one intrinsic-width column,
+        // so progress reads as Play's and a late response cannot resize the row. The button and
+        // strip fill that typography-derived width; a fixed value would drift under localisation.
+        Column(modifier = Modifier.width(IntrinsicSize.Max)) {
             IglooButton(
                 text = "Play",
                 onClick = onPlay,
                 icon = IglooIcons.Play,
                 // The resume caption below is plain text a TV screen reader can never reach, so
-                // Play carries the exact resume point as state while its label stays the action.
+                // Play carries the exact resume point and spoken remaining time as state while
+                // its label stays the action.
                 semanticLabel = if (movie.progress != null) "Play" else "Play ${movie.title}",
                 stateDescription = movie.progress?.resumeStateDescription,
                 actionLabel = "Play",
@@ -473,6 +474,7 @@ private fun LibraryActionRow(
                     // The node the movie player restores focus to on close — two requesters on
                     // one button, the same pairing the trailer's action row carries.
                     .focusRequester(playReturnRequester)
+                    .fillMaxWidth()
                     .then(rowFocus)
                     .focusProperties { left = Cancel }
                     .onFocusChanged {
@@ -553,9 +555,9 @@ private val TOGGLE_LIKE_LABELS = listOf("Like", "Liked")
 
 /**
  * The thin resume strip and its remaining-time caption. The strip itself stays silent; Play's
- * state carries the exact resume point and spoken remaining time. It fills the column Play sizes,
- * so it is exactly as wide as the button it belongs to; the top gap clears Play's focus ring at
- * its 1.05x scale.
+ * state carries the exact resume point and spoken remaining time. The longest caption reserves
+ * the column's intrinsic width; both Play and the strip fill it, so the strip stays exactly as
+ * wide as the button it belongs to. The top gap clears Play's focus ring at its 1.05x scale.
  *
  * The slot is composed even with no [progress] — invisible and silent — because the progress
  * request lands after first paint and toggling Watched removes the strip: either would reflow
@@ -596,11 +598,33 @@ internal fun ResumeProgress(
                     .background(colors.primary),
             )
         }
-        IglooText(
-            text = progress?.remainingTimeLabel ?: "",
-            style = IglooTheme.typography.label.overMedia(overMedia),
-            color = if (overMedia) Color.White.copy(alpha = 0.85f) else colors.mutedForeground,
-            maxLines = 1,
-        )
+        Box {
+            // Keep the longest caption in layout from first paint so a late progress response
+            // cannot resize Play's column. Its width remains typography- and locale-derived.
+            IglooText(
+                text = RESUME_CAPTION_WIDTH_RESERVATION,
+                style = IglooTheme.typography.label.overMedia(overMedia),
+                color = Color.Transparent,
+                modifier = Modifier.clearAndSetSemantics {},
+                maxLines = 1,
+                softWrap = false,
+            )
+            if (progress != null) {
+                IglooText(
+                    text = progress.remainingTimeLabel,
+                    style = IglooTheme.typography.label.overMedia(overMedia),
+                    color = if (overMedia) {
+                        Color.White.copy(alpha = 0.85f)
+                    } else {
+                        colors.mutedForeground
+                    },
+                    modifier = Modifier.testTag("details_resume_caption"),
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+        }
     }
 }
+
+private const val RESUME_CAPTION_WIDTH_RESERVATION = "Less than 1m left"

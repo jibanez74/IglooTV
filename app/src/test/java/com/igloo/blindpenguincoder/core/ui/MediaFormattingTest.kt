@@ -72,10 +72,22 @@ class MediaFormattingTest {
     }
 
     @Test
-    fun `progress fraction clamps and guards a zero duration`() {
+    fun `progress fraction preserves valid values and clamps overshoot`() {
         assertEquals(0.25f, progressFraction(1800.0, 7200.0), 0.0001f)
         assertEquals(1f, progressFraction(9000.0, 7200.0), 0.0f)
+        assertEquals(0f, progressFraction(-30.0, 7200.0), 0.0f)
+    }
+
+    @Test
+    fun `progress fraction rejects invalid and non-finite values`() {
         assertEquals(0f, progressFraction(1800.0, 0.0), 0.0f)
+        assertEquals(0f, progressFraction(1800.0, -1.0), 0.0f)
+        assertEquals(0f, progressFraction(Double.NaN, 7200.0), 0.0f)
+        assertEquals(0f, progressFraction(Double.POSITIVE_INFINITY, 7200.0), 0.0f)
+        assertEquals(0f, progressFraction(Double.NEGATIVE_INFINITY, 7200.0), 0.0f)
+        assertEquals(0f, progressFraction(1800.0, Double.NaN), 0.0f)
+        assertEquals(0f, progressFraction(1800.0, Double.POSITIVE_INFINITY), 0.0f)
+        assertEquals(0f, progressFraction(1800.0, Double.NEGATIVE_INFINITY), 0.0f)
     }
 
     @Test
