@@ -400,19 +400,27 @@ class MovieDetailsAccessibilityTest {
         composeRule.onNodeWithTag("more_menu").assertDoesNotExist()
     }
 
+    /**
+     * Not "hidden from traversal" — *gone*. A node an overlay merely flags stays in the semantics
+     * tree, and TalkBack for TV leaves accessibility focus parked on it: the More trigger the user
+     * pressed. Nothing moves it off, because the menu's first row is composed already focused and
+     * Compose emits no TYPE_VIEW_FOCUSED for a node it never saw unfocused. So the covered
+     * controls have to leave the tree, which is what the empty clearAndSetSemantics does.
+     */
     @Test
-    fun theScreenBehindTheMenuLeavesTalkBackTraversal() {
+    fun theScreenBehindTheMenuLeavesTheSemanticsTree() {
         setContent()
-        val body = composeRule.onNodeWithTag("details_body")
-        body.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+        composeRule.onNodeWithTag("details_more").assertExists()
 
         openMenu()
 
-        // Hidden from traversal but still in the tree, so the assertion is meaningful — and the
-        // menu's own items are outside the hidden subtree.
-        body.assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
-        composeRule.onNodeWithTag("more_menu_item_0")
-            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+        // The body keeps its own tag — it is outside the clear — but nothing under it survives,
+        // so no covered control can hold TalkBack's focus while the menu is up.
+        composeRule.onNodeWithTag("details_body").assertExists()
+        composeRule.onNodeWithTag("details_more").assertDoesNotExist()
+        composeRule.onNodeWithTag("details_play").assertDoesNotExist()
+        // The menu itself is a sibling of the cleared body, so it is untouched.
+        composeRule.onNodeWithTag("more_menu_item_0").assertExists()
     }
 
     @Test

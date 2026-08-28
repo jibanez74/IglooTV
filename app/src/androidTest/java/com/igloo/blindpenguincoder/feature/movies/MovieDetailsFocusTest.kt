@@ -597,6 +597,33 @@ class MovieDetailsFocusTest {
         composeRule.onNodeWithTag("more_menu_item_0").assertIsFocused()
     }
 
+    /**
+     * The screen-reader path composes a different screen — reading stops sit between the hero and
+     * the sections, and the covered body leaves the semantics tree entirely while the menu is up.
+     * The trigger, the entry row, the trap and the restore must be the same either way.
+     */
+    @Test
+    fun pressingMoreOpensTheMenuOnItsFirstItemWithAScreenReaderRunning() {
+        setShellContent(loadedState(), spokenAccessibilityEnabled = true)
+
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
+
+        composeRule.onNodeWithTag("more_menu").assertExists()
+        val first = composeRule.onNodeWithTag("more_menu_item_0")
+        first.assertIsFocused()
+
+        first.performKeyInput { pressKey(Key.DirectionUp) }
+        first.assertIsFocused()
+        first.performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("more_menu_item_1").assertIsFocused()
+
+        pressBack()
+
+        composeRule.onNodeWithTag("more_menu").assertDoesNotExist()
+        composeRule.onNodeWithTag("details_more").assertIsFocused()
+    }
+
     @Test
     fun theMenuTrapsEveryDpadDirection() {
         setShellContent(loadedState())

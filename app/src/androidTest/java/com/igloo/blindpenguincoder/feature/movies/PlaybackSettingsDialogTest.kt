@@ -185,9 +185,10 @@ class PlaybackSettingsDialogTest {
         composeRule.onNodeWithTag("more_menu").assertDoesNotExist()
         composeRule.onNodeWithTag("playback_settings_dialog").assertExists()
         composeRule.onNodeWithTag("playback_mode_direct").assertIsFocused().assertIsSelected()
-        // The covered page leaves TalkBack traversal, same as it does under the menu.
-        composeRule.onNodeWithTag("details_body")
-            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
+        // The covered page leaves the semantics tree, same as it does under the menu: a node
+        // merely flagged hidden keeps TalkBack's accessibility focus parked on it.
+        composeRule.onNodeWithTag("details_body").assertExists()
+        composeRule.onNodeWithTag("details_more").assertDoesNotExist()
     }
 
     @Test

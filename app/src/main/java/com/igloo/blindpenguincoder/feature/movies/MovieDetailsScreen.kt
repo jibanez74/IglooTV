@@ -37,7 +37,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
@@ -204,15 +203,24 @@ fun MovieDetailsScreen(
             }
             .testTag("movie_details"),
     ) {
-        // hideFromAccessibility, not clearAndSetSemantics, while the menu covers this — the
-        // same treatment the shell gets under the details overlay: nodes stay in the tree, so
-        // a test can still assert what left traversal.
+        // clearAndSetSemantics, not hideFromAccessibility, unlike the full-screen overlays: this
+        // one has to take the covered controls *out of the semantics tree*, not merely flag them.
+        // A hidden node is still in the tree, and TalkBack for TV leaves accessibility focus
+        // parked on it — the More trigger it was sitting on when the menu opened. Nothing then
+        // moves it: the menu's first row is composed already focused, and Compose emits
+        // TYPE_VIEW_FOCUSED only for a node it has previously seen unfocused, so the reader goes
+        // silent and the remote appears dead until Back. The shell under the details overlay and
+        // the details screen under a player do not need this, because those overlays are
+        // full-screen semantics nodes: what they cover is already dropped as occluded. The menu
+        // is a small anchored card that occludes nothing.
+        //
+        // testTag stays outside the clear (the reading-stop ordering rule) so the tag survives.
         Box(
             modifier = Modifier
                 .testTag("details_body")
                 .then(
                     if (moreMenuOpen || playbackSettingsOpen) {
-                        Modifier.semantics { hideFromAccessibility() }
+                        Modifier.clearAndSetSemantics { }
                     } else {
                         Modifier
                     },

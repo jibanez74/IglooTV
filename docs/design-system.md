@@ -732,7 +732,7 @@ until 2026-08-19.
 | `IglooIconButton` | The square icon-only control for row ends (the detail hero's More trigger): `controlHeight` both ways, radius `lg`, focus per §6.1, glyph at `icons.md`. `semanticLabel` is mandatory — the glyph alone says nothing to TalkBack. With a null `onClick` it stays a focus target but announces no action, the inert-poster-card contract. Carries `restingFill` / `contentColor` for the §3.2 over-media ground like `IglooButton`. |
 | `IglooScrim` | The paint-only dim: `background @ 0.60` by default (§3.1), no `clickable`/`focusable`/`semantics`, so it can never intercept the d-pad and TalkBack does not know it exists. Used by the rail (§8.1) and the modal (§9.3) — **never both at once**. |
 | `IglooConfirmDialog` | The confirmation modal (§9.3) |
-| `IglooMenu` | The anchored menu: a `card` surface of focusable rows placed against the trigger's root-coordinate bounds — right-aligned, below it, flipping above when the bottom safe area would be breached. In-tree for §9.3's four reasons and hosted as the last child of the screen that owns the trigger; **unscrimmed**, unlike the modal — an anchored menu is local chrome, not a page-blocking decision, and §9.1 gives the scrim to the rail and the modal only. One `standard` alpha reveal, no exit animation. Focus is trapped (up/down walk the rows, everything else `Cancel`), the first row takes focus on reveal, the caller restores focus in `onDismiss` and gates its own Back (§9.3). `paneTitle` + one cleared Button node per row; a `destructive` row wears the destructive token pair, and `separatorBefore` draws a silent hairline. The covered screen leaves TalkBack traversal via `hideFromAccessibility`, the overlay-stack treatment. |
+| `IglooMenu` | The anchored menu: a `card` surface of focusable rows placed against the trigger's root-coordinate bounds — right-aligned, below it, flipping above when the bottom safe area would be breached. In-tree for §9.3's four reasons and hosted as the last child of the screen that owns the trigger; **unscrimmed**, unlike the modal — an anchored menu is local chrome, not a page-blocking decision, and §9.1 gives the scrim to the rail and the modal only. One `standard` alpha reveal, no exit animation. Focus is trapped (up/down walk the rows, everything else `Cancel`), the first row takes focus on reveal, the caller restores focus in `onDismiss` and gates its own Back (§9.3). `paneTitle` + one cleared Button node per row; a `destructive` row wears the destructive token pair, and `separatorBefore` draws a silent hairline. The covered screen leaves the semantics tree via an empty `clearAndSetSemantics { }` — the partial-overlay rule (§9.3), since an anchored card occludes nothing and a merely-hidden node keeps TalkBack's focus. |
 | `IglooRadioRow` | One option row of a radio list on a card ground: the `IglooMenu` row recipe (`navItemHeight` minimum, `muted` focused fill, `spacing.md` padding, focus per §6.1) plus a drawn-only leading radio glyph — outer ring on `border` (`primary` when selected), `primary` dot when selected, unscaled 2dp stroke so the hairline stays a hairline. One cleared `RadioButton` node per row announcing label and selected state with a "Select" action. A null `onSelect` is the inert variant: still **focusable** — an unfocusable row mid-list punches a hole in a hand-wired up/down chain, the §9.3 pending-row argument — but announced disabled with no action; the label carries the reason it cannot be chosen. Optional `detail` is trailing muted text (a timecode), drawn-only; optional `semanticLabel` replaces the spoken label when the drawn one is not the sentence to read, the `IglooButton` contract. Focus wiring is the caller's, like the menu's rows. |
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
@@ -828,6 +828,20 @@ user. Dismiss stops *showing* the work; it does not recall it.
 **TalkBack.** The card carries `paneTitle` and `isTraversalGroup`; the shell behind it carries
 `hideFromAccessibility()` while the dialog is open. That hides it from *traversal* while keeping
 the nodes in the semantics tree, so tests can still assert the rail is not focused.
+
+**A partial overlay must go further: it clears the content it covers.** `hideFromAccessibility`
+is only enough when the overlay is a full-screen semantics node, because what such a node covers
+is dropped from the accessibility tree as *occluded* anyway — that is the case for the shell under
+the details overlay and for the details screen under a player. An anchored menu occludes nothing.
+There the flagged nodes stay in the tree, and TalkBack for TV leaves accessibility focus parked on
+the one it was already sitting on — the trigger the user just pressed. Nothing moves it off: an
+overlay's entry row is composed *already focused*, and Compose emits `TYPE_VIEW_FOCUSED` only for a
+node it has previously seen unfocused, so no focus event is ever sent for it. Measured on a Shield,
+the pane appearing does not move TalkBack either while the node it is focused on is still in the
+tree. The reader goes silent, the remote looks dead, and Back is the only way out. So a partial overlay puts an empty
+`clearAndSetSemantics { }` on the content it covers, taking those controls out of the tree
+entirely — with the covered node's own `testTag` left *outside* the clear so it survives, the same
+ordering rule the reading stops follow (§12).
 
 **Motion.** One `standard` alpha reveal via `graphicsLayer` (§7.2), and **no exit animation** — the
 overlay leaves at once so the restored focus ring is never drawn under a fading scrim. The focus
@@ -1403,7 +1417,8 @@ focus tree nor the semantics tree; a control a user can reach but never use only
 the press is wasted. The split follows the overlay contract: the host owns the open flag (it
 must gate its details-closing Back on it, §9.3) and restores focus to the trigger in the
 dismiss callback; the screen owns the item list and the trigger's anchor bounds. While the menu
-is up the details content behind it leaves TalkBack traversal via `hideFromAccessibility`, and
+is up the details content behind it leaves the semantics tree via an empty
+`clearAndSetSemantics { }` — the partial-overlay rule of §9.3, not the full-screen treatment — and
 Back closes the menu — never the overlay under it.
 
 **Playback Settings dialog.** The menu's first item opens `PlaybackSettingsDialog`
