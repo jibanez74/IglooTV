@@ -1,7 +1,9 @@
 package com.igloo.blindpenguincoder.playback.hls
 
+import com.igloo.blindpenguincoder.playback.model.HLS_AUDIO_CONVERSION_UNAVAILABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.HLS_RECONNECTING_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.HLS_WAITING_FOR_CAPACITY_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_BUSY_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SESSION_LOST_MESSAGE
 import java.util.UUID
@@ -66,6 +68,7 @@ class HlsSessionController(
     suspend fun start(
         profileId: String,
         audioTypeIndex: Int?,
+        audioProfile: HlsAudioProfile?,
         startSec: Int,
         onStatus: (String?) -> Unit = {},
     ): HlsSessionStart {
@@ -77,7 +80,10 @@ class HlsSessionController(
         // the viewer actually feels, and it runs on the coroutine clock so it is testable.
         return try {
             withTimeout(HLS_START_TOTAL_BUDGET_MS) {
-                startLoop(startGeneration, startUuid, profileId, audioTypeIndex, startSec, onStatus)
+                startLoop(
+                    startGeneration, startUuid, profileId, audioTypeIndex, audioProfile,
+                    startSec, onStatus,
+                )
             }
         } catch (_: TimeoutCancellationException) {
             throw HlsStartException(PLAYBACK_SERVER_BUSY_MESSAGE)
@@ -89,11 +95,13 @@ class HlsSessionController(
         startUuid: String,
         profileId: String,
         audioTypeIndex: Int?,
+        requestedAudioProfile: HlsAudioProfile?,
         startSec: Int,
         onStatus: (String?) -> Unit,
     ): HlsSessionStart {
         var busyAttempts = 0
         var lostAttempts = 0
+        var audioProfile = requestedAudioProfile
         while (true) {
             ensureCurrent(startGeneration, startUuid)
             val spec = HlsSessionSpec(
@@ -103,6 +111,7 @@ class HlsSessionController(
                 startSec = startSec,
                 sessionUuid = startUuid,
                 reload = reload,
+                audioProfile = audioProfile,
             )
             manifestRequestIssued = true
             val result = api.fetchHlsManifest(spec)
@@ -134,7 +143,16 @@ class HlsSessionController(
                     delay(delayMs)
                 }
                 is HlsManifestResult.Failed ->
-                    throw HlsStartException(result.message, result.unauthorized)
+                    // A 400/422 on the conversion pair means server-side contract drift or
+                    // source metadata the server rejects; one immediate legacy retry keeps the
+                    // movie playing with the pre-conversion behavior. One-shot by construction:
+                    // the profile drops and cannot come back within this start.
+                    if (result.rejectedRequest && audioProfile != null) {
+                        audioProfile = null
+                        onStatus(HLS_AUDIO_CONVERSION_UNAVAILABLE_MESSAGE)
+                    } else {
+                        throw HlsStartException(result.message, result.unauthorized)
+                    }
             }
         }
     }

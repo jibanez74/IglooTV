@@ -53,16 +53,21 @@ class MovieDetailsPlayLaunchTest {
 
     private fun TestScope.http(
         progressJson: String = watchProgressJson(),
+        technicalJson: String = technicalDetailsJson(),
     ) = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
         val path = request.url.encodedPath
         when {
             path.startsWith("/api/movies/details/") -> jsonResponse(movieDetailsJson())
-            path.endsWith("/technical-details") -> jsonResponse(technicalDetailsJson())
+            path.endsWith("/technical-details") -> jsonResponse(technicalJson)
             path.endsWith("/watch-progress") -> jsonResponse(progressJson)
             path.endsWith("/like-status") -> jsonResponse(likeStatusJson())
             else -> error("Unrouted path: $path")
         }
     }
+
+    /** A fixture whose default track the automatic audio conversion does not cover. */
+    private fun truehdTechnicalJson() =
+        technicalDetailsJson(audioStreams = listOf(audioStreamJson(codec = "truehd")))
 
     private fun viewModel(
         http: TestHttp,
@@ -117,23 +122,30 @@ class MovieDetailsPlayLaunchTest {
 
     @Test
     fun `an undecodable audio track blocks the launch onto the details notice`() = runTest {
-        val asked = mutableListOf<Pair<String, Int?>>()
-        val viewModel = viewModel(http()) { mime, channels ->
-            asked += mime to channels
-            false
-        }
+        val viewModel = viewModel(http(technicalJson = truehdTechnicalJson())) { _, _ -> false }
         viewModel.open(1)
         viewModel.awaitTracksResolved()
 
         viewModel.requestPlayback()
 
-        // The fixture's default track is DTS-HD MA 5.1; every consultation (the gate's and the
-        // settings dialog's, which shares its rule) asked about exactly that.
-        assertTrue(asked.isNotEmpty())
-        assertTrue(asked.all { it == ("audio/vnd.dts.hd" to 6) })
         val notice = requireNotNull(viewModel.uiState.value.mutationNotice)
-        assertTrue(notice.contains("DTS-HD"))
+        assertTrue(notice.contains("Dolby TrueHD"))
         assertTrue(notice.contains("English · 5.1 surround"))
+    }
+
+    /** DTS-family tracks are the engine's Remux conversion's to handle — the gate lets them by. */
+    @Test
+    fun `a dts track launches under direct even with no decoder or passthrough`() = runTest {
+        // The fixture's default track is DTS-HD MA 5.1.
+        val viewModel = viewModel(http()) { _, _ -> false }
+        viewModel.open(1)
+        viewModel.awaitTracksResolved()
+
+        val request = viewModel.requestAndAwaitLaunch()
+
+        assertEquals(PlaybackMode.Direct, request.mode)
+        assertEquals("dts", request.selectedAudioTrack?.codec)
+        assertNull(viewModel.uiState.value.mutationNotice)
     }
 
     @Test
@@ -149,10 +161,13 @@ class MovieDetailsPlayLaunchTest {
         assertNull(viewModel.uiState.value.mutationNotice)
     }
 
-    /** An unplayable Direct pick is refused with guidance — never silently switched to Remux. */
+    /**
+     * Outside the audio conversion's scope, an unplayable Direct pick is still refused with
+     * guidance — never silently switched to Remux.
+     */
     @Test
     fun `an undecodable direct track is refused, not substituted`() = runTest {
-        val viewModel = viewModel(http()) { _, _ -> false }
+        val viewModel = viewModel(http(technicalJson = truehdTechnicalJson())) { _, _ -> false }
         viewModel.open(1)
         viewModel.awaitTracksResolved()
 

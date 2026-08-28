@@ -27,3 +27,7 @@ const val HLS_WAITING_FOR_CAPACITY_MESSAGE = "Waiting for the server to free up�
 
 /** Narration while the session-lost budget recreates an evicted session. */
 const val HLS_RECONNECTING_MESSAGE = "Reconnecting to the stream…"
+
+/** Narration when the server refuses a requested audio conversion and the start retries legacy. */
+const val HLS_AUDIO_CONVERSION_UNAVAILABLE_MESSAGE =
+    "Audio conversion unavailable — using standard audio."

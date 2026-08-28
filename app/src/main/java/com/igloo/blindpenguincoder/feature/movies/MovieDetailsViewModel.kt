@@ -376,6 +376,7 @@ class MovieDetailsViewModel(
                 mode = request.mode,
                 audioCodec = request.selectedAudioTrack?.codec,
                 audioCodecProfile = request.selectedAudioTrack?.codecProfile,
+                audioChannels = request.selectedAudioTrack?.channels,
                 audioLabel = request.selectedAudioTrack?.label,
                 canPlayMime = { mime -> canPlayAudioMime(mime, request.selectedAudioTrack?.channels) },
             )

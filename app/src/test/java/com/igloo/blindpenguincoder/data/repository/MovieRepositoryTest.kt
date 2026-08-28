@@ -4,6 +4,7 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.playback.hls.HlsManifestResult
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
+import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_UNAUTHORIZED_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.playbackServerRefusedMessage
@@ -54,13 +55,14 @@ class MovieRepositoryTest {
 
     // --- HLS session plumbing ---
 
-    private fun hlsSpec(reload: Int = 0) = HlsSessionSpec(
+    private fun hlsSpec(reload: Int = 0, audioProfile: HlsAudioProfile? = null) = HlsSessionSpec(
         movieId = 9,
         profileId = "remux",
         audioTypeIndex = 1,
         startSec = 90,
         sessionUuid = "5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1",
         reload = reload,
+        audioProfile = audioProfile,
     )
 
     @Test
@@ -71,6 +73,20 @@ class MovieRepositoryTest {
             "$TEST_SERVER/movies/9/hls/remux/playlist.m3u8" +
                 "?playback_session=5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1&start=90&audio_track=1",
             http.movieRepository.hlsPlaylistUrl(hlsSpec()),
+        )
+    }
+
+    @Test
+    fun `an audio conversion rides the playlist url as the codec-channels pair`() = runTest {
+        val http = TestHttp { error("the playlist url is built, never fetched") }
+
+        assertEquals(
+            "$TEST_SERVER/movies/9/hls/remux/playlist.m3u8" +
+                "?playback_session=5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1&start=90&audio_track=1" +
+                "&audio_codec=eac3&audio_channels=6",
+            http.movieRepository.hlsPlaylistUrl(
+                hlsSpec(audioProfile = HlsAudioProfile.DolbyDigitalPlus),
+            ),
         )
     }
 
@@ -112,6 +128,9 @@ class MovieRepositoryTest {
         assertEquals("5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1", captured.url.parameters["playback_session"])
         assertEquals("90", captured.url.parameters["start"])
         assertEquals("1", captured.url.parameters["audio_track"])
+        // A legacy spec must not leak half a conversion pair onto the wire.
+        assertEquals(null, captured.url.parameters["audio_codec"])
+        assertEquals(null, captured.url.parameters["audio_channels"])
         assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
         val timeouts = requireNotNull(captured.getCapabilityOrNull(HttpTimeoutCapability))
         assertEquals(45_000L, timeouts.requestTimeoutMillis)

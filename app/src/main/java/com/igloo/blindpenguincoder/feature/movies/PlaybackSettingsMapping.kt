@@ -4,9 +4,11 @@ import com.igloo.blindpenguincoder.data.model.AudioStream
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.Subtitle
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
+import com.igloo.blindpenguincoder.playback.model.audioCodecDisplayName
 import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
 import com.igloo.blindpenguincoder.playback.model.describeChannelLayout
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
+import com.igloo.blindpenguincoder.playback.model.isUnreliableHlsAudio
 import com.igloo.blindpenguincoder.playback.model.languageDisplayName
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import java.util.Locale
@@ -126,9 +128,23 @@ internal fun playbackSettingsUi(
         mode = selection.mode,
         audioCodec = effectiveAudio?.codec,
         audioCodecProfile = effectiveAudio?.codecProfile?.orNull(),
+        audioChannels = effectiveAudio?.channels?.toInt(),
         audioLabel = effectiveAudio?.let { audioTrackLabel(it, effectiveAudioIndex) },
         canPlayMime = { mime -> canPlayAudioMime(mime, effectiveAudio?.channels?.toInt()) },
     ) as? PlaybackGateResult.Blocked
+
+    // The same predicate the engine uses to substitute the Remux conversion under Direct —
+    // announced here so the automatic switch never surprises anyone mid-movie.
+    val conversionNote = effectiveAudio
+        ?.takeIf {
+            selection.mode == PlaybackMode.Direct &&
+                isUnreliableHlsAudio(it.codec, it.channels.toInt())
+        }
+        ?.let {
+            " This track's ${audioCodecDisplayName(it.codec, it.codecProfile?.orNull())} audio " +
+                "will be adjusted automatically for reliable playback."
+        }
+        .orEmpty()
 
     return PlaybackSettingsUi(
         modes = modes,
@@ -143,7 +159,7 @@ internal fun playbackSettingsUi(
             subtitleLabel = effectiveSubtitle?.let {
                 subtitleTrackLabel(it, subtitleList.indexOf(it))
             },
-        ) + directCaution?.let { " ${it.message}" }.orEmpty(),
+        ) + conversionNote + directCaution?.let { " ${it.message}" }.orEmpty(),
     )
 }
 

@@ -42,12 +42,15 @@ import com.igloo.blindpenguincoder.playback.hls.hlsResumeStartSec
 import com.igloo.blindpenguincoder.playback.hls.isMovieHlsRequestPath
 import com.igloo.blindpenguincoder.playback.hls.shouldRebaseHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRecoverLostHlsSession
+import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
+import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.TrackOption
 import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
+import com.igloo.blindpenguincoder.playback.model.hlsAudioConversionFor
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import kotlin.math.floor
 import kotlinx.coroutines.CancellationException
@@ -87,12 +90,16 @@ internal class ExoMoviePlayerEngine(
     private val controller =
         HlsSessionController(request.movieId, services.hlsSessionApi, scope, services.stopScope)
 
-    /** User intent; every seek, audio swap, and recovery asks for this mode again. */
-    private var requestedMode = request.mode
+    /**
+     * User intent; every seek, audio swap, and recovery asks for this mode again. Resolved
+     * through [resolveModeForAudio] already at construction: a Direct request whose track needs
+     * the audio conversion starts (and reports itself upstream) as Remux from the first frame.
+     */
+    private var requestedMode = resolveModeForAudio(request.mode, request.audioTypeIndex)
     /** A switch whose manifest has not resolved yet; keeps repeated OK presses idempotent. */
     private var pendingMode: PlaybackMode? = null
     /** What the prepared source actually uses; the Quality menu reports this truth. */
-    private var effectiveMode = request.mode
+    private var effectiveMode = requestedMode
     override var currentAudioTypeIndex: Int? = request.audioTypeIndex
         private set
     override var currentSubtitleTypeIndex: Int? = request.subtitleTypeIndex
@@ -277,8 +284,14 @@ internal class ExoMoviePlayerEngine(
         }
         val override = overrideFor(optionId) ?: return
         // Remembered as the type ordinal so the choice survives a later switch into HLS.
-        typeIndexForOptionId(player.currentTracks, C.TRACK_TYPE_AUDIO, optionId)
-            ?.let { currentAudioTypeIndex = it }
+        val typeIndex = typeIndexForOptionId(player.currentTracks, C.TRACK_TYPE_AUDIO, optionId)
+        typeIndex?.let { currentAudioTypeIndex = it }
+        // A track that needs the audio conversion cannot stay under Direct — the restart
+        // resolves to Remux with the converted soundtrack instead of an in-place override.
+        if (typeIndex != null && conversionFor(typeIndex) != null) {
+            restartInPlace(requestedMode, typeIndex, currentAbsoluteSec())
+            return
+        }
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setOverrideForType(override)
             .build()
@@ -302,7 +315,10 @@ internal class ExoMoviePlayerEngine(
 
     override fun selectPlaybackMode(optionId: String) {
         if (!playbackIntent.acceptsCommands) return
-        val mode = PlaybackMode.entries.firstOrNull { it.name == optionId } ?: return
+        val picked = PlaybackMode.entries.firstOrNull { it.name == optionId } ?: return
+        // Picking Direct with an unreliable track resolves straight to Remux — usually the
+        // active mode already, making the press a no-op instead of a wasted session restart.
+        val mode = resolveModeForAudio(picked, currentAudioTypeIndex)
         if (mode == pendingMode) return
         if (mode == effectiveMode) {
             if (pendingMode != null) cancelPendingModeSwitch()
@@ -327,6 +343,7 @@ internal class ExoMoviePlayerEngine(
             mode = mode,
             audioCodec = track?.codec,
             audioCodecProfile = track?.codecProfile,
+            audioChannels = track?.channels,
             audioLabel = track?.label,
             canPlayMime = { mime -> services.canPlayAudioMime(mime, track?.channels) },
         )
@@ -365,11 +382,14 @@ internal class ExoMoviePlayerEngine(
      * screen (frozen) through capacity waits instead of going black.
      */
     private fun restartInPlace(
-        mode: PlaybackMode,
+        requestedModeArg: PlaybackMode,
         audioTypeIndex: Int?,
         targetAbsoluteSec: Double,
     ) {
         if (!playbackIntent.acceptsCommands) return
+        // Recovery, keepalive, and seeks re-enter here with the stored intent; resolving again
+        // means no entry point can regress into Direct with a track that needs conversion.
+        val mode = resolveModeForAudio(requestedModeArg, audioTypeIndex)
         restartJob?.cancel()
         restartJob = null
         val generation = ++restartGeneration
@@ -399,6 +419,7 @@ internal class ExoMoviePlayerEngine(
                 val start = controller.start(
                     profileId = profileId,
                     audioTypeIndex = audioTypeIndex ?: request.effectiveAudioTypeIndex,
+                    audioProfile = conversionFor(audioTypeIndex),
                     startSec = floor(targetAbsoluteSec).toInt().coerceAtLeast(0),
                 ) { message ->
                     if (isRestartCurrent(generation)) {
@@ -560,6 +581,25 @@ internal class ExoMoviePlayerEngine(
     /** The concrete audio ordinal an HLS session would use right now. */
     private fun effectiveAudioOrdinal(): Int? =
         currentAudioTypeIndex ?: request.effectiveAudioTypeIndex
+
+    /** The track an HLS session with this ordinal would use; null = video-only movie. */
+    private fun trackFor(audioTypeIndex: Int?): PlayableAudioTrack? =
+        (audioTypeIndex ?: request.effectiveAudioTypeIndex)?.let(request.audioTracks::getOrNull)
+
+    /** The server-side conversion this track needs, or null for legacy audio handling. */
+    private fun conversionFor(audioTypeIndex: Int?): HlsAudioProfile? =
+        hlsAudioConversionFor(trackFor(audioTypeIndex))
+
+    /**
+     * Direct with a track that needs conversion becomes Remux — the video plays as-is while
+     * the server converts the soundtrack; every other combination is the user's ask untouched.
+     */
+    private fun resolveModeForAudio(mode: PlaybackMode, audioTypeIndex: Int?): PlaybackMode =
+        if (mode == PlaybackMode.Direct && conversionFor(audioTypeIndex) != null) {
+            PlaybackMode.Remux
+        } else {
+            mode
+        }
 
     /** The in-player menu exposes the same normative seven-mode contract as pre-play settings. */
     private fun emitQualityOptions() {

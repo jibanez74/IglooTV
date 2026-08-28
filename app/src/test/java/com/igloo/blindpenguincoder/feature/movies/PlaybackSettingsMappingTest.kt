@@ -312,4 +312,46 @@ class PlaybackSettingsMappingTest {
         )
         assertTrue(!ui.explanation.contains("can't play"))
     }
+
+    // --- the automatic audio conversion ---
+
+    /** Tracks the engine converts get an announcement instead of the capability caution. */
+    @Test
+    fun `a direct pick over a convertible track announces the automatic adjustment`() {
+        for (stream in listOf(audioStream(codec = "dts"), audioStream(codec = "aac"))) {
+            val ui = playbackSettingsUi(
+                audioStreams = listOf(stream),
+                subtitles = null,
+                selection = PlaybackSelection(mode = PlaybackMode.Direct),
+                canPlayAudioMime = { _, _ -> false },
+            )
+            assertEquals(PlaybackMode.Direct, ui.selectedMode)
+            assertTrue(ui.explanation.contains("adjusted automatically"))
+            assertTrue(!ui.explanation.contains("can't play"))
+        }
+    }
+
+    @Test
+    fun `the adjustment announcement names the codec and stays off other modes and tracks`() {
+        val direct = playbackSettingsUi(
+            audioStreams = listOf(audioStream(codec = "dts")),
+            subtitles = null,
+            selection = PlaybackSelection(mode = PlaybackMode.Direct),
+        )
+        assertTrue(direct.explanation.contains("This track's DTS audio"))
+
+        val remux = playbackSettingsUi(
+            audioStreams = listOf(audioStream(codec = "dts")),
+            subtitles = null,
+            selection = PlaybackSelection(mode = PlaybackMode.Remux),
+        )
+        assertTrue(!remux.explanation.contains("adjusted automatically"))
+
+        val stereoAac = playbackSettingsUi(
+            audioStreams = listOf(audioStream(codec = "aac", channels = 2, channelLayout = "stereo")),
+            subtitles = null,
+            selection = PlaybackSelection(mode = PlaybackMode.Direct),
+        )
+        assertTrue(!stereoAac.explanation.contains("adjusted automatically"))
+    }
 }

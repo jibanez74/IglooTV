@@ -1,5 +1,7 @@
 package com.igloo.blindpenguincoder.playback.hls
 
+import com.igloo.blindpenguincoder.playback.model.HLS_AUDIO_CONVERSION_UNAVAILABLE_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -50,7 +52,12 @@ class HlsSessionControllerTest {
         val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
         val statuses = mutableListOf<String?>()
 
-        val start = controller.start("remux", audioTypeIndex = 1, startSec = 90) { statuses += it }
+        val start = controller.start(
+            "remux",
+            audioTypeIndex = 1,
+            audioProfile = null,
+            startSec = 90,
+        ) { statuses += it }
 
         assertEquals("1080p_8mbps", start.effectiveProfileId)
         assertEquals(87.4, start.actualStartSec, 0.0)
@@ -64,8 +71,8 @@ class HlsSessionControllerTest {
         val api = FakeHlsApi()
         val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
 
-        controller.start("remux", 0, 0)
-        controller.start("1080p_8mbps", 1, 500)
+        controller.start("remux", 0, null, 0)
+        controller.start("1080p_8mbps", 1, null, 500)
 
         assertEquals(1, api.fetchedSpecs.map { it.sessionUuid }.distinct().size)
         assertEquals(controller.sessionUuid, api.fetchedSpecs.first().sessionUuid)
@@ -75,12 +82,12 @@ class HlsSessionControllerTest {
     fun `stop rotates the uuid before a later start`() = runTest {
         val api = FakeHlsApi()
         val controller = HlsSessionController(7, api, backgroundScope, this)
-        controller.start("remux", 0, 0)
+        controller.start("remux", 0, null, 0)
         val stoppedUuid = controller.sessionUuid
 
         controller.releaseAndStop()
         val nextUuid = controller.sessionUuid
-        controller.start("1080p_8mbps", 0, 60)
+        controller.start("1080p_8mbps", 0, null, 60)
         runCurrent()
 
         assertTrue(stoppedUuid != nextUuid)
@@ -102,12 +109,12 @@ class HlsSessionControllerTest {
             }
         }
         val controller = HlsSessionController(7, delayingApi, backgroundScope, backgroundScope)
-        controller.start("remux", 0, 0)
+        controller.start("remux", 0, null, 0)
         val oldUuid = controller.sessionUuid
 
         controller.releaseAndStop()
         val newUuid = controller.sessionUuid
-        controller.start("1080p_8mbps", 0, 60)
+        controller.start("1080p_8mbps", 0, null, 60)
         assertEquals(oldUuid, stopEntered.await())
         assertTrue(oldUuid != newUuid)
         assertEquals(newUuid, api.fetchedSpecs.last().sessionUuid)
@@ -129,7 +136,7 @@ class HlsSessionControllerTest {
         val controller = HlsSessionController(7, api, backgroundScope, this)
         val result = CompletableDeferred<Result<HlsSessionStart>>()
         backgroundScope.launch {
-            result.complete(runCatching { controller.start("remux", 0, 0) })
+            result.complete(runCatching { controller.start("remux", 0, null, 0) })
         }
         fetchStarted.await()
 
@@ -150,7 +157,7 @@ class HlsSessionControllerTest {
         val statuses = mutableListOf<String?>()
         val before = currentTime
 
-        controller.start("remux", 0, 0) { statuses += it }
+        controller.start("remux", 0, null, 0) { statuses += it }
 
         assertEquals(3_000L, currentTime - before)
         assertEquals(2, api.fetchedSpecs.size)
@@ -165,7 +172,7 @@ class HlsSessionControllerTest {
         val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
 
         try {
-            controller.start("remux", 0, 0)
+            controller.start("remux", 0, null, 0)
             fail("expected HlsStartException")
         } catch (expected: HlsStartException) {
             assertTrue(expected.message!!.contains("busy"))
@@ -187,7 +194,7 @@ class HlsSessionControllerTest {
             val before = currentTime
 
             try {
-                controller.start("remux", 0, 0)
+                controller.start("remux", 0, null, 0)
                 fail("expected HlsStartException")
             } catch (expected: HlsStartException) {
                 assertTrue(expected.message!!.contains("busy"))
@@ -205,7 +212,7 @@ class HlsSessionControllerTest {
         api.queuedResults += HlsManifestResult.Ready("remux", 12.0)
         val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
 
-        val start = controller.start("remux", 0, 0)
+        val start = controller.start("remux", 0, null, 0)
 
         assertEquals(12.0, start.actualStartSec, 0.0)
     }
@@ -214,7 +221,7 @@ class HlsSessionControllerTest {
     fun `a throwing keepalive tick neither ends the loop nor escapes the scope`() = runTest {
         val api = FakeHlsApi()
         val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
-        controller.start("remux", 2, 60)
+        controller.start("remux", 2, null, 60)
         var lost = 0
         controller.startKeepalive { lost++ }
 
@@ -238,10 +245,87 @@ class HlsSessionControllerTest {
         api.queuedResults += HlsManifestResult.Ready("remux", 0.0)
         val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
 
-        controller.start("remux", 0, 0)
+        controller.start("remux", 0, null, 0)
 
         assertEquals(0, api.fetchedSpecs.first().reload)
         assertEquals(1, api.fetchedSpecs.last().reload)
+    }
+
+    @Test
+    fun `an audio profile rides every retry, the started spec, and the keepalive`() = runTest {
+        val api = FakeHlsApi()
+        api.queuedResults += HlsManifestResult.Busy(retryAfterSec = 1)
+        api.queuedResults += HlsManifestResult.Lost
+        api.queuedResults += HlsManifestResult.Ready("remux", 0.0)
+        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+
+        val start = controller.start("remux", 0, HlsAudioProfile.DolbyDigitalPlus, 0)
+        controller.startKeepalive { }
+        advanceTimeBy(HLS_KEEPALIVE_INTERVAL_MS + 1)
+
+        assertEquals(4, api.fetchedSpecs.size)
+        assertTrue(api.fetchedSpecs.all { it.audioProfile == HlsAudioProfile.DolbyDigitalPlus })
+        assertEquals(HlsAudioProfile.DolbyDigitalPlus, start.spec.audioProfile)
+        // The lost retry still bumped reload alongside the profile.
+        assertEquals(1, api.fetchedSpecs.last().reload)
+    }
+
+    @Test
+    fun `a rejected conversion falls back to legacy audio once, narrating the change`() = runTest {
+        val api = FakeHlsApi()
+        api.queuedResults += HlsManifestResult.Failed(
+            "The server refused the stream (HTTP 400).",
+            rejectedRequest = true,
+        )
+        api.queuedResults += HlsManifestResult.Ready("remux", 0.0)
+        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val statuses = mutableListOf<String?>()
+
+        val start = controller.start("remux", 0, HlsAudioProfile.DolbyDigital, 0) { statuses += it }
+
+        assertEquals(HlsAudioProfile.DolbyDigital, api.fetchedSpecs.first().audioProfile)
+        assertNull(api.fetchedSpecs.last().audioProfile)
+        assertNull(start.spec.audioProfile)
+        assertEquals(listOf(HLS_AUDIO_CONVERSION_UNAVAILABLE_MESSAGE, null), statuses)
+    }
+
+    /** The fallback is one-shot: a second rejection is a genuine failure, not a loop. */
+    @Test
+    fun `a rejection after the legacy fallback throws`() = runTest {
+        val api = FakeHlsApi()
+        repeat(2) {
+            api.queuedResults += HlsManifestResult.Failed(
+                "The server refused the stream (HTTP 400).",
+                rejectedRequest = true,
+            )
+        }
+        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+
+        try {
+            controller.start("remux", 0, HlsAudioProfile.DolbyDigitalPlus, 0)
+            fail("expected HlsStartException")
+        } catch (expected: HlsStartException) {
+            assertTrue(expected.message!!.contains("400"))
+        }
+        assertEquals(2, api.fetchedSpecs.size)
+    }
+
+    @Test
+    fun `a rejected request without a profile throws as before`() = runTest {
+        val api = FakeHlsApi()
+        api.queuedResults += HlsManifestResult.Failed(
+            "The server refused the stream (HTTP 400).",
+            rejectedRequest = true,
+        )
+        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+
+        try {
+            controller.start("remux", 0, null, 0)
+            fail("expected HlsStartException")
+        } catch (expected: HlsStartException) {
+            assertTrue(expected.message!!.contains("400"))
+        }
+        assertEquals(1, api.fetchedSpecs.size)
     }
 
     @Test
@@ -251,7 +335,7 @@ class HlsSessionControllerTest {
         val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
 
         try {
-            controller.start("remux", 0, 0)
+            controller.start("remux", 0, null, 0)
             fail("expected HlsStartException")
         } catch (expected: HlsStartException) {
             assertTrue(expected.unauthorized)
@@ -262,7 +346,7 @@ class HlsSessionControllerTest {
     fun `the keepalive refetches the started spec and reports a lost session`() = runTest {
         val api = FakeHlsApi()
         val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
-        controller.start("remux", 2, 60)
+        controller.start("remux", 2, null, 60)
         var lost = 0
         controller.startKeepalive { lost++ }
 
@@ -284,7 +368,7 @@ class HlsSessionControllerTest {
     fun `the keepalive shrugs off transient failures and keeps ticking`() = runTest {
         val api = FakeHlsApi()
         val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
-        controller.start("remux", 2, 60)
+        controller.start("remux", 2, null, 60)
         var lost = 0
         controller.startKeepalive { lost++ }
 
@@ -305,7 +389,7 @@ class HlsSessionControllerTest {
     fun `release stops the started session on the surviving scope`() = runTest {
         val api = FakeHlsApi()
         val controller = HlsSessionController(7, api, backgroundScope, this)
-        controller.start("remux", 0, 0)
+        controller.start("remux", 0, null, 0)
 
         val stoppedUuid = controller.sessionUuid
         controller.releaseAndStop()
@@ -324,7 +408,7 @@ class HlsSessionControllerTest {
             manifest.await()
         }
         val controller = HlsSessionController(7, api, backgroundScope, this)
-        val startup = backgroundScope.launch { controller.start("remux", 0, 0) }
+        val startup = backgroundScope.launch { controller.start("remux", 0, null, 0) }
         fetchStarted.await()
 
         startup.cancelAndJoin()
@@ -340,7 +424,7 @@ class HlsSessionControllerTest {
         val api = FakeHlsApi()
         api.queuedResults += HlsManifestResult.Failed("No stream.")
         val controller = HlsSessionController(7, api, backgroundScope, this)
-        runCatching { controller.start("remux", 0, 0) }
+        runCatching { controller.start("remux", 0, null, 0) }
 
         val stoppedUuid = controller.sessionUuid
         controller.releaseAndStop()
@@ -378,7 +462,7 @@ class HlsSessionControllerTest {
     fun `repeated stop is idempotent and keepalive stays canceled`() = runTest {
         val api = FakeHlsApi()
         val controller = HlsSessionController(7, api, backgroundScope, this)
-        controller.start("remux", 0, 0)
+        controller.start("remux", 0, null, 0)
         controller.startKeepalive { fail("keepalive must be canceled") }
 
         controller.releaseAndStop()

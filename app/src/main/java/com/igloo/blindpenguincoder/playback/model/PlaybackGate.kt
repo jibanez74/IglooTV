@@ -8,9 +8,12 @@ import java.util.Locale
  * start honestly on this device? Only Direct play can be refused: standard Media3 cannot
  * software-decode TrueHD or DTS, so on a TV without passthrough for the selected track the
  * movie would start with silence, which is worse than a clear refusal naming the codec. HLS
- * modes always proceed — the backend guarantees the mux is playable (AAC audio, H.264-safe
- * video). The gate never substitutes a different mode: refusing with guidance keeps the
- * user's choice theirs. Capability is injected so the rules stay JVM-pure and testable.
+ * modes always proceed — the backend guarantees the mux is playable. Tracks covered by
+ * [isUnreliableHlsAudio] also always proceed: for those (and only those) the engine substitutes
+ * a Remux session with server-side AC-3/E-AC-3 conversion and surfaces the switch in the
+ * quality menu, so a refusal would block a request that can in fact play well. Everything else
+ * keeps the rule that the gate never substitutes a different mode: refusing with guidance keeps
+ * the user's choice theirs. Capability is injected so the rules stay JVM-pure and testable.
  */
 sealed interface PlaybackGateResult {
     data object Proceed : PlaybackGateResult
@@ -21,10 +24,13 @@ fun evaluatePlaybackGate(
     mode: PlaybackMode,
     audioCodec: String?,
     audioCodecProfile: String?,
+    audioChannels: Int?,
     audioLabel: String?,
     canPlayMime: (String) -> Boolean,
 ): PlaybackGateResult {
     if (mode != PlaybackMode.Direct) return PlaybackGateResult.Proceed
+    // Covered by the automatic Remux conversion — never refused, regardless of capability.
+    if (isUnreliableHlsAudio(audioCodec, audioChannels)) return PlaybackGateResult.Proceed
     // Unknown or unmapped codecs proceed: the gate refuses only what it can prove unplayable,
     // and the player's own error surface catches whatever it could not foresee.
     val mimeType = audioCodecToMimeType(audioCodec ?: return PlaybackGateResult.Proceed, audioCodecProfile)

@@ -11,6 +11,7 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.playback.hls.HlsManifestResult
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionApi
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
+import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
@@ -311,6 +312,126 @@ class ExoMoviePlayerEngineTest {
         waitFor("the stop") { api.stopped.isNotEmpty() }
 
         assertTrue(engine.refusals().isEmpty())
+    }
+
+    // --- the automatic audio conversion ---
+
+    private fun dtsTrack() = PlayableAudioTrack(
+        label = "English · DTS-HD",
+        codec = "dts",
+        codecProfile = "DTS-HD MA",
+        channels = 6,
+        isDefault = true,
+    )
+
+    @Test
+    fun aDirectRequestOverADtsTrackStartsARemuxSessionWithTheConversionPair() {
+        val api = FakeHlsApi()
+        val engine = engine(playRequest(mode = PlaybackMode.Direct, audioTracks = listOf(dtsTrack())), api)
+
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the manifest") { api.fetched.isNotEmpty() }
+
+        // Original video (remux copies it), converted soundtrack — never a Direct source.
+        assertEquals("remux", api.fetched.single().profileId)
+        assertEquals(HlsAudioProfile.DolbyDigitalPlus, api.fetched.single().audioProfile)
+
+        // The quality menu tells the truth: Remux effective, Remux the reported intent.
+        waitFor("the quality options") {
+            engine.events.replayCache.any { it is MoviePlayerEvent.QualityOptionsChanged }
+        }
+        val ladder = engine.events.replayCache
+            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .last()
+        assertEquals(PlaybackMode.Remux.name, ladder.options.single { it.selected }.id)
+        assertEquals(PlaybackMode.Remux, ladder.requestedMode)
+
+        // Re-picking Direct resolves back to Remux: a no-op, not a refusal or a new session.
+        onMain { engine.selectPlaybackMode(PlaybackMode.Direct.name) }
+        instrumentation.waitForIdleSync()
+        assertEquals(1, api.fetched.size)
+        assertTrue(engine.refusals().isEmpty())
+        assertTrue(api.stopped.isEmpty())
+    }
+
+    @Test
+    fun aDirectRequestOverAReliableTrackNeverTouchesTheBackend() {
+        val api = FakeHlsApi()
+        val engine = engine(
+            playRequest(
+                mode = PlaybackMode.Direct,
+                audioTracks = listOf(
+                    PlayableAudioTrack(label = "English · Stereo", codec = "aac", channels = 2, isDefault = true),
+                ),
+            ),
+            api,
+        )
+
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the quality options") {
+            engine.events.replayCache.any { it is MoviePlayerEvent.QualityOptionsChanged }
+        }
+
+        assertTrue(api.fetched.isEmpty())
+        val ladder = engine.events.replayCache
+            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .last()
+        assertEquals(PlaybackMode.Direct.name, ladder.options.single { it.selected }.id)
+    }
+
+    @Test
+    fun aChosenQualityKeepsItsProfileAndAddsTheConversionForTheTrack() {
+        val ladderApi = FakeHlsApi()
+        ladderApi.result = HlsManifestResult.Ready("1080p_8mbps", 0.0)
+        val ladder = engine(
+            playRequest(mode = PlaybackMode.P1080Mbps8, audioTracks = listOf(dtsTrack())),
+            ladderApi,
+        )
+        onMain { ladder.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the ladder manifest") { ladderApi.fetched.isNotEmpty() }
+        assertEquals("1080p_8mbps", ladderApi.fetched.single().profileId)
+        assertEquals(HlsAudioProfile.DolbyDigitalPlus, ladderApi.fetched.single().audioProfile)
+
+        val remuxApi = FakeHlsApi()
+        val remux = engine(
+            playRequest(
+                mode = PlaybackMode.Remux,
+                audioTracks = listOf(
+                    PlayableAudioTrack(label = "English · 5.1", codec = "aac", channels = 6, isDefault = true),
+                ),
+            ),
+            remuxApi,
+        )
+        onMain { remux.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the remux manifest") { remuxApi.fetched.isNotEmpty() }
+        assertEquals("remux", remuxApi.fetched.single().profileId)
+        assertEquals(HlsAudioProfile.DolbyDigital, remuxApi.fetched.single().audioProfile)
+    }
+
+    @Test
+    fun anHlsAudioSwitchRecomputesTheConversionPerTrack() {
+        val api = FakeHlsApi()
+        val engine = engine(
+            playRequest(
+                mode = PlaybackMode.Remux,
+                audioTracks = listOf(
+                    dtsTrack(),
+                    PlayableAudioTrack(label = "Spanish · Stereo", codec = "aac", channels = 2),
+                ),
+            ),
+            api,
+        )
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the first manifest") { api.fetched.size == 1 }
+        assertEquals(HlsAudioProfile.DolbyDigitalPlus, api.fetched[0].audioProfile)
+
+        onMain { engine.selectAudioTrack("audio:1") }
+        waitFor("the switch to the stereo track") { api.fetched.size == 2 }
+        assertNull(api.fetched[1].audioProfile)
+
+        onMain { engine.selectAudioTrack("audio:0") }
+        waitFor("the switch back") { api.fetched.size == 3 }
+        assertEquals(HlsAudioProfile.DolbyDigitalPlus, api.fetched[2].audioProfile)
     }
 
     // --- failing honestly ---

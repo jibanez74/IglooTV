@@ -11,12 +11,14 @@ class PlaybackGateTest {
         mode: PlaybackMode = PlaybackMode.Direct,
         codec: String? = "truehd",
         profile: String? = null,
+        channels: Int? = null,
         label: String? = "English · 7.1 surround",
         canPlay: Boolean = true,
     ) = evaluatePlaybackGate(
         mode = mode,
         audioCodec = codec,
         audioCodecProfile = profile,
+        audioChannels = channels,
         audioLabel = label,
         canPlayMime = { canPlay },
     )
@@ -57,6 +59,29 @@ class PlaybackGateTest {
     fun `unknown or missing codecs proceed rather than block on ignorance`() {
         assertEquals(PlaybackGateResult.Proceed, gate(codec = null, canPlay = false))
         assertEquals(PlaybackGateResult.Proceed, gate(codec = "exotic_new_codec", canPlay = false))
+    }
+
+    /** Tracks the engine converts via Remux are never refused, capability notwithstanding. */
+    @Test
+    fun `codecs covered by the automatic audio conversion proceed even when unplayable`() {
+        assertEquals(PlaybackGateResult.Proceed, gate(codec = "dts", canPlay = false))
+        assertEquals(
+            PlaybackGateResult.Proceed,
+            gate(codec = "dts", profile = "DTS-HD MA", channels = 6, canPlay = false),
+        )
+        assertEquals(
+            PlaybackGateResult.Proceed,
+            gate(codec = "aac", channels = 6, canPlay = false),
+        )
+    }
+
+    /** Stereo AAC is outside the conversion's scope; its gate outcome is capability's as ever. */
+    @Test
+    fun `stereo aac still answers to capability alone`() {
+        assertEquals(PlaybackGateResult.Proceed, gate(codec = "aac", channels = 2))
+        assertTrue(
+            gate(codec = "aac", channels = 2, canPlay = false) is PlaybackGateResult.Blocked,
+        )
     }
 
     // --- codec → MIME table ---

@@ -1,6 +1,8 @@
 package com.igloo.blindpenguincoder.playback.hls
 
+import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -10,6 +12,7 @@ class HlsSessionTest {
         audioTypeIndex: Int? = 1,
         startSec: Int = 90,
         reload: Int = 0,
+        audioProfile: HlsAudioProfile? = null,
     ) = HlsSessionSpec(
         movieId = 7,
         profileId = "remux",
@@ -17,6 +20,7 @@ class HlsSessionTest {
         startSec = startSec,
         sessionUuid = "5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1",
         reload = reload,
+        audioProfile = audioProfile,
     )
 
     // --- query construction ---
@@ -47,6 +51,36 @@ class HlsSessionTest {
     fun `reload appears only once recovery has bumped it`() {
         assertTrue(hlsQueryParams(spec(reload = 0)).none { it.first == "reload" })
         assertTrue(hlsQueryParams(spec(reload = 2)).contains("reload" to "2"))
+    }
+
+    @Test
+    fun `an audio profile adds the codec-channels pair after the audio ordinal`() {
+        assertEquals(
+            listOf(
+                "playback_session" to "5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1",
+                "start" to "90",
+                "audio_track" to "1",
+                "audio_codec" to "eac3",
+                "audio_channels" to "6",
+            ),
+            hlsQueryParams(spec(audioProfile = HlsAudioProfile.DolbyDigitalPlus)),
+        )
+        assertTrue(
+            hlsQueryParams(spec(audioProfile = HlsAudioProfile.DolbyDigital))
+                .containsAll(listOf("audio_codec" to "ac3", "audio_channels" to "6")),
+        )
+    }
+
+    /** The server 400s a lone half of the pair; no spec can ever emit one without the other. */
+    @Test
+    fun `the pair is all-or-nothing by construction`() {
+        for (profile in listOf(null, HlsAudioProfile.DolbyDigital, HlsAudioProfile.DolbyDigitalPlus)) {
+            val params = hlsQueryParams(spec(audioProfile = profile))
+            assertEquals(
+                params.any { it.first == "audio_codec" },
+                params.any { it.first == "audio_channels" },
+            )
+        }
     }
 
     // --- manifest response classification ---
@@ -97,5 +131,17 @@ class HlsSessionTest {
         val failed = parseHlsManifestResponse(500, spec(), headers()) as HlsManifestResult.Failed
         assertTrue(failed.message.contains("500"))
         assertTrue(!failed.unauthorized)
+        assertFalse(failed.rejectedRequest)
+    }
+
+    /** 400/422 mean the server refused what was asked — the audio-profile fallback's trigger. */
+    @Test
+    fun `a 400 or 422 is marked as a rejected request`() {
+        for (status in listOf(400, 422)) {
+            val failed =
+                parseHlsManifestResponse(status, spec(), headers()) as HlsManifestResult.Failed
+            assertTrue(failed.rejectedRequest)
+            assertTrue(failed.message.contains(status.toString()))
+        }
     }
 }
