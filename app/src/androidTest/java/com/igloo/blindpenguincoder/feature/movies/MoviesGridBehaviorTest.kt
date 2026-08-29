@@ -123,10 +123,16 @@ class MoviesGridBehaviorTest {
     private fun showRows(
         rows: Int,
         append: MoviesAppendState = MoviesAppendState.Idle,
+        appendGeneration: Int = 0,
+        refreshing: Boolean = false,
+        notice: String? = null,
     ) {
         moviesState = testMoviesState(
             grid = IglooRailState.Loaded(testMovieGridItems.take(columns * rows)),
             append = append,
+            appendGeneration = appendGeneration,
+            refreshing = refreshing,
+            notice = notice,
         )
         composeRule.waitForIdle()
     }
@@ -284,6 +290,30 @@ class MoviesGridBehaviorTest {
     }
 
     @Test
+    fun retryFocusReturnsToThePreviousPosterAndStaysThereWhenTheAppendFinishes() {
+        setContent()
+        showRows(rows = 1, append = MoviesAppendState.Error("Something went wrong"))
+
+        card(1).performKeyInput { pressKey(Key.DirectionDown) }
+        val retry = composeRule.onNodeWithContentDescription("Retry loading more movies")
+        retry.assertIsFocused()
+        retry.performClick()
+
+        showRows(rows = 1, append = MoviesAppendState.Loading)
+        card(1).assertIsFocused()
+
+        showRows(
+            rows = 2,
+            append = MoviesAppendState.Idle,
+            appendGeneration = 1,
+        )
+        card(1).assertIsFocused()
+
+        showRows(rows = 2, append = MoviesAppendState.Error("Still unavailable"))
+        card(1).assertIsFocused()
+    }
+
+    @Test
     fun reachingTheEndOfTheLoadedCardsAsksForTheNextPage() {
         setContent()
         loadMoreCalls = 0
@@ -294,13 +324,42 @@ class MoviesGridBehaviorTest {
     }
 
     @Test
+    fun advancingAppendGenerationRearmsPrefetchWhenTheItemsDidNotChange() {
+        setContent()
+        loadMoreCalls = 0
+        showRows(rows = 2)
+        val callsAfterFirstPage = loadMoreCalls
+        assertTrue("expected the initial prefetch", callsAfterFirstPage >= 1)
+
+        showRows(rows = 2, appendGeneration = 1)
+
+        assertTrue(
+            "expected append generation to rearm prefetch",
+            loadMoreCalls > callsAfterFirstPage,
+        )
+    }
+
+    @Test
+    fun prefetchPausesDuringRefreshAndRearmsWhenAFailedRefreshCompletes() {
+        setContent()
+        showRows(rows = 2, refreshing = true)
+        loadMoreCalls = 0
+
+        showRows(rows = 2, refreshing = true)
+        assertEquals(0, loadMoreCalls)
+
+        showRows(rows = 2, refreshing = false, notice = "Refresh failed")
+
+        assertTrue("expected prefetch after refresh completion", loadMoreCalls >= 1)
+    }
+
+    @Test
     fun aGridWithEveryPageLoadedNeverAsksForAnother() {
         setContent()
+        loadMoreCalls = 0
         showRows(rows = 2, append = MoviesAppendState.End)
 
-        // The prefetch trigger still fires — it is a scroll threshold, not a paging decision —
-        // but the view model's guard is what stops it, so the screen may still report one call.
-        // What must not happen is the tail rendering anything to land on.
+        assertEquals(0, loadMoreCalls)
         composeRule.onNodeWithContentDescription("Loading more movies").assertDoesNotExist()
     }
 

@@ -147,6 +147,8 @@ fun MoviesScreen(
                 MoviesGrid(
                     items = grid.items,
                     append = state.append,
+                    appendGeneration = state.appendGeneration,
+                    refreshing = state.refreshing,
                     contentGeneration = state.contentGeneration,
                     handledGeneration = handledGeneration,
                     onGenerationHandled = onGenerationHandled,
@@ -244,6 +246,8 @@ private fun MoviesHeader(
 private fun MoviesGrid(
     items: List<MoviesGridItem>,
     append: MoviesAppendState,
+    appendGeneration: Int,
+    refreshing: Boolean,
     contentGeneration: Int,
     handledGeneration: Int,
     onGenerationHandled: (Int) -> Unit,
@@ -265,6 +269,10 @@ private fun MoviesGrid(
     val entryId = remember(items, lastFocusedMovieId) {
         lastFocusedMovieId?.takeIf { id -> items.any { it.id == id } } ?: items.first().id
     }
+    val appendRetryReturnRequester = remember { FocusRequester() }
+    var appendRetryFocused by remember { mutableStateOf(false) }
+    var appendRetryHandoffPending by remember { mutableStateOf(false) }
+    val appendRetryReturnId = lastFocusedMovieId?.takeIf { id -> items.any { it.id == id } }
 
     // layoutInfo changes on every scroll frame — and on a TV every d-pad press is a scroll frame
     // — so reading it straight from the composable would subscribe the whole grid to a per-frame
@@ -281,10 +289,30 @@ private fun MoviesGrid(
             last >= loadedCount - columns * PREFETCH_ROWS
         }
     }
-    // Edge-triggered on the boolean rather than run every frame. The view model's guards make a
-    // repeat call idempotent regardless, because a focus change or a resize can re-run this.
-    LaunchedEffect(shouldPrefetch) {
-        if (shouldPrefetch) onLoadMore()
+    // A successful append rearms this effect even if every returned id overlapped the loaded
+    // list. Refresh completion does the same after prefetch has deliberately paused.
+    LaunchedEffect(
+        shouldPrefetch,
+        append,
+        appendGeneration,
+        contentGeneration,
+        refreshing,
+    ) {
+        if (shouldPrefetch && append == MoviesAppendState.Idle && !refreshing) onLoadMore()
+    }
+
+    // Retry is the only focusable tail state. When it starts another request, move focus back to
+    // the real card the user came from before disposing Retry; stable movie keys then keep that
+    // card focused whether the append succeeds or fails again.
+    LaunchedEffect(append, appendRetryHandoffPending, appendRetryReturnId) {
+        if (
+            append == MoviesAppendState.Loading &&
+            appendRetryHandoffPending &&
+            appendRetryReturnId != null
+        ) {
+            appendRetryReturnRequester.requestFocusSafely()
+            appendRetryHandoffPending = false
+        }
     }
 
     // A wholesale replacement — a Refresh, or the first page landing — returns the user to the
@@ -332,6 +360,9 @@ private fun MoviesGrid(
                 modifier = Modifier
                     .withRequester(contentStartRequester.takeIf { item.id == entryId })
                     .withRequester(returnRequester.takeIf { item.id == entryId })
+                    .withRequester(
+                        appendRetryReturnRequester.takeIf { item.id == appendRetryReturnId },
+                    )
                     .focusProperties {
                         if (index % columns == 0) left = navigationRequester
                         // The header is a sibling of the scroll surface, so the first row's way
@@ -382,8 +413,13 @@ private fun MoviesGrid(
                     message = append.message,
                     actionText = "Retry",
                     actionSemanticLabel = "Retry loading more movies",
-                    onAction = onRetryAppend,
-                    actionModifier = Modifier.focusProperties { left = navigationRequester },
+                    onAction = {
+                        appendRetryHandoffPending = appendRetryFocused
+                        onRetryAppend()
+                    },
+                    actionModifier = Modifier
+                        .onFocusChanged { appendRetryFocused = it.isFocused }
+                        .focusProperties { left = navigationRequester },
                     // Polite, not Assertive: the grid above still works, so this reports on the
                     // tail rather than interrupting (section 12).
                     liveRegionMode = LiveRegionMode.Polite,

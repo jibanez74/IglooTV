@@ -123,6 +123,23 @@ class MoviesViewModelTest {
     }
 
     @Test
+    fun `a successful append updates the library count from that page`() = runTest {
+        val http = routedHttp(
+            library = {
+                when (it.page()) {
+                    "1" -> jsonResponse(page(number = 1, total = 96, totalPages = 3, ids = 1L..3L))
+                    else -> jsonResponse(page(number = 2, total = 97, totalPages = 3, ids = 4L..6L))
+                }
+            },
+        )
+        val model = loaded(http)
+
+        model.loadMore()
+
+        assertEquals(97L, model.uiState.value.totalMovies)
+    }
+
+    @Test
     fun `concurrent load more calls issue a single request`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val http = routedHttp(
@@ -195,6 +212,29 @@ class MoviesViewModelTest {
         model.loadMore()
 
         assertEquals(listOf(1L, 2L, 3L, 4L, 5L), model.uiState.value.gridIds())
+    }
+
+    @Test
+    fun `a fully overlapping append still advances its generation`() = runTest {
+        val http = routedHttp(
+            library = {
+                jsonResponse(
+                    page(
+                        number = it.page().toLong(),
+                        totalPages = 3,
+                        ids = 1L..3L,
+                    ),
+                )
+            },
+        )
+        val model = loaded(http)
+        val generationBefore = model.uiState.value.appendGeneration
+
+        model.loadMore()
+
+        assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+        assertEquals(generationBefore + 1, model.uiState.value.appendGeneration)
+        assertEquals(MoviesAppendState.Idle, model.uiState.value.append)
     }
 
     @Test
@@ -346,6 +386,46 @@ class MoviesViewModelTest {
     }
 
     @Test
+    fun `a failed reload after canceling an append rearms the canceled page`() = runTest {
+        val appendGate = CompletableDeferred<Unit>()
+        var firstPageCalls = 0
+        var secondPageCalls = 0
+        val http = routedHttp(
+            library = {
+                when (it.page()) {
+                    "1" -> {
+                        firstPageCalls += 1
+                        if (firstPageCalls == 1) {
+                            jsonResponse(page(number = 1, totalPages = 3, ids = 1L..3L))
+                        } else {
+                            jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                        }
+                    }
+                    else -> {
+                        secondPageCalls += 1
+                        if (secondPageCalls == 1) appendGate.await()
+                        jsonResponse(page(number = 2, totalPages = 3, ids = 4L..6L))
+                    }
+                }
+            },
+        )
+        val model = loaded(http)
+
+        model.loadMore()
+        assertEquals(MoviesAppendState.Loading, model.uiState.value.append)
+        model.reload()
+
+        assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+        assertEquals(MoviesAppendState.Idle, model.uiState.value.append)
+        assertTrue(!model.uiState.value.refreshing)
+
+        model.loadMore()
+
+        assertEquals(listOf("1", "2", "1", "2"), http.libraryPages)
+        assertEquals(listOf(1L, 2L, 3L, 4L, 5L, 6L), model.uiState.value.gridIds())
+    }
+
+    @Test
     fun `a failed background refresh keeps the loaded grid`() = runTest {
         val http = routedHttp(
             stats = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
@@ -362,15 +442,17 @@ class MoviesViewModelTest {
     // --- stats ------------------------------------------------------------------------------
 
     @Test
-    fun `a stats failure leaves the grid alone`() = runTest {
+    fun `a stats failure uses the library page count`() = runTest {
         val http = routedHttp(
             stats = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
-            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+            library = {
+                jsonResponse(page(number = 1, total = 73, totalPages = 1, ids = 1L..3L))
+            },
         )
 
         val state = loaded(http).uiState.value
 
-        assertNull(state.totalMovies)
+        assertEquals(73L, state.totalMovies)
         assertEquals(listOf(1L, 2L, 3L), state.gridIds())
     }
 

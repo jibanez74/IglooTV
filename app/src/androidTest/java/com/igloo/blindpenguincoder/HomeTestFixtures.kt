@@ -59,6 +59,7 @@ internal fun testMoviesState(
     totalMovies: Long? = 96,
     refreshing: Boolean = false,
     notice: String? = null,
+    appendGeneration: Int = 0,
     contentGeneration: Int = 0,
 ) = MoviesUiState(
     totalMovies = totalMovies,
@@ -66,6 +67,7 @@ internal fun testMoviesState(
     append = append,
     refreshing = refreshing,
     notice = notice,
+    appendGeneration = appendGeneration,
     contentGeneration = contentGeneration,
 )
 

@@ -54,6 +54,8 @@ data class MoviesUiState(
     val refreshing: Boolean = false,
     /** A refresh that failed with content still on screen — a notice, not an error card. */
     val notice: String? = null,
+    /** Bumped after every successful append, even when every returned id was already loaded. */
+    val appendGeneration: Int = 0,
     /**
      * Bumped whenever the list is replaced wholesale rather than appended to. The screen scrolls
      * to top and re-anchors focus on a change; an append never bumps it, so a prefetch never
@@ -148,7 +150,19 @@ class MoviesViewModel(
     private fun loadFirstPage(userInitiated: Boolean) {
         pageJob?.cancel()
         val startedIn = ++generation
-        if (userInitiated) _uiState.update { it.copy(refreshing = true, notice = null) }
+        if (userInitiated) {
+            _uiState.update {
+                it.copy(
+                    append = if (it.append == MoviesAppendState.Loading) {
+                        MoviesAppendState.Idle
+                    } else {
+                        it.append
+                    },
+                    refreshing = true,
+                    notice = null,
+                )
+            }
+        }
         pageJob = viewModelScope.launch {
             val result = movies.moviesLibrary(FIRST_PAGE, PAGE_SIZE, SORT)
             if (startedIn != generation) return@launch
@@ -160,6 +174,7 @@ class MoviesViewModel(
                     seenIds += items.map { it.id }
                     _uiState.update {
                         it.copy(
+                            totalMovies = result.value.total,
                             grid = IglooRailState.Loaded(items),
                             append = result.value.appendStateFor(FIRST_PAGE, items),
                             refreshing = false,
@@ -174,6 +189,11 @@ class MoviesViewModel(
                         val hadContent = it.grid is IglooRailState.Loaded
                         it.copy(
                             grid = IglooRailState.Error(message).orKeepContent(it.grid),
+                            append = if (it.append == MoviesAppendState.Loading) {
+                                MoviesAppendState.Idle
+                            } else {
+                                it.append
+                            },
                             refreshing = false,
                             // With content still on screen the failure is over and Refresh is one
                             // press away, so a notice rather than an error card promising a
@@ -205,8 +225,10 @@ class MoviesViewModel(
                     _uiState.update { state ->
                         val loaded = state.grid as? IglooRailState.Loaded ?: return@update state
                         state.copy(
+                            totalMovies = result.value.total,
                             grid = IglooRailState.Loaded(loaded.items + fresh),
                             append = result.value.appendStateFor(page, result.value.movies),
+                            appendGeneration = state.appendGeneration + 1,
                         )
                     }
                 }
