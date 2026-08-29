@@ -182,6 +182,19 @@ fun IglooRoot(container: IglooAppContainer) {
                         )
                     }
                     val appContext = LocalContext.current.applicationContext
+                    // Session-scoped like the rest: that is what keeps the library grid's loaded
+                    // pages and scroll position alive across a Movies -> Home -> Movies trip.
+                    // Created before the details view model, which reports committed like
+                    // toggles into it so a shown Liked grid never goes stale.
+                    val moviesViewModel = viewModel(
+                        viewModelStoreOwner = authenticatedSessionOwner,
+                        key = "movies",
+                    ) {
+                        MoviesViewModel(
+                            container.movieRepository,
+                            container.serverUrlProvider,
+                        )
+                    }
                     val detailsViewModel = viewModel(
                         viewModelStoreOwner = authenticatedSessionOwner,
                         key = "movie-details",
@@ -190,6 +203,7 @@ fun IglooRoot(container: IglooAppContainer) {
                             container.movieRepository,
                             container.serverUrlProvider,
                             onWatchedStateCommitted = homeViewModel::refreshContinueWatching,
+                            onLikeStateCommitted = moviesViewModel::onLikeCommitted,
                             canPlayAudioMime = { mimeType, channels ->
                                 deviceCanPlayAudioMime(appContext, mimeType, channels)
                             },
@@ -214,17 +228,6 @@ fun IglooRoot(container: IglooAppContainer) {
                         key = "theater-movie-details",
                     ) {
                         TheaterMovieDetailsViewModel(
-                            container.movieRepository,
-                            container.serverUrlProvider,
-                        )
-                    }
-                    // Session-scoped like the rest: that is what keeps the library grid's loaded
-                    // pages and scroll position alive across a Movies -> Home -> Movies trip.
-                    val moviesViewModel = viewModel(
-                        viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "movies",
-                    ) {
-                        MoviesViewModel(
                             container.movieRepository,
                             container.serverUrlProvider,
                         )
@@ -257,6 +260,8 @@ fun IglooRoot(container: IglooAppContainer) {
                             onRetryFirstPage = moviesViewModel::retryFirstPage,
                             onRetryAppend = moviesViewModel::retryAppend,
                             onLoadMore = moviesViewModel::loadMore,
+                            onSelectFilter = moviesViewModel::selectFilter,
+                            onToggleSort = moviesViewModel::toggleSort,
                         )
                     }
                     val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()

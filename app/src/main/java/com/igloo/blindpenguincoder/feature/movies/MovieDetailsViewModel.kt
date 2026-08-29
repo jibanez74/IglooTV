@@ -195,6 +195,7 @@ class MovieDetailsViewModel(
     private val movies: MovieRepository,
     private val serverUrl: ServerUrlProvider,
     private val onWatchedStateCommitted: () -> Unit = {},
+    private val onLikeStateCommitted: () -> Unit = {},
     /** The pre-flight gate's device capability, injected so the launch rules stay JVM-testable. */
     private val canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
 ) : ViewModel() {
@@ -565,8 +566,7 @@ class MovieDetailsViewModel(
                 when (val result = write(type, intent)) {
                     is ApiResult.Success -> settle(type, intent) {
                         confirmed = result.value
-                        // Only Watched has a listener; tracking Like would be state nobody reads.
-                        if (type == MutationType.Watched) successfulWriteSinceDrain = true
+                        successfulWriteSinceDrain = true
                     }
 
                     is ApiResult.Failure -> {
@@ -635,7 +635,10 @@ class MovieDetailsViewModel(
         // The reconcile read above suspends, so a press can have landed during it.
         if (state.pending.isEmpty() && state.successfulWriteSinceDrain) {
             state.successfulWriteSinceDrain = false
-            onWatchedStateCommitted()
+            when (type) {
+                MutationType.Watched -> onWatchedStateCommitted()
+                MutationType.Like -> onLikeStateCommitted()
+            }
         }
     }
 

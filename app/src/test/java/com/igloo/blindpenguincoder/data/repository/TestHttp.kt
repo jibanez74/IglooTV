@@ -181,6 +181,16 @@ fun moviesLibraryJson(
 fun moviesStatsJson(totalMovies: Long = 1): String =
     """{"error":false,"message":"movie stats","data":{"total_movies":$totalMovies}}"""
 
+/** One `GET /movies/genres` list entry. */
+fun movieGenreWithCountJson(
+    id: Long = 7,
+    tag: String = "Action",
+    movieCount: Long = 26,
+): String = """{"genre_id":$id,"genre_tag":"$tag","movie_count":$movieCount}"""
+
+fun moviesGenresJson(vararg genres: String): String =
+    """{"error":false,"message":"movie genres","data":{"genres":[${genres.joinToString(",")}]}}"""
+
 /** One `GET /movies/continue-watching` list entry: the latest-movie shape plus progress. */
 fun continueWatchingMovieJson(
     id: Long = 1,

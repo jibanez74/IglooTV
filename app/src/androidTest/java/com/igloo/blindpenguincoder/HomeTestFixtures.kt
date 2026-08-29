@@ -18,6 +18,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesAppendState
+import com.igloo.blindpenguincoder.feature.movies.MoviesFilter
 import com.igloo.blindpenguincoder.feature.movies.MoviesGridItem
 import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
@@ -31,6 +32,8 @@ import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.AudioStream
+import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
+import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
 
@@ -52,17 +55,29 @@ internal val testMovieGridItems = (1L..40L).map { id ->
     MoviesGridItem(id = id, title = "Movie $id", year = (1980 + id).toString(), posterUrl = null)
 }
 
+/** Two genres cover selected-vs-not and give the chip row a d-pad path to travel. */
+internal val testGenres = listOf(
+    MovieGenreWithCount(genreId = 7, genreTag = "Action", movieCount = 26),
+    MovieGenreWithCount(genreId = 9, genreTag = "Drama", movieCount = 14),
+)
+
 /** A grid that has loaded its first page and has more to come. */
 internal fun testMoviesState(
     grid: IglooRailState<MoviesGridItem> = IglooRailState.Loaded(testMovieGridItems),
     append: MoviesAppendState = MoviesAppendState.Idle,
     totalMovies: Long? = 96,
+    filter: MoviesFilter = MoviesFilter.All,
+    sort: SortOrder = SortOrder.Ascending,
+    genres: List<MovieGenreWithCount> = testGenres,
     refreshing: Boolean = false,
     notice: String? = null,
     appendGeneration: Int = 0,
     contentGeneration: Int = 0,
 ) = MoviesUiState(
     totalMovies = totalMovies,
+    filter = filter,
+    sort = sort,
+    genres = genres,
     grid = grid,
     append = append,
     refreshing = refreshing,
@@ -76,6 +91,8 @@ internal val inertMoviesActions = MoviesActions(
     onRetryFirstPage = {},
     onRetryAppend = {},
     onLoadMore = {},
+    onSelectFilter = {},
+    onToggleSort = {},
 )
 
 internal val testContinueMovies = listOf(

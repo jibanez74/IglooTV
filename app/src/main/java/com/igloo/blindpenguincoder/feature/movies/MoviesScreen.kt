@@ -54,6 +54,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
+import com.igloo.blindpenguincoder.data.model.SortOrder
 import java.text.NumberFormat
 
 /** What the Movies pane needs from its view model, bundled rather than threaded as six lambdas. */
@@ -62,11 +63,14 @@ data class MoviesActions(
     val onRetryFirstPage: () -> Unit,
     val onRetryAppend: () -> Unit,
     val onLoadMore: () -> Unit,
+    val onSelectFilter: (MoviesFilter) -> Unit,
+    val onToggleSort: () -> Unit,
 )
 
 /**
- * The movie library index (docs/design-system.md section 11.4): a heading with the library count
- * and a Refresh action over an infinite-scrolling poster grid.
+ * The movie library index (docs/design-system.md section 11.4): a heading with the current
+ * view's count, Sort and Refresh actions, and a filter chip row (All · Liked · genres) over an
+ * infinite-scrolling poster grid.
  *
  * The grid pages itself. Unlike the web client's numbered pagination a d-pad user never sees a
  * page control — scrolling within [PREFETCH_ROWS] rows of the end asks for the next page, and
@@ -74,9 +78,10 @@ data class MoviesActions(
  *
  * [contentStartRequester] lands on the grid's entry cell — the remembered card if there is one,
  * otherwise the first — so entering the pane puts focus on content rather than on chrome, with
- * Refresh a d-pad press above it. In the states with no cards the anchor moves to whatever the
- * screen draws instead, because the shell's focus model assumes the pane always has somewhere
- * to land.
+ * the filter chips one d-pad press above it and the header a press above them. In the states
+ * with no cards the anchor moves to whatever the screen draws instead, because the shell's
+ * focus model assumes the pane always has somewhere to land. The chip row renders in every grid
+ * state — an empty Liked view or a failed first page must still let the user switch filters.
  */
 @Composable
 fun MoviesScreen(
@@ -98,6 +103,8 @@ fun MoviesScreen(
     val columns = IglooTheme.layout.gridColumns
     val grid = state.grid
     val refreshRequester = remember { FocusRequester() }
+    val sortRequester = remember { FocusRequester() }
+    val filterRowRequester = remember { FocusRequester() }
 
     Column(
         // No horizontal padding here: the grid carries the pane's gutter as contentPadding so
@@ -108,21 +115,47 @@ fun MoviesScreen(
         MoviesHeader(
             totalMovies = state.totalMovies,
             loadedCount = (grid as? IglooRailState.Loaded)?.items?.size,
+            filter = state.filter,
+            sort = state.sort,
             refreshing = state.refreshing,
             notice = state.notice,
             contentInset = contentInset,
             navigationRequester = navigationRequester,
+            sortRequester = sortRequester,
             refreshRequester = refreshRequester,
+            onToggleSort = actions.onToggleSort,
             onRefresh = actions.onRefresh,
         )
+
+        MoviesFilterRow(
+            genres = state.genres,
+            selected = state.filter,
+            contentInset = contentInset,
+            filterRowRequester = filterRowRequester,
+            navigationRequester = navigationRequester,
+            refreshRequester = refreshRequester,
+            contentStartRequester = contentStartRequester,
+            onSelectFilter = actions.onSelectFilter,
+        )
+
+        // In the states with no cards the anchor also carries [returnRequester]: the details
+        // overlay can outlive the card that opened it (the Liked reconcile empties the grid
+        // underneath), and a detached return requester does not fail its focus request — it
+        // silently no-ops, the host's fallback never runs, and the overlay's disposal hands
+        // focus to the platform fallback in the navigation rail. A live anchor node is the fix.
+        val cardlessAnchor = Modifier
+            .withRequester(contentStartRequester)
+            .withRequester(returnRequester)
+            .focusProperties {
+                left = navigationRequester
+                up = filterRowRequester
+            }
 
         when (grid) {
             is IglooRailState.Loading -> MoviesGridSkeleton(
                 columns = columns,
                 contentInset = contentInset,
-                anchorModifier = Modifier
-                    .withRequester(contentStartRequester)
-                    .focusProperties { left = navigationRequester },
+                anchorModifier = cardlessAnchor,
             )
 
             is IglooRailState.Error -> IglooInlineError(
@@ -130,18 +163,15 @@ fun MoviesScreen(
                 actionText = "Retry",
                 actionSemanticLabel = "Retry loading the movie library",
                 onAction = actions.onRetryFirstPage,
-                actionModifier = Modifier
-                    .withRequester(contentStartRequester)
-                    .focusProperties { left = navigationRequester },
+                actionModifier = cardlessAnchor,
                 modifier = Modifier.padding(contentInset),
             )
 
             is IglooRailState.Loaded -> if (grid.items.isEmpty()) {
                 MoviesEmpty(
+                    message = emptyMessage(state.filter),
                     contentInset = contentInset,
-                    anchorModifier = Modifier
-                        .withRequester(contentStartRequester)
-                        .focusProperties { left = navigationRequester },
+                    anchorModifier = cardlessAnchor,
                 )
             } else {
                 MoviesGrid(
@@ -158,7 +188,7 @@ fun MoviesScreen(
                     contentStartRequester = contentStartRequester,
                     navigationRequester = navigationRequester,
                     returnRequester = returnRequester,
-                    refreshRequester = refreshRequester,
+                    filterRowRequester = filterRowRequester,
                     lastFocusedMovieId = lastFocusedMovieId,
                     onMovieFocused = onMovieFocused,
                     onLoadMore = actions.onLoadMore,
@@ -174,11 +204,15 @@ fun MoviesScreen(
 private fun MoviesHeader(
     totalMovies: Long?,
     loadedCount: Int?,
+    filter: MoviesFilter,
+    sort: SortOrder,
     refreshing: Boolean,
     notice: String?,
     contentInset: PaddingValues,
     navigationRequester: FocusRequester,
+    sortRequester: FocusRequester,
     refreshRequester: FocusRequester,
+    onToggleSort: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     val colors = IglooTheme.colors
@@ -210,7 +244,7 @@ private fun MoviesHeader(
                 modifier = Modifier
                     .testTag("movies_count")
                     .semantics {
-                        contentDescription = spokenCount(totalMovies, loadedCount)
+                        contentDescription = spokenCount(totalMovies, loadedCount, filter)
                         liveRegion = LiveRegionMode.Polite
                     },
             )
@@ -220,6 +254,23 @@ private fun MoviesHeader(
                 IglooNotice(text = notice, modifier = Modifier.testTag("movies_notice"))
             }
         }
+        IglooButton(
+            // Direction-only on purpose: the backend sorts by title and offers no field choice.
+            text = if (sort == SortOrder.Ascending) SORT_ASCENDING_LABEL else SORT_DESCENDING_LABEL,
+            labelVariants = listOf(SORT_ASCENDING_LABEL, SORT_DESCENDING_LABEL),
+            onClick = onToggleSort,
+            variant = IglooButtonVariant.Ghost,
+            // Never disabled, for the same focus-tree reason as Refresh below; the view model
+            // guards a toggle that lands mid-reload by cancelling the in-flight page.
+            enabled = true,
+            semanticLabel = "Sort order",
+            stateDescription = if (sort == SortOrder.Ascending) "A to Z" else "Z to A",
+            actionLabel = if (sort == SortOrder.Ascending) "Sort Z to A" else "Sort A to Z",
+            modifier = Modifier
+                .testTag("movies_sort")
+                .focusRequester(sortRequester)
+                .focusProperties { left = navigationRequester },
+        )
         IglooButton(
             // A label swap, not a spinner: nothing in the product loops (section 7.2).
             // labelVariants reserves the wider label's width so the button does not resize
@@ -237,7 +288,8 @@ private fun MoviesHeader(
             modifier = Modifier
                 .testTag("movies_refresh")
                 .focusRequester(refreshRequester)
-                .focusProperties { left = navigationRequester },
+                // A deterministic left chain: Refresh → Sort → the navigation spine.
+                .focusProperties { left = sortRequester },
         )
     }
 }
@@ -257,7 +309,7 @@ private fun MoviesGrid(
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
     returnRequester: FocusRequester,
-    refreshRequester: FocusRequester,
+    filterRowRequester: FocusRequester,
     lastFocusedMovieId: Long?,
     onMovieFocused: (Long) -> Unit,
     onLoadMore: () -> Unit,
@@ -365,9 +417,10 @@ private fun MoviesGrid(
                     )
                     .focusProperties {
                         if (index % columns == 0) left = navigationRequester
-                        // The header is a sibling of the scroll surface, so the first row's way
-                        // back up to Refresh is wired rather than resolved spatially.
-                        if (index < columns) up = refreshRequester
+                        // The chip row is a sibling of the scroll surface, so the first row's
+                        // way back up to the selected chip is wired rather than resolved
+                        // spatially.
+                        if (index < columns) up = filterRowRequester
                         if (lastRowIsTheEdge && index / columns == lastRow) {
                             down = FocusRequester.Cancel
                         }
@@ -474,7 +527,11 @@ private fun MoviesGridSkeleton(
 }
 
 @Composable
-private fun MoviesEmpty(contentInset: PaddingValues, anchorModifier: Modifier) {
+private fun MoviesEmpty(
+    message: String,
+    contentInset: PaddingValues,
+    anchorModifier: Modifier,
+) {
     var focused by remember { mutableStateOf(false) }
     Box(
         // Focusable deliberately: the grid is the pane's only content, and an unfocusable empty
@@ -487,13 +544,13 @@ private fun MoviesEmpty(contentInset: PaddingValues, anchorModifier: Modifier) {
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .clearAndSetSemantics {
-                contentDescription = EMPTY_MESSAGE
+                contentDescription = message
                 liveRegion = LiveRegionMode.Polite
             }
             .padding(IglooTheme.spacing.lg),
         contentAlignment = Alignment.Center,
     ) {
-        IglooEmpty(icon = IglooIcons.Movies, message = EMPTY_MESSAGE)
+        IglooEmpty(icon = IglooIcons.Movies, message = message)
     }
 }
 
@@ -516,19 +573,37 @@ private fun PaddingValues.asGridPadding(): PaddingValues {
 private fun countLine(totalMovies: Long?): String =
     if (totalMovies == null) "—" else "${NUMBER_FORMAT.format(totalMovies)} ${plural(totalMovies)}"
 
-private fun spokenCount(totalMovies: Long?, loadedCount: Int?): String = when {
-    totalMovies == null -> "Loading the movie library"
-    loadedCount == null -> countLine(totalMovies)
-    else -> "Showing $loadedCount of ${NUMBER_FORMAT.format(totalMovies)} ${plural(totalMovies)}"
+/** The visible line stays generic; only the spoken form names the active filter. */
+private fun spokenCount(totalMovies: Long?, loadedCount: Int?, filter: MoviesFilter): String =
+    when {
+        totalMovies == null -> "Loading the movie library"
+        loadedCount == null -> countLine(totalMovies)
+        else -> "Showing $loadedCount of " +
+            "${NUMBER_FORMAT.format(totalMovies)} ${filterNoun(filter, totalMovies)}"
+    }
+
+private fun filterNoun(filter: MoviesFilter, count: Long): String = when (filter) {
+    MoviesFilter.All -> plural(count)
+    MoviesFilter.Liked -> "liked ${plural(count)}"
+    is MoviesFilter.Genre -> "${filter.tag} ${plural(count)}"
 }
 
-private fun plural(count: Long): String = if (count == 1L) "movie" else "movies"
+private fun emptyMessage(filter: MoviesFilter): String = when (filter) {
+    MoviesFilter.All -> "No movies found in your library."
+    MoviesFilter.Liked ->
+        "No liked movies yet. Like a movie from its details page and it will appear here."
+    is MoviesFilter.Genre -> "No ${filter.tag} movies in your library."
+}
 
-private val NUMBER_FORMAT: NumberFormat = NumberFormat.getIntegerInstance()
+/** Shared with the filter row's chip labels; internal so the split files spell them once. */
+internal fun plural(count: Long): String = if (count == 1L) "movie" else "movies"
 
-private const val EMPTY_MESSAGE = "No movies found in your library."
+internal val NUMBER_FORMAT: NumberFormat = NumberFormat.getIntegerInstance()
+
 private const val REFRESH_LABEL = "Refresh"
 private const val REFRESHING_LABEL = "Refreshing…"
+private const val SORT_ASCENDING_LABEL = "A–Z"
+private const val SORT_DESCENDING_LABEL = "Z–A"
 
 /** How close to the end the grid gets before it asks for the next page, in rows. */
 private const val PREFETCH_ROWS = 2

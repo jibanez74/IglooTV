@@ -1,9 +1,12 @@
 package com.igloo.blindpenguincoder.feature.movies
 
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
+import com.igloo.blindpenguincoder.data.repository.movieGenreWithCountJson
 import com.igloo.blindpenguincoder.data.repository.movieLibraryItemJson
+import com.igloo.blindpenguincoder.data.repository.moviesGenresJson
 import com.igloo.blindpenguincoder.data.repository.moviesLibraryJson
 import com.igloo.blindpenguincoder.data.repository.moviesStatsJson
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -474,6 +477,213 @@ class MoviesViewModelTest {
         assertEquals(96L, model.uiState.value.totalMovies)
     }
 
+    // --- filters and sort -------------------------------------------------------------------
+
+    @Test
+    fun `selecting the liked filter requests page one of the liked endpoint`() = runTest {
+        val http = routedHttp(
+            liked = { jsonResponse(page(number = 1, total = 3, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+
+        model.selectFilter(MoviesFilter.Liked)
+
+        assertEquals(listOf("1"), http.likedPages)
+        assertEquals(MoviesFilter.Liked, model.uiState.value.filter)
+        assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+        assertEquals(3L, model.uiState.value.totalMovies)
+    }
+
+    @Test
+    fun `selecting a genre requests that genre's movies at the contract's page size`() = runTest {
+        val http = routedHttp(
+            genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+
+        model.selectFilter(MoviesFilter.Genre(id = 7, tag = "Action"))
+
+        assertEquals(listOf("7:1"), http.genrePages)
+        assertEquals(listOf("48", "48"), http.perPages)
+        assertEquals(26L, model.uiState.value.totalMovies)
+    }
+
+    @Test
+    fun `toggling sort re-requests page one of the current filter in the other direction`() = runTest {
+        val http = routedHttp(
+            genreMovies = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        model.selectFilter(MoviesFilter.Genre(id = 7, tag = "Action"))
+
+        model.toggleSort()
+
+        // The flip stays on the genre endpoint; the library is not re-read.
+        assertEquals(listOf("7:1", "7:1"), http.genrePages)
+        assertEquals(listOf("1"), http.libraryPages)
+        assertEquals(listOf("asc", "asc", "desc"), http.sorts)
+        assertEquals(SortOrder.Descending, model.uiState.value.sort)
+    }
+
+    @Test
+    fun `a failed filter switch keeps the grid, reverts the selection, and reports a notice`() = runTest {
+        val http = routedHttp(
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+            liked = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+        )
+        val model = loaded(http)
+
+        model.selectFilter(MoviesFilter.Liked)
+
+        assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+        assertEquals(MoviesFilter.All, model.uiState.value.filter)
+        assertTrue(model.uiState.value.notice != null)
+    }
+
+    @Test
+    fun `a failed sort toggle reverts the direction`() = runTest {
+        var fail = false
+        val http = routedHttp(
+            library = {
+                if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                else jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
+            },
+        )
+        val model = loaded(http)
+
+        fail = true
+        model.toggleSort()
+
+        assertEquals(SortOrder.Ascending, model.uiState.value.sort)
+        assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+    }
+
+    @Test
+    fun `a filter switch mid-append discards the stale page`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            library = {
+                when (it.page()) {
+                    "1" -> jsonResponse(page(number = 1, totalPages = 3, ids = 1L..3L))
+                    else -> {
+                        gate.await()
+                        jsonResponse(page(number = 2, totalPages = 3, ids = 4L..6L))
+                    }
+                }
+            },
+            liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 10L..12L)) },
+        )
+        val model = loaded(http)
+        model.loadMore()
+
+        model.selectFilter(MoviesFilter.Liked)
+        gate.complete(Unit)
+
+        assertEquals(listOf(10L, 11L, 12L), model.uiState.value.gridIds())
+    }
+
+    @Test
+    fun `appending in a filtered view pages the same endpoint`() = runTest {
+        val http = routedHttp(
+            liked = {
+                when (it.page()) {
+                    "1" -> jsonResponse(page(number = 1, totalPages = 2, ids = 1L..3L))
+                    else -> jsonResponse(page(number = 2, totalPages = 2, ids = 4L..6L))
+                }
+            },
+        )
+        val model = loaded(http)
+        model.selectFilter(MoviesFilter.Liked)
+
+        model.loadMore()
+
+        assertEquals(listOf("1", "2"), http.likedPages)
+        assertEquals(listOf("1"), http.libraryPages)
+        assertEquals((1L..6L).toList(), model.uiState.value.gridIds())
+    }
+
+    @Test
+    fun `a filtered count comes from the response total and stats never overwrite it`() = runTest {
+        val http = routedHttp(
+            stats = { jsonResponse(moviesStatsJson(totalMovies = 96)) },
+            genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        model.selectFilter(MoviesFilter.Genre(id = 7, tag = "Action"))
+
+        // The start effect re-fires on every return to the foreground and re-reads stats.
+        model.refresh()
+
+        assertEquals(26L, model.uiState.value.totalMovies)
+    }
+
+    @Test
+    fun `re-pressing the selected filter is a no-op`() = runTest {
+        val http = routedHttp(
+            liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        model.selectFilter(MoviesFilter.Liked)
+
+        model.selectFilter(MoviesFilter.Liked)
+
+        assertEquals(listOf("1"), http.likedPages)
+    }
+
+    @Test
+    fun `a genres failure keeps the last known genre list`() = runTest {
+        var fail = false
+        val http = routedHttp(
+            genres = {
+                if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                else jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = "Action")))
+            },
+        )
+        val model = loaded(http)
+        assertEquals(1, model.uiState.value.genres.size)
+
+        fail = true
+        model.reload()
+
+        assertEquals("Action", model.uiState.value.genres.single().genreTag)
+    }
+
+    // --- liked reconcile --------------------------------------------------------------------
+
+    @Test
+    fun `a like commit on the liked filter re-reads page one silently`() = runTest {
+        var unliked = false
+        val http = routedHttp(
+            liked = {
+                if (unliked) jsonResponse(page(number = 1, total = 2, totalPages = 1, ids = 1L..2L))
+                else jsonResponse(page(number = 1, total = 3, totalPages = 1, ids = 1L..3L))
+            },
+        )
+        val model = loaded(http)
+        model.selectFilter(MoviesFilter.Liked)
+        val generationBefore = model.uiState.value.contentGeneration
+
+        unliked = true
+        model.onLikeCommitted()
+
+        assertEquals(listOf("1", "1"), http.likedPages)
+        assertEquals(listOf(1L, 2L), model.uiState.value.gridIds())
+        // Silent: the reconcile happens under the open details overlay, where a refreshing
+        // label or a generation bump would scroll and steal focus from it.
+        assertTrue(!model.uiState.value.refreshing)
+        assertEquals(generationBefore, model.uiState.value.contentGeneration)
+    }
+
+    @Test
+    fun `a like commit on another filter issues no request`() = runTest {
+        val http = routedHttp()
+        val model = loaded(http)
+
+        model.onLikeCommitted()
+
+        assertEquals(emptyList<String>(), http.likedPages)
+    }
+
     // --- harness ----------------------------------------------------------------------------
 
     /** The host's start effect is what fires the first load; there is no fetch in `init`. */
@@ -507,11 +717,14 @@ class MoviesViewModelTest {
     )
 
     /** Records what the grid actually asked the backend for, so the paging can be asserted. */
-    private class RoutedHttp(
-        val libraryPages: MutableList<String>,
-        val perPages: MutableList<String>,
-        val sorts: MutableList<String>,
-    ) {
+    private class RoutedHttp {
+        val libraryPages = mutableListOf<String>()
+        val likedPages = mutableListOf<String>()
+
+        /** `"genreId:page"` per request, so the path and the cursor assert together. */
+        val genrePages = mutableListOf<String>()
+        val perPages = mutableListOf<String>()
+        val sorts = mutableListOf<String>()
         lateinit var test: TestHttp
     }
 
@@ -523,20 +736,42 @@ class MoviesViewModelTest {
     private fun TestScope.routedHttp(
         stats: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(moviesStatsJson()) },
+        genres: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+            { jsonResponse(moviesGenresJson()) },
         library: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(moviesLibraryJson()) },
+        liked: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+            { jsonResponse(moviesLibraryJson()) },
+        genreMovies: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+            { jsonResponse(moviesLibraryJson()) },
     ): RoutedHttp {
-        val routed = RoutedHttp(mutableListOf(), mutableListOf(), mutableListOf())
+        val routed = RoutedHttp()
+        fun recordListParams(request: HttpRequestData) {
+            routed.perPages += request.url.parameters["per_page"].orEmpty()
+            routed.sorts += request.url.parameters["sort"].orEmpty()
+        }
         routed.test = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
-            when (request.url.encodedPath) {
-                "/api/movies/stats" -> stats(request)
-                "/api/movies/library" -> {
-                    routed.libraryPages += request.url.parameters["page"].orEmpty()
-                    routed.perPages += request.url.parameters["per_page"].orEmpty()
-                    routed.sorts += request.url.parameters["sort"].orEmpty()
+            val path = request.url.encodedPath
+            val genreId = GENRE_MOVIES_PATH.matchEntire(path)?.groupValues?.get(1)
+            when {
+                path == "/api/movies/stats" -> stats(request)
+                path == "/api/movies/genres" -> genres(request)
+                path == "/api/movies/library" -> {
+                    routed.libraryPages += request.page()
+                    recordListParams(request)
                     library(request)
                 }
-                else -> error("unexpected request to ${request.url.encodedPath}")
+                path == "/api/movies/liked" -> {
+                    routed.likedPages += request.page()
+                    recordListParams(request)
+                    liked(request)
+                }
+                genreId != null -> {
+                    routed.genrePages += "$genreId:${request.page()}"
+                    recordListParams(request)
+                    genreMovies(request)
+                }
+                else -> error("unexpected request to $path")
             }
         }
         return routed
@@ -544,5 +779,6 @@ class MoviesViewModelTest {
 
     private companion object {
         const val ERROR_BODY = """{"error":true,"message":"nope"}"""
+        val GENRE_MOVIES_PATH = Regex("/api/movies/genres/(\\d+)/movies")
     }
 }

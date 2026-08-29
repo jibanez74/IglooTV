@@ -742,6 +742,7 @@ until 2026-08-19.
 |---|---|
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
 | `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `restingFill` / `contentColor` carry the §3.2 over-media ground where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. |
+| `IglooFilterChip` | One choice in a row of mutually exclusive filters (the Movies index's filter row, §11.4): `heightIn(min = sizes.controlHeight)`, radius `lg`, `spacing.md` horizontal padding, `bodyMedium` label. Selection and focus compose rather than compete — selected is a `primary` fill that holds while unfocused, focus is the §6.1 ring/scale/glow over whatever fill the chip has; unselected rests as the ring's hairline border and takes the Ghost focus fill. Not an `IglooButton` variant: a selected-state fill on an unfocused node is outside the button contract. One cleared node: `semanticLabel` replaces the drawn text ("Action · 26" speaks as "Action, 26 movies"), the selected chip announces "Selected" via state description, and `actionLabel` names the press. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
 | `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, compact `formatRemainingTime` ("2h 20m left"), spoken `formatSpokenRemainingTime` ("2 hours and 20 minutes remaining"), `formatTimecode` ("1:01:15"), sparse `formatSpokenTime` ("1 hour and 15 seconds"), and exact `formatSpokenTimeThroughSeconds` ("1 hour, 0 minutes, and 15 seconds"). Both remaining-time forms clamp overshoot and round partial minutes up; they use "Less than 1m left" / "Less than 1 minute remaining" below one minute and defensively fall back to "In progress" for an invalid duration. The exact resume form floors to the last completed second and includes every unit from the largest relevant one through seconds, never a leading zero hour. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
@@ -1327,9 +1328,51 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
 
 ### 11.4 Movies
 
-- **Index** — a heading, the library count, and a **Refresh** action over a poster grid at
-  `gridColumns`, sorted A–Z, **paged by infinite scroll**. No tab control and no sort control:
-  the grid is All Movies and nothing else until Genres and Playlists have screens of their own.
+- **Index** — a heading, the current view's count, **Sort (A–Z ⇄ Z–A)** and **Refresh**
+  actions, and a **filter row** (All · Liked · one chip per genre, with counts) over a poster
+  grid at `gridColumns`, **paged by infinite scroll**. Still no tab control: the web movies
+  page's Genres and Liked views land here as chips in a single row — one press to filter, no
+  second screen. Playlists remain out until they have a screen of their own.
+
+  **This reverses the earlier "no sort control, no filters" rule** ("the grid is All Movies and
+  nothing else"). Sort is **direction only** — the backend orders by title and offers no field
+  choice — so the control is a Ghost button beside Refresh with reserved label variants
+  ("A–Z"/"Z–A", §9.1), never disabled for the same focus-tree reason as Refresh, announcing
+  "Sort order" with an "A to Z"/"Z to A" state description.
+
+  **The filter row** sits between the header and the grid and renders in every grid state — an
+  empty Liked view or a failed first page must still let the user switch filters. It is one
+  horizontally scrollable plain `Row`, deliberately not lazy: genre lists are bounded (tens),
+  and keeping every chip composed keeps every focus requester permanently attached, so the
+  grid's wired `up` edge can never target a disposed node. All and Liked render before the
+  genres fetch lands and fix the row's height, so genre chips arriving later never reflow the
+  grid or move focus. Genres load with every refresh and **degrade silently**: a failed read
+  keeps the last known list — or just All + Liked — and never shows an error in the row. The
+  selected chip wears the `primary` fill while focus stays the §6.1 ring (the two compose, not
+  compete) and announces "Selected"; chips draw "Action · 26" and speak "Action, 26 movies".
+  Genre chip identity is the id, so a renamed tag cannot deselect the chip.
+
+  **Focus contract:** the grid's first row goes up to the selected chip; every chip goes up to
+  Refresh and down to the pane's content anchor — entry card, skeleton anchor, error Retry, or
+  the empty box, whichever the state drew; the first chip exits left to the spine and the last
+  chip's right edge is pinned. The header's left chain is Refresh → Sort → spine. In the states
+  with no cards the anchor also carries the overlay-return requester: the details overlay can
+  outlive the card that opened it (the Liked reconcile empties the grid underneath), and a
+  detached return requester does not *fail* its focus request — it silently no-ops, the host's
+  anchor fallback never runs, and the overlay's disposal hands focus to the platform fallback in
+  the navigation rail. Back must always find a live node inside the pane.
+
+  **Transitions.** A filter or sort change is a wholesale replacement, exactly like Refresh:
+  the chip highlights on the press, the loaded grid stays on screen while page one is in
+  flight, and success scrolls to top and re-anchors focus on the first card. Failure keeps the
+  grid, **reverts the selection** to the view the grid still shows, and reports in the notice —
+  a chip must never claim a filter the grid isn't in. Counts belong to the active view: the
+  library-wide stat backs All only, and filtered views read their own responses' `total`. Each
+  view has its own empty copy ("No liked movies yet. Like a movie from its details page and it
+  will appear here.", "No {genre} movies in your library."). A like toggle committed in the
+  details overlay reconciles a shown Liked grid **silently** — no refreshing label, no notice,
+  no generation bump — because the overlay is still composed above the grid and any scroll or
+  focus side effect would land on a surface the user cannot see.
 
   **This reverses the earlier numbered-pagination rule.** The argument for numbered pages was
   that a remote user needs a bounded, predictable focus target — but a page strip is a *second*
@@ -1345,8 +1388,9 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   is exactly where the user's focus is heading at that moment. Prefetch fires two rows out, one
   request at a time, at `per_page=48` — the contract's maximum.
 
-  **Refresh is for everyone**, and it is a client-side re-read: it re-requests the count and
-  page one, drops the accumulated pages, and returns to the top. It is not the admin scan
+  **Refresh is for everyone**, and it is a client-side re-read: it re-requests the count, the
+  genre list, and page one **of the current view**, drops the accumulated pages, and returns to
+  the top. It is not the admin scan
   endpoint and must never be described as one. The loaded grid **stays on screen while it runs**
   — blanking it would dispose the focused cell mid-request — and the button swaps its own label
   rather than showing a spinner (§7.2). It is never disabled: `IglooButton` is focusable only
@@ -1907,6 +1951,28 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-29 — Movies index: sort, genre filters, and Liked (§11.4, §9.1).**
+
+- **§11.4 reverses its own "no sort control, no filters" rule**: the index gains a
+  direction-only Sort toggle beside Refresh (title is the backend's only sort field) and a
+  filter chip row — All · Liked · genres with counts — between the header and the grid. Still
+  no tabs: filters are one chip press in a single always-rendered row. The section records the
+  chip row's plain-`Row` rationale, its silent genre degradation, the full focus contract
+  (grid → selected chip → Refresh; first-chip left to the spine, last-chip right pinned), and
+  the transition rules — wholesale replacement on switch, **selection reverts on failure**,
+  per-view counts and empty copy, and the silent Liked reconcile after a like committed in the
+  details overlay.
+- **§9.1** gains `IglooFilterChip`: selected `primary` fill composing with (never competing
+  against) the §6.1 focus ring, one cleared node speaking name, count, and "Selected".
+- `MovieDetailsViewModel`'s committed-write listener grows a Like twin
+  (`onLikeStateCommitted`), wired to the movies view model so a shown Liked grid re-reads
+  itself when a like toggle commits.
+- The pane's card-less anchors (skeleton, error Retry, empty box) now also carry the
+  overlay-return requester. Found on-device: unliking the only Liked movie and pressing Back
+  landed focus on the navigation rail's first row, because a return requester whose card was
+  disposed reports its focus request as successful while moving nothing, so the host's anchor
+  fallback never ran. Pinned by `backAfterTheGridEmptiedUnderTheOverlayLandsOnTheEmptyState`.
 
 **2026-08-28 — Movies index: an infinite-scroll library grid.**
 

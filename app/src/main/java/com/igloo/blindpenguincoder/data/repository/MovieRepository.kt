@@ -11,6 +11,8 @@ import com.igloo.blindpenguincoder.data.model.ContinueWatchingMoviesData
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.LatestMoviesData
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
+import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
+import com.igloo.blindpenguincoder.data.model.MovieGenresData
 import com.igloo.blindpenguincoder.data.model.MovieLikeStatusData
 import com.igloo.blindpenguincoder.data.model.MovieLikeToggleData
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
@@ -34,6 +36,7 @@ import com.igloo.blindpenguincoder.playback.hls.parseHlsManifestResponse
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_MESSAGE
 import io.ktor.client.call.body
 import io.ktor.client.network.sockets.ConnectTimeoutException
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.discard
 
@@ -53,11 +56,39 @@ class MovieRepository(
         page: Long,
         perPage: Long,
         sort: SortOrder,
+    ): ApiResult<MoviesLibraryData> = moviesListPage { api.moviesLibrary(page, perPage, sort) }
+
+    suspend fun movieGenres(): ApiResult<List<MovieGenreWithCount>> = safeApiCall(
+        request = { api.movieGenres() },
+        decode = { response ->
+            response.body<ApiEnvelope<MovieGenresData>>().data?.genres
+                ?: error("Missing genres in movie genres response")
+        },
+    )
+
+    /** One page of one genre's movies; same result shape as [moviesLibrary]. */
+    suspend fun genreMovies(
+        genreId: Long,
+        page: Long,
+        perPage: Long,
+        sort: SortOrder,
+    ): ApiResult<MoviesLibraryData> = moviesListPage { api.genreMovies(genreId, page, perPage, sort) }
+
+    /** One page of the current user's liked movies; same result shape as [moviesLibrary]. */
+    suspend fun likedMovies(
+        page: Long,
+        perPage: Long,
+        sort: SortOrder,
+    ): ApiResult<MoviesLibraryData> = moviesListPage { api.likedMovies(page, perPage, sort) }
+
+    /** The library, genre, and liked lists all answer with the same paged envelope. */
+    private suspend fun moviesListPage(
+        request: suspend () -> HttpResponse,
     ): ApiResult<MoviesLibraryData> = safeApiCall(
-        request = { api.moviesLibrary(page, perPage, sort) },
+        request = request,
         decode = { response ->
             response.body<ApiEnvelope<MoviesLibraryData>>().data
-                ?: error("Missing data in movies library response")
+                ?: error("Missing data in movies list response")
         },
     )
 

@@ -62,11 +62,16 @@ class MovieDetailsViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel(http: TestHttp, onWatchedStateCommitted: () -> Unit = {}) =
+    private fun viewModel(
+        http: TestHttp,
+        onWatchedStateCommitted: () -> Unit = {},
+        onLikeStateCommitted: () -> Unit = {},
+    ) =
         MovieDetailsViewModel(
             http.movieRepository,
             http.serverUrl,
             onWatchedStateCommitted,
+            onLikeStateCommitted,
             canPlayAudioMime = { _, _ -> true },
         )
             .also { viewModels += it }
@@ -857,6 +862,55 @@ class MovieDetailsViewModelTest {
     }
 
     @Test
+    fun `a committed like toggle notifies the like listener and not the watched listener`() = runTest {
+        var watchedCommits = 0
+        var likeCommits = 0
+        val http = routedHttp(
+            likeStatus = { jsonResponse(likeStatusJson(isLiked = false)) },
+            likeToggle = { jsonResponse(likeToggleJson(isLiked = true)) },
+        )
+        val viewModel = viewModel(
+            http,
+            onWatchedStateCommitted = { watchedCommits += 1 },
+            onLikeStateCommitted = { likeCommits += 1 },
+        )
+        viewModel.open(1)
+        viewModel.uiState.first {
+            (it.details as? MovieDetailsState.Loaded)?.movie?.liked == false
+        }
+
+        viewModel.toggleLike()
+
+        assertEquals(1, likeCommits)
+        assertEquals(0, watchedCommits)
+    }
+
+    @Test
+    fun `a committed watched toggle notifies the watched listener and not the like listener`() =
+        runTest {
+            var watchedCommits = 0
+            var likeCommits = 0
+            val http = routedHttp(
+                progress = { jsonResponse(watchProgressJson(watched = false)) },
+                setWatched = { jsonResponse(watchedUpdateJson(watched = true)) },
+            )
+            val viewModel = viewModel(
+                http,
+                onWatchedStateCommitted = { watchedCommits += 1 },
+                onLikeStateCommitted = { likeCommits += 1 },
+            )
+            viewModel.open(1)
+            viewModel.uiState.first {
+                (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+            }
+
+            viewModel.toggleWatched()
+
+            assertEquals(1, watchedCommits)
+            assertEquals(0, likeCommits)
+        }
+
+    @Test
     fun `rapid watched presses are written once each in order without older completion repaint`() =
         runTest {
             val firstReached = CompletableDeferred<Unit>()
@@ -1235,7 +1289,7 @@ class MovieDetailsViewModelTest {
             },
         )
 
-        val viewModel = viewModel(http) { commits += 1 }
+        val viewModel = viewModel(http, onWatchedStateCommitted = { commits += 1 })
         viewModel.open(1)
         viewModel.uiState.first {
             val movie = (it.details as? MovieDetailsState.Loaded)?.movie

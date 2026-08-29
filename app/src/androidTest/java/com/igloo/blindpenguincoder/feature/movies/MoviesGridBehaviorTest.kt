@@ -22,6 +22,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
@@ -29,6 +30,7 @@ import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.inertDetailsActions
 import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
+import com.igloo.blindpenguincoder.testMovieDetails
 import com.igloo.blindpenguincoder.testMovieGridItems
 import com.igloo.blindpenguincoder.testMoviesState
 import org.junit.Assert.assertEquals
@@ -66,16 +68,25 @@ class MoviesGridBehaviorTest {
     private var loadMoreCalls = 0
     private var refreshCalls = 0
     private var appendRetries = 0
+    private var sortToggles = 0
+    private val selectedFilters = mutableListOf<MoviesFilter>()
     private val opened = mutableListOf<Long>()
     private var hostActivity: Activity? = null
     private var columns = 0
+
+    /** When true, selecting a card opens a real details overlay, as the app does. */
+    private var openDetailsOnSelect = false
+    private var detailsState by mutableStateOf(MovieDetailsUiState())
 
     private fun setContent(initial: MoviesUiState = testMoviesState()) {
         moviesState = initial
         loadMoreCalls = 0
         refreshCalls = 0
         appendRetries = 0
+        sortToggles = 0
+        selectedFilters.clear()
         opened.clear()
+        detailsState = MovieDetailsUiState()
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
@@ -92,6 +103,8 @@ class MoviesGridBehaviorTest {
                         onRetryFirstPage = {},
                         onRetryAppend = { appendRetries += 1 },
                         onLoadMore = { loadMoreCalls += 1 },
+                        onSelectFilter = { selectedFilters += it },
+                        onToggleSort = { sortToggles += 1 },
                     ),
                     serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),
@@ -100,10 +113,23 @@ class MoviesGridBehaviorTest {
                     moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
                     moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
                     onRetryRail = {},
-                    onMovieSelected = { opened += it },
+                    onMovieSelected = { movieId ->
+                        opened += movieId
+                        if (openDetailsOnSelect) {
+                            detailsState = MovieDetailsUiState(
+                                openMovieId = movieId,
+                                details = MovieDetailsState.Loaded(testMovieDetails(id = movieId)),
+                            )
+                        }
+                    },
                     onTheaterMovieSelected = null,
-                    onCloseDetails = {},
-                    details = MovieDetailsUiState(),
+                    onCloseDetails = {
+                        detailsState = detailsState.copy(
+                            openMovieId = null,
+                            details = MovieDetailsState.Loading,
+                        )
+                    },
+                    details = detailsState,
                     detailsActions = inertDetailsActions,
                     onSwitchProfile = {},
                     onSignOut = {},
@@ -228,12 +254,160 @@ class MoviesGridBehaviorTest {
     }
 
     @Test
-    fun upFromTheFirstRowLandsOnRefresh() {
+    fun upFromTheFirstRowLandsOnTheSelectedFilterChip() {
         setContent()
 
         card(1).performKeyInput { pressKey(Key.DirectionUp) }
 
+        composeRule.onNodeWithTag("movies_filter_all").assertIsFocused()
+    }
+
+    // --- the filter row and header ------------------------------------------------------------
+
+    @Test
+    fun upFromTheFilterRowLandsOnRefresh() {
+        setContent()
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+
+        composeRule.onNodeWithTag("movies_filter_all")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+
         composeRule.onNodeWithContentDescription("Refresh the movie library").assertIsFocused()
+    }
+
+    @Test
+    fun downFromTheFilterRowLandsOnTheGridsEntryCell() {
+        setContent()
+        card(1).performKeyInput { pressKey(Key.DirectionRight) }
+        card(2).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_filter_all").assertIsFocused()
+
+        composeRule.onNodeWithTag("movies_filter_all")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+
+        // The entry cell is the remembered card, not blindly the first.
+        card(2).assertIsFocused()
+    }
+
+    @Test
+    fun leftFromTheFirstChipExitsToTheNavigationRail() {
+        setContent()
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+
+        composeRule.onNodeWithTag("movies_filter_all")
+            .performKeyInput { pressKey(Key.DirectionLeft) }
+
+        composeRule.onNodeWithContentDescription("Movies").assertIsFocused()
+    }
+
+    @Test
+    fun rightFromTheLastChipStaysPut() {
+        setContent()
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_filter_all")
+            .performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.onNodeWithTag("movies_filter_liked")
+            .performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.onNodeWithTag("movies_filter_genre_7")
+            .performKeyInput { pressKey(Key.DirectionRight) }
+        val lastChip = composeRule.onNodeWithTag("movies_filter_genre_9")
+        lastChip.assertIsFocused()
+
+        lastChip.performKeyInput { pressKey(Key.DirectionRight) }
+
+        lastChip.assertIsFocused()
+    }
+
+    @Test
+    fun selectingAGenreChipReportsTheFilter() {
+        setContent()
+
+        composeRule.onNodeWithTag("movies_filter_genre_7").performClick()
+
+        assertEquals(listOf<MoviesFilter>(MoviesFilter.Genre(id = 7, tag = "Action")), selectedFilters)
+    }
+
+    /** Focusable while the request is out, same contract as Refresh below. */
+    @Test
+    fun sortStaysAFocusTargetWhileTheOrderFlips() {
+        setContent()
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_filter_all")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithContentDescription("Refresh the movie library")
+            .performKeyInput { pressKey(Key.DirectionLeft) }
+        val sort = composeRule.onNodeWithContentDescription("Sort order")
+        sort.assertIsFocused()
+        sort.performClick()
+        assertEquals(1, sortToggles)
+
+        moviesState = testMoviesState(sort = SortOrder.Descending)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithContentDescription("Sort order").assertIsFocused()
+    }
+
+    @Test
+    fun leftFromSortExitsToTheNavigationRail() {
+        setContent()
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_filter_all")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithContentDescription("Refresh the movie library")
+            .performKeyInput { pressKey(Key.DirectionLeft) }
+
+        composeRule.onNodeWithContentDescription("Sort order")
+            .performKeyInput { pressKey(Key.DirectionLeft) }
+
+        composeRule.onNodeWithContentDescription("Movies").assertIsFocused()
+    }
+
+    @Test
+    fun anEmptyLikedViewStillReachesTheFilterRow() {
+        setContent(
+            testMoviesState(
+                filter = MoviesFilter.Liked,
+                grid = IglooRailState.Loaded(emptyList()),
+            ),
+        )
+        val empty = composeRule.onNodeWithContentDescription(
+            "No liked movies yet. Like a movie from its details page and it will appear here.",
+        )
+        empty.assertIsFocused()
+
+        empty.performKeyInput { pressKey(Key.DirectionUp) }
+
+        composeRule.onNodeWithTag("movies_filter_liked").assertIsFocused()
+    }
+
+    /** The genres fetch resolves after first composition; the row growing must not move focus. */
+    @Test
+    fun genresArrivingLaterDoNotMoveFocus() {
+        setContent(testMoviesState(genres = emptyList()))
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_filter_all").assertIsFocused()
+
+        moviesState = testMoviesState()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("movies_filter_genre_7").assertIsDisplayed()
+        composeRule.onNodeWithTag("movies_filter_all").assertIsFocused()
+    }
+
+    /** Pins the deliberate yank: a successful switch re-anchors on content, like Refresh. */
+    @Test
+    fun aFilterReplacementReanchorsFocusOnTheFirstCard() {
+        setContent()
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_filter_all").assertIsFocused()
+
+        moviesState = testMoviesState(
+            filter = MoviesFilter.Genre(id = 7, tag = "Action"),
+            contentGeneration = 1,
+        )
+        composeRule.waitForIdle()
+
+        card(1).assertIsFocused()
     }
 
     @Test
@@ -250,7 +424,10 @@ class MoviesGridBehaviorTest {
     fun refreshStaysAFocusTargetWhileItIsRefreshing() {
         setContent()
         card(1).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_filter_all")
+            .performKeyInput { pressKey(Key.DirectionUp) }
         val refresh = composeRule.onNodeWithContentDescription("Refresh the movie library")
+        refresh.assertIsFocused()
         refresh.performClick()
         assertEquals(1, refreshCalls)
 
@@ -401,6 +578,37 @@ class MoviesGridBehaviorTest {
         openMovies()
 
         card(3).assertIsFocused()
+    }
+
+    /**
+     * The silent Liked reconcile can empty the grid under the open overlay — the card Back
+     * would restore to is gone. Back must still land inside the pane, on the empty state,
+     * never on the platform's fallback (the first rail row).
+     */
+    @Test
+    fun backAfterTheGridEmptiedUnderTheOverlayLandsOnTheEmptyState() {
+        openDetailsOnSelect = true
+        setContent(
+            testMoviesState(
+                filter = MoviesFilter.Liked,
+                grid = IglooRailState.Loaded(testMovieGridItems.take(1)),
+                totalMovies = 1,
+            ),
+        )
+        card(1).performClick()
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
+
+        moviesState = testMoviesState(
+            filter = MoviesFilter.Liked,
+            grid = IglooRailState.Loaded(emptyList()),
+            totalMovies = 0,
+        )
+        composeRule.waitForIdle()
+        pressBack()
+
+        composeRule.onNodeWithContentDescription(
+            "No liked movies yet. Like a movie from its details page and it will appear here.",
+        ).assertIsFocused()
     }
 
     /** Back out of the spine returns to content, not to a reset grid. */

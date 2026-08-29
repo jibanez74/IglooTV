@@ -190,4 +190,79 @@ class MoviesGridAccessibilityTest {
         composeRule.onNodeWithContentDescription("No movies found in your library.")
             .assertIsFocused()
     }
+
+    // --- the filter row and header -----------------------------------------------------------
+
+    /** One cleared node per chip: the drawn "Action · 26" must not leak past the spoken form. */
+    @Test
+    fun eachChipAnnouncesItsNameCountAndSelection() {
+        setContent()
+
+        val action = composeRule.onNodeWithTag("movies_filter_genre_7")
+        action.assertContentDescriptionEquals("Action, 26 movies")
+        action.assertHasClickAction()
+        action.assert(
+            SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription),
+        )
+
+        // Only the selected chip carries the state; every other chip stays silent about it.
+        composeRule.onNodeWithTag("movies_filter_all")
+            .assertContentDescriptionEquals("All movies")
+            .assert(
+                SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"),
+            )
+    }
+
+    @Test
+    fun theSortButtonAnnouncesItsOrderAndItsAction() {
+        setContent()
+
+        composeRule.onNodeWithContentDescription("Sort order")
+            .assert(
+                SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "A to Z"),
+            )
+            .assertHasClickAction()
+    }
+
+    /** The count region is what announces a filter change, so it must name the active view. */
+    @Test
+    fun theCountSpeaksTheActiveFilter() {
+        setContent(
+            testMoviesState(
+                filter = MoviesFilter.Liked,
+                grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
+                totalMovies = 3,
+            ),
+        )
+
+        composeRule.onNodeWithTag("movies_count")
+            .assertContentDescriptionEquals("Showing 3 of 3 liked movies")
+    }
+
+    @Test
+    fun anEmptyLikedViewAnnouncesItself() {
+        setContent(
+            testMoviesState(
+                filter = MoviesFilter.Liked,
+                grid = IglooRailState.Loaded(emptyList()),
+            ),
+        )
+
+        composeRule.onNodeWithContentDescription(
+            "No liked movies yet. Like a movie from its details page and it will appear here.",
+        ).assertIsFocused()
+    }
+
+    @Test
+    fun anEmptyGenreViewAnnouncesItself() {
+        setContent(
+            testMoviesState(
+                filter = MoviesFilter.Genre(id = 7, tag = "Action"),
+                grid = IglooRailState.Loaded(emptyList()),
+            ),
+        )
+
+        composeRule.onNodeWithContentDescription("No Action movies in your library.")
+            .assertIsFocused()
+    }
 }
