@@ -41,6 +41,8 @@ import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.inertDetailsActions
+import com.igloo.blindpenguincoder.inertMoviesActions
+import com.igloo.blindpenguincoder.testMoviesState
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
@@ -133,6 +135,8 @@ class MoviePlayerOverlayFocusTest {
                     // asserts the focus chain without the reading stops.
                     spokenAccessibilityEnabled = false,
                     user = user,
+                    movies = testMoviesState(),
+                    moviesActions = inertMoviesActions,
                     serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),
                     home = HomeUiState(

@@ -42,6 +42,8 @@ import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutViewModel
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
+import com.igloo.blindpenguincoder.feature.movies.MoviesActions
+import com.igloo.blindpenguincoder.feature.movies.MoviesViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.MoviePlaybackServices
@@ -216,19 +218,47 @@ fun IglooRoot(container: IglooAppContainer) {
                             container.serverUrlProvider,
                         )
                     }
+                    // Session-scoped like the rest: that is what keeps the library grid's loaded
+                    // pages and scroll position alive across a Movies -> Home -> Movies trip.
+                    val moviesViewModel = viewModel(
+                        viewModelStoreOwner = authenticatedSessionOwner,
+                        key = "movies",
+                    ) {
+                        MoviesViewModel(
+                            container.movieRepository,
+                            container.serverUrlProvider,
+                        )
+                    }
                     // Device tokens are revoked server-side after long disuse, so a session
                     // resumed from the background is re-checked before it is trusted — and the
                     // library is re-read, because a TV can sit on this screen for days. The
                     // first START is also the first load; the view models have no init fetch,
                     // and the details refresh is a no-op unless the overlay is open.
-                    LifecycleStartEffect(homeViewModel, detailsViewModel, theaterDetailsViewModel) {
+                    LifecycleStartEffect(
+                        homeViewModel,
+                        detailsViewModel,
+                        theaterDetailsViewModel,
+                        moviesViewModel,
+                    ) {
                         scope.launch { sessionManager.revalidateActive() }
                         homeViewModel.refresh()
                         detailsViewModel.refresh()
                         theaterDetailsViewModel.refresh()
+                        // Re-reads the count and, only if the grid has nothing yet, page one: a
+                        // TV woken from standby must keep the pages the user scrolled through.
+                        moviesViewModel.refresh()
                         onStopOrDispose { }
                     }
                     val home by homeViewModel.uiState.collectAsStateWithLifecycle()
+                    val movies by moviesViewModel.uiState.collectAsStateWithLifecycle()
+                    val moviesActions = remember(moviesViewModel) {
+                        MoviesActions(
+                            onRefresh = moviesViewModel::reload,
+                            onRetryFirstPage = moviesViewModel::retryFirstPage,
+                            onRetryAppend = moviesViewModel::retryAppend,
+                            onLoadMore = moviesViewModel::loadMore,
+                        )
+                    }
                     val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()
                     val theaterDetails by theaterDetailsViewModel.uiState
                         .collectAsStateWithLifecycle()
@@ -242,6 +272,8 @@ fun IglooRoot(container: IglooAppContainer) {
                         serverOrigin = state.serverAddress.origin,
                         signOut = signOut,
                         home = home,
+                        movies = movies,
+                        moviesActions = moviesActions,
                         details = if (theaterOpen) theaterDetails else libraryDetails,
                         detailsActions = if (theaterOpen) {
                             MovieDetailsActions.Theater(

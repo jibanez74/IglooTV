@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -24,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -75,6 +77,9 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsScreen
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
+import com.igloo.blindpenguincoder.feature.movies.MoviesActions
+import com.igloo.blindpenguincoder.feature.movies.MoviesScreen
+import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
 import com.igloo.blindpenguincoder.feature.movies.VideoLaunchSite
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerScreen
@@ -97,6 +102,9 @@ private sealed interface DetailsOrigin {
     data object Hero : DetailsOrigin
     data class Rail(val rail: HomeRail) : DetailsOrigin
 
+    /** The Movies grid. No payload: the grid's own focus memory names the cell, not the origin. */
+    data object MoviesGrid : DetailsOrigin
+
     companion object {
         /** One string, because the overlay outlives activity recreation but `remember` does not. */
         val Saver: Saver<DetailsOrigin?, String> = Saver(
@@ -104,6 +112,7 @@ private sealed interface DetailsOrigin {
                 when (origin) {
                     is Rail -> origin.rail.name
                     Hero -> HERO
+                    MoviesGrid -> MOVIES_GRID
                     null -> NONE
                 }
             },
@@ -111,12 +120,14 @@ private sealed interface DetailsOrigin {
                 when (saved) {
                     NONE -> null
                     HERO -> Hero
+                    MOVIES_GRID -> MoviesGrid
                     else -> Rail(HomeRail.valueOf(saved))
                 }
             },
         )
 
         private const val HERO = "hero"
+        private const val MOVIES_GRID = "movies_grid"
         private const val NONE = "none"
     }
 }
@@ -226,6 +237,8 @@ fun IglooApp(
     serverOrigin: String,
     signOut: SignOutUiState,
     home: HomeUiState,
+    movies: MoviesUiState,
+    moviesActions: MoviesActions,
     details: MovieDetailsUiState,
     detailsActions: MovieDetailsActions,
     onRequestPlayback: () -> Unit,
@@ -261,6 +274,9 @@ fun IglooApp(
     val railReturnRequesters = remember {
         HomeRail.entries.associateWith { FocusRequester() }
     }
+    // The grid's sibling of railReturnRequesters: parked on the Movies grid's entry cell in
+    // every grid state, so Back out of details lands on the card that opened it.
+    val moviesReturnRequester = remember { FocusRequester() }
     // The rail expands exactly while d-pad focus is inside it; railOpenedByBack remembers
     // whether the rail was entered with the Back button, so Back can mean "step outward":
     // content -> rail -> exit, but a rail entered by d-pad steps back into content instead.
@@ -387,9 +403,13 @@ fun IglooApp(
         onCloseDetails()
         // In the callback, not an effect: the overlay's nodes are disposed in the same frame,
         // and a late effect would request focus on a detached requester (section 9.3).
-        val returnRequester = (origin as? DetailsOrigin.Rail)
-            ?.takeIf { currentDestination == IglooDestination.Home }
-            ?.let { railReturnRequesters.getValue(it.rail) }
+        val returnRequester = when (origin) {
+            is DetailsOrigin.Rail -> railReturnRequesters.getValue(origin.rail)
+                .takeIf { currentDestination == IglooDestination.Home }
+            DetailsOrigin.MoviesGrid -> moviesReturnRequester
+                .takeIf { currentDestination == IglooDestination.Movies }
+            else -> null
+        }
         // A rail whose list changed while the overlay was open — a refresh that dropped the
         // movie — can leave its anchor uncomposed, and requesting an unattached requester
         // throws. Landing on the pane's anchor is a worse restore than the card, and a far
@@ -419,6 +439,8 @@ fun IglooApp(
             serverOrigin = serverOrigin,
             currentDestination = currentDestination,
             home = home,
+            movies = movies,
+            moviesActions = moviesActions,
             // The details header owns the notice while the overlay is up; rendering it here too
             // would only shift Home's rails behind a screen nobody can see. It surfaces here
             // when Back closes an overlay whose write had already failed.
@@ -427,6 +449,7 @@ fun IglooApp(
             openMovie = openMovie,
             openTheaterMovie = openTheaterMovie,
             railReturnRequesters = railReturnRequesters,
+            moviesReturnRequester = moviesReturnRequester,
             // The rail stays open behind the dialog: the row that opened it must still be legible,
             // so the focus it gets back on cancel is not a surprise.
             railExpanded = railHasFocus || signOut.confirming,
@@ -597,11 +620,14 @@ private fun IglooShell(
     serverOrigin: String,
     currentDestination: IglooDestination,
     home: HomeUiState,
+    movies: MoviesUiState,
+    moviesActions: MoviesActions,
     mutationNotice: String?,
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
+    moviesReturnRequester: FocusRequester,
     railExpanded: Boolean,
     scrimmed: Boolean,
     hiddenFromAccessibility: Boolean,
@@ -660,11 +686,14 @@ private fun IglooShell(
             ContentPane(
                 currentDestination = currentDestination,
                 home = home,
+                movies = movies,
+                moviesActions = moviesActions,
                 mutationNotice = mutationNotice,
                 onRetryRail = onRetryRail,
                 openMovie = openMovie,
                 openTheaterMovie = openTheaterMovie,
                 railReturnRequesters = railReturnRequesters,
+                moviesReturnRequester = moviesReturnRequester,
                 contentStartRequester = contentStartRequester,
                 navigationRequesters = navigationRequesters,
                 // The pane fills the panel and applies no gutter of its own. It used to box every
@@ -696,7 +725,7 @@ private fun IglooShell(
                 // survives — and ContentPane claims the anchor once the new branch is composed.
                 onDestinationSelected = { destination ->
                     val sameBranch =
-                        paneBranchIsHome(destination) == paneBranchIsHome(currentDestination)
+                        paneBranchOf(destination) == paneBranchOf(currentDestination)
                     onDestinationSelected(destination)
                     if (sameBranch) contentStartRequester.requestFocus()
                 },
@@ -732,11 +761,14 @@ private fun IglooShell(
 private fun ContentPane(
     currentDestination: IglooDestination,
     home: HomeUiState,
+    movies: MoviesUiState,
+    moviesActions: MoviesActions,
     mutationNotice: String?,
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
+    moviesReturnRequester: FocusRequester,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     modifier: Modifier = Modifier,
@@ -757,6 +789,19 @@ private fun ContentPane(
             },
         ),
     ) { mutableStateMapOf() }
+
+    // Hoisted beside lastFocusedByRail and for the same reason: a Movies -> Home -> Movies round
+    // trip must land on the same cell. A plain var rather than another map entry — HomeRail names
+    // Home's rails, and the library grid is not one of them.
+    var lastFocusedMovieId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Hoisted for the same reason as the scroll state below: kept inside MoviesScreen it would be
+    // discarded when the pane switches away, and re-entering Movies would replay the scroll-to-top
+    // that a Refresh asked for once, throwing away the user's position.
+    var handledMoviesGeneration by rememberSaveable { mutableIntStateOf(0) }
+    // ContentPane's `when` has no SaveableStateHolder, so a rememberSaveable inside the removed
+    // subtree is discarded on a destination switch. Held here, the grid's scroll position
+    // survives a trip to Home and back.
+    val moviesGridState = rememberLazyGridState()
 
     // The pane's one gutter, handed to the sections instead of applied here: the collapsed rail
     // plus a reading gutter on the start, the overscan inset on the end. Chrome and text take it;
@@ -796,6 +841,25 @@ private fun ContentPane(
                 lastFocusedByRail = lastFocusedByRail,
             )
 
+            IglooDestination.Movies -> MoviesScreen(
+                state = movies,
+                actions = moviesActions,
+                contentInset = contentInset,
+                gridState = moviesGridState,
+                contentStartRequester = contentStartRequester,
+                navigationRequester = navigationRequesters.getValue(IglooDestination.Movies),
+                returnRequester = moviesReturnRequester,
+                lastFocusedMovieId = lastFocusedMovieId,
+                onMovieFocused = { lastFocusedMovieId = it },
+                handledGeneration = handledMoviesGeneration,
+                onGenerationHandled = { handledMoviesGeneration = it },
+                // The pane's mutationNotice is the details overlay's write report; the grid has
+                // its own notice for a refresh that failed, and two in one header would confuse.
+                onMovieSelected = openMovie?.let { open ->
+                    { movieId -> open(DetailsOrigin.MoviesGrid, movieId) }
+                },
+            )
+
             else -> PlaceholderContent(
                 currentDestination = currentDestination,
                 mutationNotice = mutationNotice,
@@ -806,24 +870,29 @@ private fun ContentPane(
         }
     }
 
-    // The two branches put contentStartRequester on different nodes, so on a cross-branch
-    // switch the shell leaves focus on the rail row (see IglooShell) and the pane claims the
-    // anchor here, once the incoming branch's node exists. Deliberately keyed on the branch
-    // and not the destination: within the placeholder branch the anchor persists, and
-    // activating a card there must keep focus where the user put it.
-    var paneOnHome by remember { mutableStateOf(paneBranchIsHome(currentDestination)) }
+    // Each branch puts contentStartRequester on a different node, so on a cross-branch switch
+    // the shell leaves focus on the rail row (see IglooShell) and the pane claims the anchor
+    // here, once the incoming branch's node exists. Deliberately keyed on the branch and not
+    // the destination: within the placeholder branch the anchor persists, and activating a card
+    // there must keep focus where the user put it.
+    var paneBranch by remember { mutableStateOf(paneBranchOf(currentDestination)) }
     LaunchedEffect(currentDestination) {
-        val onHome = paneBranchIsHome(currentDestination)
-        if (onHome != paneOnHome) {
-            paneOnHome = onHome
+        val branch = paneBranchOf(currentDestination)
+        if (branch != paneBranch) {
+            paneBranch = branch
             contentStartRequester.requestFocus()
         }
     }
 }
 
-/** Which of ContentPane's two trees a destination renders; the focus anchor moves with it. */
-private fun paneBranchIsHome(destination: IglooDestination): Boolean =
-    destination == IglooDestination.Home
+/** Which of ContentPane's trees a destination renders; the focus anchor moves with the branch. */
+private enum class PaneBranch { Home, Movies, Placeholder }
+
+private fun paneBranchOf(destination: IglooDestination): PaneBranch = when (destination) {
+    IglooDestination.Home -> PaneBranch.Home
+    IglooDestination.Movies -> PaneBranch.Movies
+    else -> PaneBranch.Placeholder
+}
 
 @Composable
 private fun HomeRails(

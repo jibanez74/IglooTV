@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.data.api
 
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.data.model.SetMovieWatchedRequest
+import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.timeout
@@ -21,6 +22,22 @@ class MovieApi(
     /** Newest additions to the library; the backend caps the list at 12. */
     suspend fun latestMovies(): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/movies/latest")
+
+    /**
+     * One page of the browsable library, title-ordered server-side. [perPage] is capped at
+     * [MAX_LIBRARY_PER_PAGE] by the backend; [sort] is only a direction — the endpoint offers
+     * no sort-field choice.
+     */
+    suspend fun moviesLibrary(page: Long, perPage: Long, sort: SortOrder): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/movies/library") {
+            parameter("page", page)
+            parameter("per_page", perPage)
+            parameter("sort", sort.wireName)
+        }
+
+    /** Library-wide counts; today just the total number of movies. */
+    suspend fun movieStats(): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/movies/stats")
 
     /** Movies in progress for the current user, most recently watched first; capped at 12. */
     suspend fun continueWatchingMovies(): HttpResponse =
@@ -89,8 +106,11 @@ class MovieApi(
         return if (startSec > 0.0) "$base?start=$startSec" else base
     }
 
-    private companion object {
-        const val HLS_MANIFEST_TIMEOUT_MS = 45_000L
+    companion object {
+        /** The backend rejects a larger `per_page` on every paged movie endpoint. */
+        const val MAX_LIBRARY_PER_PAGE = 48L
+
+        private const val HLS_MANIFEST_TIMEOUT_MS = 45_000L
     }
 
     /** Current user's saved position and watched flag for one movie. */

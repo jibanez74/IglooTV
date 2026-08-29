@@ -696,7 +696,25 @@ parked short of a gutter, which reads as the end of the list rather than the mid
 > and blog posts still reference them; **do not reintroduce them**, and do not add
 > `tv-foundation` as a dependency for list purposes.
 
-Grids use `LazyVerticalGrid` with `GridCells.Fixed(IglooTheme.layout.gridColumns)`.
+Grids use `LazyVerticalGrid` with `GridCells.Fixed(IglooTheme.layout.gridColumns)`. A card in a
+grid cell passes `width = Dp.Unspecified` so it fills the cell it was already given; the rails'
+fixed `posterWidth` would leave ragged gutters.
+
+**Paged grids append; they do not repaginate.** A `LazyVerticalGrid` backed by a paged endpoint
+keys its real cells and its tail cells in one disjoint string space (`movie_$id` versus
+`tail_skeleton_$i`), and the tail keys index *within the tail* so an append never renumbers them
+— stable keys are the whole reason focus stays on a card while a page lands underneath it. The
+prefetch trigger reads `LazyGridState.layoutInfo` **through `derivedStateOf`** and compares the
+last visible index against the *real* item count, never `layoutInfo.totalItemsCount`, which
+includes the tail and would drift as the tail changed shape. `layoutInfo` changes on every
+scroll frame, and on a TV every d-pad press is a scroll frame, so reading it directly in
+composition subscribes the entire grid to a per-frame value. Two things must be hoisted above
+the pane's destination branch: the `LazyGridState`, because `ContentPane`'s `when` has no
+`SaveableStateHolder` and a `rememberSaveable` inside the removed subtree is discarded on a
+destination switch; and whatever records that a scroll-to-top has been handled, or re-entering
+the pane replays it. The item list itself lives in the view model and never in `rememberSaveable`
+— a five-thousand-item library would exceed the saved-state `Bundle` limit and crash on process
+death.
 
 **Rails pad their content and let the scroll surface bleed past it.** `IglooMediaRail` takes the
 pane's `contentInset` and splits it by node:
@@ -1309,9 +1327,32 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
 
 ### 11.4 Movies
 
-- **Index** — heading, stats, tab control (All / Genres / Playlists), then a poster grid at
-  `gridColumns` with A–Z sort and pagination. Numbered pagination, not infinite scroll: a
-  remote user needs a bounded, predictable focus target.
+- **Index** — a heading, the library count, and a **Refresh** action over a poster grid at
+  `gridColumns`, sorted A–Z, **paged by infinite scroll**. No tab control and no sort control:
+  the grid is All Movies and nothing else until Genres and Playlists have screens of their own.
+
+  **This reverses the earlier numbered-pagination rule.** The argument for numbered pages was
+  that a remote user needs a bounded, predictable focus target — but a page strip is a *second*
+  focus region below a grid the user is already inside, reached by pressing down through the
+  last row and left again to get out, and every page turn is a full list replacement that drops
+  focus. Infinite scroll is bounded differently and better: **the tail is always occupied.** Two
+  rows of skeleton cells sit past the last loaded item whenever more pages exist, in the same
+  place whether a request is in flight or not, so the grid's geometry never changes under a
+  focused cell. Those skeletons are **not** focus targets — a node that vanishes when its page
+  lands would drop focus on the floor (§10) — so the last row pins its own `down` and reaching
+  the true end is a stable no-op rather than an escape into the navigation rail. A page that
+  *fails* replaces the tail with a full-width inline error whose Retry **is** focusable, which
+  is exactly where the user's focus is heading at that moment. Prefetch fires two rows out, one
+  request at a time, at `per_page=48` — the contract's maximum.
+
+  **Refresh is for everyone**, and it is a client-side re-read: it re-requests the count and
+  page one, drops the accumulated pages, and returns to the top. It is not the admin scan
+  endpoint and must never be described as one. The loaded grid **stays on screen while it runs**
+  — blanking it would dispose the focused cell mid-request — and the button swaps its own label
+  rather than showing a spinner (§7.2). It is never disabled: `IglooButton` is focusable only
+  through its `clickable` branch, so disabling it would remove the node the user is standing on
+  from the focus tree. A refresh that fails leaves the grid alone and reports in an
+  `IglooNotice`, because the failure is over and Refresh is one press away.
 - **Detail** — full-bleed backdrop with a `background` gradient scrim, content pulled up over
   it. Poster left; title, tagline, metadata chips, genres, and hero actions right. Hero actions:
   **Play**, **Watched** toggle, **Like**, and the icon-only **More** trigger, which opens the
@@ -1866,6 +1907,19 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-28 — Movies index: an infinite-scroll library grid.**
+
+- **§11.4** replaces numbered pagination with infinite scroll and records why: an always-occupied,
+  unfocusable tail plus a pinned last-row edge is a stronger bound for a remote than a second
+  focus region below the grid. Adds the all-users Refresh and states plainly that it is a
+  client-side re-read, not the admin scan.
+- **§8.3** gains the paged-grid rules — disjoint tail keys, `derivedStateOf` over `layoutInfo`,
+  the hoisted grid state and handled-generation, and the list living in the view model.
+- `SkeletonCell` moved out of `IglooMediaRail` to `core/ui/IglooSkeletonCell.kt` so the rails and
+  the grid share one placeholder; `IglooPosterCard` gained the `Dp.Unspecified` fill-the-cell
+  width. `IglooDestination.Movies.supportingText` no longer renders — Movies has a real pane —
+  and `paneBranchIsHome` became the three-valued `paneBranchOf`.
 
 **2026-08-25 — Playback lifecycle and quality are one strict contract.**
 

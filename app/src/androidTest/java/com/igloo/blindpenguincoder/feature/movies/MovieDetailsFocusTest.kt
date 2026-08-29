@@ -39,6 +39,8 @@ import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.inertDetailsActions
+import com.igloo.blindpenguincoder.inertMoviesActions
+import com.igloo.blindpenguincoder.testMoviesState
 import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -103,6 +105,8 @@ class MovieDetailsFocusTest {
                 IglooApp(
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                     user = user,
+                    movies = testMoviesState(),
+                    moviesActions = inertMoviesActions,
                     serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),
                     // Hero hidden by default so the rails own the pane's entry anchor: this

@@ -17,6 +17,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.igloo.blindpenguincoder.inertMoviesActions
+import com.igloo.blindpenguincoder.testMoviesState
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
@@ -82,6 +84,8 @@ class TheaterMovieDetailsTest {
                 IglooApp(
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                     user = user,
+                    movies = testMoviesState(),
+                    moviesActions = inertMoviesActions,
                     serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),
                     home = HomeUiState(

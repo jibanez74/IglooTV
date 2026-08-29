@@ -42,6 +42,8 @@ import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.inertDetailsActions
+import com.igloo.blindpenguincoder.inertMoviesActions
+import com.igloo.blindpenguincoder.testMoviesState
 import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testHomeMovies
 import kotlin.math.abs
@@ -135,6 +137,8 @@ class IglooConfirmDialogMotionTest {
                         // asserts the focus chain without the reading stops.
                         spokenAccessibilityEnabled = false,
                         user = user,
+                        movies = testMoviesState(),
+                        moviesActions = inertMoviesActions,
                         serverOrigin = "http://igloo.test:8080",
                         signOut = signOut,
                         // Hero hidden — a legitimate 11.3.1 state — so the sampled rail-card

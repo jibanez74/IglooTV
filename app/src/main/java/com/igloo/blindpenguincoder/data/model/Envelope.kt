@@ -51,8 +51,13 @@ data class SqlNullFloat64(
     fun orNull(): Double? = if (valid) value else null
 }
 
+/**
+ * Direction-only sort shared by every paged library endpoint; there is no sort-field choice.
+ * [wireName] repeats each `@SerialName` because a query parameter is built by hand rather than
+ * serialized, and `toString()` would send the Kotlin constant name.
+ */
 @Serializable
-enum class SortOrder {
-    @SerialName("asc") Ascending,
-    @SerialName("desc") Descending,
+enum class SortOrder(val wireName: String) {
+    @SerialName("asc") Ascending("asc"),
+    @SerialName("desc") Descending("desc"),
 }

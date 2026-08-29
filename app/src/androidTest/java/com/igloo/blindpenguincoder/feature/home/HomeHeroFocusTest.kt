@@ -22,6 +22,8 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.inertDetailsActions
+import com.igloo.blindpenguincoder.inertMoviesActions
+import com.igloo.blindpenguincoder.testMoviesState
 import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -66,6 +68,8 @@ class HomeHeroFocusTest {
                     // asserts the focus chain without the reading stops.
                     spokenAccessibilityEnabled = false,
                     user = user,
+                    movies = testMoviesState(),
+                    moviesActions = inertMoviesActions,
                     serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),
                     home = HomeUiState(

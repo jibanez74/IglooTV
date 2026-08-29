@@ -14,7 +14,12 @@ import com.igloo.blindpenguincoder.feature.movies.AboutUi
 import com.igloo.blindpenguincoder.feature.movies.CastMemberUi
 import com.igloo.blindpenguincoder.feature.movies.CrewEntry
 import com.igloo.blindpenguincoder.feature.movies.ExtraVideoUi
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
+import com.igloo.blindpenguincoder.feature.movies.MoviesActions
+import com.igloo.blindpenguincoder.feature.movies.MoviesAppendState
+import com.igloo.blindpenguincoder.feature.movies.MoviesGridItem
+import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSettingsUi
@@ -37,6 +42,38 @@ internal val testHomeMovies = listOf(
     HomeMovie(id = 1, title = "Heat", year = 1995, posterUrl = null),
     HomeMovie(id = 2, title = "Arrival", year = 2016, posterUrl = null),
     HomeMovie(id = 3, title = "Ran", year = 1985, posterUrl = null),
+)
+
+/**
+ * Poster-less like the rail fixtures, and long enough to fill several rows at every
+ * `gridColumns` value so the grid's paging and focus contracts have somewhere to travel.
+ */
+internal val testMovieGridItems = (1L..40L).map { id ->
+    MoviesGridItem(id = id, title = "Movie $id", year = (1980 + id).toString(), posterUrl = null)
+}
+
+/** A grid that has loaded its first page and has more to come. */
+internal fun testMoviesState(
+    grid: IglooRailState<MoviesGridItem> = IglooRailState.Loaded(testMovieGridItems),
+    append: MoviesAppendState = MoviesAppendState.Idle,
+    totalMovies: Long? = 96,
+    refreshing: Boolean = false,
+    notice: String? = null,
+    contentGeneration: Int = 0,
+) = MoviesUiState(
+    totalMovies = totalMovies,
+    grid = grid,
+    append = append,
+    refreshing = refreshing,
+    notice = notice,
+    contentGeneration = contentGeneration,
+)
+
+internal val inertMoviesActions = MoviesActions(
+    onRefresh = {},
+    onRetryFirstPage = {},
+    onRetryAppend = {},
+    onLoadMore = {},
 )
 
 internal val testContinueMovies = listOf(

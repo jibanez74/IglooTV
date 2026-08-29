@@ -34,6 +34,8 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.inertDetailsActions
+import com.igloo.blindpenguincoder.inertMoviesActions
+import com.igloo.blindpenguincoder.testMoviesState
 import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueMovies
@@ -117,6 +119,8 @@ class HomeRailBehaviorTest {
                     // asserts the focus chain without the reading stops.
                     spokenAccessibilityEnabled = false,
                     user = user,
+                    movies = testMoviesState(),
+                    moviesActions = inertMoviesActions,
                     serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),
                     // Hero hidden: this suite pins the rails' own focus contract, where the

@@ -155,6 +155,32 @@ fun latestMovieJson(
 fun latestMoviesJson(vararg movies: String): String =
     """{"error":false,"message":"latest movies","data":{"movies":[${movies.joinToString(",")}]}}"""
 
+/** One `GET /movies/library` list entry: the latest-movie shape plus a certification. */
+fun movieLibraryItemJson(
+    id: Long = 1,
+    title: String = "Heat",
+    posterPath: String? = "/heat.jpg",
+    year: Long? = 1995,
+    certification: String? = "R",
+): String = """{"id":$id,"title":"$title","poster_path":${sqlNullStringJson(posterPath)},""" +
+    """"year":${sqlNullInt64Json(year)},""" +
+    """"certification":${sqlNullStringJson(certification)}}"""
+
+/** A `GET /movies/library` page. The paging counts are what the grid's tail is driven by. */
+fun moviesLibraryJson(
+    page: Long = 1,
+    perPage: Long = 48,
+    total: Long = 1,
+    totalPages: Long = 1,
+    sort: String = "asc",
+    vararg movies: String,
+): String = """{"error":false,"message":"movies library","data":{""" +
+    """"movies":[${movies.joinToString(",")}],"total":$total,"page":$page,""" +
+    """"per_page":$perPage,"total_pages":$totalPages,"sort":"$sort"}}"""
+
+fun moviesStatsJson(totalMovies: Long = 1): String =
+    """{"error":false,"message":"movie stats","data":{"total_movies":$totalMovies}}"""
+
 /** One `GET /movies/continue-watching` list entry: the latest-movie shape plus progress. */
 fun continueWatchingMovieJson(
     id: Long = 1,

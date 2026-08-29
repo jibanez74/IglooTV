@@ -17,7 +17,10 @@ import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.MovieWatchedData
+import com.igloo.blindpenguincoder.data.model.MoviesLibraryData
+import com.igloo.blindpenguincoder.data.model.MoviesStatsData
 import com.igloo.blindpenguincoder.data.model.SetMovieWatchedRequest
+import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.model.TheaterMovie
 import com.igloo.blindpenguincoder.data.model.TheaterMoviesData
 import com.igloo.blindpenguincoder.data.model.TmdbMovie
@@ -42,6 +45,27 @@ class MovieRepository(
         decode = { response ->
             response.body<ApiEnvelope<LatestMoviesData>>().data?.movies
                 ?: error("Missing movies in latest movies response")
+        },
+    )
+
+    /** One page of the browsable library. The envelope's paging counts are part of the result. */
+    suspend fun moviesLibrary(
+        page: Long,
+        perPage: Long,
+        sort: SortOrder,
+    ): ApiResult<MoviesLibraryData> = safeApiCall(
+        request = { api.moviesLibrary(page, perPage, sort) },
+        decode = { response ->
+            response.body<ApiEnvelope<MoviesLibraryData>>().data
+                ?: error("Missing data in movies library response")
+        },
+    )
+
+    suspend fun movieStats(): ApiResult<MoviesStatsData> = safeApiCall(
+        request = { api.movieStats() },
+        decode = { response ->
+            response.body<ApiEnvelope<MoviesStatsData>>().data
+                ?: error("Missing data in movie stats response")
         },
     )
 

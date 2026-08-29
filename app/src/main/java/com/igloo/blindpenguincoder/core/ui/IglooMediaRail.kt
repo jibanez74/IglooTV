@@ -1,13 +1,11 @@
 package com.igloo.blindpenguincoder.core.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,7 +16,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,7 +40,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.scaled
 
 /** What a media rail renders. An empty [Loaded] list is the empty state, not an error. */
 sealed interface IglooRailState<out T> {
@@ -260,7 +256,7 @@ private fun RailSkeleton(
         modifier = modifier.padding(vertical = IglooTheme.spacing.md),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
     ) {
-        SkeletonCell(
+        IglooSkeletonCell(
             focused = focused,
             cardAspect = cardAspect,
             cardWidth = cardWidth,
@@ -273,51 +269,13 @@ private fun RailSkeleton(
                 },
         )
         repeat(SKELETON_CELLS - 1) {
-            SkeletonCell(
+            IglooSkeletonCell(
                 focused = false,
                 cardAspect = cardAspect,
                 cardWidth = cardWidth,
                 modifier = Modifier.semantics { hideFromAccessibility() },
             )
         }
-    }
-}
-
-@Composable
-private fun SkeletonCell(
-    focused: Boolean,
-    cardAspect: Float,
-    cardWidth: Dp,
-    modifier: Modifier = Modifier,
-) {
-    val colors = IglooTheme.colors
-    val stubShape = RoundedCornerShape(IglooTheme.radius.sm)
-    Column(
-        modifier = modifier.width(cardWidth),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(cardAspect)
-                .focusRing(
-                    focused = focused,
-                    radius = IglooTheme.radius.lg,
-                    fill = colors.muted,
-                ),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .height(14.dp.scaled())
-                .background(colors.muted, stubShape),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.5f)
-                .height(10.dp.scaled())
-                .background(colors.muted, stubShape),
-        )
     }
 }
 

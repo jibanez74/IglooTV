@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.playback.hls.HlsManifestResult
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
@@ -46,6 +47,87 @@ class MovieRepositoryTest {
         assertEquals("Heat", movies.single().title)
         assertEquals("/heat.jpg", movies.single().posterPath.orNull())
         assertEquals(1995L, movies.single().year.orNull())
+    }
+
+    @Test
+    fun `the movies library request carries page, per page and sort as query parameters`() =
+        runTest {
+            var request: HttpRequestData? = null
+            val http = TestHttp {
+                request = it
+                jsonResponse(moviesLibraryJson(page = 2, total = 96, totalPages = 2))
+            }
+            http.profiles.setPending("igd_test")
+
+            http.movieRepository.moviesLibrary(page = 2, perPage = 48, sort = SortOrder.Ascending)
+
+            val captured = requireNotNull(request)
+            assertEquals("/api/movies/library", captured.url.encodedPath)
+            assertEquals("2", captured.url.parameters["page"])
+            assertEquals("48", captured.url.parameters["per_page"])
+            // The wire spelling, not the Kotlin constant name.
+            assertEquals("asc", captured.url.parameters["sort"])
+            assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+        }
+
+    @Test
+    fun `a library page decodes its items and its paging counts`() = runTest {
+        val http = TestHttp {
+            jsonResponse(
+                moviesLibraryJson(
+                    page = 1,
+                    total = 96,
+                    totalPages = 2,
+                    movies = arrayOf(
+                        movieLibraryItemJson(id = 5, title = "Heat"),
+                        // A movie the scanner never matched: no poster, no year, no rating.
+                        movieLibraryItemJson(
+                            id = 6,
+                            title = "Unmatched",
+                            posterPath = null,
+                            year = null,
+                            certification = null,
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        val page = (http.movieRepository.moviesLibrary(1, 48, SortOrder.Ascending)
+            as ApiResult.Success).value
+
+        assertEquals(listOf(5L, 6L), page.movies.map { it.id })
+        assertEquals("/heat.jpg", page.movies.first().posterPath.orNull())
+        assertEquals(1995L, page.movies.first().year.orNull())
+        assertNull(page.movies.last().posterPath.orNull())
+        assertNull(page.movies.last().year.orNull())
+        assertEquals(96L, page.total)
+        assertEquals(2L, page.totalPages)
+        assertEquals(SortOrder.Ascending, page.sort)
+    }
+
+    @Test
+    fun `a refused library page fails with its status`() = runTest {
+        val http = TestHttp { jsonResponse("""{"error":true,"message":"nope"}""", HttpStatusCode.InternalServerError) }
+
+        val result = http.movieRepository.moviesLibrary(1, 48, SortOrder.Ascending)
+
+        val error = (result as ApiResult.Failure).error
+        assertEquals(500, (error as AppError.Api).status)
+    }
+
+    @Test
+    fun `movie stats decodes the total movie count`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(moviesStatsJson(totalMovies = 1234))
+        }
+
+        val stats = (http.movieRepository.movieStats() as ApiResult.Success).value
+
+        assertEquals("/api/movies/stats", requireNotNull(request).url.encodedPath)
+        assertEquals(1234L, stats.totalMovies)
     }
 
     @Test

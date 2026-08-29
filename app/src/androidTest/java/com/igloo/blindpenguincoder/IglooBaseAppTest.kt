@@ -84,6 +84,8 @@ class IglooBaseAppTest {
                     // asserts the focus chain without the reading stops.
                     spokenAccessibilityEnabled = false,
                     user = user,
+                    movies = testMoviesState(),
+                    moviesActions = inertMoviesActions,
                     serverOrigin = "http://igloo.test:8080",
                     signOut = signOut,
                     // Hero hidden — a legitimate 11.3.1 state — so both rail headings fit the
@@ -165,13 +167,13 @@ class IglooBaseAppTest {
     fun navigationItemsChangeContentPane() {
         setShellContent()
 
-        // The placeholder is one cleared node (section 10's inert-anchor contract), so the pane
-        // is identified by what it announces rather than by a loose text node inside it.
+        // Movies has a real screen: its pane is the library grid, identified by its own tag.
         composeRule.onNodeWithContentDescription("Movies").performClick()
-        composeRule.onNodeWithContentDescription(
-            "Movies. Movie library scaffolding is ready for API-backed content.",
-        ).assertIsDisplayed()
+        composeRule.onNodeWithTag("movies_grid").assertIsDisplayed()
 
+        // A destination with no screen yet still swaps the pane. The placeholder is one cleared
+        // node (section 10's inert-anchor contract), so it is identified by what it announces
+        // rather than by a loose text node inside it.
         composeRule.onNodeWithContentDescription("Music").performClick()
         composeRule.onNodeWithContentDescription(
             "Music. Music playback dependencies are available for the next feature pass.",

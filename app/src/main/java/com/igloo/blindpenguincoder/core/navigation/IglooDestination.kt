@@ -1,5 +1,10 @@
 package com.igloo.blindpenguincoder.core.navigation
 
+/**
+ * [supportingText] is the line the placeholder pane shows for a destination that has no screen
+ * yet. Home and Movies both render real content and never surface theirs; the entries stay so
+ * the enum has one shape, and are worded as if they would be shown.
+ */
 enum class IglooDestination(
     val label: String,
     val supportingText: String,
@@ -14,7 +19,7 @@ enum class IglooDestination(
     ),
     Movies(
         label = "Movies",
-        supportingText = "Movie library scaffolding is ready for API-backed content.",
+        supportingText = "Browse every movie in your library.",
     ),
     TvShows(
         label = "TV Shows",

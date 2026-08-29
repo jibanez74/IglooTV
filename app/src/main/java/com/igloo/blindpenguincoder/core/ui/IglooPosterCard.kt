@@ -54,7 +54,9 @@ data class PosterCardProgress(
  * is one focus target and one TalkBack node.
  *
  * [aspect] defaults to the 2:3 movie poster; album art passes `albumAspect`, and wide video
- * cards pass `wideAspect` with `wideCardWidth` as [width] (section 8.2). A
+ * cards pass `wideAspect` with `wideCardWidth` as [width] (section 8.2). A [width] of
+ * [Dp.Unspecified] makes the card fill its parent instead, which is what a `LazyVerticalGrid`
+ * cell wants — the cell is already sized and a fixed card width would leave ragged gutters. A
  * null or failed image falls back to [fallbackIcon] on the muted fill; the text below is
  * unchanged, so the card loses nothing but the artwork. An optional progress bar sits on the
  * artwork's bottom edge and is announced through [PosterCardProgress.description].
@@ -86,7 +88,10 @@ fun IglooPosterCard(
 
     Column(
         modifier = modifier
-            .width(width)
+            // A grid cell already has a width; a rail's card does not. Applying `width()`
+            // unconditionally would override a caller's fillMaxWidth() — it comes second in the
+            // chain — and leave grid cards at the rail's size with ragged gutters.
+            .then(if (width == Dp.Unspecified) Modifier.fillMaxWidth() else Modifier.width(width))
             .onFocusChanged { focused = it.isFocused }
             .then(
                 if (onClick != null) {

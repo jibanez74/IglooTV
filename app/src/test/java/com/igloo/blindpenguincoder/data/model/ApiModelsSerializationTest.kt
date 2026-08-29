@@ -117,6 +117,17 @@ class ApiModelsSerializationTest {
         assertEquals("PG-13", movie.certification?.orNull())
     }
 
+    /**
+     * `SortOrder.wireName` is spelled a second time so a query parameter can be built by hand.
+     * This is the guard that keeps it from drifting away from the `@SerialName`.
+     */
+    @Test
+    fun everySortOrderWireNameMatchesItsSerialName() {
+        SortOrder.entries.forEach { order ->
+            assertEquals(""""${order.wireName}"""", json.encodeToString(order))
+        }
+    }
+
     @Test
     fun decodesLatestMoviesEnvelope() {
         val body = """

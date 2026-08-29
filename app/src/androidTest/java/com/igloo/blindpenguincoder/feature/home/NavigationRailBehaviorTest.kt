@@ -32,6 +32,8 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.inertDetailsActions
+import com.igloo.blindpenguincoder.inertMoviesActions
+import com.igloo.blindpenguincoder.testMoviesState
 import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -85,6 +87,8 @@ class NavigationRailBehaviorTest {
                     // asserts the focus chain without the reading stops.
                     spokenAccessibilityEnabled = false,
                     user = user,
+                    movies = testMoviesState(),
+                    moviesActions = inertMoviesActions,
                     serverOrigin = "http://igloo.test:8080",
                     signOut = signOut,
                     // Loaded with poster-less movies and a backdrop-less hero: the placeholder
@@ -118,12 +122,13 @@ class NavigationRailBehaviorTest {
     private fun contentStartCard() = composeRule.onNodeWithTag("home_hero")
 
     /**
-     * The content anchor on every other destination. The placeholder is one cleared node — the
-     * same contract as the hero and an inert poster card — so it is addressed by the description
-     * it announces, not by the text inside it.
+     * The content anchor on a destination that has no screen yet. The placeholder is one cleared
+     * node — the same contract as the hero and an inert poster card — so it is addressed by the
+     * description it announces, not by the text inside it. TV Shows rather than Movies: Movies
+     * renders a real grid now, and this suite's subject is the shell, not a library screen.
      */
     private fun placeholderStartCard() = composeRule.onNodeWithContentDescription(
-        "Movies. Movie library scaffolding is ready for API-backed content.",
+        "TV Shows. TV show browsing will use the same remote-first shell.",
     )
 
     private fun rail() = composeRule.onNodeWithTag("navigation_rail")
@@ -158,12 +163,12 @@ class NavigationRailBehaviorTest {
     fun backFromContentOpensRailOnCurrentDestination() {
         setShellContent()
 
-        composeRule.onNodeWithContentDescription("Movies").performClick()
+        composeRule.onNodeWithContentDescription("TV Shows").performClick()
         placeholderStartCard().assertIsFocused()
 
         pressBack()
 
-        composeRule.onNodeWithContentDescription("Movies").assertIsFocused()
+        composeRule.onNodeWithContentDescription("TV Shows").assertIsFocused()
         rail().assertWidthIsEqualTo(expandedWidth)
     }
 

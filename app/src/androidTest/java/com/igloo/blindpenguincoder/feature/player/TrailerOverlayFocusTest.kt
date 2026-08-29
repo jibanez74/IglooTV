@@ -31,6 +31,8 @@ import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.inertDetailsActions
+import com.igloo.blindpenguincoder.inertMoviesActions
+import com.igloo.blindpenguincoder.testMoviesState
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
 import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testContinueMovies
@@ -85,6 +87,8 @@ class TrailerOverlayFocusTest {
                     // asserts the focus chain without the reading stops.
                     spokenAccessibilityEnabled = false,
                     user = user,
+                    movies = testMoviesState(),
+                    moviesActions = inertMoviesActions,
                     serverOrigin = "http://igloo.test:8080",
                     signOut = SignOutUiState(),
                     home = HomeUiState(
