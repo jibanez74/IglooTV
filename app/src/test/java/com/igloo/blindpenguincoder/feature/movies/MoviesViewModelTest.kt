@@ -662,6 +662,7 @@ class MoviesViewModelTest {
         val model = loaded(http)
         model.selectFilter(MoviesFilter.Liked)
         val generationBefore = model.uiState.value.contentGeneration
+        val silentGenerationBefore = model.uiState.value.silentReconcileGeneration
 
         unliked = true
         model.onLikeCommitted()
@@ -672,6 +673,174 @@ class MoviesViewModelTest {
         // label or a generation bump would scroll and steal focus from it.
         assertTrue(!model.uiState.value.refreshing)
         assertEquals(generationBefore, model.uiState.value.contentGeneration)
+        assertEquals(
+            silentGenerationBefore + 1,
+            model.uiState.value.silentReconcileGeneration,
+        )
+    }
+
+    @Test
+    fun `a failed liked reconcile keeps the grid selection notice and generations`() = runTest {
+        var likedCalls = 0
+        val http = routedHttp(
+            liked = {
+                likedCalls += 1
+                if (likedCalls == 1) {
+                    jsonResponse(page(number = 1, total = 3, totalPages = 1, ids = 1L..3L))
+                } else {
+                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                }
+            },
+        )
+        val model = loaded(http)
+        model.selectFilter(MoviesFilter.Liked)
+        model.reload()
+        val before = model.uiState.value
+        assertTrue(before.notice != null)
+
+        model.onLikeCommitted()
+
+        val after = model.uiState.value
+        assertEquals(before.gridIds(), after.gridIds())
+        assertEquals(before.filter, after.filter)
+        assertEquals(before.notice, after.notice)
+        assertEquals(before.contentGeneration, after.contentGeneration)
+        assertEquals(before.silentReconcileGeneration, after.silentReconcileGeneration)
+        assertTrue(!after.refreshing)
+    }
+
+    @Test
+    fun `a reconcile superseding a liked reload clears refreshing immediately and terminally`() =
+        runTest {
+            var likedCalls = 0
+            val reloadGate = CompletableDeferred<Unit>()
+            val reconcileGate = CompletableDeferred<Unit>()
+            val http = routedHttp(
+                liked = {
+                    likedCalls += 1
+                    when (likedCalls) {
+                        1 -> jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
+                        2 -> {
+                            reloadGate.await()
+                            jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
+                        }
+                        else -> {
+                            reconcileGate.await()
+                            jsonResponse(page(number = 1, totalPages = 1, ids = 1L..2L))
+                        }
+                    }
+                },
+            )
+            val model = loaded(http)
+            model.selectFilter(MoviesFilter.Liked)
+
+            model.reload()
+            assertTrue(model.uiState.value.refreshing)
+            model.onLikeCommitted()
+            assertTrue(!model.uiState.value.refreshing)
+
+            reconcileGate.complete(Unit)
+
+            assertTrue(!model.uiState.value.refreshing)
+            assertEquals(listOf(1L, 2L), model.uiState.value.gridIds())
+        }
+
+    @Test
+    fun `a failed reconcile superseding a liked reload also leaves refreshing cleared`() =
+        runTest {
+            var likedCalls = 0
+            val reloadGate = CompletableDeferred<Unit>()
+            val reconcileGate = CompletableDeferred<Unit>()
+            val http = routedHttp(
+                liked = {
+                    likedCalls += 1
+                    when (likedCalls) {
+                        1 -> jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
+                        2 -> {
+                            reloadGate.await()
+                            jsonResponse(page(number = 1, totalPages = 1, ids = 4L..6L))
+                        }
+                        else -> {
+                            reconcileGate.await()
+                            jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                        }
+                    }
+                },
+            )
+            val model = loaded(http)
+            model.selectFilter(MoviesFilter.Liked)
+            val silentGenerationBefore = model.uiState.value.silentReconcileGeneration
+
+            model.reload()
+            model.onLikeCommitted()
+            assertTrue(!model.uiState.value.refreshing)
+            reconcileGate.complete(Unit)
+
+            assertTrue(!model.uiState.value.refreshing)
+            assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+            assertEquals(
+                silentGenerationBefore,
+                model.uiState.value.silentReconcileGeneration,
+            )
+        }
+
+    @Test
+    fun `a reconcile superseding a liked filter request clears its pending state`() = runTest {
+        var likedCalls = 0
+        val filterGate = CompletableDeferred<Unit>()
+        val reconcileGate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            liked = {
+                likedCalls += 1
+                if (likedCalls == 1) {
+                    filterGate.await()
+                    jsonResponse(page(number = 1, totalPages = 1, ids = 10L..12L))
+                } else {
+                    reconcileGate.await()
+                    jsonResponse(page(number = 1, totalPages = 1, ids = 20L..21L))
+                }
+            },
+        )
+        val model = loaded(http)
+
+        model.selectFilter(MoviesFilter.Liked)
+        assertTrue(model.uiState.value.refreshing)
+        model.onLikeCommitted()
+        assertTrue(!model.uiState.value.refreshing)
+        reconcileGate.complete(Unit)
+
+        assertEquals(MoviesFilter.Liked, model.uiState.value.filter)
+        assertEquals(listOf(20L, 21L), model.uiState.value.gridIds())
+        assertTrue(!model.uiState.value.refreshing)
+    }
+
+    @Test
+    fun `reload remains available while a silent reconcile is running`() = runTest {
+        var likedCalls = 0
+        val reconcileGate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            liked = {
+                likedCalls += 1
+                when (likedCalls) {
+                    1 -> jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
+                    2 -> {
+                        reconcileGate.await()
+                        jsonResponse(page(number = 1, totalPages = 1, ids = 1L..2L))
+                    }
+                    else -> jsonResponse(page(number = 1, totalPages = 1, ids = 4L..6L))
+                }
+            },
+        )
+        val model = loaded(http)
+        model.selectFilter(MoviesFilter.Liked)
+        model.onLikeCommitted()
+        assertTrue(!model.uiState.value.refreshing)
+
+        model.reload()
+
+        assertEquals(listOf(4L, 5L, 6L), model.uiState.value.gridIds())
+        assertTrue(!model.uiState.value.refreshing)
+        assertEquals(3, likedCalls)
     }
 
     @Test

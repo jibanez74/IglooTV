@@ -9,14 +9,14 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -141,20 +141,47 @@ class MoviesGridAccessibilityTest {
     }
 
     @Test
-    fun onlyOneTailCellAnnouncesThatMoreMoviesAreComing() {
+    fun thePersistentCountRegionAnnouncesThatMoreMoviesAreComingPolitely() {
         setContent()
         showOneRow(MoviesAppendState.Loading)
 
-        composeRule.onAllNodesWithContentDescription("Loading more movies").assertCountEquals(1)
+        composeRule.onNodeWithTag("movies_count")
+            .assertContentDescriptionEquals("Showing $columns of 96 movies. Loading more movies.")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    androidx.compose.ui.semantics.LiveRegionMode.Polite,
+                ),
+            )
     }
 
-    /** An idle tail is pure texture — it must not add a stop between the grid and whatever follows. */
     @Test
-    fun anIdleTailAnnouncesNothing() {
+    fun everyLoadingTailSkeletonIsHiddenFromAccessibility() {
+        setContent()
+        showOneRow(MoviesAppendState.Loading)
+
+        repeat(columns * 2) { index ->
+            composeRule.onNodeWithTag("movies_grid")
+                .performScrollToNode(hasTestTag("tail_skeleton_$index"))
+            composeRule.onNodeWithTag("tail_skeleton_$index", useUnmergedTree = true)
+                .assert(
+                    SemanticsMatcher.keyIsDefined(
+                        SemanticsProperties.HideFromAccessibility,
+                    ),
+                )
+        }
+    }
+
+    @Test
+    fun idleAndEndTailsRemoveTheLoadingPhrase() {
         setContent()
         showOneRow(MoviesAppendState.Idle)
+        composeRule.onNodeWithTag("movies_count")
+            .assertContentDescriptionEquals("Showing $columns of 96 movies")
 
-        composeRule.onAllNodesWithContentDescription("Loading more movies").assertCountEquals(0)
+        showOneRow(MoviesAppendState.End)
+        composeRule.onNodeWithTag("movies_count")
+            .assertContentDescriptionEquals("Showing $columns of 96 movies")
     }
 
     @Test

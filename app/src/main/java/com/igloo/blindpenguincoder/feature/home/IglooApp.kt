@@ -25,7 +25,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -794,10 +793,6 @@ private fun ContentPane(
     // trip must land on the same cell. A plain var rather than another map entry — HomeRail names
     // Home's rails, and the library grid is not one of them.
     var lastFocusedMovieId by rememberSaveable { mutableStateOf<Long?>(null) }
-    // Hoisted for the same reason as the scroll state below: kept inside MoviesScreen it would be
-    // discarded when the pane switches away, and re-entering Movies would replay the scroll-to-top
-    // that a Refresh asked for once, throwing away the user's position.
-    var handledMoviesGeneration by rememberSaveable { mutableIntStateOf(0) }
     // ContentPane's `when` has no SaveableStateHolder, so a rememberSaveable inside the removed
     // subtree is discarded on a destination switch. Held here, the grid's scroll position
     // survives a trip to Home and back.
@@ -851,8 +846,6 @@ private fun ContentPane(
                 returnRequester = moviesReturnRequester,
                 lastFocusedMovieId = lastFocusedMovieId,
                 onMovieFocused = { lastFocusedMovieId = it },
-                handledGeneration = handledMoviesGeneration,
-                onGenerationHandled = { handledMoviesGeneration = it },
                 // The pane's mutationNotice is the details overlay's write report; the grid has
                 // its own notice for a refresh that failed, and two in one header would confuse.
                 onMovieSelected = openMovie?.let { open ->

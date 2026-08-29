@@ -73,6 +73,7 @@ internal fun testMoviesState(
     notice: String? = null,
     appendGeneration: Int = 0,
     contentGeneration: Int = 0,
+    silentReconcileGeneration: Int = 0,
 ) = MoviesUiState(
     totalMovies = totalMovies,
     filter = filter,
@@ -84,6 +85,7 @@ internal fun testMoviesState(
     notice = notice,
     appendGeneration = appendGeneration,
     contentGeneration = contentGeneration,
+    silentReconcileGeneration = silentReconcileGeneration,
 )
 
 internal val inertMoviesActions = MoviesActions(

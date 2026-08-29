@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -52,6 +53,7 @@ internal fun MoviesFilterRow(
     refreshRequester: FocusRequester,
     contentStartRequester: FocusRequester,
     onSelectFilter: (MoviesFilter) -> Unit,
+    onFocusChanged: (String, Boolean) -> Unit,
 ) {
     val direction = LocalLayoutDirection.current
     val chips = remember(genres) {
@@ -114,6 +116,7 @@ internal fun MoviesFilterRow(
                 actionLabel = chip.actionLabel,
                 modifier = Modifier
                     .withRequester(filterRowRequester.takeIf { chip.filter.matches(anchor) })
+                    .onFocusChanged { onFocusChanged(chip.testTag, it.isFocused) }
                     .focusProperties {
                         // The header and the grid are siblings of this scroll surface, so both
                         // vertical edges are wired rather than resolved spatially.

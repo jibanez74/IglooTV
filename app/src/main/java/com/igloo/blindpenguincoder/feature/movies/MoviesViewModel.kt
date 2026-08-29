@@ -85,6 +85,8 @@ data class MoviesUiState(
      * idempotent and must survive a recomposition mid-refresh, where an event would be lost.
      */
     val contentGeneration: Int = 0,
+    /** Bumped after a successful silent replacement of the shown Liked grid. */
+    val silentReconcileGeneration: Int = 0,
 )
 
 /**
@@ -176,8 +178,8 @@ class MoviesViewModel(
 
     /**
      * The details overlay committed a like toggle. A shown Liked grid is now stale, so it is
-     * re-read silently — the overlay is still open above it, and any scroll or focus side
-     * effect would land on a surface the user cannot see.
+     * re-read silently — the overlay is still open above it, so the screen distinguishes this
+     * reconciliation from a user-driven replacement before deciding whether focus needs repair.
      */
     fun onLikeCommitted() {
         val state = _uiState.value
@@ -214,15 +216,27 @@ class MoviesViewModel(
     /**
      * [silent] is the Liked reconcile under the details overlay: no refreshing label, no
      * notice, and — critically — no [MoviesUiState.contentGeneration] bump, because the shell
-     * stays composed beneath the overlay and a bump would scroll it and steal the overlay's
-     * focus. A silent failure changes nothing at all; the user may never look at the pane.
+     * stays composed beneath the overlay. Its separate silent generation lets the screen repair
+     * focus only if the overlay has already closed and the focused movie disappears. A silent
+     * failure keeps the existing content and messaging.
      */
     private fun loadFirstPage(userInitiated: Boolean, silent: Boolean = false) {
         pageJob?.cancel()
         val startedIn = ++generation
         val filter = _uiState.value.filter
         val sort = _uiState.value.sort
-        if (userInitiated) {
+        if (silent) {
+            _uiState.update {
+                it.copy(
+                    append = if (it.append == MoviesAppendState.Loading) {
+                        MoviesAppendState.Idle
+                    } else {
+                        it.append
+                    },
+                    refreshing = false,
+                )
+            }
+        } else if (userInitiated) {
             _uiState.update {
                 it.copy(
                     append = if (it.append == MoviesAppendState.Loading) {
@@ -251,12 +265,17 @@ class MoviesViewModel(
                             totalMovies = result.value.total,
                             grid = IglooRailState.Loaded(items),
                             append = result.value.appendStateFor(FIRST_PAGE, items),
-                            refreshing = if (silent) it.refreshing else false,
+                            refreshing = false,
                             notice = if (silent) it.notice else null,
                             contentGeneration = if (silent) {
                                 it.contentGeneration
                             } else {
                                 it.contentGeneration + 1
+                            },
+                            silentReconcileGeneration = if (silent) {
+                                it.silentReconcileGeneration + 1
+                            } else {
+                                it.silentReconcileGeneration
                             },
                         )
                     }

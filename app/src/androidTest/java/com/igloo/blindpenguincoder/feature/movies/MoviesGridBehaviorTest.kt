@@ -231,6 +231,34 @@ class MoviesGridBehaviorTest {
         card(1).assertIsFocused()
     }
 
+    @Test
+    fun aFocusedSkeletonHandsFocusToTheFirstPageErrorRetry() {
+        setContent(testMoviesState(grid = IglooRailState.Loading, totalMovies = null))
+        composeRule.onNodeWithContentDescription("Loading movies").assertIsFocused()
+
+        moviesState = testMoviesState(grid = IglooRailState.Error("Something went wrong"))
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithContentDescription("Retry loading the movie library")
+            .assertIsFocused()
+    }
+
+    @Test
+    fun aFocusedSkeletonHandsFocusToAnEmptyResult() {
+        setContent(testMoviesState(grid = IglooRailState.Loading, totalMovies = null))
+        composeRule.onNodeWithContentDescription("Loading movies").assertIsFocused()
+
+        moviesState = testMoviesState(
+            grid = IglooRailState.Loaded(emptyList()),
+            totalMovies = 0,
+            contentGeneration = 1,
+        )
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithContentDescription("No movies found in your library.")
+            .assertIsFocused()
+    }
+
     // --- d-pad geometry -----------------------------------------------------------------------
 
     @Test
@@ -398,13 +426,32 @@ class MoviesGridBehaviorTest {
     @Test
     fun aFilterReplacementReanchorsFocusOnTheFirstCard() {
         setContent()
-        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+        card(1).performKeyInput { pressKey(Key.DirectionRight) }
+        card(2).performKeyInput { pressKey(Key.DirectionRight) }
+        card(3).performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.onNodeWithTag("movies_filter_all").assertIsFocused()
 
         moviesState = testMoviesState(
             filter = MoviesFilter.Genre(id = 7, tag = "Action"),
             contentGeneration = 1,
         )
+        composeRule.waitForIdle()
+
+        card(1).assertIsFocused()
+    }
+
+    @Test
+    fun aRefreshReplacementUsesTheFirstCardEvenWhenTheRememberedCardSurvives() {
+        setContent()
+        card(3).performClick()
+        card(1).performKeyInput { pressKey(Key.DirectionRight) }
+        card(2).performKeyInput { pressKey(Key.DirectionRight) }
+        card(3).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_filter_all")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithContentDescription("Refresh the movie library").assertIsFocused()
+
+        moviesState = testMoviesState(contentGeneration = 1)
         composeRule.waitForIdle()
 
         card(1).assertIsFocused()
@@ -580,6 +627,96 @@ class MoviesGridBehaviorTest {
         card(3).assertIsFocused()
     }
 
+    @Test
+    fun aReplacementThatLandsOutsideMoviesDoesNotReplayOnReentry() {
+        setContent()
+        card(1).performKeyInput { pressKey(Key.DirectionRight) }
+        card(2).performKeyInput { pressKey(Key.DirectionRight) }
+        card(3).assertIsFocused()
+
+        composeRule.onNodeWithContentDescription("Home").performClick()
+        composeRule.waitForIdle()
+        moviesState = testMoviesState(contentGeneration = 1)
+        composeRule.waitForIdle()
+        openMovies()
+
+        card(3).assertIsFocused()
+    }
+
+    @Test
+    fun reconcileUnderDetailsDoesNotStealOverlayFocus() {
+        openDetailsOnSelect = true
+        setContent(
+            testMoviesState(
+                filter = MoviesFilter.Liked,
+                grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
+                totalMovies = 3,
+            ),
+        )
+        card(1).performClick()
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
+
+        moviesState = testMoviesState(
+            filter = MoviesFilter.Liked,
+            grid = IglooRailState.Loaded(testMovieGridItems.drop(1).take(2)),
+            totalMovies = 2,
+            silentReconcileGeneration = 1,
+        )
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
+    }
+
+    @Test
+    fun reconcileAfterBackMovesFocusWhenTheRestoredCardDisappears() {
+        openDetailsOnSelect = true
+        setContent(
+            testMoviesState(
+                filter = MoviesFilter.Liked,
+                grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
+                totalMovies = 3,
+            ),
+        )
+        card(1).performClick()
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
+        pressBack()
+        card(1).assertIsFocused()
+
+        moviesState = testMoviesState(
+            filter = MoviesFilter.Liked,
+            grid = IglooRailState.Loaded(testMovieGridItems.drop(1).take(2)),
+            totalMovies = 2,
+            silentReconcileGeneration = 1,
+        )
+        composeRule.waitForIdle()
+
+        card(2).assertIsFocused()
+    }
+
+    @Test
+    fun reconcileToAnEmptyGridHandsFocusToTheEmptyAnchor() {
+        setContent(
+            testMoviesState(
+                filter = MoviesFilter.Liked,
+                grid = IglooRailState.Loaded(testMovieGridItems.take(1)),
+                totalMovies = 1,
+            ),
+        )
+        card(1).assertIsFocused()
+
+        moviesState = testMoviesState(
+            filter = MoviesFilter.Liked,
+            grid = IglooRailState.Loaded(emptyList()),
+            totalMovies = 0,
+            silentReconcileGeneration = 1,
+        )
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithContentDescription(
+            "No liked movies yet. Like a movie from its details page and it will appear here.",
+        ).assertIsFocused()
+    }
+
     /**
      * The silent Liked reconcile can empty the grid under the open overlay — the card Back
      * would restore to is gone. Back must still land inside the pane, on the empty state,
@@ -602,6 +739,7 @@ class MoviesGridBehaviorTest {
             filter = MoviesFilter.Liked,
             grid = IglooRailState.Loaded(emptyList()),
             totalMovies = 0,
+            silentReconcileGeneration = 1,
         )
         composeRule.waitForIdle()
         pressBack()
