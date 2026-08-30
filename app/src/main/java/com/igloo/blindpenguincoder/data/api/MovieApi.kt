@@ -132,13 +132,6 @@ class MovieApi(
         return if (startSec > 0.0) "$base?start=$startSec" else base
     }
 
-    companion object {
-        /** The backend rejects a larger `per_page` on every paged movie endpoint. */
-        const val MAX_LIBRARY_PER_PAGE = 48L
-
-        private const val HLS_MANIFEST_TIMEOUT_MS = 45_000L
-    }
-
     /** Current user's saved position and watched flag for one movie. */
     suspend fun movieWatchProgress(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/movies/$id/watch-progress")
@@ -164,4 +157,11 @@ class MovieApi(
     /** Server-side toggle — no request body; the response carries the new state. */
     suspend fun toggleMovieLike(id: Long): HttpResponse =
         client.post("${serverUrl.require().apiBaseUrl}/movies/$id/like")
+
+    companion object {
+        /** The backend rejects a larger `per_page` on every paged movie endpoint. */
+        const val MAX_LIBRARY_PER_PAGE = 48L
+
+        private const val HLS_MANIFEST_TIMEOUT_MS = 45_000L
+    }
 }

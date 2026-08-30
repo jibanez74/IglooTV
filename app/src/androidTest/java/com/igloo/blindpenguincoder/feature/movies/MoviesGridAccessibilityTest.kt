@@ -19,16 +19,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.data.model.AuthUser
-import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
-import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.IglooApp
-import com.igloo.blindpenguincoder.feature.home.SignOutUiState
-import com.igloo.blindpenguincoder.inertDetailsActions
-import com.igloo.blindpenguincoder.inertMoviesActions
-import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testMovieGridItems
 import com.igloo.blindpenguincoder.testMoviesState
 import org.junit.Rule
@@ -49,17 +42,6 @@ class MoviesGridAccessibilityTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private val user = AuthUser(
-        id = 1,
-        name = "Jose",
-        email = "jose@example.com",
-        isAdmin = false,
-        avatar = null,
-        hasPin = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
-    )
-
     private var moviesState by mutableStateOf(testMoviesState())
     private var columns = 0
 
@@ -68,27 +50,9 @@ class MoviesGridAccessibilityTest {
         composeRule.setContent {
             IglooTheme {
                 columns = IglooTheme.layout.gridColumns
-                IglooApp(
-                    spokenAccessibilityEnabled = false,
-                    user = user,
+                TestIglooApp(
                     movies = moviesState,
-                    moviesActions = inertMoviesActions,
-                    serverOrigin = "http://igloo.test:8080",
-                    signOut = SignOutUiState(),
-                    home = HomeUiState(),
-                    onRequestPlayback = { null },
-                    moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
-                    moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
-                    onRetryRail = {},
                     onMovieSelected = {},
-                    onTheaterMovieSelected = null,
-                    onCloseDetails = {},
-                    details = MovieDetailsUiState(),
-                    detailsActions = inertDetailsActions,
-                    onSwitchProfile = {},
-                    onSignOut = {},
-                    onSignOutConfirm = {},
-                    onSignOutDismiss = {},
                 )
             }
         }

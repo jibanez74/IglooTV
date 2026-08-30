@@ -17,20 +17,14 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.igloo.blindpenguincoder.inertMoviesActions
-import com.igloo.blindpenguincoder.testMoviesState
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.data.model.AuthUser
-import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.IglooApp
-import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
-import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testTheaterMovieDetails
 import com.igloo.blindpenguincoder.testTheaterMovies
@@ -54,17 +48,6 @@ class TheaterMovieDetailsTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private val user = AuthUser(
-        id = 1,
-        name = "Jose",
-        email = "jose@example.com",
-        isAdmin = false,
-        avatar = null,
-        hasPin = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
-    )
-
     private var detailsState by mutableStateOf(MovieDetailsUiState())
     private val engines = mutableListOf<FakeTrailerPlayerEngine>()
     private var hostActivity: Activity? = null
@@ -81,13 +64,8 @@ class TheaterMovieDetailsTest {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
-                IglooApp(
+                TestIglooApp(
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
-                    user = user,
-                    movies = testMoviesState(),
-                    moviesActions = inertMoviesActions,
-                    serverOrigin = "http://igloo.test:8080",
-                    signOut = SignOutUiState(),
                     home = HomeUiState(
                         hero = HomeHeroState.Hidden,
                         continueWatching = IglooRailState.Loaded(testContinueMovies),
@@ -97,11 +75,6 @@ class TheaterMovieDetailsTest {
                     // The in-theaters page's only hero action is the trailer, which the screen
                     // opens through the host's own player callback, so this bag holds Retry alone.
                     detailsActions = MovieDetailsActions.Theater(onRetry = {}),
-                    onRequestPlayback = { null },
-                    moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
-                    moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
-                    onRetryRail = {},
-                    onMovieSelected = null,
                     onTheaterMovieSelected = {
                         detailsState = MovieDetailsUiState(
                             openMovieId = it,
@@ -114,10 +87,6 @@ class TheaterMovieDetailsTest {
                             details = MovieDetailsState.Loading,
                         )
                     },
-                    onSwitchProfile = {},
-                    onSignOut = {},
-                    onSignOutConfirm = {},
-                    onSignOutDismiss = {},
                     trailerEngineFactory = { _, _ ->
                         FakeTrailerPlayerEngine().also { engines += it }
                     },

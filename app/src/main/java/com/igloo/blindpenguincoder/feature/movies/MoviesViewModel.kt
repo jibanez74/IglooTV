@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.core.ui.orKeepContent
 import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
 import com.igloo.blindpenguincoder.data.model.MovieLibraryItem
@@ -12,22 +13,15 @@ import com.igloo.blindpenguincoder.data.model.MoviesLibraryData
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
-import com.igloo.blindpenguincoder.images.TmdbImageSize
-import com.igloo.blindpenguincoder.images.tmdbImageUrl
+import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
+import com.igloo.blindpenguincoder.feature.shared.moviePosterItem
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-/** A library movie ready to render: nullable wire fields resolved, poster path built into a URL. */
-data class MoviesGridItem(
-    val id: Long,
-    val title: String,
-    val year: String?,
-    val posterUrl: String?,
-)
 
 /**
  * Which list the grid shows. The three are the same paged, title-ordered shape server-side;
@@ -70,7 +64,7 @@ data class MoviesUiState(
     val sort: SortOrder = SortOrder.Ascending,
     /** All movie genres with counts; empty until the fetch lands, stale over a failed re-read. */
     val genres: List<MovieGenreWithCount> = emptyList(),
-    val grid: IglooRailState<MoviesGridItem> = IglooRailState.Loading,
+    val grid: IglooRailState<MoviePosterItem> = IglooRailState.Loading,
     val append: MoviesAppendState = MoviesAppendState.Idle,
     /** True from a Refresh press until page 1 resolves; swaps the button's label. */
     val refreshing: Boolean = false,
@@ -125,6 +119,13 @@ class MoviesViewModel(
 
     /** One slot for both the first page and appends, so a refresh cancels a prefetch mid-flight. */
     private var pageJob: Job? = null
+
+    /**
+     * One slot each for the side loads too: [refresh] fires on every lifecycle START, and two
+     * overlapping responses would otherwise race — the older one landing last and winning.
+     */
+    private var statsJob: Job? = null
+    private var genresJob: Job? = null
 
     /**
      * Guards a response that has already resumed past its last suspension point and so cannot be
@@ -228,22 +229,14 @@ class MoviesViewModel(
         if (silent) {
             _uiState.update {
                 it.copy(
-                    append = if (it.append == MoviesAppendState.Loading) {
-                        MoviesAppendState.Idle
-                    } else {
-                        it.append
-                    },
+                    append = it.append.resetIfLoading(),
                     refreshing = false,
                 )
             }
         } else if (userInitiated) {
             _uiState.update {
                 it.copy(
-                    append = if (it.append == MoviesAppendState.Loading) {
-                        MoviesAppendState.Idle
-                    } else {
-                        it.append
-                    },
+                    append = it.append.resetIfLoading(),
                     refreshing = true,
                     notice = null,
                 )
@@ -254,7 +247,8 @@ class MoviesViewModel(
             if (startedIn != generation) return@launch
             when (result) {
                 is ApiResult.Success -> {
-                    val items = result.value.toGridItems(serverUrl.require().apiBaseUrl)
+                    val apiBaseUrl = apiBaseUrlOrNull() ?: return@launch
+                    val items = result.value.toPosterItems(apiBaseUrl)
                     nextPage = FIRST_PAGE + 1
                     seenIds.clear()
                     seenIds += items.map { it.id }
@@ -264,7 +258,7 @@ class MoviesViewModel(
                         it.copy(
                             totalMovies = result.value.total,
                             grid = IglooRailState.Loaded(items),
-                            append = result.value.appendStateFor(FIRST_PAGE, items),
+                            append = result.value.appendStateFor(FIRST_PAGE),
                             refreshing = false,
                             notice = if (silent) it.notice else null,
                             contentGeneration = if (silent) {
@@ -291,11 +285,7 @@ class MoviesViewModel(
                             filter = committedFilter,
                             sort = committedSort,
                             grid = IglooRailState.Error(message).orKeepContent(it.grid),
-                            append = if (it.append == MoviesAppendState.Loading) {
-                                MoviesAppendState.Idle
-                            } else {
-                                it.append
-                            },
+                            append = it.append.resetIfLoading(),
                             refreshing = false,
                             // With content still on screen the failure is over and Refresh is one
                             // press away, so a notice rather than an error card promising a
@@ -321,18 +311,30 @@ class MoviesViewModel(
             if (startedIn != generation) return@launch
             when (result) {
                 is ApiResult.Success -> {
+                    val apiBaseUrl = apiBaseUrlOrNull() ?: return@launch
                     val fresh = result.value
-                        .toGridItems(serverUrl.require().apiBaseUrl)
+                        .toPosterItems(apiBaseUrl)
                         .filterNot { it.id in seenIds }
+                    val tail = result.value.appendStateFor(page)
+                    // A library mid-rescan can return a page whose every id is already on
+                    // screen. The walk still advances, but only after a beat: the prefetch
+                    // effect re-arms on the generation bump below, and without the pause it
+                    // would chase every remaining page at line rate with the grid never growing.
+                    if (fresh.isEmpty() && tail == MoviesAppendState.Idle) {
+                        delay(DUPLICATE_PAGE_BACKOFF_MS)
+                        if (startedIn != generation) return@launch
+                    }
+                    val loaded = _uiState.value.grid as? IglooRailState.Loaded ?: return@launch
+                    // The cursor moves only once the write below is guaranteed; advanced any
+                    // earlier, a dropped page would be unrecoverable without a full reload.
                     nextPage = page + 1
                     seenIds += fresh.map { it.id }
-                    _uiState.update { state ->
-                        val loaded = state.grid as? IglooRailState.Loaded ?: return@update state
-                        state.copy(
+                    _uiState.update {
+                        it.copy(
                             totalMovies = result.value.total,
                             grid = IglooRailState.Loaded(loaded.items + fresh),
-                            append = result.value.appendStateFor(page, result.value.movies),
-                            appendGeneration = state.appendGeneration + 1,
+                            append = tail,
+                            appendGeneration = it.appendGeneration + 1,
                         )
                     }
                 }
@@ -362,7 +364,8 @@ class MoviesViewModel(
      * own pages, and a slow stats response must not overwrite it.
      */
     private fun loadStats() {
-        viewModelScope.launch {
+        statsJob?.cancel()
+        statsJob = viewModelScope.launch {
             val result = movies.movieStats()
             if (result is ApiResult.Success) {
                 _uiState.update {
@@ -381,7 +384,8 @@ class MoviesViewModel(
      * last and never reports — the row degrades to All and Liked until a later refresh lands.
      */
     private fun loadGenres() {
-        viewModelScope.launch {
+        genresJob?.cancel()
+        genresJob = viewModelScope.launch {
             val result = movies.movieGenres()
             if (result is ApiResult.Success) {
                 _uiState.update { it.copy(genres = result.value) }
@@ -390,49 +394,44 @@ class MoviesViewModel(
     }
 
     /**
+     * The address clears only while the session tears down, and the session-scoped store is
+     * about to drop this view model with it — so a response caught in that window is discarded
+     * rather than crashing the scope on [ServerUrlProvider.require].
+     */
+    private fun apiBaseUrlOrNull(): String? = serverUrl.current.value?.apiBaseUrl
+
+    /** A superseded request's Loading tail must not outlive the request it belonged to. */
+    private fun MoviesAppendState.resetIfLoading(): MoviesAppendState =
+        if (this == MoviesAppendState.Loading) MoviesAppendState.Idle else this
+
+    /**
      * `total_pages` is authoritative, but an empty page stops the grid regardless: a library
      * shrinking between requests can return nothing for page N while still claiming more exist.
      */
-    private fun MoviesLibraryData.appendStateFor(
-        page: Long,
-        pageItems: List<*>,
-    ): MoviesAppendState =
-        if (page >= totalPages || pageItems.isEmpty()) {
+    private fun MoviesLibraryData.appendStateFor(page: Long): MoviesAppendState =
+        if (page >= totalPages || movies.isEmpty()) {
             MoviesAppendState.End
         } else {
             MoviesAppendState.Idle
         }
 
-    private fun MoviesLibraryData.toGridItems(apiBaseUrl: String): List<MoviesGridItem> =
-        movies.map { it.toGridItem(apiBaseUrl) }
+    private fun MoviesLibraryData.toPosterItems(apiBaseUrl: String): List<MoviePosterItem> =
+        movies.map { it.toPosterItem(apiBaseUrl) }
 
-    private fun MovieLibraryItem.toGridItem(apiBaseUrl: String): MoviesGridItem = MoviesGridItem(
-        id = id,
-        title = title,
-        year = year.orNull()?.toString(),
-        // w500 for a poster-sized cell: crisp at TV densities, and the same cache entry the
-        // detail screen wants when the card is opened.
-        posterUrl = tmdbImageUrl(
+    private fun MovieLibraryItem.toPosterItem(apiBaseUrl: String): MoviePosterItem =
+        moviePosterItem(
+            id = id,
+            title = title,
+            posterPath = posterPath,
+            year = year,
             apiBaseUrl = apiBaseUrl,
-            size = TmdbImageSize.W500,
-            path = posterPath.orNullIfBlank(),
-        ),
-    )
-
-    /**
-     * A failed page-1 load never removes cards that are already on screen — a moment of bad wifi
-     * as the TV wakes must not replace a working grid with an error card. Unlike the Home rails
-     * this holds for a user-initiated refresh too, because here the failure is reported as a
-     * notice beside a Refresh button rather than as a card offering its own Retry. Only a first
-     * load, with nothing to protect, shows the error.
-     */
-    private fun <T> IglooRailState<T>.orKeepContent(
-        current: IglooRailState<T>,
-    ): IglooRailState<T> =
-        if (this is IglooRailState.Error && current is IglooRailState.Loaded) current else this
+        )
 
     private companion object {
         const val FIRST_PAGE = 1L
         const val PAGE_SIZE = MovieApi.MAX_LIBRARY_PER_PAGE
+
+        /** How long an all-duplicates page holds the walk back before the cursor advances. */
+        const val DUPLICATE_PAGE_BACKOFF_MS = 250L
     }
 }

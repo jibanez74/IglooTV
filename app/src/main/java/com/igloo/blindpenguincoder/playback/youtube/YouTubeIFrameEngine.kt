@@ -77,7 +77,13 @@ private class YouTubeIFrameEngine(
     // surface, while the same WebView renders fine as an activity's content view. An ordinary
     // FrameLayout between the two restores the video layer.
     private val container = FrameLayout(context).apply {
-        addView(webView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        addView(
+            webView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
     }
 
     init {

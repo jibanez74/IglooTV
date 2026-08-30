@@ -1,17 +1,13 @@
 package com.igloo.blindpenguincoder.core.ui
 
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -31,11 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.hideFromAccessibility
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -47,6 +39,19 @@ sealed interface IglooRailState<out T> {
     data class Loaded<T>(val items: List<T>) : IglooRailState<T>
     data class Error(val message: String) : IglooRailState<Nothing>
 }
+
+/**
+ * A failed re-read leaves what is on screen alone: an [IglooRailState.Error] arriving over a
+ * [IglooRailState.Loaded] keeps the loaded content while [keep] holds — a moment of bad wifi as
+ * the TV wakes must not replace working content with an error card. A caller whose user-asked
+ * Retry must show the truth passes `keep = !userInitiated`; one that reports the failure
+ * elsewhere (a notice beside a Refresh button) keeps content unconditionally.
+ */
+fun <T> IglooRailState<T>.orKeepContent(
+    current: IglooRailState<T>,
+    keep: Boolean = true,
+): IglooRailState<T> =
+    if (keep && this is IglooRailState.Error && current is IglooRailState.Loaded) current else this
 
 /**
  * A horizontal media rail (docs/design-system.md sections 8.3, 11.3): section header over a
@@ -177,10 +182,11 @@ fun <T> IglooMediaRail(
             )
 
             is IglooRailState.Loaded -> if (state.items.isEmpty()) {
-                RailEmpty(
+                IglooFocusableEmpty(
                     anchorModifier = anchorModifier,
-                    emptyIcon = emptyIcon,
-                    emptyText = emptyText,
+                    icon = emptyIcon,
+                    message = emptyText,
+                    contentPadding = IglooTheme.spacing.xl,
                     modifier = insetModifier,
                 )
             } else {
@@ -251,57 +257,19 @@ private fun RailSkeleton(
     cardWidth: Dp,
     modifier: Modifier = Modifier,
 ) {
-    var focused by remember { mutableStateOf(false) }
     Row(
         modifier = modifier.padding(vertical = IglooTheme.spacing.md),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
     ) {
-        IglooSkeletonCell(
-            focused = focused,
+        IglooSkeletonAnchorCell(
+            anchorModifier = anchorModifier,
+            loadingLabel = loadingLabel,
             cardAspect = cardAspect,
             cardWidth = cardWidth,
-            modifier = anchorModifier
-                .onFocusChanged { focused = it.isFocused }
-                .focusable()
-                .semantics {
-                    contentDescription = loadingLabel
-                    liveRegion = LiveRegionMode.Polite
-                },
         )
         repeat(SKELETON_CELLS - 1) {
-            IglooSkeletonCell(
-                focused = false,
-                cardAspect = cardAspect,
-                cardWidth = cardWidth,
-                modifier = Modifier.semantics { hideFromAccessibility() },
-            )
+            IglooSkeletonTextureCell(cardAspect = cardAspect, cardWidth = cardWidth)
         }
-    }
-}
-
-@Composable
-private fun RailEmpty(
-    anchorModifier: Modifier,
-    emptyIcon: ImageVector,
-    emptyText: String,
-    modifier: Modifier = Modifier,
-) {
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        // Focusable deliberately: when the rail is the pane's only section, an unfocusable
-        // empty state would leave the pane with no anchor and break the shell's focus model.
-        modifier = modifier
-            .focusRing(focused = focused, radius = IglooTheme.radius.lg)
-            .then(anchorModifier)
-            .onFocusChanged { focused = it.isFocused }
-            .focusable()
-            .clearAndSetSemantics {
-                contentDescription = emptyText
-                liveRegion = LiveRegionMode.Polite
-            }
-            .padding(IglooTheme.spacing.xl),
-    ) {
-        IglooEmpty(icon = emptyIcon, message = emptyText)
     }
 }
 

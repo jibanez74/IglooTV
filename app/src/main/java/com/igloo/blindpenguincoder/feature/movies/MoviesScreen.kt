@@ -1,8 +1,6 @@
 package com.igloo.blindpenguincoder.feature.movies
 
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,29 +31,28 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
-import com.igloo.blindpenguincoder.core.ui.IglooEmpty
+import com.igloo.blindpenguincoder.core.ui.IglooFocusableEmpty
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
-import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.core.ui.IglooSkeletonCell
+import com.igloo.blindpenguincoder.core.ui.IglooSkeletonAnchorCell
+import com.igloo.blindpenguincoder.core.ui.IglooSkeletonTextureCell
 import com.igloo.blindpenguincoder.core.ui.IglooText
-import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.integerCountFormat
+import com.igloo.blindpenguincoder.core.ui.movieNoun
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.data.model.SortOrder
-import java.text.NumberFormat
+import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
 
 /** What the Movies pane needs from its view model, bundled rather than threaded as six lambdas. */
 data class MoviesActions(
@@ -183,10 +180,15 @@ fun MoviesScreen(
                 modifier = Modifier.padding(contentInset),
             )
 
-            is MoviesContent.Empty -> MoviesEmpty(
-                message = emptyMessage(content.filter),
-                contentInset = contentInset,
+            is MoviesContent.Empty -> IglooFocusableEmpty(
                 anchorModifier = cardlessAnchor,
+                icon = IglooIcons.Movies,
+                message = emptyMessage(content.filter),
+                contentPadding = IglooTheme.spacing.lg,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(contentInset),
+                contentAlignment = Alignment.Center,
             )
 
             is MoviesContent.Populated -> MoviesGrid(
@@ -267,7 +269,7 @@ private fun MoviesHeader(
             // A refresh that failed with cards still on screen: the failure is over and Refresh
             // is one press away, so this reports rather than offering a second, redundant Retry.
             if (notice != null) {
-                IglooNotice(text = notice, modifier = Modifier.testTag("movies_notice"))
+                IglooNotice(text = notice)
             }
         }
         IglooButton(
@@ -283,9 +285,8 @@ private fun MoviesHeader(
             stateDescription = if (sort == SortOrder.Ascending) "A to Z" else "Z to A",
             actionLabel = if (sort == SortOrder.Ascending) "Sort Z to A" else "Sort A to Z",
             modifier = Modifier
-                .testTag("movies_sort")
                 .focusRequester(sortRequester)
-                .onFocusChanged { onFocusChanged("movies_sort", it.isFocused) }
+                .onFocusChanged { onFocusChanged(SORT_FOCUS_KEY, it.isFocused) }
                 .focusProperties { left = navigationRequester },
         )
         IglooButton(
@@ -303,9 +304,8 @@ private fun MoviesHeader(
             semanticLabel = "Refresh the movie library",
             stateDescription = "Refreshing".takeIf { refreshing },
             modifier = Modifier
-                .testTag("movies_refresh")
                 .focusRequester(refreshRequester)
-                .onFocusChanged { onFocusChanged("movies_refresh", it.isFocused) }
+                .onFocusChanged { onFocusChanged(REFRESH_FOCUS_KEY, it.isFocused) }
                 // A deterministic left chain: Refresh → Sort → the navigation spine.
                 .focusProperties { left = sortRequester },
         )
@@ -313,72 +313,8 @@ private fun MoviesHeader(
 }
 
 @Composable
-private fun MoviesFocusHandoffCoordinator(
-    content: MoviesContent,
-    contentGeneration: Int,
-    silentReconcileGeneration: Int,
-    gridState: LazyGridState,
-    firstCardRequester: FocusRequester,
-    cardlessHandoffRequester: FocusRequester,
-    focusOwnership: MoviesFocusOwnership,
-) {
-    val memory = remember {
-        MoviesFocusHandoffMemory(
-            content = content,
-            contentGeneration = contentGeneration,
-            silentReconcileGeneration = silentReconcileGeneration,
-        )
-    }
-    val focusedMovieId = focusOwnership.focusedMovieId
-    val cardlessFocused = focusOwnership.cardlessFocused
-    val screenOwnedFocus = focusOwnership.screenOwnedFocus
-
-    LaunchedEffect(content, contentGeneration, silentReconcileGeneration) {
-        val outgoingContent = memory.content
-        val contentReplaced = contentGeneration != memory.contentGeneration
-        val reconciledSilently =
-            silentReconcileGeneration != memory.silentReconcileGeneration
-        memory.content = content
-        memory.contentGeneration = contentGeneration
-        memory.silentReconcileGeneration = silentReconcileGeneration
-
-        when {
-            contentReplaced && screenOwnedFocus -> {
-                when (content) {
-                    is MoviesContent.Populated -> {
-                        gridState.scrollToItem(0)
-                        firstCardRequester.requestFocusSafely()
-                    }
-
-                    MoviesContent.Loading -> Unit
-                    is MoviesContent.Error, is MoviesContent.Empty ->
-                        cardlessHandoffRequester.requestFocusSafely()
-                }
-            }
-
-            reconciledSilently &&
-                focusedMovieId != null &&
-                outgoingContent is MoviesContent.Populated &&
-                !content.containsMovie(focusedMovieId) -> {
-                when (content) {
-                    is MoviesContent.Populated -> firstCardRequester.requestFocusSafely()
-                    is MoviesContent.Empty -> cardlessHandoffRequester.requestFocusSafely()
-                    MoviesContent.Loading, is MoviesContent.Error -> Unit
-                }
-            }
-
-            outgoingContent is MoviesContent.Loading &&
-                cardlessFocused &&
-                (content is MoviesContent.Error || content is MoviesContent.Empty) -> {
-                cardlessHandoffRequester.requestFocusSafely()
-            }
-        }
-    }
-}
-
-@Composable
 private fun MoviesGrid(
-    items: List<MoviesGridItem>,
+    items: List<MoviePosterItem>,
     append: MoviesAppendState,
     appendGeneration: Int,
     refreshing: Boolean,
@@ -473,7 +409,7 @@ private fun MoviesGrid(
         itemsIndexed(items, key = { _, item -> "movie_${item.id}" }) { index, item ->
             IglooPosterCard(
                 title = item.title,
-                subtitle = item.year,
+                subtitle = item.year?.toString(),
                 imageUrl = item.posterUrl,
                 onClick = onMovieSelected?.let { open -> { open(item.id) } },
                 // Unspecified so the card fills its grid cell rather than taking the rail's
@@ -522,13 +458,10 @@ private fun MoviesGrid(
                 count = columns * PREFETCH_ROWS,
                 key = { "tail_skeleton_$it" },
             ) { index ->
-                IglooSkeletonCell(
-                    focused = false,
+                IglooSkeletonTextureCell(
                     cardAspect = IglooTheme.layout.posterAspect,
                     cardWidth = Dp.Unspecified,
-                    modifier = Modifier
-                        .testTag("tail_skeleton_$index")
-                        .semantics { hideFromAccessibility() },
+                    modifier = Modifier.testTag("tail_skeleton_$index"),
                 )
             }
 
@@ -570,7 +503,6 @@ private fun MoviesGridSkeleton(
     contentInset: PaddingValues,
     anchorModifier: Modifier,
 ) {
-    var focused by remember { mutableStateOf(false) }
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
@@ -581,55 +513,19 @@ private fun MoviesGridSkeleton(
     ) {
         // Only the first cell is real to focus and TalkBack; the rest are texture.
         item(key = "skeleton_anchor") {
-            IglooSkeletonCell(
-                focused = focused,
+            IglooSkeletonAnchorCell(
+                anchorModifier = anchorModifier,
+                loadingLabel = "Loading movies",
                 cardAspect = IglooTheme.layout.posterAspect,
                 cardWidth = Dp.Unspecified,
-                modifier = anchorModifier
-                    .onFocusChanged { focused = it.isFocused }
-                    .focusable()
-                    .semantics {
-                        contentDescription = "Loading movies"
-                        liveRegion = LiveRegionMode.Polite
-                    },
             )
         }
         items(count = columns * SKELETON_ROWS - 1, key = { "skeleton_$it" }) {
-            IglooSkeletonCell(
-                focused = false,
+            IglooSkeletonTextureCell(
                 cardAspect = IglooTheme.layout.posterAspect,
                 cardWidth = Dp.Unspecified,
-                modifier = Modifier.semantics { hideFromAccessibility() },
             )
         }
-    }
-}
-
-@Composable
-private fun MoviesEmpty(
-    message: String,
-    contentInset: PaddingValues,
-    anchorModifier: Modifier,
-) {
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        // Focusable deliberately: the grid is the pane's only content, and an unfocusable empty
-        // state would leave the pane with no anchor and break the shell's focus model.
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(contentInset)
-            .focusRing(focused = focused, radius = IglooTheme.radius.lg)
-            .then(anchorModifier)
-            .onFocusChanged { focused = it.isFocused }
-            .focusable()
-            .clearAndSetSemantics {
-                contentDescription = message
-                liveRegion = LiveRegionMode.Polite
-            }
-            .padding(IglooTheme.spacing.lg),
-        contentAlignment = Alignment.Center,
-    ) {
-        IglooEmpty(icon = IglooIcons.Movies, message = message)
     }
 }
 
@@ -650,7 +546,11 @@ private fun PaddingValues.asGridPadding(): PaddingValues {
 }
 
 private fun countLine(totalMovies: Long?): String =
-    if (totalMovies == null) "—" else "${NUMBER_FORMAT.format(totalMovies)} ${plural(totalMovies)}"
+    if (totalMovies == null) {
+        "—"
+    } else {
+        "${integerCountFormat.format(totalMovies)} ${movieNoun(totalMovies)}"
+    }
 
 /** The visible line stays generic; only the spoken form names the active filter. */
 private fun spokenCount(
@@ -664,79 +564,17 @@ private fun spokenCount(
         loadedCount == null -> countLine(totalMovies)
         else -> buildString {
             append("Showing $loadedCount of ")
-            append("${NUMBER_FORMAT.format(totalMovies)} ${filterNoun(filter, totalMovies)}")
+            append("${integerCountFormat.format(totalMovies)} ${filterNoun(filter, totalMovies)}")
             if (appendState == MoviesAppendState.Loading) {
                 append(". Loading more movies.")
             }
         }
     }
 
-private sealed interface MoviesContent {
-    data object Loading : MoviesContent
-    data class Error(val message: String) : MoviesContent
-    data class Empty(val filter: MoviesFilter) : MoviesContent
-    data class Populated(val items: List<MoviesGridItem>) : MoviesContent
-}
-
-private fun MoviesUiState.toMoviesContent(): MoviesContent = when (val grid = grid) {
-    IglooRailState.Loading -> MoviesContent.Loading
-    is IglooRailState.Error -> MoviesContent.Error(grid.message)
-    is IglooRailState.Loaded -> if (grid.items.isEmpty()) {
-        MoviesContent.Empty(filter)
-    } else {
-        MoviesContent.Populated(grid.items)
-    }
-}
-
-private fun MoviesContent.containsMovie(movieId: Long): Boolean =
-    this is MoviesContent.Populated && items.any { it.id == movieId }
-
-private class MoviesFocusOwnership {
-    var focusedMovieId: Long? = null
-    var cardlessFocused: Boolean = false
-    private var focusedChromeKey: String? = null
-    val screenOwnedFocus: Boolean
-        get() = focusedMovieId != null || cardlessFocused || focusedChromeKey != null
-
-    fun onMovieFocusChanged(movieId: Long, focused: Boolean) {
-        if (focused) {
-            focusedMovieId = movieId
-            cardlessFocused = false
-            focusedChromeKey = null
-        } else if (focusedMovieId == movieId) {
-            focusedMovieId = null
-        }
-    }
-
-    fun onChromeFocusChanged(key: String, focused: Boolean) {
-        if (focused) {
-            focusedChromeKey = key
-            focusedMovieId = null
-            cardlessFocused = false
-        } else if (focusedChromeKey == key) {
-            focusedChromeKey = null
-        }
-    }
-
-    fun onCardlessFocusChanged(focused: Boolean) {
-        cardlessFocused = focused
-        if (focused) {
-            focusedMovieId = null
-            focusedChromeKey = null
-        }
-    }
-}
-
-private class MoviesFocusHandoffMemory(
-    var content: MoviesContent,
-    var contentGeneration: Int,
-    var silentReconcileGeneration: Int,
-)
-
 private fun filterNoun(filter: MoviesFilter, count: Long): String = when (filter) {
-    MoviesFilter.All -> plural(count)
-    MoviesFilter.Liked -> "liked ${plural(count)}"
-    is MoviesFilter.Genre -> "${filter.tag} ${plural(count)}"
+    MoviesFilter.All -> movieNoun(count)
+    MoviesFilter.Liked -> "liked ${movieNoun(count)}"
+    is MoviesFilter.Genre -> "${filter.tag} ${movieNoun(count)}"
 }
 
 private fun emptyMessage(filter: MoviesFilter): String = when (filter) {
@@ -746,15 +584,14 @@ private fun emptyMessage(filter: MoviesFilter): String = when (filter) {
     is MoviesFilter.Genre -> "No ${filter.tag} movies in your library."
 }
 
-/** Shared with the filter row's chip labels; internal so the split files spell them once. */
-internal fun plural(count: Long): String = if (count == 1L) "movie" else "movies"
-
-internal val NUMBER_FORMAT: NumberFormat = NumberFormat.getIntegerInstance()
-
 private const val REFRESH_LABEL = "Refresh"
 private const val REFRESHING_LABEL = "Refreshing…"
 private const val SORT_ASCENDING_LABEL = "A–Z"
 private const val SORT_DESCENDING_LABEL = "Z–A"
+
+/** Focus-ownership keys for the header's controls (see [MoviesFocusOwnership]). */
+private const val SORT_FOCUS_KEY = "movies_sort"
+private const val REFRESH_FOCUS_KEY = "movies_refresh"
 
 /** How close to the end the grid gets before it asks for the next page, in rows. */
 private const val PREFETCH_ROWS = 2

@@ -26,23 +26,18 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.IglooApp
-import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
-import com.igloo.blindpenguincoder.inertDetailsActions
-import com.igloo.blindpenguincoder.inertMoviesActions
-import com.igloo.blindpenguincoder.testMoviesState
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
@@ -70,17 +65,6 @@ class MoviePlayerOverlayFocusTest {
 
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
-
-    private val user = AuthUser(
-        id = 1,
-        name = "Jose",
-        email = "jose@example.com",
-        isAdmin = false,
-        avatar = null,
-        hasPin = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
-    )
 
     private val playRequest = MoviePlayRequest(
         movieId = 1,
@@ -130,21 +114,12 @@ class MoviePlayerOverlayFocusTest {
                         onWatchedStateCommitted = {},
                     )
                 }
-                IglooApp(
-                    // Pinned: the Shield test device runs TalkBack, and this suite
-                    // asserts the focus chain without the reading stops.
-                    spokenAccessibilityEnabled = false,
-                    user = user,
-                    movies = testMoviesState(),
-                    moviesActions = inertMoviesActions,
-                    serverOrigin = "http://igloo.test:8080",
-                    signOut = SignOutUiState(),
+                TestIglooApp(
                     home = HomeUiState(
                         hero = HomeHeroState.Hidden,
                         continueWatching = IglooRailState.Loaded(testContinueMovies),
                     ),
                     details = detailsState,
-                    detailsActions = inertDetailsActions,
                     onRequestPlayback = {
                         requestPlayback()?.let(playRequests::tryEmit)
                     },
@@ -153,7 +128,6 @@ class MoviePlayerOverlayFocusTest {
                     moviePlayerEngineFactory = { _, _ ->
                         FakeMoviePlayerEngine().also { engines += it }
                     },
-                    onRetryRail = {},
                     onMovieSelected = {},
                     onTheaterMovieSelected = {},
                     onCloseDetails = {
@@ -162,10 +136,6 @@ class MoviePlayerOverlayFocusTest {
                             details = MovieDetailsState.Loading,
                         )
                     },
-                    onSwitchProfile = {},
-                    onSignOut = {},
-                    onSignOutConfirm = {},
-                    onSignOutDismiss = {},
                     trailerEngineFactory = { _, _ ->
                         FakeTrailerPlayerEngine().also { trailerEngines += it }
                     },

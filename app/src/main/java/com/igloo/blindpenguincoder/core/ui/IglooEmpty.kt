@@ -1,17 +1,28 @@
 package com.igloo.blindpenguincoder.core.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 
 /**
@@ -43,5 +54,37 @@ fun IglooEmpty(
             color = colors.mutedForeground,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         )
+    }
+}
+
+/**
+ * [IglooEmpty] as a pane's focus anchor. Focusable deliberately: when the empty state is the
+ * pane's only content, an unfocusable node would leave the pane with no anchor and break the
+ * shell's focus model. One TalkBack node, announcing [message] politely.
+ */
+@Composable
+internal fun IglooFocusableEmpty(
+    anchorModifier: Modifier,
+    icon: ImageVector,
+    message: String,
+    contentPadding: Dp,
+    modifier: Modifier = Modifier,
+    contentAlignment: Alignment = Alignment.TopStart,
+) {
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        modifier = modifier
+            .focusRing(focused = focused, radius = IglooTheme.radius.lg)
+            .then(anchorModifier)
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .clearAndSetSemantics {
+                contentDescription = message
+                liveRegion = LiveRegionMode.Polite
+            }
+            .padding(contentPadding),
+        contentAlignment = contentAlignment,
+    ) {
+        IglooEmpty(icon = icon, message = message)
     }
 }

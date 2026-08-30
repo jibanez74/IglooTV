@@ -29,19 +29,14 @@ import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.width
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
-import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.IglooApp
-import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
-import com.igloo.blindpenguincoder.inertDetailsActions
-import com.igloo.blindpenguincoder.inertMoviesActions
-import com.igloo.blindpenguincoder.testMoviesState
-import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
+import com.igloo.blindpenguincoder.testAuthUser
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
 import com.igloo.blindpenguincoder.testHomeMovies
@@ -67,16 +62,6 @@ class MovieDetailsFocusTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private val user = AuthUser(
-        id = 1,
-        name = "Jose",
-        email = "jose@example.com",
-        isAdmin = false,
-        avatar = null,
-        hasPin = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
-    )
     private val subMinuteProgress = ProgressUi(
         fraction = 0.99f,
         remainingTimeLabel = "Less than 1m left",
@@ -91,7 +76,7 @@ class MovieDetailsFocusTest {
     private fun setShellContent(
         initialDetails: MovieDetailsUiState = MovieDetailsUiState(),
         hero: HomeHeroState = HomeHeroState.Hidden,
-        user: AuthUser = this.user,
+        user: AuthUser = testAuthUser,
         // Explicit, never the ambient default: the Shield test device runs TalkBack, and this
         // suite pins the chain both with and without the reading stops.
         spokenAccessibilityEnabled: Boolean = false,
@@ -102,13 +87,9 @@ class MovieDetailsFocusTest {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
-                IglooApp(
+                TestIglooApp(
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                     user = user,
-                    movies = testMoviesState(),
-                    moviesActions = inertMoviesActions,
-                    serverOrigin = "http://igloo.test:8080",
-                    signOut = SignOutUiState(),
                     // Hero hidden by default so the rails own the pane's entry anchor: this
                     // suite's subject is the round trip between a card and the overlay.
                     home = HomeUiState(
@@ -117,11 +98,6 @@ class MovieDetailsFocusTest {
                         latestMovies = IglooRailState.Loaded(testHomeMovies),
                     ),
                     details = detailsState,
-                    detailsActions = inertDetailsActions,
-                    onRequestPlayback = { null },
-                    moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
-                    moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
-                    onRetryRail = {},
                     onMovieSelected = { movieId ->
                         opened += movieId
                         detailsState = MovieDetailsUiState(
@@ -129,17 +105,12 @@ class MovieDetailsFocusTest {
                             details = MovieDetailsState.Loaded(testMovieDetails(id = movieId)),
                         )
                     },
-                    onTheaterMovieSelected = null,
                     onCloseDetails = {
                         detailsState = detailsState.copy(
                             openMovieId = null,
                             details = MovieDetailsState.Loading,
                         )
                     },
-                    onSwitchProfile = {},
-                    onSignOut = {},
-                    onSignOutConfirm = {},
-                    onSignOutDismiss = {},
                 )
             }
         }
@@ -735,7 +706,7 @@ class MovieDetailsFocusTest {
 
     @Test
     fun adminItemsArePresentForAdmins() {
-        setShellContent(loadedState(), user = user.copy(isAdmin = true))
+        setShellContent(loadedState(), user = testAuthUser.copy(isAdmin = true))
         composeRule.onNodeWithTag("details_more").requestFocus()
         composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
 

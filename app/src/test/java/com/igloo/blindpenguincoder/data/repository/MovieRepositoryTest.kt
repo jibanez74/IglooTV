@@ -103,7 +103,6 @@ class MovieRepositoryTest {
         assertNull(page.movies.last().year.orNull())
         assertEquals(96L, page.total)
         assertEquals(2L, page.totalPages)
-        assertEquals(SortOrder.Ascending, page.sort)
     }
 
     @Test

@@ -33,16 +33,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 
 @RunWith(AndroidJUnit4::class)
 class IglooBaseAppTest {
@@ -53,17 +50,6 @@ class IglooBaseAppTest {
 
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
-
-    private val user = AuthUser(
-        id = 1,
-        name = "Jose",
-        email = "jose@example.com",
-        isAdmin = false,
-        avatar = null,
-        hasPin = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
-    )
 
     /**
      * Hosts the sign-out state the way `SignOutViewModel` does, so the rail → dialog → confirm
@@ -79,14 +65,7 @@ class IglooBaseAppTest {
         composeRule.setContent {
             var signOut by remember { mutableStateOf(initialSignOut) }
             IglooTheme(uiScale = uiScale) {
-                IglooApp(
-                    // Pinned: the Shield test device runs TalkBack, and this suite
-                    // asserts the focus chain without the reading stops.
-                    spokenAccessibilityEnabled = false,
-                    user = user,
-                    movies = testMoviesState(),
-                    moviesActions = inertMoviesActions,
-                    serverOrigin = "http://igloo.test:8080",
+                TestIglooApp(
                     signOut = signOut,
                     // Hero hidden — a legitimate 11.3.1 state — so both rail headings fit the
                     // viewport at once for the order assertion; the hero-visible shell is
@@ -96,15 +75,6 @@ class IglooBaseAppTest {
                         continueWatching = IglooRailState.Loaded(testContinueMovies),
                         latestMovies = IglooRailState.Loaded(testHomeMovies),
                     ),
-                    onRequestPlayback = { null },
-                    moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
-                    moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
-                    onRetryRail = {},
-                    onMovieSelected = null,
-                    onTheaterMovieSelected = null,
-                    onCloseDetails = {},
-                    details = MovieDetailsUiState(),
-                    detailsActions = inertDetailsActions,
                     onSwitchProfile = onSwitchProfile,
                     onSignOut = { signOut = SignOutUiState(confirming = true) },
                     onSignOutConfirm = {

@@ -12,6 +12,7 @@ import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
 import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
 import com.igloo.blindpenguincoder.data.repository.theaterMovieJson
 import com.igloo.blindpenguincoder.data.repository.theaterMoviesJson
+import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -75,7 +76,7 @@ class HomeViewModelTest {
         }
     }
 
-    private suspend fun HomeViewModel.awaitLatest(): IglooRailState.Loaded<HomeMovie> =
+    private suspend fun HomeViewModel.awaitLatest(): IglooRailState.Loaded<MoviePosterItem> =
         uiState.first { it.latestMovies is IglooRailState.Loaded }
             .latestMovies as IglooRailState.Loaded
 
@@ -151,8 +152,18 @@ class HomeViewModelTest {
         // Both wire shapes — with and without the leading slash — build the same proxy URL form.
         assertEquals(
             listOf(
-                HomeMovie(1, "Heat", 1995, "http://igloo.test:8080/api/tmdb/images/w500/heat.jpg"),
-                HomeMovie(2, "Arrival", 2016, "http://igloo.test:8080/api/tmdb/images/w500/arrival.jpg"),
+                MoviePosterItem(
+                    1,
+                    "Heat",
+                    1995,
+                    "http://igloo.test:8080/api/tmdb/images/w500/heat.jpg",
+                ),
+                MoviePosterItem(
+                    2,
+                    "Arrival",
+                    2016,
+                    "http://igloo.test:8080/api/tmdb/images/w500/arrival.jpg",
+                ),
             ),
             state.items,
         )
@@ -386,7 +397,7 @@ class HomeViewModelTest {
         assertEquals(
             listOf(
                 HomeContinueMovie(
-                    movie = HomeMovie(
+                    movie = MoviePosterItem(
                         1,
                         "Heat",
                         1995,

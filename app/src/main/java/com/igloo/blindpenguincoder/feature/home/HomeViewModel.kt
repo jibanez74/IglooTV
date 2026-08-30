@@ -7,14 +7,15 @@ import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
+import com.igloo.blindpenguincoder.core.ui.orKeepContent
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.Movie
-import com.igloo.blindpenguincoder.data.model.SqlNullInt64
-import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
+import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
+import com.igloo.blindpenguincoder.feature.shared.moviePosterItem
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import java.util.Locale
@@ -25,17 +26,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** A movie ready to render: nullable wire fields resolved, poster path built into a URL. */
-data class HomeMovie(
-    val id: Long,
-    val title: String,
-    val year: Long?,
-    val posterUrl: String?,
-)
-
 /** A movie in progress: the render-ready movie plus its progress, ready for the card. */
 data class HomeContinueMovie(
-    val movie: HomeMovie,
+    val movie: MoviePosterItem,
     val progressFraction: Float,
     val progressDescription: String,
 )
@@ -83,7 +76,7 @@ sealed interface HomeHeroState {
 data class HomeUiState(
     val hero: HomeHeroState = HomeHeroState.Loading,
     val continueWatching: IglooRailState<HomeContinueMovie> = IglooRailState.Loading,
-    val latestMovies: IglooRailState<HomeMovie> = IglooRailState.Loading,
+    val latestMovies: IglooRailState<MoviePosterItem> = IglooRailState.Loading,
     val latestAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loading,
     val inTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loading,
 )
@@ -135,7 +128,7 @@ class HomeViewModel(
                 val apiBaseUrl = serverUrl.require().apiBaseUrl
                 inProgress.map { movie ->
                     HomeContinueMovie(
-                        movie = toHomeMovie(
+                        movie = moviePosterItem(
                             id = movie.id,
                             title = movie.title,
                             posterPath = movie.posterPath,
@@ -151,7 +144,12 @@ class HomeViewModel(
                 }
             }
             _uiState.update {
-                it.copy(continueWatching = next.orKeep(it.continueWatching, userInitiated))
+                it.copy(
+                    continueWatching = next.orKeepContent(
+                        it.continueWatching,
+                        keep = !userInitiated,
+                    ),
+                )
             }
         }
     }
@@ -167,7 +165,7 @@ class HomeViewModel(
             val next = result.toRailState { latest ->
                 val apiBaseUrl = serverUrl.require().apiBaseUrl
                 latest.map { movie ->
-                    toHomeMovie(
+                    moviePosterItem(
                         id = movie.id,
                         title = movie.title,
                         posterPath = movie.posterPath,
@@ -178,7 +176,7 @@ class HomeViewModel(
             }
             // Rail first, so the list is on screen while the hero's details request runs.
             _uiState.update {
-                it.copy(latestMovies = next.orKeep(it.latestMovies, userInitiated))
+                it.copy(latestMovies = next.orKeepContent(it.latestMovies, keep = !userInitiated))
             }
             loadHero(result, userInitiated)
         }
@@ -206,7 +204,7 @@ class HomeViewModel(
                 }
             }
             _uiState.update {
-                it.copy(latestAlbums = next.orKeep(it.latestAlbums, userInitiated))
+                it.copy(latestAlbums = next.orKeepContent(it.latestAlbums, keep = !userInitiated))
             }
         }
     }
@@ -239,7 +237,7 @@ class HomeViewModel(
                     }
             }
             _uiState.update {
-                it.copy(inTheaters = next.orKeep(it.inTheaters, userInitiated))
+                it.copy(inTheaters = next.orKeepContent(it.inTheaters, keep = !userInitiated))
             }
         }
     }
@@ -273,7 +271,7 @@ class HomeViewModel(
         }
     }
 
-    /** The hero's [orKeep]: a background refresh that fails leaves a loaded hero alone. */
+    /** The hero's [orKeepContent]: a background refresh that fails leaves a loaded hero alone. */
     private fun hideHeroOrKeep(userInitiated: Boolean) {
         _uiState.update {
             if (!userInitiated && it.hero is HomeHeroState.Loaded) {
@@ -283,21 +281,6 @@ class HomeViewModel(
             }
         }
     }
-
-    /**
-     * A background refresh that fails leaves what is on screen alone — a moment of bad wifi as
-     * the TV wakes must not replace a working Home with two error cards. A Retry the user asked
-     * for always shows the truth, and a rail with nothing to protect shows the error either way.
-     */
-    private fun <T> IglooRailState<T>.orKeep(
-        current: IglooRailState<T>,
-        userInitiated: Boolean,
-    ): IglooRailState<T> =
-        if (!userInitiated && this is IglooRailState.Error && current is IglooRailState.Loaded) {
-            current
-        } else {
-            this
-        }
 
     /**
      * A foreground refresh can arrive while the previous one is still in flight; without this
@@ -313,25 +296,6 @@ class HomeViewModel(
             is ApiResult.Success -> IglooRailState.Loaded(map(value))
             is ApiResult.Failure -> IglooRailState.Error(error.toLibraryDisplayMessage())
         }
-
-    private fun toHomeMovie(
-        id: Long,
-        title: String,
-        posterPath: SqlNullString,
-        year: SqlNullInt64,
-        apiBaseUrl: String,
-    ): HomeMovie = HomeMovie(
-        id = id,
-        title = title,
-        year = year.orNull(),
-        // w500 for a 148dp poster: crisp at TV densities, and the same cache entry
-        // the detail screen will want later.
-        posterUrl = tmdbImageUrl(
-            apiBaseUrl = apiBaseUrl,
-            size = TmdbImageSize.W500,
-            path = posterPath.orNull(),
-        ),
-    )
 
     private fun toHomeHero(movie: Movie, apiBaseUrl: String): HomeHero = HomeHero(
         id = movie.id,

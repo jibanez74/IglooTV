@@ -12,25 +12,27 @@ data class LatestMovie(
     val year: SqlNullInt64,
 )
 
-/** LatestMovie plus certification, used in library listings. */
+/**
+ * One entry of a paged library listing. The route also sends `certification`, left to
+ * `ignoreUnknownKeys` — the grid card renders title and year only.
+ */
 @Serializable
 data class MovieLibraryItem(
     val id: Long,
     val title: String,
     @SerialName("poster_path") val posterPath: SqlNullString,
     val year: SqlNullInt64,
-    val certification: SqlNullString? = null,
 )
 
-/** Payload of `MoviesLibraryEnvelope.data`. */
+/**
+ * Payload of `MoviesLibraryEnvelope.data`. The envelope echoes `page`, `per_page`, and `sort`
+ * too; the client tracks its own cursor, so those are left to `ignoreUnknownKeys`.
+ */
 @Serializable
 data class MoviesLibraryData(
     val movies: List<MovieLibraryItem>,
     val total: Long,
-    val page: Long,
-    @SerialName("per_page") val perPage: Long,
     @SerialName("total_pages") val totalPages: Long,
-    val sort: SortOrder,
 )
 
 /** Payload of `LatestMoviesEnvelope.data`. */

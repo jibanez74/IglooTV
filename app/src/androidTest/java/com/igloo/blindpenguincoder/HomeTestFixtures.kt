@@ -8,7 +8,6 @@ import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
 import com.igloo.blindpenguincoder.feature.home.HomeAlbum
 import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeHero
-import com.igloo.blindpenguincoder.feature.home.HomeMovie
 import com.igloo.blindpenguincoder.feature.home.HomeTheaterMovie
 import com.igloo.blindpenguincoder.feature.movies.AboutUi
 import com.igloo.blindpenguincoder.feature.movies.CastMemberUi
@@ -19,8 +18,8 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesAppendState
 import com.igloo.blindpenguincoder.feature.movies.MoviesFilter
-import com.igloo.blindpenguincoder.feature.movies.MoviesGridItem
 import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
+import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSettingsUi
@@ -42,9 +41,9 @@ import com.igloo.blindpenguincoder.data.model.Subtitle
  * with no network or image decoding involved.
  */
 internal val testHomeMovies = listOf(
-    HomeMovie(id = 1, title = "Heat", year = 1995, posterUrl = null),
-    HomeMovie(id = 2, title = "Arrival", year = 2016, posterUrl = null),
-    HomeMovie(id = 3, title = "Ran", year = 1985, posterUrl = null),
+    MoviePosterItem(id = 1, title = "Heat", year = 1995, posterUrl = null),
+    MoviePosterItem(id = 2, title = "Arrival", year = 2016, posterUrl = null),
+    MoviePosterItem(id = 3, title = "Ran", year = 1985, posterUrl = null),
 )
 
 /**
@@ -52,7 +51,7 @@ internal val testHomeMovies = listOf(
  * `gridColumns` value so the grid's paging and focus contracts have somewhere to travel.
  */
 internal val testMovieGridItems = (1L..40L).map { id ->
-    MoviesGridItem(id = id, title = "Movie $id", year = (1980 + id).toString(), posterUrl = null)
+    MoviePosterItem(id = id, title = "Movie $id", year = 1980 + id, posterUrl = null)
 }
 
 /** Two genres cover selected-vs-not and give the chip row a d-pad path to travel. */
@@ -63,7 +62,7 @@ internal val testGenres = listOf(
 
 /** A grid that has loaded its first page and has more to come. */
 internal fun testMoviesState(
-    grid: IglooRailState<MoviesGridItem> = IglooRailState.Loaded(testMovieGridItems),
+    grid: IglooRailState<MoviePosterItem> = IglooRailState.Loaded(testMovieGridItems),
     append: MoviesAppendState = MoviesAppendState.Idle,
     totalMovies: Long? = 96,
     filter: MoviesFilter = MoviesFilter.All,

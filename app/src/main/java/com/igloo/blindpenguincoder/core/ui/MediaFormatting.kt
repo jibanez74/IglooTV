@@ -1,10 +1,17 @@
 package com.igloo.blindpenguincoder.core.ui
 
+import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 import kotlin.math.ceil
+
+/** Grouped integer format for on-screen counts: `1234` → `"1,234"`. */
+val integerCountFormat: NumberFormat = NumberFormat.getIntegerInstance()
+
+/** The noun beside a movie count — one "movie", otherwise "movies". */
+fun movieNoun(count: Long): String = if (count == 1L) "movie" else "movies"
 
 /** `170` → `"2h 50m"`; whole hours and sub-hour runtimes drop the empty part. */
 fun formatRuntime(minutes: Long): String {

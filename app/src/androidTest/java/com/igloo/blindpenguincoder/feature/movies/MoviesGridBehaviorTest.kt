@@ -20,17 +20,11 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.data.model.SortOrder
-import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
-import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.IglooApp
-import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
-import com.igloo.blindpenguincoder.inertDetailsActions
-import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testMovieDetails
 import com.igloo.blindpenguincoder.testMovieGridItems
 import com.igloo.blindpenguincoder.testMoviesState
@@ -53,17 +47,6 @@ class MoviesGridBehaviorTest {
 
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
-
-    private val user = AuthUser(
-        id = 1,
-        name = "Jose",
-        email = "jose@example.com",
-        isAdmin = false,
-        avatar = null,
-        hasPin = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
-    )
 
     private var moviesState by mutableStateOf(testMoviesState())
     private var loadMoreCalls = 0
@@ -93,11 +76,7 @@ class MoviesGridBehaviorTest {
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 columns = IglooTheme.layout.gridColumns
-                IglooApp(
-                    // Pinned: the Shield test device runs TalkBack, and this suite asserts the
-                    // focus chain without the reading stops.
-                    spokenAccessibilityEnabled = false,
-                    user = user,
+                TestIglooApp(
                     movies = moviesState,
                     moviesActions = MoviesActions(
                         onRefresh = { refreshCalls += 1 },
@@ -107,13 +86,6 @@ class MoviesGridBehaviorTest {
                         onSelectFilter = { selectedFilters += it },
                         onToggleSort = { sortToggles += 1 },
                     ),
-                    serverOrigin = "http://igloo.test:8080",
-                    signOut = SignOutUiState(),
-                    home = HomeUiState(),
-                    onRequestPlayback = { null },
-                    moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
-                    moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
-                    onRetryRail = {},
                     onMovieSelected = { movieId ->
                         opened += movieId
                         if (openDetailsOnSelect) {
@@ -123,7 +95,6 @@ class MoviesGridBehaviorTest {
                             )
                         }
                     },
-                    onTheaterMovieSelected = null,
                     onCloseDetails = {
                         detailsState = detailsState.copy(
                             openMovieId = null,
@@ -131,11 +102,6 @@ class MoviesGridBehaviorTest {
                         )
                     },
                     details = detailsState,
-                    detailsActions = inertDetailsActions,
-                    onSwitchProfile = {},
-                    onSignOut = {},
-                    onSignOutConfirm = {},
-                    onSignOutDismiss = {},
                 )
             }
         }

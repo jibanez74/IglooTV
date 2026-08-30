@@ -84,7 +84,7 @@ class ApiModelsSerializationTest {
     }
 
     @Test
-    fun decodesMoviesLibraryWithSqlNullFieldsAndSort() {
+    fun decodesMoviesLibraryWithSqlNullFieldsAndUnmodelledEchoes() {
         val body = """
             {
               "error": false,
@@ -109,12 +109,14 @@ class ApiModelsSerializationTest {
 
         val envelope = json.decodeFromString<ApiEnvelope<MoviesLibraryData>>(body)
 
+        // `certification`, `page`, `per_page`, and `sort` ride along unmodelled;
+        // `ignoreUnknownKeys` must absorb them without failing the decode.
         val data = envelope.data!!
-        assertEquals(SortOrder.Ascending, data.sort)
+        assertEquals(1L, data.total)
+        assertEquals(1L, data.totalPages)
         val movie = data.movies.single()
         assertEquals("/arrival.jpg", movie.posterPath.orNull())
         assertNull(movie.year.orNull())
-        assertEquals("PG-13", movie.certification?.orNull())
     }
 
     /**

@@ -4,10 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -25,17 +21,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
 import com.igloo.blindpenguincoder.core.design.viewportFactor
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.data.model.AuthUser
-import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
-import com.igloo.blindpenguincoder.inertDetailsActions
-import com.igloo.blindpenguincoder.inertMoviesActions
-import com.igloo.blindpenguincoder.testMoviesState
-import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
 import com.igloo.blindpenguincoder.testHomeMovies
@@ -65,17 +55,6 @@ class ShellBleedTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private val user = AuthUser(
-        id = 1,
-        name = "Jose",
-        email = "jose@example.com",
-        isAdmin = false,
-        avatar = null,
-        hasPin = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
-    )
-
     private var railWidth: Dp = Dp.Unspecified
     private var gutter: Dp = Dp.Unspecified
     private var safeAreaHorizontal: Dp = Dp.Unspecified
@@ -95,33 +74,12 @@ class ShellBleedTest {
                             .size(width = VIEWPORT_WIDTH, height = VIEWPORT_HEIGHT)
                             .testTag(VIEWPORT_TAG),
                     ) {
-                        IglooApp(
-                            // Pinned: the Shield test device runs TalkBack, and this suite
-                            // asserts the focus chain without the reading stops.
-                            spokenAccessibilityEnabled = false,
-                            user = user,
-                            movies = testMoviesState(),
-                            moviesActions = inertMoviesActions,
-                            serverOrigin = "http://igloo.test:8080",
-                            signOut = SignOutUiState(),
+                        TestIglooApp(
                             home = HomeUiState(
                                 hero = HomeHeroState.Loaded(testHero),
                                 continueWatching = IglooRailState.Loaded(testContinueMovies),
                                 latestMovies = IglooRailState.Loaded(testHomeMovies),
                             ),
-                            onRequestPlayback = { null },
-                            moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
-                            moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
-                            onRetryRail = {},
-                            onMovieSelected = null,
-                            onTheaterMovieSelected = null,
-                            onCloseDetails = {},
-                            details = MovieDetailsUiState(),
-                            detailsActions = inertDetailsActions,
-                            onSwitchProfile = {},
-                            onSignOut = {},
-                            onSignOutConfirm = {},
-                            onSignOutDismiss = {},
                         )
                     }
                 }

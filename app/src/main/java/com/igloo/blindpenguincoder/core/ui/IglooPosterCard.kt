@@ -88,10 +88,7 @@ fun IglooPosterCard(
 
     Column(
         modifier = modifier
-            // A grid cell already has a width; a rail's card does not. Applying `width()`
-            // unconditionally would override a caller's fillMaxWidth() — it comes second in the
-            // chain — and leave grid cards at the rail's size with ragged gutters.
-            .then(if (width == Dp.Unspecified) Modifier.fillMaxWidth() else Modifier.width(width))
+            .cardWidth(width)
             .onFocusChanged { focused = it.isFocused }
             .then(
                 if (onClick != null) {
@@ -182,3 +179,11 @@ fun IglooPosterCard(
         }
     }
 }
+
+/**
+ * A grid cell already has a width; a rail's card does not. [Dp.Unspecified] fills the parent
+ * instead — applying `width()` unconditionally would override a caller's `fillMaxWidth()`, which
+ * comes second in the chain, and leave grid cards at the rail's size with ragged gutters.
+ */
+internal fun Modifier.cardWidth(width: Dp): Modifier =
+    then(if (width == Dp.Unspecified) Modifier.fillMaxWidth() else Modifier.width(width))

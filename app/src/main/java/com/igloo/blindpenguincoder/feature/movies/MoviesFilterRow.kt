@@ -19,6 +19,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooFilterChip
+import com.igloo.blindpenguincoder.core.ui.integerCountFormat
+import com.igloo.blindpenguincoder.core.ui.movieNoun
 import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
 
@@ -77,12 +79,12 @@ internal fun MoviesFilterRow(
                 ),
             )
             genres.forEach { genre ->
-                val count = NUMBER_FORMAT.format(genre.movieCount)
+                val count = integerCountFormat.format(genre.movieCount)
                 add(
                     MoviesFilterChipSpec(
                         filter = MoviesFilter.Genre(genre.genreId, genre.genreTag),
                         text = "${genre.genreTag} · $count",
-                        semanticLabel = "${genre.genreTag}, $count ${plural(genre.movieCount)}",
+                        semanticLabel = "${genre.genreTag}, $count ${movieNoun(genre.movieCount)}",
                         actionLabel = "Show ${genre.genreTag} movies",
                         testTag = "movies_filter_genre_${genre.genreId}",
                     ),
@@ -103,8 +105,7 @@ internal fun MoviesFilterRow(
             .padding(
                 start = contentInset.calculateStartPadding(direction),
                 end = contentInset.calculateEndPadding(direction),
-            )
-            .testTag("movies_filter_row"),
+            ),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
         chips.forEachIndexed { index, chip ->

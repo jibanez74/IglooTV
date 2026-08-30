@@ -28,15 +28,10 @@ import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.Dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.data.model.AuthUser
-import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
-import com.igloo.blindpenguincoder.inertDetailsActions
-import com.igloo.blindpenguincoder.inertMoviesActions
-import com.igloo.blindpenguincoder.testMoviesState
-import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
+import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHomeMovies
@@ -60,17 +55,6 @@ class HomeRailBehaviorTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private val user = AuthUser(
-        id = 1,
-        name = "Jose",
-        email = "jose@example.com",
-        isAdmin = false,
-        avatar = null,
-        hasPin = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
-    )
-
     private val continueMovies = testContinueMovies
     private val movies = testHomeMovies
     private val albums = testAlbums
@@ -78,7 +62,8 @@ class HomeRailBehaviorTest {
 
     private var continueState by
         mutableStateOf<IglooRailState<HomeContinueMovie>>(IglooRailState.Loading)
-    private var latestState by mutableStateOf<IglooRailState<HomeMovie>>(IglooRailState.Loading)
+    private var latestState by
+        mutableStateOf<IglooRailState<MoviePosterItem>>(IglooRailState.Loading)
     private var albumsState by mutableStateOf<IglooRailState<HomeAlbum>>(IglooRailState.Loading)
     private var theatersState by
         mutableStateOf<IglooRailState<HomeTheaterMovie>>(IglooRailState.Loading)
@@ -93,7 +78,7 @@ class HomeRailBehaviorTest {
 
     private fun setShellContent(
         initialContinue: IglooRailState<HomeContinueMovie>,
-        initialLatest: IglooRailState<HomeMovie> = IglooRailState.Loaded(movies),
+        initialLatest: IglooRailState<MoviePosterItem> = IglooRailState.Loaded(movies),
         initialAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loaded(albums),
         initialTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loaded(theaterMovies),
         onMovieSelected: ((Long) -> Unit)? = { opened += it },
@@ -114,15 +99,7 @@ class HomeRailBehaviorTest {
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 expandedWidth = IglooTheme.layout.navRailExpandedWidth
-                IglooApp(
-                    // Pinned: the Shield test device runs TalkBack, and this suite
-                    // asserts the focus chain without the reading stops.
-                    spokenAccessibilityEnabled = false,
-                    user = user,
-                    movies = testMoviesState(),
-                    moviesActions = inertMoviesActions,
-                    serverOrigin = "http://igloo.test:8080",
-                    signOut = SignOutUiState(),
+                TestIglooApp(
                     // Hero hidden: this suite pins the rails' own focus contract, where the
                     // first rail legitimately owns the pane's entry anchor (section 11.3.1).
                     // The hero's focus behavior is HomeHeroFocusTest's subject.
@@ -133,9 +110,6 @@ class HomeRailBehaviorTest {
                         latestAlbums = albumsState,
                         inTheaters = theatersState,
                     ),
-                    onRequestPlayback = { null },
-                    moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
-                    moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
                     onRetryRail = { rail ->
                         when (rail) {
                             HomeRail.ContinueWatching -> continueRetries += 1
@@ -146,13 +120,6 @@ class HomeRailBehaviorTest {
                     },
                     onMovieSelected = onMovieSelected,
                     onTheaterMovieSelected = onTheaterMovieSelected,
-                    onCloseDetails = {},
-                    details = MovieDetailsUiState(),
-                    detailsActions = inertDetailsActions,
-                    onSwitchProfile = {},
-                    onSignOut = {},
-                    onSignOutConfirm = {},
-                    onSignOutDismiss = {},
                 )
             }
         }

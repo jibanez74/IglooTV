@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -218,7 +219,7 @@ class MoviesViewModelTest {
     }
 
     @Test
-    fun `a fully overlapping append still advances its generation`() = runTest {
+    fun `a fully overlapping append advances its generation only after the backoff`() = runTest {
         val http = routedHttp(
             library = {
                 jsonResponse(
@@ -234,6 +235,13 @@ class MoviesViewModelTest {
         val generationBefore = model.uiState.value.appendGeneration
 
         model.loadMore()
+
+        // The page landed all-duplicates, so the walk holds: an immediate generation bump
+        // would re-arm the prefetch effect and chase every remaining page at line rate.
+        assertEquals(generationBefore, model.uiState.value.appendGeneration)
+        assertEquals(MoviesAppendState.Loading, model.uiState.value.append)
+
+        advanceUntilIdle()
 
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
         assertEquals(generationBefore + 1, model.uiState.value.appendGeneration)
@@ -442,6 +450,27 @@ class MoviesViewModelTest {
         assertNull(model.uiState.value.notice)
     }
 
+    /** The address clears only mid-teardown; a page caught in that window must not crash. */
+    @Test
+    fun `a page landing after the server address clears is dropped without crashing`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        var gated = false
+        val http = routedHttp(
+            library = {
+                if (gated) gate.await()
+                jsonResponse(page(number = 1, totalPages = 2, ids = 1L..3L))
+            },
+        )
+        val model = loaded(http)
+
+        gated = true
+        model.reload()
+        http.test.serverUrl.set(null)
+        gate.complete(Unit)
+
+        assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+    }
+
     // --- stats ------------------------------------------------------------------------------
 
     @Test
@@ -457,6 +486,55 @@ class MoviesViewModelTest {
 
         assertEquals(73L, state.totalMovies)
         assertEquals(listOf(1L, 2L, 3L), state.gridIds())
+    }
+
+    @Test
+    fun `a stale stats response cannot overwrite a newer one`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        var statsCalls = 0
+        val http = routedHttp(
+            stats = {
+                statsCalls += 1
+                if (statsCalls == 1) {
+                    gate.await()
+                    jsonResponse(moviesStatsJson(totalMovies = 42))
+                } else {
+                    jsonResponse(moviesStatsJson(totalMovies = 96))
+                }
+            },
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+        )
+        // The start effect re-fires on every return to the foreground, so two stats reads can
+        // overlap; the older response resuming last must not win.
+        val model = loaded(http)
+
+        model.refresh()
+        gate.complete(Unit)
+
+        assertEquals(96L, model.uiState.value.totalMovies)
+    }
+
+    @Test
+    fun `a stale genres response cannot overwrite a newer list`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        var genresCalls = 0
+        val http = routedHttp(
+            genres = {
+                genresCalls += 1
+                if (genresCalls == 1) {
+                    gate.await()
+                    jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 1, tag = "Stale")))
+                } else {
+                    jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 2, tag = "Fresh")))
+                }
+            },
+        )
+        val model = loaded(http)
+
+        model.refresh()
+        gate.complete(Unit)
+
+        assertEquals("Fresh", model.uiState.value.genres.single().genreTag)
     }
 
     @Test

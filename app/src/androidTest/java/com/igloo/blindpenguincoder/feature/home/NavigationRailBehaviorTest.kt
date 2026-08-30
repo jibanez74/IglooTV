@@ -26,15 +26,9 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.data.model.AuthUser
-import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
-import com.igloo.blindpenguincoder.inertDetailsActions
-import com.igloo.blindpenguincoder.inertMoviesActions
-import com.igloo.blindpenguincoder.testMoviesState
-import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
 import com.igloo.blindpenguincoder.testHomeMovies
@@ -57,17 +51,6 @@ class NavigationRailBehaviorTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private val user = AuthUser(
-        id = 1,
-        name = "Jose",
-        email = "jose@example.com",
-        isAdmin = false,
-        avatar = null,
-        hasPin = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
-    )
-
     // Captured inside the theme so a density-corrected emulator still yields the widths the
     // shell actually laid out with, rather than hardcoded Standard values.
     private var collapsedWidth: Dp = Dp.Unspecified
@@ -82,14 +65,7 @@ class NavigationRailBehaviorTest {
             IglooTheme {
                 collapsedWidth = IglooTheme.layout.navRailCollapsedWidth
                 expandedWidth = IglooTheme.layout.navRailExpandedWidth
-                IglooApp(
-                    // Pinned: the Shield test device runs TalkBack, and this suite
-                    // asserts the focus chain without the reading stops.
-                    spokenAccessibilityEnabled = false,
-                    user = user,
-                    movies = testMoviesState(),
-                    moviesActions = inertMoviesActions,
-                    serverOrigin = "http://igloo.test:8080",
+                TestIglooApp(
                     signOut = signOut,
                     // Loaded with poster-less movies and a backdrop-less hero: the placeholder
                     // paths render with no network or image loading, so the shell tests stay
@@ -99,16 +75,6 @@ class NavigationRailBehaviorTest {
                         continueWatching = IglooRailState.Loaded(testContinueMovies),
                         latestMovies = IglooRailState.Loaded(testHomeMovies),
                     ),
-                    onRequestPlayback = { null },
-                    moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
-                    moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
-                    onRetryRail = {},
-                    onMovieSelected = null,
-                    onTheaterMovieSelected = null,
-                    onCloseDetails = {},
-                    details = MovieDetailsUiState(),
-                    detailsActions = inertDetailsActions,
-                    onSwitchProfile = {},
                     onSignOut = { signOut = SignOutUiState(confirming = true) },
                     onSignOutConfirm = { signOut = SignOutUiState() },
                     onSignOutDismiss = { signOut = SignOutUiState() },

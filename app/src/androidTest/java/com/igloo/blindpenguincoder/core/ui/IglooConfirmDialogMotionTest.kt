@@ -28,23 +28,16 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooDarkColors
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
-import com.igloo.blindpenguincoder.data.model.AuthUser
-import com.igloo.blindpenguincoder.fakeMoviePlayerEngineFactory
 import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
-import com.igloo.blindpenguincoder.feature.home.HomeMovie
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
-import com.igloo.blindpenguincoder.inertDetailsActions
-import com.igloo.blindpenguincoder.inertMoviesActions
-import com.igloo.blindpenguincoder.testMoviesState
-import com.igloo.blindpenguincoder.rememberInertMoviePlayerViewModel
+import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
 import com.igloo.blindpenguincoder.testHomeMovies
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -63,25 +56,14 @@ class IglooConfirmDialogMotionTest {
     private val density = InstrumentationRegistry.getInstrumentation()
         .targetContext.resources.displayMetrics.density
 
-    private val user = AuthUser(
-        id = 1,
-        name = "Jose",
-        email = "jose@example.com",
-        isAdmin = false,
-        avatar = null,
-        hasPin = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
-    )
-
     // Five cards in the top (Continue Watching) rail, so the last one lies right of both the
     // expanded rail's overlay and the centered 480dp dialog card — the one place a scrimmed
     // content pixel stays visible through the modal's whole reveal. Small fractions keep the
     // sampled left sliver above the poster's bottom edge on the muted placeholder fill.
     private val continueMovies = (
         testHomeMovies + listOf(
-            HomeMovie(id = 4, title = "Solaris", year = 1972, posterUrl = null),
-            HomeMovie(id = 5, title = "Alien", year = 1979, posterUrl = null),
+            MoviePosterItem(id = 4, title = "Solaris", year = 1972, posterUrl = null),
+            MoviePosterItem(id = 5, title = "Alien", year = 1979, posterUrl = null),
         )
         ).map {
             HomeContinueMovie(
@@ -132,14 +114,7 @@ class IglooConfirmDialogMotionTest {
             var signOut by remember { mutableStateOf(SignOutUiState()) }
             IglooTheme {
                 CompositionLocalProvider(LocalIglooReducedMotion provides false) {
-                    IglooApp(
-                        // Pinned: the Shield test device runs TalkBack, and this suite
-                        // asserts the focus chain without the reading stops.
-                        spokenAccessibilityEnabled = false,
-                        user = user,
-                        movies = testMoviesState(),
-                        moviesActions = inertMoviesActions,
-                        serverOrigin = "http://igloo.test:8080",
+                    TestIglooApp(
                         signOut = signOut,
                         // Hero hidden — a legitimate 11.3.1 state — so the sampled rail-card
                         // bounds stay on the 540dp viewport; this test's subject is the scrim.
@@ -148,16 +123,6 @@ class IglooConfirmDialogMotionTest {
                             continueWatching = IglooRailState.Loaded(continueMovies),
                             latestMovies = IglooRailState.Loaded(testHomeMovies),
                         ),
-                        onRequestPlayback = { null },
-                        moviePlayerViewModel = rememberInertMoviePlayerViewModel(),
-                        moviePlayerEngineFactory = fakeMoviePlayerEngineFactory,
-                        onRetryRail = {},
-                        onMovieSelected = null,
-                        onTheaterMovieSelected = null,
-                        onCloseDetails = {},
-                        details = MovieDetailsUiState(),
-                        detailsActions = inertDetailsActions,
-                        onSwitchProfile = {},
                         onSignOut = { signOut = SignOutUiState(confirming = true) },
                         onSignOutConfirm = { signOut = SignOutUiState() },
                         onSignOutDismiss = { signOut = SignOutUiState() },

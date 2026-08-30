@@ -3,7 +3,6 @@ package com.igloo.blindpenguincoder.core.ui
 import android.graphics.Bitmap
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
