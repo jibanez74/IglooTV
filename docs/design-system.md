@@ -1813,7 +1813,10 @@ don't report progress**. The surface is full-bleed (§2.5); the chrome keeps the
 The page is loaded with the **Igloo server's origin** as its base URL — the same real,
 attributable origin the web client's trailer page has. Device-verified 2026-08-16: a borrowed
 `https://www.youtube.com` base URL is rejected by the embed with error 152, the server origin
-plays. Every control lives in Compose: the WebView is **never focusable** and never in the
+plays. Device-verified 2026-08-29: the engine's surface is the WebView inside a plain
+FrameLayout, and the WebView carries a WebChromeClient — with the WebView as the direct child
+of Compose's `AndroidView` holder, Chromium decodes the embed's audio but composites no video
+(a black picture over playing sound), while the wrapped WebView renders. Every control lives in Compose: the WebView is **never focusable** and never in the
 TalkBack tree — all input belongs to the chrome. Chrome is a §11.8-shaped reduction: top bar
 (Back, title, type label), bottom transport (rewind 10s, play/pause, forward 10s) over a 4dp
 seek track with current/total timecodes (one cleared, non-focusable summary node — no live

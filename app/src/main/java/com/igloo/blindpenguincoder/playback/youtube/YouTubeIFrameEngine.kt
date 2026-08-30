@@ -7,7 +7,9 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -64,7 +66,18 @@ private class YouTubeIFrameEngine(
                 request: WebResourceRequest,
             ): Boolean = request.isForMainFrame
         }
+        // HTML5 <video> only composites frames when a WebChromeClient is installed; without
+        // one the embed decodes audio over a black surface.
+        webChromeClient = WebChromeClient()
         addJavascriptInterface(Bridge(), JS_INTERFACE)
+    }
+
+    // Chromium refuses to composite HTML5 video when the WebView is the direct child of
+    // Compose's AndroidView holder — device-verified on the Shield: audio plays over a black
+    // surface, while the same WebView renders fine as an activity's content view. An ordinary
+    // FrameLayout between the two restores the video layer.
+    private val container = FrameLayout(context).apply {
+        addView(webView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     }
 
     init {
@@ -77,7 +90,7 @@ private class YouTubeIFrameEngine(
         }
     }
 
-    override fun surface(): View = webView
+    override fun surface(): View = container
 
     override fun play() = command("igloo.play()")
 
