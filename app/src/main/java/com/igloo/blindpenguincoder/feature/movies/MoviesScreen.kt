@@ -153,6 +153,7 @@ fun MoviesScreen(
             .focusProperties {
                 left = navigationRequester
                 up = filterRowRequester
+                right = FocusRequester.Cancel
             }
             .onFocusChanged { focusOwnership.onCardlessFocusChanged(it.isFocused) }
 
@@ -494,6 +495,14 @@ private fun MoviesGrid(
                         if (lastRowIsTheEdge && index / columns == lastRow) {
                             down = FocusRequester.Cancel
                         }
+                        // The grid is the panel's right edge, so the last column has nowhere
+                        // legitimate to go — and neither has the final card of a partial last
+                        // row, whose remaining cells are unfocusable tail skeletons. Unpinned,
+                        // the search leaves the grid and resolves against the pane's siblings,
+                        // landing back on the filter chips.
+                        if (index % columns == columns - 1 || index == items.lastIndex) {
+                            right = FocusRequester.Cancel
+                        }
                     }
                     .onFocusChanged {
                         focusOwnership.onMovieFocusChanged(item.id, it.isFocused)
@@ -539,7 +548,10 @@ private fun MoviesGrid(
                     },
                     actionModifier = Modifier
                         .onFocusChanged { appendRetryFocused = it.isFocused }
-                        .focusProperties { left = navigationRequester },
+                        .focusProperties {
+                            left = navigationRequester
+                            right = FocusRequester.Cancel
+                        },
                     // Polite, not Assertive: the grid above still works, so this reports on the
                     // tail rather than interrupting (section 12).
                     liveRegionMode = LiveRegionMode.Polite,

@@ -10,6 +10,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -288,6 +289,62 @@ class MoviesGridBehaviorTest {
         card(1).performKeyInput { pressKey(Key.DirectionUp) }
 
         composeRule.onNodeWithTag("movies_filter_all").assertIsFocused()
+    }
+
+    /**
+     * The grid is the panel's right edge. Unpinned, the search left the grid entirely and
+     * resolved against the pane's siblings, landing back on the filter chips.
+     */
+    @Test
+    fun rightFromTheLastColumnStaysOnTheCard() {
+        setContent()
+        repeat(columns - 1) { index ->
+            card(1L + index).performKeyInput { pressKey(Key.DirectionRight) }
+        }
+        val lastColumn = card(columns.toLong())
+        lastColumn.assertIsFocused()
+
+        lastColumn.performKeyInput { pressKey(Key.DirectionRight) }
+
+        lastColumn.assertIsFocused()
+        composeRule.onNodeWithTag("movies_filter_all").assertIsNotFocused()
+    }
+
+    /** A partial last row ends short of the last column, with unfocusable skeletons beside it. */
+    @Test
+    fun rightFromTheLastCardOfAPartialRowStaysPut() {
+        setContent()
+        moviesState = testMoviesState(
+            grid = IglooRailState.Loaded(testMovieGridItems.take(columns + 1)),
+        )
+        composeRule.waitForIdle()
+        card(1).performKeyInput { pressKey(Key.DirectionDown) }
+        val lastCard = card(columns + 1L)
+        lastCard.assertIsFocused()
+
+        lastCard.performKeyInput { pressKey(Key.DirectionRight) }
+
+        lastCard.assertIsFocused()
+        composeRule.onNodeWithTag("movies_filter_all").assertIsNotFocused()
+    }
+
+    /** The cardless states carry the same right edge as the cards they stand in for. */
+    @Test
+    fun rightFromTheEmptyStateStaysPut() {
+        setContent(
+            testMoviesState(
+                filter = MoviesFilter.Liked,
+                grid = IglooRailState.Loaded(emptyList()),
+            ),
+        )
+        val empty = composeRule.onNodeWithContentDescription(
+            "No liked movies yet. Like a movie from its details page and it will appear here.",
+        )
+        empty.assertIsFocused()
+
+        empty.performKeyInput { pressKey(Key.DirectionRight) }
+
+        empty.assertIsFocused()
     }
 
     // --- the filter row and header ------------------------------------------------------------
