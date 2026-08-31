@@ -75,6 +75,7 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
     val popularity = album.spotifyPopularity.orNull()?.roundToInt()?.coerceIn(0, 100)
     val artistNames = data.artists.map { it.name }.filter { it.isNotBlank() }
         .ifEmpty { listOfNotNull(artistName) }
+    val artistNamesLine = joinedLine(artistNames, ", ")
     val discs = discs(data.tracks, trackGenres = data.trackGenres.groupBy({ it.trackId }, { it.tag }))
     val audioQuality = audioQualitySummary(data.tracks)
     val facts = buildList {
@@ -84,7 +85,7 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
             ?.let { add(AlbumFactUi("Release date", it)) }
         add(AlbumFactUi("Total tracks", "${data.tracks.size}"))
         add(AlbumFactUi("Total duration", totalDurationText))
-        artistName?.let { add(AlbumFactUi("Artist", it)) }
+        artistNamesLine?.let { add(AlbumFactUi("Artist", it)) }
         joinedLine(data.albumGenres, ", ")?.let { add(AlbumFactUi("Genres", it)) }
         if (discs.size > 1) add(AlbumFactUi("Discs", "${discs.size}"))
         audioQuality?.let { add(AlbumFactUi("Audio quality", it)) }
@@ -109,6 +110,7 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
         heroInfoDescription = heroInfoDescription(
             title = title,
             artistName = artistName,
+            artistNames = artistNames,
             trackCountText = trackCountText,
             totalDurationSpoken = formatSpokenTime(data.totalDuration / 1000.0),
             genres = data.albumGenres,
@@ -210,17 +212,27 @@ internal fun audioQualitySummary(tracks: List<AlbumTrack>): String? {
 private fun heroInfoDescription(
     title: String,
     artistName: String?,
+    artistNames: List<String>,
     trackCountText: String,
     totalDurationSpoken: String,
     genres: List<String>,
     popularity: Int?,
-): String = listOfNotNull(
-    title + (artistName?.let { " by $it" } ?: ""),
-    trackCountText,
-    "Total duration: $totalDurationSpoken",
-    joinedLine(genres, ", ")?.let { "Genres: $it" },
-    popularity?.let { "Spotify popularity $it out of 100" },
-).joinToString(". ") + "."
+): String {
+    val creditedArtists = joinedLine(artistNames, ", ")
+        ?.takeUnless {
+            artistNames.size == 1 && artistName != null &&
+                artistNames.single().equals(artistName, ignoreCase = true)
+        }
+        ?.let { "Artists: $it" }
+    return listOfNotNull(
+        title + (artistName?.let { " by $it" } ?: ""),
+        creditedArtists,
+        trackCountText,
+        "Total duration: $totalDurationSpoken",
+        joinedLine(genres, ", ")?.let { "Genres: $it" },
+        popularity?.let { "Spotify popularity $it out of 100" },
+    ).joinToString(". ") + "."
+}
 
 /** A line built from values: blanks dropped, null rather than an empty line. */
 private fun joinedLine(values: List<String>, separator: String): String? = values

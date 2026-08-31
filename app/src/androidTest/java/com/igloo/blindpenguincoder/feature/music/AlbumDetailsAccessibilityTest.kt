@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -179,6 +180,36 @@ class AlbumDetailsAccessibilityTest {
                 "Help! by The Beatles. 3 tracks. Total duration: 7 minutes and 5 seconds. " +
                     "Genres: Rock, Pop. Spotify popularity 73 out of 100.",
             )
+    }
+
+    @Test
+    fun creditedCollaboratorsRideTheExistingReadingStops() {
+        val artistNames = listOf("The Beatles", "Billy Preston")
+        val heroDescription = "Help! by The Beatles. Artists: The Beatles, Billy Preston. " +
+            "3 tracks. Total duration: 7 minutes and 5 seconds. Genres: Rock, Pop. " +
+            "Spotify popularity 73 out of 100."
+        val factsDescription = "Album details. Release date: August 6, 1965. Total tracks: 3. " +
+            "Total duration: 7m 5s. Artist: The Beatles, Billy Preston. Genres: Rock, Pop. " +
+            "Discs: 2. Audio quality: FLAC · 900 kbps · stereo. " +
+            "Spotify popularity: 73 / 100."
+        val baseAlbum = testAlbumDetails()
+        val album = baseAlbum.copy(
+            artistNames = artistNames,
+            facts = baseAlbum.facts.map { fact ->
+                if (fact.label == "Artist") fact.copy(value = artistNames.joinToString(", ")) else fact
+            },
+            factsDescription = factsDescription,
+            heroInfoDescription = heroDescription,
+        )
+        setContent(loadedState(album), spokenAccessibilityEnabled = true)
+
+        composeRule.onNodeWithTag("album_hero_info")
+            .assertContentDescriptionEquals(heroDescription)
+        composeRule.onNodeWithTag("album_details_facts")
+            .assertContentDescriptionEquals(factsDescription)
+        composeRule.onNodeWithTag("album_artists").assertHasNoClickAction()
+        // The complete list rides the two deliberate stops instead of becoming chip-by-chip noise.
+        composeRule.onNodeWithText("Billy Preston").assertDoesNotExist()
     }
 
     @Test

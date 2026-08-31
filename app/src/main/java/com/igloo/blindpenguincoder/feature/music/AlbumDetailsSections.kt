@@ -2,6 +2,8 @@ package com.igloo.blindpenguincoder.feature.music
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,7 +49,6 @@ internal fun AlbumDetailsSections(
     contentInset: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
-    val trackRows = album.discs.flatMap { it.tracks }
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
@@ -79,19 +80,29 @@ internal fun AlbumDetailsSections(
  * these to open, so they are prose, not targets — the album-card rule, where a control that
  * announces an action and does nothing is worse than none. The names also live in the hero
  * reading stop's sentence and the facts panel's Artist row, which is how a screen reader
- * reaches them.
+ * reaches them. The flow stays inside the safe content width and grows with every credit.
  */
+// Foundation 1.11 still marks FlowRow experimental; using it here keeps wrapping measurement
+// inside Compose instead of maintaining a custom layout for one display-only chip group.
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ArtistsSection(
     artistNames: List<String>,
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.clearAndSetSemantics { },
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("album_artists")
+            .clearAndSetSemantics { },
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
         SectionHeading(if (artistNames.size == 1) "Artist" else "Artists")
-        Row(horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+        ) {
             artistNames.forEach { name ->
                 AlbumDetailChip(text = name, overMedia = false)
             }

@@ -319,7 +319,80 @@ class AlbumDetailsViewModelTest {
         viewModel.open(1)
         testScheduler.advanceUntilIdle()
 
-        assertEquals(listOf("Various Artists"), viewModel.loaded().artistNames)
+        val album = viewModel.loaded()
+        assertEquals(listOf("Various Artists"), album.artistNames)
+        assertEquals(
+            "Help! by Various Artists. 1 track. Total duration: 2 minutes and 5 seconds. " +
+                "Genres: Rock. Spotify popularity 73 out of 100.",
+            album.heroInfoDescription,
+        )
+    }
+
+    @Test
+    fun `credited collaborators join the musician in spoken summaries`() = runTest {
+        val viewModel = viewModel(
+            http {
+                jsonResponse(
+                    albumDetailsJson(
+                        album = albumJson(title = "Shared Record", musician = "Various Artists"),
+                        artists = listOf(
+                            albumArtistJson(id = 4, name = "Aurora Pines"),
+                            albumArtistJson(id = 5, name = "North Harbor Choir"),
+                        ),
+                    ),
+                )
+            },
+        )
+        viewModel.open(1)
+        testScheduler.advanceUntilIdle()
+        val album = viewModel.loaded()
+
+        assertEquals(listOf("Aurora Pines", "North Harbor Choir"), album.artistNames)
+        assertEquals(
+            "Aurora Pines, North Harbor Choir",
+            album.facts.single { it.label == "Artist" }.value,
+        )
+        assertEquals(
+            "Shared Record by Various Artists. Artists: Aurora Pines, North Harbor Choir. " +
+                "1 track. Total duration: 2 minutes and 5 seconds. Genres: Rock. " +
+                "Spotify popularity 73 out of 100.",
+            album.heroInfoDescription,
+        )
+        assertTrue(
+            album.factsDescription.contains("Artist: Aurora Pines, North Harbor Choir."),
+        )
+    }
+
+    @Test
+    fun `credited artists remain spoken when the album musician is absent`() = runTest {
+        val viewModel = viewModel(
+            http {
+                jsonResponse(
+                    albumDetailsJson(
+                        album = albumJson(title = "Joint Record", musician = null),
+                        artists = listOf(
+                            albumArtistJson(id = 4, name = "Mara Vale"),
+                            albumArtistJson(id = 5, name = "The Winter Quartet"),
+                        ),
+                    ),
+                )
+            },
+        )
+        viewModel.open(1)
+        testScheduler.advanceUntilIdle()
+        val album = viewModel.loaded()
+
+        assertNull(album.artistName)
+        assertEquals(
+            "Mara Vale, The Winter Quartet",
+            album.facts.single { it.label == "Artist" }.value,
+        )
+        assertEquals(
+            "Joint Record. Artists: Mara Vale, The Winter Quartet. 1 track. " +
+                "Total duration: 2 minutes and 5 seconds. Genres: Rock. " +
+                "Spotify popularity 73 out of 100.",
+            album.heroInfoDescription,
+        )
     }
 
     @Test
