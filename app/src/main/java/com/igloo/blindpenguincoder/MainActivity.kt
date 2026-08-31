@@ -13,6 +13,12 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         val container = (application as IglooApplication).container
+        // A launch, not a recreation: SessionManager is a process singleton, so a relaunch over a
+        // surviving process would otherwise compose the signed-in app — and fire its user-scoped
+        // fetches — on the first frame, before restoreOnLaunch() re-published the gate. Has to be
+        // synchronous and before setContent; a LaunchedEffect runs a whole composition too late.
+        // A configuration change arrives with a saved bundle and keeps the session it had.
+        if (savedInstanceState == null) container.sessionManager.beginLaunch()
         setContent {
             IglooRoot(container)
         }

@@ -152,6 +152,81 @@ class SessionManagerTest {
         assertTrue(state.profile.hasPin)
     }
 
+    /**
+     * The launch bug: this class is a process singleton, so backing out of Igloo leaves the
+     * session published while the Activity dies. The next launcher press used to compose the
+     * signed-in shell — and fire its user-scoped fetches — before the gate came back.
+     */
+    @Test
+    fun `a relaunch over a live process drops the session before re-asking for the PIN`() =
+        runTest {
+            val fixture = fixture(TEST_SERVER, backgroundScope) {
+                jsonResponse(authUserJson(hasPin = true))
+            }
+            fixture.http.seedVault(testStoredProfile(hasPin = true))
+            fixture.manager.restore()
+            // The PIN this launch asked for, now verified.
+            fixture.manager.completeSignIn()
+            assertTrue(fixture.manager.state.value is AppAuthState.Authenticated)
+
+            fixture.manager.beginLaunch()
+
+            // Synchronously, before anything suspends: this is the whole point of the call, since
+            // MainActivity makes it before setContent and the shell must not compose over it.
+            assertEquals(AppAuthState.Loading, fixture.manager.state.value)
+
+            fixture.manager.restoreOnLaunch()
+
+            assertEquals("Jose", (fixture.manager.state.value as AppAuthState.NeedsPin).profile.name)
+        }
+
+    /**
+     * A font scale, ui mode or locale change recreates the Activity — the manifest leaves those
+     * out of `configChanges` on purpose. That is not a resumed token, so it must not eject
+     * whoever is watching onto the keypad.
+     */
+    @Test
+    fun `an Activity recreation keeps the session instead of re-asking for the PIN`() = runTest {
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            jsonResponse(authUserJson(hasPin = true))
+        }
+        fixture.http.seedVault(testStoredProfile(hasPin = true))
+        fixture.manager.restore()
+        fixture.manager.completeSignIn()
+        val session = fixture.manager.state.value as AppAuthState.Authenticated
+        val requestsSoFar = fixture.requestCount
+
+        // No beginLaunch: the recreation arrives with a saved bundle.
+        fixture.manager.restoreOnLaunch()
+
+        assertEquals(session, fixture.manager.state.value)
+        assertEquals(requestsSoFar, fixture.requestCount)
+    }
+
+    /**
+     * [SessionManager.restore] is the gate screens' Retry, so it runs from a settled gate rather
+     * than from `Loading`. Guards it against [SessionManager.restoreOnLaunch]'s guard being pushed
+     * down into the shared body, which would make Retry a no-op.
+     */
+    @Test
+    fun `restore still re-resolves the gate for the retry paths`() = runTest {
+        var offline = true
+        val fixture = fixture(TEST_SERVER, backgroundScope) {
+            if (offline) throw IOException("offline") else jsonResponse(authUserJson())
+        }
+        fixture.http.seedVault(testStoredProfile())
+        fixture.manager.restore()
+        assertEquals(
+            AppError.Network,
+            (fixture.manager.state.value as AppAuthState.ChooseProfile).restoreError,
+        )
+
+        offline = false
+        fixture.manager.restore()
+
+        assertEquals("Jose", (fixture.manager.state.value as AppAuthState.Authenticated).user.name)
+    }
+
     @Test
     fun `a PIN set elsewhere since the last sign-in is still asked for`() = runTest {
         // The vault says no PIN because that was true when this TV last signed Jose in.

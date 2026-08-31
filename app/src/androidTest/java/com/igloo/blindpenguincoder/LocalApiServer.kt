@@ -4,6 +4,7 @@ import java.io.BufferedInputStream
 import java.io.InputStream
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import kotlin.concurrent.thread
 
@@ -49,6 +50,13 @@ class LocalApiServer(private val hasPin: Boolean = true) {
 
     val apiBaseUrl: String get() = "http://127.0.0.1:${socket.localPort}/api"
 
+    private val requested = ConcurrentLinkedQueue<String>()
+
+    /** Every path asked for so far, so a test can assert on what was *not* loaded. */
+    val requestedPaths: List<String> get() = requested.toList()
+
+    fun clearRequestLog() = requested.clear()
+
     init {
         thread(isDaemon = true, name = "LocalApiServer") {
             while (!socket.isClosed) {
@@ -72,6 +80,7 @@ class LocalApiServer(private val hasPin: Boolean = true) {
     private fun respond(client: Socket) {
         val input = BufferedInputStream(client.getInputStream())
         val path = readRequest(input)
+        requested += path
         val body = when {
             path.endsWith("/auth/user") -> authUserJson()
             path.endsWith("/user/pin/verify") -> """{"error":false,"data":{"valid":$pinValid}}"""

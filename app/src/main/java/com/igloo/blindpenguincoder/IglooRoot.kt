@@ -64,8 +64,11 @@ fun IglooRoot(container: IglooAppContainer) {
             AuthenticatedSessionViewModelStoreOwner(sessionManager.state)
         }
 
+        // Paired with MainActivity's beginLaunch(): a launch has already been dropped back to
+        // Loading, and this resolves the gate from storage. A no-op on an Activity recreation,
+        // which keeps the session it had rather than re-asking for the PIN mid-session.
         LaunchedEffect(Unit) {
-            sessionManager.restore()
+            sessionManager.restoreOnLaunch()
         }
 
         // Gated on the boot rather than on `Loading`: once any other state has been seen the
@@ -73,7 +76,9 @@ fun IglooRoot(container: IglooAppContainer) {
         // of a full-screen brand moment. See docs/design-system.md section 11.1.-1.
         // Plain `remember`, not `rememberSaveable`: SessionManager dies with the process, so a
         // restore from the saved Bundle starts over at `Loading`. A saved `booted` would skip the
-        // splash and leave the empty `Loading` arm on screen for the whole of `restore()`.
+        // splash and leave the empty `Loading` arm on screen for the whole of `restore()`. A new
+        // Activity therefore starts at `false`, which is what lets the splash cover a relaunch's
+        // whole re-gate — the process singleton's previous session is gone by the first frame.
         var booted by remember { mutableStateOf(false) }
         var holdElapsed by remember { mutableStateOf(false) }
         LaunchedEffect(authState) {

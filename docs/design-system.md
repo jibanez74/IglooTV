@@ -1111,6 +1111,18 @@ and not where the user has just proved who they are: a password login, a fresh p
 sign-in behind a PIN this moment verified, or the periodic revalidation of a session already
 running. A PIN set while someone is watching must not eject them mid-session.
 
+**A launch is a new Activity, and only that.** `SessionManager` is a process singleton, so its
+state outlives the Activity: backing out of Igloo leaves the process alive with the session still
+published, and the next launcher press composes a *new* Activity over it. That is a resumed token
+and is gated. So `MainActivity.onCreate` drops the session back to `AppAuthState.Loading` whenever
+`savedInstanceState` is null — synchronously, before `setContent`, because a `LaunchedEffect`
+runs a composition too late and the shell would already have created its view models and fired
+the §11.3 rails' user-scoped fetches. The splash then covers the whole re-gate (§11.1.-1), and
+`SessionManager.restoreOnLaunch()` resolves it. A configuration-change recreation arrives with a
+saved bundle instead — `uiMode`, `locale` and `fontScale` are deliberately left out of
+`configChanges` — and keeps the session it had, as does a return to the foreground on an Activity
+that was never destroyed. Neither is a resumed token; both are the mid-session case above.
+
 **Remotes have no number keys.** This is the constraint the screen is designed around: a 3×4
 on-screen keypad (1–9, delete, 0) plus four masked indicator cells, in the `Split` canvas's form
 column (§11.1). Indicator, pad and footer share one bounded 320dp measure — the keys are

@@ -69,12 +69,46 @@ class SessionManager(
         }
     }
 
-    /** Called once at launch: restores the stored server and picks up where sign-in left off. */
-    suspend fun restore() = transitionMutex.withLock {
+    /**
+     * A launch: the app is starting from scratch, so the gate is re-resolved from nothing.
+     *
+     * [SessionManager] is a process singleton and outlives the Activity, so a relaunch over a
+     * surviving process finds the previous session still published. Dropping back to
+     * [AppAuthState.Loading] synchronously — before `setContent`, from `MainActivity.onCreate` —
+     * is what keeps the signed-in app from composing and firing its user-scoped fetches on the
+     * first frame of the new Activity, ahead of the PIN gate this call is about to publish.
+     *
+     * Not under [transitionMutex], because it cannot suspend and still beat that first
+     * composition. Nothing else can be mid-transition while an Activity is being created, and
+     * [restoreOnLaunch] settles the real state under the lock a moment later regardless.
+     */
+    fun beginLaunch() {
+        _state.value = AppAuthState.Loading
+    }
+
+    /**
+     * The launch entry point, paired with [beginLaunch]. A no-op unless the app is still at
+     * [AppAuthState.Loading], so an Activity *recreation* — a font scale, ui mode or locale
+     * change, which the manifest deliberately lets through — resumes the session it already had
+     * instead of sending the user back to the keypad mid-session (design-system section 11.1.2).
+     */
+    suspend fun restoreOnLaunch() = transitionMutex.withLock {
+        if (_state.value !is AppAuthState.Loading) return@withLock
+        restoreLocked()
+    }
+
+    /**
+     * Retry after a launch that could not reach the server: the gate screens offer it, so unlike
+     * [restoreOnLaunch] it runs from whatever state the gate is resting in.
+     */
+    suspend fun restore() = transitionMutex.withLock { restoreLocked() }
+
+    /** Restores the stored server and picks up where sign-in left off. */
+    private suspend fun restoreLocked() {
         val storedUrl = settings.serverUrl.first()
         if (storedUrl == null) {
             _state.value = AppAuthState.NeedsServer(firstRun = true)
-            return@withLock
+            return
         }
         val storedAddress = ServerAddress.fromApiBaseUrl(storedUrl)
         if (storedAddress == null) {
@@ -82,7 +116,7 @@ class SessionManager(
             profiles.clearAll()
             serverUrl.set(null)
             _state.value = AppAuthState.NeedsServer()
-            return@withLock
+            return
         }
         serverUrl.set(storedAddress)
 
