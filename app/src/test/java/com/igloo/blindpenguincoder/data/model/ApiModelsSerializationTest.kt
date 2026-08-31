@@ -580,6 +580,105 @@ class ApiModelsSerializationTest {
         assertNull(albums[1].year.orNull())
     }
 
+    /**
+     * `GET /music/albums/details/{id}`: full album row, tracks and artists typed to the fields
+     * the detail page reads. Durations are milliseconds on this wire — the raw values must come
+     * through untouched.
+     */
+    @Test
+    fun decodesAlbumDetailsEnvelope() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "album": {
+                  "id": 211,
+                  "title": "Glacier Sessions",
+                  "sort_title": "glacier sessions",
+                  "spotify_id": {"String": "5uPKKfe1Y3PoLLmnrIhEIp", "Valid": true},
+                  "spotify_popularity": {"Float64": 73.4, "Valid": true},
+                  "musician": {"String": "Aurora Pines", "Valid": true},
+                  "release_date": {"String": "2026-02-13", "Valid": true},
+                  "year": {"Int64": 2026, "Valid": true},
+                  "total_tracks": {"Int64": 3, "Valid": true},
+                  "cover": {"String": "https://i.scdn.co/image/ab67.jpg", "Valid": true},
+                  "created_at": "2026-02-14T01:02:03Z",
+                  "updated_at": "2026-02-14T01:02:03Z"
+                },
+                "tracks": [
+                  {
+                    "id": 900, "title": "Northern Drift", "sort_title": "northern drift",
+                    "file_path": "/music/a/01.flac", "file_name": "01.flac",
+                    "container": "flac", "mime_type": "audio/flac", "codec": "flac",
+                    "size": 31457280, "track_index": 1, "duration": 214000, "disc": 1,
+                    "channels": "2", "channel_layout": "stereo", "bit_rate": 900000,
+                    "profile": "",
+                    "release_date": {"String": "", "Valid": false},
+                    "year": {"Int64": 0, "Valid": false},
+                    "composer": {"String": "", "Valid": false},
+                    "copyright": {"String": "", "Valid": false},
+                    "language": {"String": "", "Valid": false},
+                    "album_id": {"Int64": 211, "Valid": true},
+                    "musician_id": {"Int64": 4, "Valid": true},
+                    "created_at": "2026-02-14T01:02:03Z", "updated_at": "2026-02-14T01:02:03Z"
+                  },
+                  {
+                    "id": 901, "title": "Second Disc Opener", "sort_title": "second disc opener",
+                    "file_path": "/music/a/d2-01.flac", "file_name": "d2-01.flac",
+                    "container": "flac", "mime_type": "audio/flac", "codec": "flac",
+                    "size": 41457280, "track_index": 1, "duration": 245000, "disc": 2,
+                    "channels": "2", "channel_layout": "stereo", "bit_rate": 850000,
+                    "profile": "",
+                    "release_date": {"String": "", "Valid": false},
+                    "year": {"Int64": 0, "Valid": false},
+                    "composer": {"String": "", "Valid": false},
+                    "copyright": {"String": "", "Valid": false},
+                    "language": {"String": "", "Valid": false},
+                    "album_id": {"Int64": 211, "Valid": true},
+                    "musician_id": {"Int64": 4, "Valid": true},
+                    "created_at": "2026-02-14T01:02:03Z", "updated_at": "2026-02-14T01:02:03Z"
+                  }
+                ],
+                "artists": [
+                  {
+                    "id": 4, "name": "Aurora Pines",
+                    "thumb": {"String": "", "Valid": false},
+                    "spotify_id": {"String": "artist123", "Valid": true},
+                    "sort_name": "aurora pines"
+                  }
+                ],
+                "track_genres": [
+                  {"track_id": 900, "genre_id": 12, "tag": "Ambient"},
+                  {"track_id": 900, "genre_id": 13, "tag": "Electronic"}
+                ],
+                "album_genres": ["Ambient", "Electronic"],
+                "total_duration": 657000
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<AlbumDetailsData>>(body).data!!
+
+        assertEquals("Glacier Sessions", data.album.title)
+        assertEquals(73.4, data.album.spotifyPopularity.orNull())
+        assertEquals("Aurora Pines", data.album.musician.orNull())
+        assertEquals("2026-02-13", data.album.releaseDate.orNull())
+        assertEquals("https://i.scdn.co/image/ab67.jpg", data.album.cover.orNull())
+        // Milliseconds on the wire, untouched by decode; formatting owns the /1000.
+        assertEquals(214000L, data.tracks[0].duration)
+        assertEquals(657000.0, data.totalDuration, 0.0)
+        assertEquals(listOf(1L, 2L), data.tracks.map { it.disc })
+        assertEquals("stereo", data.tracks[0].channelLayout)
+        assertEquals(900000L, data.tracks[0].bitRate)
+        // Artists arrive as full musician rows (additionalProperties on the wire); the fields
+        // the page does not read must be ignored, not fatal.
+        assertEquals("Aurora Pines", data.artists[0].name)
+        assertNull(data.artists[0].thumb.orNull())
+        assertEquals(listOf("Ambient", "Electronic"), data.trackGenres.map { it.tag })
+        assertEquals(900L, data.trackGenres[0].trackId)
+        assertEquals(listOf("Ambient", "Electronic"), data.albumGenres)
+    }
+
     // The models below were generated from an older openapi.json and kept fields the contract has
     // since dropped or moved. Each payload carries exactly the current schema's required keys and
     // nothing else, so a future spec sync that drops a field fails here instead of shipping.

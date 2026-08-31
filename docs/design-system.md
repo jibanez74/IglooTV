@@ -1713,7 +1713,81 @@ letter headers, plus Play all / Shuffle all), **Playlists**. Album and musician 
 backdrop + hero + list pattern.
 
 Track rows carry a play action, a like toggle, and an overflow menu — **all three focusable**,
-none hidden until focus.
+none hidden until focus. (The album detail below ships ahead of playback with one-stop rows;
+§11.5.1 records the deferral.)
+
+#### 11.5.1 The album detail screen, as built
+
+**Shape.** The §11.4.1 overlay contract, third occupant of the host's **one details slot**: a
+full-screen in-tree overlay above the shell on the opaque `background` token, mutually exclusive
+with both movie detail pages because `IglooRoot`'s open callbacks close the other view models
+before opening this one — which is what keeps Back, the accessibility fence, and focus
+restoration single-path. The host owns Back and focus restore through the same `DetailsOrigin`
+machinery; no new case was needed — the LatestAlbums rail finally passes the `returnRequester`
+it never had, and `DetailsOrigin.Rail(HomeRail.LatestAlbums)` was already representable. Opening
+is the album rail's card, whose `onClick` this page finally gives a destination (the "no
+destination yet" carve-out is gone; the card's Open action and Button role came back with it).
+`AlbumDetailsViewModel` is the `TheaterMovieDetailsViewModel` shape — one read, nothing to
+write, its own `errorOrKeep` — over `GET /music/albums/details/{id}`.
+
+**Units.** Every duration on this wire is **milliseconds** — `Track.duration` and
+`total_duration` both — unlike the tracks-list endpoint's seconds. The mapping divides once,
+at the edge; formatting is web parity (`"1h 2m"` / `"42m 10s"` for the album, `"m:ss"` for a
+track, blank for a missing duration).
+
+**Hero.** The web page's treatment: there is no separate music backdrop asset, so the **album
+cover itself** is the full-bleed backdrop, cover-cropped, with §11.4.1's exact two scrims and
+decode-gated over-media licensing. The cover is used **verbatim** (an absolute Spotify URL or
+nothing — no proxy, no bearer, §11.3.2's album-rail rule). Beside a square cover
+(`posterWidth` × `albumAspect`, Music-glyph fallback, decorative): title at `titleLarge`
+(2 lines), the artist line, three §11.4.1 detail chips (release date — full date, else bare
+year — track count, total duration) cleared into one sentence, the genres line, the popularity
+meter, and the action row.
+
+**Spotify popularity.** The meter is web parity: glyph + "Spotify popularity" + bold score over
+a 4dp fill bar at `score/100`. Glyph and fill wear **Spotify's brand green** (`#1DB954`) — the
+one deliberate brand color in the app, because the number is Spotify's and painting it `primary`
+would claim it as ours. The meter is silent and unfocusable; its score rides the hero reading
+stop's sentence and the facts panel's row.
+
+**Actions.** Play Album (Primary, the entry anchor, held through the loading→loaded swap by the
+skeleton's geometry-matched stub) and Shuffle (Ghost, over-media resting fill per §3.2). Both
+are **host-owned stubs until playback lands** — the More-menu precedent: real, focusable
+controls with honest labels that claim no state, wired to no-ops in `IglooRoot`. An album with
+**no tracks composes no action row at all** (web parity, and the inert-control rule); the facts
+panel takes the entry anchor, requested safely. Row edges pinned; up reaches the hero reading
+stop only while a spoken reader runs.
+
+**Track list.** One-focus-stop rows — index, title, genre tags, duration — deliberately **not**
+§11.5's three-action row: this pass ships the page before playback, and a row announcing "Play"
+that does nothing would spend a press teaching the user it is empty. The three-action row
+supersedes this when playback lands. Rows wear the reading-stop treatment at the control radius
+(`radius.lg`, surface fill, no scale, **no click action and no role**), one cleared node per row
+speaking the mapping's sentence. Multi-disc albums get plain-text "Disc N" headers, and — since
+TV TalkBack never reaches plain text — each disc's **first row folds "Disc N." into its own
+sentence**, the §11.4.1 heading-folding rule at row scale. The vertical chain is hand-wired
+end to end (actions → every row in disc/index order → facts panel), horizontal edges pinned
+per row; up from the first row returns to the **last-focused action**, and up from the facts
+panel lands on the **last row** — nearest-edge re-entry, the deliberate list contract (a list,
+unlike a rail, keeps no `lastFocusedKey`; position is the memory).
+
+**Artists.** Display-only chips under the hero (web order, not web behavior): there is no
+musician screen, so the chips are prose wearing chip styling, zero focus stops, semantics
+cleared — the album-card rule again. The names reach a screen reader through the hero stop's
+sentence and the facts panel's Artist row.
+
+**Facts panel.** "Album Details", the §11.4.1 About treatment verbatim: heading outside the
+panel, `radius.xl` surface focus target, one cleared announcement folding the heading in. Rows —
+Release Date (full date only), Total Tracks, Total Duration, Artist, Genres, Discs (multi-disc
+only), Audio Quality, Spotify popularity ("73 / 100") — each dropped when absent. Audio Quality
+is the web derivation exactly: dominant codec by track count (first past the post), peak
+bitrate in kbps, channel layout only when uniform across the album, `·`-joined, absent parts
+dropped, no summary without a codec.
+
+**Shared with movies.** `SectionHeading` and `Modifier.readingStopTarget` moved from
+`feature/movies/MovieDetailsSections.kt` to `feature/shared/DetailsReadingStops.kt` (the stop
+grew a `radius` parameter for row-shaped targets); everything else — `AboutSection`,
+`DetailsRailSection` — stays movie-private until a second caller earns the move.
 
 ### 11.6 Search
 
@@ -1966,6 +2040,28 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-08-31 — Album detail: the third occupant of the one details slot (§11.5.1).**
+
+- New **§11.5.1**: the album detail overlay as built — cover-as-backdrop with §11.4.1's scrims,
+  square cover geometry, the Spotify popularity meter (brand green `#1DB954`, the app's one
+  deliberate brand color, silent and unfocusable), stubbed Play Album / Shuffle
+  (host-owned no-ops until playback lands, the More-menu precedent; no action row at all on a
+  trackless album), one-stop track rows with disc headers folded into each disc's first spoken
+  row, the About-treatment facts panel with the web's audio-quality derivation, and the
+  hand-wired chain with nearest-edge list re-entry. **Explicitly defers §11.5's three-action
+  track row** to the playback pass — a row announcing "Play" that does nothing teaches the user
+  the press is wasted.
+- **Milliseconds on this wire**: `/music/albums/details/{id}` durations are ms where the tracks
+  list speaks seconds; the mapping divides once at the edge and the section says so.
+- The LatestAlbums rail gains the `returnRequester` it never had, and its cards their long-
+  deferred `onClick` — the "album detail has no destination yet" carve-out is retired, and the
+  rail-behavior suite's no-action assertion moved to the null-callback case like every other
+  card.
+- `SectionHeading` and `readingStopTarget` promoted to `feature/shared/DetailsReadingStops.kt`
+  (with a `radius` parameter for row-shaped stops); `AlbumDetailsData` and friends are now
+  typed wire models (`Album`, `AlbumTrack`, `AlbumArtist`, `TrackGenre`) instead of raw
+  `JsonObject`s.
 
 **2026-08-29 — Movies index: sort, genre filters, and Liked (§11.4, §9.1).**
 

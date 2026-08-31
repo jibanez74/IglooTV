@@ -220,6 +220,74 @@ fun simpleAlbumJson(
 fun latestAlbumsJson(vararg albums: String): String =
     """{"error":false,"message":"latest albums","data":{"albums":[${albums.joinToString(",")}]}}"""
 
+/** The full album row `GET /music/albums/details/{id}` returns under `album`. */
+fun albumJson(
+    id: Long = 1,
+    title: String = "Help!",
+    cover: String? = "https://i.scdn.co/image/help.jpg",
+    musician: String? = "The Beatles",
+    releaseDate: String? = "1965-08-06",
+    year: Long? = 1965,
+    totalTracks: Long? = 14,
+    spotifyPopularity: Double? = 73.0,
+): String = """{"id":$id,"title":"$title","sort_title":"${title.lowercase()}",""" +
+    """"spotify_id":${sqlNullStringJson("spot-$id")},""" +
+    """"spotify_popularity":${sqlNullFloat64Json(spotifyPopularity)},""" +
+    """"musician":${sqlNullStringJson(musician)},""" +
+    """"release_date":${sqlNullStringJson(releaseDate)},""" +
+    """"year":${sqlNullInt64Json(year)},""" +
+    """"total_tracks":${sqlNullInt64Json(totalTracks)},""" +
+    """"cover":${sqlNullStringJson(cover)},""" +
+    """"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}"""
+
+/** One album-details track row: the full `Track` schema; `duration` is milliseconds. */
+fun albumTrackJson(
+    id: Long = 1,
+    title: String = "Yesterday",
+    trackIndex: Long = 1,
+    durationMs: Long = 125_000,
+    disc: Long = 1,
+    codec: String = "flac",
+    bitRate: Long = 900_000,
+    channelLayout: String = "stereo",
+    albumId: Long = 1,
+): String = """{"id":$id,"title":"$title","sort_title":"${title.lowercase()}",""" +
+    """"file_path":"/music/$id.flac","file_name":"$id.flac","container":"flac",""" +
+    """"mime_type":"audio/flac","codec":"$codec","size":31457280,""" +
+    """"track_index":$trackIndex,"duration":$durationMs,"disc":$disc,""" +
+    """"channels":"2","channel_layout":"$channelLayout","bit_rate":$bitRate,"profile":"",""" +
+    """"release_date":${sqlNullStringJson(null)},"year":${sqlNullInt64Json(null)},""" +
+    """"composer":${sqlNullStringJson(null)},"copyright":${sqlNullStringJson(null)},""" +
+    """"language":${sqlNullStringJson(null)},"album_id":${sqlNullInt64Json(albumId)},""" +
+    """"musician_id":${sqlNullInt64Json(4)},""" +
+    """"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}"""
+
+/** One album-details artist: a full musician row on the wire; the model reads a subset. */
+fun albumArtistJson(
+    id: Long = 4,
+    name: String = "The Beatles",
+    thumb: String? = null,
+): String = """{"id":$id,"name":"$name","sort_name":"${name.lowercase()}",""" +
+    """"thumb":${sqlNullStringJson(thumb)},"spotify_id":${sqlNullStringJson("artist-$id")}}"""
+
+fun trackGenreJson(trackId: Long = 1, genreId: Long = 12, tag: String = "Rock"): String =
+    """{"track_id":$trackId,"genre_id":$genreId,"tag":"$tag"}"""
+
+/** A `GET /music/albums/details/{id}` payload; `total_duration` is milliseconds. */
+fun albumDetailsJson(
+    album: String = albumJson(),
+    tracks: List<String> = listOf(albumTrackJson()),
+    artists: List<String> = listOf(albumArtistJson()),
+    trackGenres: List<String> = listOf(trackGenreJson()),
+    albumGenres: List<String> = listOf("Rock"),
+    totalDurationMs: Double = 125_000.0,
+): String = """{"error":false,"message":"album details","data":{""" +
+    """"album":$album,"tracks":[${tracks.joinToString(",")}],""" +
+    """"artists":[${artists.joinToString(",")}],""" +
+    """"track_genres":[${trackGenres.joinToString(",")}],""" +
+    """"album_genres":[${albumGenres.joinToString(",") { "\"$it\"" }}],""" +
+    """"total_duration":$totalDurationMs}}"""
+
 /**
  * One `GET /tmdb/movies/in-theaters` list entry. TMDB fields are plain values, not `sql.Null*`
  * wrappers; every field the contract requires is emitted even though the model maps a subset.

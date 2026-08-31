@@ -15,4 +15,7 @@ class MusicApi(
      */
     suspend fun latestAlbums(): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/music/albums/latest")
+
+    suspend fun albumDetails(id: Long): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/music/albums/details/$id")
 }

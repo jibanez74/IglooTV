@@ -28,8 +28,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -41,6 +39,8 @@ import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.feature.shared.SectionHeading
+import com.igloo.blindpenguincoder.feature.shared.readingStopTarget
 
 /**
  * Everything below the hero: overview, key crew, the cast and extra-videos rails, and the
@@ -149,53 +149,6 @@ internal fun MovieDetailsSections(
             )
         }
     }
-}
-
-@Composable
-private fun SectionHeading(text: String) {
-    IglooText(
-        text = text,
-        style = IglooTheme.typography.titleMedium,
-        color = IglooTheme.colors.foreground,
-        modifier = Modifier.semantics { heading() },
-    )
-}
-
-/**
- * The reading-stop treatment for a prose section while a screen reader runs: the About panel's
- * focus-target-only look (ring and fill, no scale — there is no action to promise), pinned
- * horizontal edges, and one cleared announcement that folds the section's heading in, because a
- * heading text node is as unreachable to TV TalkBack as the prose under it.
- */
-@Composable
-private fun Modifier.readingStopTarget(
-    tag: String,
-    focused: Boolean,
-    requester: FocusRequester,
-    upRequester: FocusRequester?,
-    downRequester: FocusRequester?,
-    onFocusChanged: (Boolean) -> Unit,
-    description: String,
-): Modifier {
-    val colors = IglooTheme.colors
-    return this
-        .testTag(tag)
-        .focusRing(
-            focused = focused,
-            radius = IglooTheme.radius.xl,
-            fill = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
-            scaleOnFocus = false,
-        )
-        .focusRequester(requester)
-        .focusProperties {
-            up = upRequester ?: Cancel
-            down = downRequester ?: Cancel
-            left = Cancel
-            right = Cancel
-        }
-        .onFocusChanged { onFocusChanged(it.isFocused) }
-        .focusable()
-        .clearAndSetSemantics { contentDescription = description }
 }
 
 @Composable

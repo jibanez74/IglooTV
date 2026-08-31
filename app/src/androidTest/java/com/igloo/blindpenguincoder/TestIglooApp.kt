@@ -11,6 +11,7 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.movies.MoviesActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
+import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
@@ -52,6 +53,9 @@ internal fun TestIglooApp(
     moviesActions: MoviesActions = inertMoviesActions,
     details: MovieDetailsUiState = MovieDetailsUiState(),
     detailsActions: MovieDetailsActions = inertDetailsActions,
+    albumDetails: AlbumDetailsUiState = AlbumDetailsUiState(),
+    onRetryAlbumDetails: () -> Unit = {},
+    onAlbumSelected: ((Long) -> Unit)? = null,
     onRequestPlayback: () -> Unit = {},
     moviePlayerViewModel: MoviePlayerViewModel = rememberInertMoviePlayerViewModel(),
     moviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine =
@@ -79,6 +83,9 @@ internal fun TestIglooApp(
         moviesActions = moviesActions,
         details = details,
         detailsActions = detailsActions,
+        albumDetails = albumDetails,
+        onRetryAlbumDetails = onRetryAlbumDetails,
+        onAlbumSelected = onAlbumSelected,
         onRequestPlayback = onRequestPlayback,
         moviePlayerViewModel = moviePlayerViewModel,
         moviePlayerEngineFactory = moviePlayerEngineFactory,

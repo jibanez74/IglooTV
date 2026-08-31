@@ -79,6 +79,8 @@ import com.igloo.blindpenguincoder.feature.movies.MoviesActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesScreen
 import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
 import com.igloo.blindpenguincoder.feature.movies.VideoLaunchSite
+import com.igloo.blindpenguincoder.feature.music.AlbumDetailsScreen
+import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerScreen
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
@@ -239,6 +241,13 @@ fun IglooApp(
     moviesActions: MoviesActions,
     details: MovieDetailsUiState,
     detailsActions: MovieDetailsActions,
+    albumDetails: AlbumDetailsUiState,
+    onRetryAlbumDetails: () -> Unit,
+    onAlbumSelected: ((Long) -> Unit)?,
+    // Host-owned stubs until playback lands (section 11.5.1): the buttons are real, focusable
+    // controls whose behavior arrives with the playback pass, the More-menu item precedent.
+    onPlayAlbum: () -> Unit = {},
+    onShuffleAlbum: () -> Unit = {},
     onRequestPlayback: () -> Unit,
     moviePlayerViewModel: MoviePlayerViewModel,
     moviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine,
@@ -284,6 +293,9 @@ fun IglooApp(
         mutableStateOf<DetailsOrigin?>(null)
     }
     val detailsOpen = details.openMovieId != null
+    // The album overlay shares the one details slot (section 11.5.1): the host's open callbacks
+    // keep the detail view models mutually exclusive, so at most one of these is ever true.
+    val albumOpen = albumDetails.openAlbumId != null
     // The trailer player is the third overlay layer (shell -> details -> player); the host owns
     // its existence and its focus restore, the same contract the details overlay lives under.
     var trailerRequest by rememberSaveable(stateSaver = TrailerRequest.Saver) {
@@ -388,13 +400,20 @@ fun IglooApp(
             select(tmdbId)
         }
     }
+    // Likewise: the albums rail is the album page's only entrance today.
+    val openAlbum: ((Long) -> Unit)? = onAlbumSelected?.let { select ->
+        { albumId ->
+            detailsOrigin = DetailsOrigin.Rail(HomeRail.LatestAlbums)
+            select(albumId)
+        }
+    }
 
     // Every handler is gated explicitly rather than left to win on registration order —
     // design-system.md section 9.3 requires the host to be deliberate about Back. While either
     // player is up, Back belongs to its own screen (chrome dismissal, then close).
     BackHandler(
-        enabled = detailsOpen && !signOut.confirming && !trailerOpen && !playerOpen &&
-            !moreMenuOpen && !playbackSettingsOpen,
+        enabled = (detailsOpen || albumOpen) && !signOut.confirming && !trailerOpen &&
+            !playerOpen && !moreMenuOpen && !playbackSettingsOpen,
     ) {
         val origin = detailsOrigin
         detailsOrigin = null
@@ -417,15 +436,15 @@ fun IglooApp(
         }
     }
     BackHandler(
-        enabled = !detailsOpen && !signOut.confirming && !trailerOpen && !playerOpen &&
-            !railHasFocus,
+        enabled = !detailsOpen && !albumOpen && !signOut.confirming && !trailerOpen &&
+            !playerOpen && !railHasFocus,
     ) {
         railOpenedByBack = true
         navigationRequesters.getValue(currentDestination).requestFocus()
     }
     BackHandler(
-        enabled = !detailsOpen && !signOut.confirming && !trailerOpen && !playerOpen &&
-            railHasFocus && !railOpenedByBack,
+        enabled = !detailsOpen && !albumOpen && !signOut.confirming && !trailerOpen &&
+            !playerOpen && railHasFocus && !railOpenedByBack,
     ) {
         contentStartRequester.requestFocus()
     }
@@ -442,10 +461,11 @@ fun IglooApp(
             // The details header owns the notice while the overlay is up; rendering it here too
             // would only shift Home's rails behind a screen nobody can see. It surfaces here
             // when Back closes an overlay whose write had already failed.
-            mutationNotice = details.mutationNotice.takeIf { !detailsOpen },
+            mutationNotice = details.mutationNotice.takeIf { !detailsOpen && !albumOpen },
             onRetryRail = onRetryRail,
             openMovie = openMovie,
             openTheaterMovie = openTheaterMovie,
+            openAlbum = openAlbum,
             railReturnRequesters = railReturnRequesters,
             moviesReturnRequester = moviesReturnRequester,
             // The rail stays open behind the dialog: the row that opened it must still be legible,
@@ -456,7 +476,7 @@ fun IglooApp(
             scrimmed = railHasFocus || signOut.confirming,
             // The overlay covers the shell completely, so the whole thing leaves TalkBack's
             // traversal while it is up — the same treatment the confirm dialog gets.
-            hiddenFromAccessibility = signOut.confirming || detailsOpen,
+            hiddenFromAccessibility = signOut.confirming || detailsOpen || albumOpen,
             onRailFocusChanged = { hasFocus ->
                 if (!hasFocus) railOpenedByBack = false
                 railHasFocus = hasFocus
@@ -483,7 +503,19 @@ fun IglooApp(
         // onto. The same reasoning stacks once more: while the trailer player is up the details
         // screen stays composed (its extras rail holds the focus memory the player's close
         // restores onto) but leaves TalkBack traversal, exactly as the shell does under it.
-        if (detailsOpen) {
+        if (albumOpen) {
+            // The one details slot's third occupant. No inner accessibility gate: the album
+            // page launches no players or menus of its own yet, so nothing ever covers it.
+            Box(modifier = Modifier.testTag("details_layer")) {
+                AlbumDetailsScreen(
+                    state = albumDetails.details,
+                    onRetry = onRetryAlbumDetails,
+                    onPlayAlbum = onPlayAlbum,
+                    onShuffle = onShuffleAlbum,
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                )
+            }
+        } else if (detailsOpen) {
             // hideFromAccessibility, not clearAndSetSemantics, for the same reason as the shell:
             // the nodes stay in the tree, so a test can still assert what is not traversable.
             Box(
@@ -608,7 +640,9 @@ fun IglooApp(
     // card the user had just activated. Skipped entirely when something is already over the
     // shell — this effect runs after the overlay's own, so it would take focus off it.
     LaunchedEffect(Unit) {
-        if (!detailsOpen && !trailerOpen && !playerOpen) contentStartRequester.requestFocus()
+        if (!detailsOpen && !albumOpen && !trailerOpen && !playerOpen) {
+            contentStartRequester.requestFocus()
+        }
     }
 }
 
@@ -624,6 +658,7 @@ private fun IglooShell(
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
+    openAlbum: ((Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     moviesReturnRequester: FocusRequester,
     railExpanded: Boolean,
@@ -690,6 +725,7 @@ private fun IglooShell(
                 onRetryRail = onRetryRail,
                 openMovie = openMovie,
                 openTheaterMovie = openTheaterMovie,
+                openAlbum = openAlbum,
                 railReturnRequesters = railReturnRequesters,
                 moviesReturnRequester = moviesReturnRequester,
                 contentStartRequester = contentStartRequester,
@@ -765,6 +801,7 @@ private fun ContentPane(
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
+    openAlbum: ((Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     moviesReturnRequester: FocusRequester,
     contentStartRequester: FocusRequester,
@@ -829,6 +866,7 @@ private fun ContentPane(
                 onRetryRail = onRetryRail,
                 openMovie = openMovie,
                 openTheaterMovie = openTheaterMovie,
+                openAlbum = openAlbum,
                 railReturnRequesters = railReturnRequesters,
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequesters.getValue(IglooDestination.Home),
@@ -894,6 +932,7 @@ private fun HomeRails(
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
+    openAlbum: ((Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
@@ -1019,15 +1058,14 @@ private fun HomeRails(
             emptyIcon = IglooIcons.Music,
             emptyText = "No albums in your library yet. Add a music folder on the server and run a scan.",
             onRetry = { onRetryRail(HomeRail.LatestAlbums) },
+            returnRequester = railReturnRequesters.getValue(HomeRail.LatestAlbums),
             cardAspect = IglooTheme.layout.albumAspect,
         ) { album, itemModifier, cardAspect ->
             IglooPosterCard(
                 title = album.title,
                 subtitle = album.musician,
                 imageUrl = album.coverUrl,
-                // Focusable but inert: album detail has no destination yet, and a card that
-                // announces "Open …" and then does nothing is worse than one that announces none.
-                onClick = null,
+                onClick = openAlbum?.let { open -> { open(album.id) } },
                 aspect = cardAspect,
                 fallbackIcon = IglooIcons.Music,
                 modifier = itemModifier.testTag("album_card_${album.id}"),

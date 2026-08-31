@@ -73,6 +73,7 @@ class HomeRailBehaviorTest {
     private var theaterRetries = 0
     private val opened = mutableListOf<Long>()
     private val theatersOpened = mutableListOf<Long>()
+    private val albumsOpened = mutableListOf<Long>()
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
 
@@ -83,6 +84,7 @@ class HomeRailBehaviorTest {
         initialTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loaded(theaterMovies),
         onMovieSelected: ((Long) -> Unit)? = { opened += it },
         onTheaterMovieSelected: ((Long) -> Unit)? = { theatersOpened += it },
+        onAlbumSelected: ((Long) -> Unit)? = { albumsOpened += it },
     ) {
         continueState = initialContinue
         latestState = initialLatest
@@ -94,6 +96,7 @@ class HomeRailBehaviorTest {
         theaterRetries = 0
         opened.clear()
         theatersOpened.clear()
+        albumsOpened.clear()
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
@@ -120,6 +123,7 @@ class HomeRailBehaviorTest {
                     },
                     onMovieSelected = onMovieSelected,
                     onTheaterMovieSelected = onTheaterMovieSelected,
+                    onAlbumSelected = onAlbumSelected,
                 )
             }
         }
@@ -408,16 +412,33 @@ class HomeRailBehaviorTest {
     }
 
     @Test
-    fun albumCardsAnnounceTitleAndMusicianWithNoAction() {
+    fun albumCardsAnnounceTitleAndMusicianAndOpenTheirPage() {
         setShellContent(IglooRailState.Loaded(continueMovies))
 
         // One cleared node: the cover image and the two captions are not separate announceable
-        // nodes. No action either — album detail has no destination yet.
+        // nodes. The action is "Open", because pressing opens the album detail overlay.
+        albumCard(11)
+            .performScrollTo()
+            .assertContentDescriptionEquals("Help!, The Beatles")
+            .assertHasClickAction()
+            .requestFocus()
+        albumCard(11).performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.onAllNodesWithText("The Beatles").assertCountEquals(0)
+        assertEquals(listOf(11L), albumsOpened)
+        // The album id goes to its own callback: a movie with the same id must not open.
+        assertEquals(emptyList<Long>(), opened)
+    }
+
+    @Test
+    fun albumCardsWithNothingToOpenAnnounceNoAction() {
+        setShellContent(IglooRailState.Loaded(continueMovies), onAlbumSelected = null)
+
+        // With no destination wired the card must not promise one — the same contract the
+        // movie cards keep — while staying focusable as a rail landing site.
         albumCard(11)
             .performScrollTo()
             .assertContentDescriptionEquals("Help!, The Beatles")
             .assertHasNoClickAction()
-        composeRule.onAllNodesWithText("The Beatles").assertCountEquals(0)
     }
 
     @Test

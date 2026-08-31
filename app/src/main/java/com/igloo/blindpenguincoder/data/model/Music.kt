@@ -57,13 +57,62 @@ data class AlbumsData(
     @SerialName("total_pages") val totalPages: Long,
 )
 
-/** Payload of `AlbumDetailsEnvelope.data`. Album and track shapes are untyped in the spec. */
+/** The full album row, as `GET /music/albums/details/{id}` returns it. */
+@Serializable
+data class Album(
+    val id: Long,
+    val title: String,
+    @SerialName("sort_title") val sortTitle: String,
+    @SerialName("spotify_id") val spotifyId: SqlNullString,
+    @SerialName("spotify_popularity") val spotifyPopularity: SqlNullFloat64,
+    val musician: SqlNullString,
+    @SerialName("release_date") val releaseDate: SqlNullString,
+    val year: SqlNullInt64,
+    @SerialName("total_tracks") val totalTracks: SqlNullInt64,
+    val cover: SqlNullString,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+)
+
+/**
+ * A track as the album details payload carries it. The wire row is the full `Track` schema;
+ * only the fields the detail page reads are typed. [duration] is in **milliseconds**, unlike
+ * [TrackListItem.duration]'s seconds.
+ */
+@Serializable
+data class AlbumTrack(
+    val id: Long,
+    val title: String,
+    @SerialName("track_index") val trackIndex: Long,
+    val duration: Long,
+    val disc: Long,
+    val codec: String,
+    @SerialName("bit_rate") val bitRate: Long,
+    @SerialName("channel_layout") val channelLayout: String,
+)
+
+/** An album's artist — a musician row on the wire; only what the detail page reads is typed. */
+@Serializable
+data class AlbumArtist(
+    val id: Long,
+    val name: String,
+    val thumb: SqlNullString,
+)
+
+/** One track→genre-tag association from the album details payload. */
+@Serializable
+data class TrackGenre(
+    @SerialName("track_id") val trackId: Long,
+    val tag: String,
+)
+
+/** Payload of `AlbumDetailsEnvelope.data`. [totalDuration] is in milliseconds. */
 @Serializable
 data class AlbumDetailsData(
-    val album: JsonObject,
-    val tracks: List<JsonObject>,
-    val artists: List<JsonObject>,
-    @SerialName("track_genres") val trackGenres: List<JsonObject>,
+    val album: Album,
+    val tracks: List<AlbumTrack>,
+    val artists: List<AlbumArtist>,
+    @SerialName("track_genres") val trackGenres: List<TrackGenre>,
     @SerialName("album_genres") val albumGenres: List<String>,
     @SerialName("total_duration") val totalDuration: Double,
 )

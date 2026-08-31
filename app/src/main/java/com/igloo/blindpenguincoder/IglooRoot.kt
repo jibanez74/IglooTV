@@ -45,6 +45,7 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.MoviesActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
+import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.MoviePlaybackServices
 import com.igloo.blindpenguincoder.playback.media3.deviceCanPlayAudioMime
@@ -237,6 +238,12 @@ fun IglooRoot(container: IglooAppContainer) {
                             container.serverUrlProvider,
                         )
                     }
+                    val albumDetailsViewModel = viewModel(
+                        viewModelStoreOwner = authenticatedSessionOwner,
+                        key = "album-details",
+                    ) {
+                        AlbumDetailsViewModel(container.musicRepository)
+                    }
                     // Device tokens are revoked server-side after long disuse, so a session
                     // resumed from the background is re-checked before it is trusted — and the
                     // library is re-read, because a TV can sit on this screen for days. The
@@ -246,12 +253,14 @@ fun IglooRoot(container: IglooAppContainer) {
                         homeViewModel,
                         detailsViewModel,
                         theaterDetailsViewModel,
+                        albumDetailsViewModel,
                         moviesViewModel,
                     ) {
                         scope.launch { sessionManager.revalidateActive() }
                         homeViewModel.refresh()
                         detailsViewModel.refresh()
                         theaterDetailsViewModel.refresh()
+                        albumDetailsViewModel.refresh()
                         // Re-reads the count and, only if the grid has nothing yet, page one: a
                         // TV woken from standby must keep the pages the user scrolled through.
                         moviesViewModel.refresh()
@@ -271,6 +280,8 @@ fun IglooRoot(container: IglooAppContainer) {
                     }
                     val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()
                     val theaterDetails by theaterDetailsViewModel.uiState
+                        .collectAsStateWithLifecycle()
+                    val albumDetails by albumDetailsViewModel.uiState
                         .collectAsStateWithLifecycle()
                     // One overlay slot, two sources: the shell hosts a single details screen, so
                     // whichever view model is open feeds it and opening either closes the other.
@@ -324,19 +335,29 @@ fun IglooRoot(container: IglooAppContainer) {
                                 ),
                             )
                         },
+                        albumDetails = albumDetails,
+                        onRetryAlbumDetails = albumDetailsViewModel::retry,
                         onRetryRail = homeViewModel::retry,
                         onMovieSelected = { movieId ->
                             theaterDetailsViewModel.close()
+                            albumDetailsViewModel.close()
                             detailsViewModel.open(movieId)
                         },
                         onTheaterMovieSelected = { tmdbId ->
                             detailsViewModel.close()
+                            albumDetailsViewModel.close()
                             theaterDetailsViewModel.open(tmdbId)
+                        },
+                        onAlbumSelected = { albumId ->
+                            detailsViewModel.close()
+                            theaterDetailsViewModel.close()
+                            albumDetailsViewModel.open(albumId)
                         },
                         // Back does not ask which one was up: closing a closed page is a no-op.
                         onCloseDetails = {
                             detailsViewModel.close()
                             theaterDetailsViewModel.close()
+                            albumDetailsViewModel.close()
                         },
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },
                         onSignOut = signOutViewModel::request,

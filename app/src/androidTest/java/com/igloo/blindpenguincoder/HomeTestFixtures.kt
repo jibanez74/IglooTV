@@ -25,6 +25,10 @@ import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSettingsUi
 import com.igloo.blindpenguincoder.feature.movies.ProgressUi
 import com.igloo.blindpenguincoder.feature.movies.playbackSettingsUi
+import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUi
+import com.igloo.blindpenguincoder.feature.music.AlbumDiscUi
+import com.igloo.blindpenguincoder.feature.music.AlbumFactUi
+import com.igloo.blindpenguincoder.feature.music.AlbumTrackUi
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
@@ -303,6 +307,82 @@ internal fun testTheaterMovieDetails(
         "released December 15, 1995",
     heroTrailer = heroTrailer,
     playbackSettings = null,
+)
+
+/**
+ * Cover-less for the glyph fallback; two discs so the disc headers and the folded "Disc N."
+ * sentences render; the spoken strings are pinned literals, so an a11y assertion reads exactly
+ * what the mapping contract promises.
+ */
+internal fun testAlbumDetails(
+    id: Long = 11,
+    title: String = "Help!",
+) = AlbumDetailsUi(
+    id = id,
+    title = title,
+    artistName = "The Beatles",
+    coverUrl = null,
+    releaseDateText = "August 6, 1965",
+    trackCountText = "3 tracks",
+    totalDurationText = "7m 5s",
+    genresLine = "Rock · Pop",
+    popularity = 73,
+    artistNames = listOf("The Beatles"),
+    discs = listOf(
+        AlbumDiscUi(
+            disc = 1,
+            tracks = listOf(
+                AlbumTrackUi(
+                    id = 901,
+                    indexText = "1",
+                    title = "Yesterday",
+                    genresLine = "Rock, Pop",
+                    durationText = "2:05",
+                    contentDescription = "Disc 1. Track 1. Yesterday. Rock, Pop. " +
+                        "2 minutes and 5 seconds.",
+                ),
+                AlbumTrackUi(
+                    id = 902,
+                    indexText = "2",
+                    title = "Ticket to Ride",
+                    genresLine = null,
+                    durationText = "3:10",
+                    contentDescription = "Track 2. Ticket to Ride. 3 minutes and 10 seconds.",
+                ),
+            ),
+        ),
+        AlbumDiscUi(
+            disc = 2,
+            tracks = listOf(
+                AlbumTrackUi(
+                    id = 903,
+                    indexText = "1",
+                    title = "Act Naturally",
+                    genresLine = null,
+                    durationText = "1:50",
+                    contentDescription = "Disc 2. Track 1. Act Naturally. " +
+                        "1 minute and 50 seconds.",
+                ),
+            ),
+        ),
+    ),
+    hasMultipleDiscs = true,
+    facts = listOf(
+        AlbumFactUi("Release date", "August 6, 1965"),
+        AlbumFactUi("Total tracks", "3"),
+        AlbumFactUi("Total duration", "7m 5s"),
+        AlbumFactUi("Artist", "The Beatles"),
+        AlbumFactUi("Genres", "Rock, Pop"),
+        AlbumFactUi("Discs", "2"),
+        AlbumFactUi("Audio quality", "FLAC · 900 kbps · stereo"),
+        AlbumFactUi("Spotify popularity", "73 / 100"),
+    ),
+    factsDescription = "Album details. Release date: August 6, 1965. Total tracks: 3. " +
+        "Total duration: 7m 5s. Artist: The Beatles. Genres: Rock, Pop. Discs: 2. " +
+        "Audio quality: FLAC · 900 kbps · stereo. Spotify popularity: 73 / 100.",
+    heroInfoDescription = "Help! by The Beatles. 3 tracks. " +
+        "Total duration: 7 minutes and 5 seconds. Genres: Rock, Pop. " +
+        "Spotify popularity 73 out of 100.",
 )
 
 internal val testExtraVideos = listOf(

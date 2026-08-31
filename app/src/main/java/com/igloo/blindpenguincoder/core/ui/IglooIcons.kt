@@ -343,6 +343,57 @@ object IglooIcons {
         }
     }
 
+    val Shuffle: ImageVector by lazy {
+        icon("Shuffle") {
+            // Two crossing strokes, each with a solid arrowhead at its right end.
+            path(fill = SolidColor(Color.White)) {
+                // Lower-left to upper-right.
+                moveTo(3f, 16f)
+                lineTo(6.2f, 16f)
+                lineTo(15.8f, 6.4f)
+                lineTo(19f, 6.4f)
+                lineTo(19f, 8.6f)
+                lineTo(16.7f, 8.6f)
+                lineTo(7.1f, 18.2f)
+                lineTo(3f, 18.2f)
+                close()
+                moveTo(18.4f, 4.9f)
+                lineTo(22.2f, 7.5f)
+                lineTo(18.4f, 10.1f)
+                close()
+            }
+            path(fill = SolidColor(Color.White)) {
+                // Upper-left to lower-right.
+                moveTo(3f, 8f)
+                lineTo(6.2f, 8f)
+                lineTo(15.8f, 17.6f)
+                lineTo(19f, 17.6f)
+                lineTo(19f, 15.4f)
+                lineTo(16.7f, 15.4f)
+                lineTo(7.1f, 5.8f)
+                lineTo(3f, 5.8f)
+                close()
+                moveTo(18.4f, 19.1f)
+                lineTo(22.2f, 16.5f)
+                lineTo(18.4f, 13.9f)
+                close()
+            }
+        }
+    }
+
+    val Spotify: ImageVector by lazy {
+        icon("Spotify") {
+            // A filled disc with the three sound-wave bands cut out; call sites tint it with
+            // the Spotify brand green, the one deliberate brand color in the app (section 11.5.1).
+            path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {
+                circle(12f, 12f, 10f)
+                wave(y = 8.0f, halfWidth = 6.4f, bow = 1.7f, thickness = 1.9f)
+                wave(y = 11.6f, halfWidth = 5.4f, bow = 1.4f, thickness = 1.7f)
+                wave(y = 14.9f, halfWidth = 4.4f, bow = 1.1f, thickness = 1.5f)
+            }
+        }
+    }
+
     val Person: ImageVector by lazy {
         icon("Person") {
             path(fill = SolidColor(Color.White)) {
@@ -366,6 +417,19 @@ object IglooIcons {
             viewportWidth = 24f,
             viewportHeight = 24f,
         ).apply(block).build()
+
+    /** One sound-wave band: a stripe of [thickness] bowing upward by [bow], centred on x=12. */
+    private fun PathBuilder.wave(y: Float, halfWidth: Float, bow: Float, thickness: Float) {
+        moveTo(12f - halfWidth, y)
+        curveTo(12f - halfWidth * 0.4f, y - bow, 12f + halfWidth * 0.4f, y - bow, 12f + halfWidth, y)
+        lineTo(12f + halfWidth, y + thickness)
+        curveTo(
+            12f + halfWidth * 0.4f, y + thickness - bow,
+            12f - halfWidth * 0.4f, y + thickness - bow,
+            12f - halfWidth, y + thickness,
+        )
+        close()
+    }
 
     private fun PathBuilder.circle(cx: Float, cy: Float, r: Float) {
         moveTo(cx - r, cy)
