@@ -34,24 +34,16 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -101,8 +93,9 @@ fun MoviePlayerScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    var reloadKey by remember { mutableIntStateOf(0) }
-    val engine = remember(reloadKey) { engineFactory(context, request) }
+    // A movie that resumes opens on the prompt, so the intent only arms once the user chooses.
+    val host = rememberPlayerHostLifecycle(initialPlayWhenReady = request.resumeAtSec == null)
+    val engine = remember(host.reloadKey) { engineFactory(context, request) }
     val latestRequest by rememberUpdatedState(request)
     val latestOnPlaybackModeRequested by rememberUpdatedState(onPlaybackModeRequested)
     val latestOnTrackSelectionChanged by rememberUpdatedState(onTrackSelectionChanged)
@@ -117,18 +110,12 @@ fun MoviePlayerScreen(
     var chosenStartSec by rememberSaveable { mutableStateOf(request.resumeAtSec ?: 0.0) }
     var lastPositionSec by rememberSaveable { mutableStateOf(0.0) }
     var lastDurationSec by rememberSaveable { mutableStateOf(request.durationSec ?: 0.0) }
-    var playWhenReadyIntent by rememberSaveable {
-        mutableStateOf(request.resumeAtSec == null)
-    }
-    var lifecycleSilenced by remember(engine) { mutableStateOf(false) }
-    var hostPausePending by remember(engine) { mutableStateOf(false) }
-    var releasedForBackground by remember { mutableStateOf(false) }
 
     var state by remember(engine) {
         mutableStateOf(
             MoviePlayerState(
                 phase = if (resumeDecided) MoviePlayerPhase.Loading else MoviePlayerPhase.AwaitingResume,
-                playWhenReady = playWhenReadyIntent,
+                playWhenReady = host.playWhenReadyIntent,
                 currentTimeSec = lastPositionSec.takeIf { it > 0.0 }
                     ?: chosenStartSec.takeIf { resumeDecided }
                     ?: 0.0,
@@ -203,11 +190,8 @@ fun MoviePlayerScreen(
                         latestOnPlaybackModeRequested(event.requestedMode)
                     }
                 is MoviePlayerEvent.TracksChanged -> persistTrackSelection(engine)
-                is MoviePlayerEvent.PlayWhenReadyChanged -> {
-                    if (!lifecycleSilenced) {
-                        playWhenReadyIntent = event.playWhenReady
-                    }
-                }
+                is MoviePlayerEvent.PlayWhenReadyChanged ->
+                    host.onEnginePlayWhenReady(event.playWhenReady)
                 is MoviePlayerEvent.Time -> {
                     lastPositionSec = event.currentSec
                     if (event.durationSec > 0.0) lastDurationSec = event.durationSec
@@ -233,7 +217,7 @@ fun MoviePlayerScreen(
             val watched = lastPositionSec.takeIf { it > 0.0 }
             engine.startPlayback(
                 watched ?: chosenStartSec.takeIf { it > 0.0 },
-                initialPlayWhenReady = playWhenReadyIntent,
+                initialPlayWhenReady = host.playWhenReadyIntent,
                 rewindOnResume = watched == null,
             )
         }
@@ -285,8 +269,8 @@ fun MoviePlayerScreen(
     }
     LaunchedEffect(focusAnchor) {
         when (focusAnchor) {
-            FocusAnchor.ErrorAction -> retryRequester.requestFocus()
-            FocusAnchor.Transport -> playPauseRequester.requestFocus()
+            FocusAnchor.ErrorAction -> retryRequester.requestFocusSafely()
+            FocusAnchor.Transport -> playPauseRequester.requestFocusSafely()
             FocusAnchor.Modal -> Unit
         }
     }
@@ -310,45 +294,16 @@ fun MoviePlayerScreen(
         }
     }
 
-    // Lifecycle silence is not transport intent. Configuration teardown preserves the user's
-    // saved choice for the replacement engine; a real background/standby trip stays paused.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(engine, lifecycleOwner, context) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE -> {
-                    lifecycleSilenced = true
-                    hostPausePending = true
-                    engine.onHostPaused()
-                }
-                Lifecycle.Event.ON_STOP -> {
-                    if (context.findHostActivity()?.isChangingConfigurations != true) {
-                        persistTrackSelection(engine)
-                        playWhenReadyIntent = false
-                        releasedForBackground = true
-                        engine.release()
-                    }
-                }
-                Lifecycle.Event.ON_RESUME -> {
-                    if (releasedForBackground) {
-                        releasedForBackground = false
-                        playWhenReadyIntent = false
-                        lifecycleSilenced = false
-                        hostPausePending = false
-                        reloadKey += 1
-                    } else {
-                        if (hostPausePending) playWhenReadyIntent = false
-                        hostPausePending = false
-                        lifecycleSilenced = false
-                        engine.onHostResumed()
-                    }
-                }
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
+    PlayerHostLifecycleEffect(
+        host = host,
+        engine = engine,
+        onHostPaused = { engine.onHostPaused() },
+        onHostResumed = { engine.onHostResumed() },
+        onBackgroundRelease = {
+            persistTrackSelection(engine)
+            engine.release()
+        },
+    )
 
     val modalUp = state.phase == MoviePlayerPhase.AwaitingResume || playerMenu != null
     Box(
@@ -365,7 +320,7 @@ fun MoviePlayerScreen(
                     pause = pause,
                     togglePlayPause = togglePlayPause,
                     seekBy = seekBy,
-                    focusPlayPause = { playPauseRequester.requestFocus() },
+                    focusPlayPause = { playPauseRequester.requestFocusSafely() },
                 )
             }
             .semantics {
@@ -383,28 +338,18 @@ fun MoviePlayerScreen(
         }
 
         if (state.phase == MoviePlayerPhase.Error) {
-            PlayerErrorSurface(
-                message = state.errorMessage ?: "The movie could not be played.",
-                actionText = if (unauthorized) "Close" else "Retry",
-                actionSemanticLabel = if (unauthorized) {
-                    "Close player"
-                } else {
-                    "Retry playing movie"
-                },
+            PlayerFailureSurface(
+                message = state.errorMessage,
+                unauthorized = unauthorized,
+                mediaNoun = "movie",
                 actionRequester = retryRequester,
-                // A revoked session cannot be retried into working — the host is already
-                // revalidating; Close is the only honest action it has.
-                onAction = if (unauthorized) {
-                    closeAndRelease
-                } else {
-                    {
-                        // Retry is a fresh, explicit Play intent after the failed engine's
-                        // terminal boundary cleared every pending transport command.
-                        persistTrackSelection(engine)
-                        playWhenReadyIntent = true
-                        reloadKey += 1
-                    }
+                onRetry = {
+                    // Retry is a fresh, explicit Play intent after the failed engine's
+                    // terminal boundary cleared every pending transport command.
+                    persistTrackSelection(engine)
+                    host.rebuildEngine(playWhenReady = true)
                 },
+                onClose = closeAndRelease,
             )
         } else {
             MoviePlayerChrome(
@@ -434,13 +379,13 @@ fun MoviePlayerScreen(
             MoviePlayerPhase.AwaitingResume -> ResumePrompt(
                 resumeAtSec = requireNotNull(request.resumeAtSec),
                 onResume = {
-                    playWhenReadyIntent = true
+                    host.playWhenReadyIntent = true
                     resumeDecided = true
                     state = state.onResumeChosen()
                 },
                 onStartOver = {
                     chosenStartSec = 0.0
-                    playWhenReadyIntent = true
+                    host.playWhenReadyIntent = true
                     resumeDecided = true
                     state = state.onResumeChosen()
                 },
@@ -506,23 +451,13 @@ fun MoviePlayerScreen(
             }
         }
 
-        // The transport announcement for a TalkBack focus parked anywhere: play state flips are
-        // otherwise silent when driven by media keys. Polite — it narrates, it never interrupts.
-        val playStateAnnouncement = moviePlayerAnnouncement(
-            phase = state.phase,
-            statusMessage = state.statusMessage,
-            title = request.title,
+        PoliteAnnouncement(
+            moviePlayerAnnouncement(
+                phase = state.phase,
+                statusMessage = state.statusMessage,
+                title = request.title,
+            ),
         )
-        if (playStateAnnouncement != null) {
-            Box(
-                modifier = Modifier
-                    .size(1.dp)
-                    .clearAndSetSemantics {
-                        liveRegion = LiveRegionMode.Polite
-                        contentDescription = playStateAnnouncement
-                    },
-            )
-        }
     }
 }
 
@@ -590,52 +525,18 @@ private fun MoviePlayerChrome(
             .fillMaxSize()
             .graphicsLayer { alpha = chromeAlpha },
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = SCRIM_STRENGTH),
-                        1f to Color.Black.copy(alpha = 0f),
-                    ),
-                )
-                .padding(
-                    horizontal = layout.safeAreaHorizontal,
-                    vertical = layout.safeAreaVertical,
-                ),
-            horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IglooButton(
-                text = "Back",
-                icon = IglooIcons.ArrowBack,
-                onClick = onBack,
-                variant = IglooButtonVariant.Ghost,
-                semanticLabel = "Close player",
-                restingFill = OVER_MEDIA_CONTROL_FILL,
-                contentColor = Color.White,
-                modifier = Modifier
-                    .focusRequester(backRequester)
-                    .onFocusChanged { if (it.isFocused) onAnyControlFocused() }
-                    .focusProperties {
-                        left = FocusRequester.Cancel
-                        right = FocusRequester.Cancel
-                        up = FocusRequester.Cancel
-                        down = if (progressSyncError != null) {
-                            progressRetryRequester
-                        } else {
-                            playPauseRequester
-                        }
-                    }
-                    .testTag("movie_back"),
-            )
-            IglooText(
-                text = title,
-                style = IglooTheme.typography.titleMedium.overMedia(true),
-                color = Color.White,
-                maxLines = 1,
-            )
-        }
+        PlayerTopBar(
+            title = title,
+            backRequester = backRequester,
+            downRequester = if (progressSyncError != null) {
+                progressRetryRequester
+            } else {
+                playPauseRequester
+            },
+            backTag = "movie_back",
+            onBack = onBack,
+            onFocused = onAnyControlFocused,
+        )
 
         Box(modifier = Modifier.weight(1f)) {
             // The engine's own narration (capacity waits, reconnects) outranks the generic word.
@@ -685,32 +586,22 @@ private fun MoviePlayerChrome(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0f),
-                        1f to Color.Black.copy(alpha = SCRIM_STRENGTH),
-                    ),
-                )
+                .playerBottomScrim()
                 .padding(
                     horizontal = layout.safeAreaHorizontal,
                     vertical = layout.safeAreaVertical,
                 ),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
-            // Every control pins up to Back and down to Cancel; only the row's outer edges
-            // cancel sideways, so the track-menu buttons stay one Right press away.
-            fun Modifier.transportFocus(isFirst: Boolean = false, isLast: Boolean = false) = this
-                .onFocusChanged { if (it.isFocused) onAnyControlFocused() }
-                .focusProperties {
-                    if (isFirst) left = FocusRequester.Cancel
-                    if (isLast) right = FocusRequester.Cancel
-                    up = if (progressSyncError != null) {
-                        progressRetryRequester
-                    } else {
-                        backRequester
-                    }
-                    down = FocusRequester.Cancel
-                }
+            // The track-menu buttons stay one Right press away, so only the row's outer
+            // edges cancel sideways.
+            val transportUp = if (progressSyncError != null) {
+                progressRetryRequester
+            } else {
+                backRequester
+            }
+            fun Modifier.transportEdges(isFirst: Boolean = false, isLast: Boolean = false) =
+                transportFocus(transportUp, isFirst, isLast, onAnyControlFocused)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(
@@ -724,7 +615,7 @@ private fun MoviePlayerChrome(
                     label = "Rewind 10 seconds",
                     onClick = { onSeekBy(-SEEK_STEP_SEC) },
                     modifier = Modifier
-                        .transportFocus(isFirst = true)
+                        .transportEdges(isFirst = true)
                         .testTag("movie_rewind"),
                 )
                 TransportButton(
@@ -733,7 +624,7 @@ private fun MoviePlayerChrome(
                     onClick = onTogglePlayPause,
                     modifier = Modifier
                         .focusRequester(playPauseRequester)
-                        .transportFocus()
+                        .transportEdges()
                         .testTag("movie_play_pause"),
                 )
                 TransportButton(
@@ -741,7 +632,7 @@ private fun MoviePlayerChrome(
                     label = "Forward 10 seconds",
                     onClick = { onSeekBy(SEEK_STEP_SEC) },
                     modifier = Modifier
-                        .transportFocus(isLast = lastControl == LastControl.Forward)
+                        .transportEdges(isLast = lastControl == LastControl.Forward)
                         .testTag("movie_forward"),
                 )
                 // Text, not icons: IglooIcons has no chapter/audio/CC glyphs, and section 5.4
@@ -758,7 +649,7 @@ private fun MoviePlayerChrome(
                         contentColor = Color.White,
                         modifier = Modifier
                             .focusRequester(chaptersButtonRequester)
-                            .transportFocus(isLast = lastControl == LastControl.Chapters)
+                            .transportEdges(isLast = lastControl == LastControl.Chapters)
                             .testTag("movie_chapters"),
                     )
                 }
@@ -772,7 +663,7 @@ private fun MoviePlayerChrome(
                         contentColor = Color.White,
                         modifier = Modifier
                             .focusRequester(audioButtonRequester)
-                            .transportFocus(isLast = lastControl == LastControl.Audio)
+                            .transportEdges(isLast = lastControl == LastControl.Audio)
                             .testTag("movie_audio"),
                     )
                 }
@@ -786,7 +677,7 @@ private fun MoviePlayerChrome(
                         contentColor = Color.White,
                         modifier = Modifier
                             .focusRequester(subtitlesButtonRequester)
-                            .transportFocus(isLast = lastControl == LastControl.Subtitles)
+                            .transportEdges(isLast = lastControl == LastControl.Subtitles)
                             .testTag("movie_subtitles"),
                     )
                 }
@@ -800,7 +691,7 @@ private fun MoviePlayerChrome(
                         contentColor = Color.White,
                         modifier = Modifier
                             .focusRequester(qualityButtonRequester)
-                            .transportFocus(isLast = lastControl == LastControl.Quality)
+                            .transportEdges(isLast = lastControl == LastControl.Quality)
                             .testTag("movie_quality"),
                     )
                 }

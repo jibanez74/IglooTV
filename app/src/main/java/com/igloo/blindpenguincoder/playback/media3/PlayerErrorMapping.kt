@@ -7,7 +7,6 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import com.igloo.blindpenguincoder.playback.hls.isMovieHlsRequestPath
-import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_BUSY_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SESSION_LOST_MESSAGE
@@ -21,42 +20,49 @@ internal fun httpErrorCause(error: Throwable): HttpDataSource.InvalidResponseCod
         .firstOrNull()
 
 /**
+ * One mapped failure. Deliberately not a player event: movies and albums have their own event
+ * hierarchies, and a mapping that returned either would make one stack depend on the other's
+ * types. Each engine wraps this into its own `Error`.
+ */
+internal data class PlaybackFailure(val message: String, val unauthorized: Boolean = false)
+
+/**
  * A player failure as the error surface's plain sentences, with the codec/container/network
  * detail AGENTS.md asks for. Pure over the exception's already-extracted facts so the whole
  * mapping table is JVM-testable. The 401 message rides `unauthorized = true` so the screen can
  * treat a revoked session distinctly; the session state machine was already signalled by the
  * data source.
  */
-internal fun playerErrorEvent(
+internal fun playerFailure(
     errorCode: Int,
     errorCodeName: String,
     httpResponseCode: Int?,
     isHls: Boolean,
     httpRequestPath: String?,
     mediaNoun: String = "movie",
-): MoviePlayerEvent.Error = when {
-    httpResponseCode == 401 -> MoviePlayerEvent.Error(
+): PlaybackFailure = when {
+    httpResponseCode == 401 -> PlaybackFailure(
         message = PLAYBACK_UNAUTHORIZED_MESSAGE,
         unauthorized = true,
     )
     httpResponseCode == 404 && isMovieHlsRequestPath(httpRequestPath) ->
-        MoviePlayerEvent.Error(PLAYBACK_SESSION_LOST_MESSAGE)
+        PlaybackFailure(PLAYBACK_SESSION_LOST_MESSAGE)
     httpResponseCode == 503 && isMovieHlsRequestPath(httpRequestPath) ->
-        MoviePlayerEvent.Error(PLAYBACK_SERVER_BUSY_MESSAGE)
-    httpResponseCode != null -> MoviePlayerEvent.Error(
+        PlaybackFailure(PLAYBACK_SERVER_BUSY_MESSAGE)
+    httpResponseCode != null -> PlaybackFailure(
         playbackServerRefusedMessage(httpResponseCode),
     )
     errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
         errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
-        MoviePlayerEvent.Error(PLAYBACK_SERVER_UNREACHABLE_MESSAGE)
-    errorCode in DECODING_ERROR_CODES -> MoviePlayerEvent.Error(
+        PlaybackFailure(PLAYBACK_SERVER_UNREACHABLE_MESSAGE)
+    errorCode in DECODING_ERROR_CODES -> PlaybackFailure(
         "This TV couldn't decode the $mediaNoun ($errorCodeName). " +
             "The file may use a codec this device doesn't support.",
     )
-    errorCode in PARSING_ERROR_CODES -> MoviePlayerEvent.Error(
+    errorCode in PARSING_ERROR_CODES -> PlaybackFailure(
         "The $mediaNoun's ${if (isHls) "stream" else "file"} could not be read ($errorCodeName).",
     )
-    else -> MoviePlayerEvent.Error("Playback failed ($errorCodeName).")
+    else -> PlaybackFailure("Playback failed ($errorCodeName).")
 }
 
 private val DECODING_ERROR_CODES = setOf(

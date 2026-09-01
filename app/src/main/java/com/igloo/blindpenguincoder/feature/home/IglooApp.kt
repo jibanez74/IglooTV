@@ -83,7 +83,6 @@ import com.igloo.blindpenguincoder.feature.music.AlbumDetailsScreen
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.toMusicPlayRequest
-import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerScreen
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.feature.player.MusicPlayerScreen
@@ -93,11 +92,6 @@ import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
-import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
-import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
-import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
-import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
-import kotlinx.serialization.json.Json
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
 import kotlinx.coroutines.flow.Flow
@@ -187,90 +181,6 @@ private data class DeferredPlayContext(
         libraryDetails && openMovieId == request.movieId && !moreMenuOpen &&
             !playbackSettingsOpen && !trailerOpen && !playerOpen && !signOutConfirming
 }
-
-/**
- * What the movie player overlay is playing, saveable so the overlay survives activity
- * recreation (the screen itself restarts the engine and re-seeks to its saved position).
- * Nullable fields ride as "" — no title is ever blank, so the encoding is unambiguous.
- */
-private val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Saver(
-    save = { request ->
-        if (request == null) {
-            emptyList()
-        } else {
-            listOf(
-                request.movieId.toString(),
-                request.title,
-                request.posterUrl.orEmpty(),
-                request.mimeType,
-                request.mode.name,
-                request.audioTypeIndex?.toString().orEmpty(),
-                request.subtitleTypeIndex?.toString().orEmpty(),
-                // Lists have no natural slot in this flat encoding; JSON is one symmetric line.
-                Json.encodeToString(request.audioTracks),
-                Json.encodeToString(request.subtitleTracks),
-                request.resumeAtSec?.toString().orEmpty(),
-                request.durationSec?.toString().orEmpty(),
-                Json.encodeToString(request.chapters),
-            )
-        }
-    },
-    restore = { saved ->
-        if (saved.isEmpty()) {
-            null
-        } else {
-            MoviePlayRequest(
-                movieId = saved[0].toLong(),
-                title = saved[1],
-                posterUrl = saved[2].ifEmpty { null },
-                mimeType = saved[3],
-                mode = PlaybackMode.valueOf(saved[4]),
-                audioTypeIndex = saved[5].toIntOrNull(),
-                subtitleTypeIndex = saved[6].toIntOrNull(),
-                audioTracks = Json.decodeFromString<List<PlayableAudioTrack>>(saved[7]),
-                subtitleTracks = Json.decodeFromString<List<PlayableSubtitleTrack>>(saved[8]),
-                resumeAtSec = saved[9].toDoubleOrNull(),
-                durationSec = saved[10].toDoubleOrNull(),
-                chapters = Json.decodeFromString<List<PlaybackChapter>>(saved[11]),
-            )
-        }
-    },
-)
-
-/**
- * What the music player overlay is playing, saveable like [MoviePlayRequestSaver] so the
- * overlay survives activity recreation. Nullable fields ride as "" — the album title is never
- * blank (the mapping's "Untitled album" fallback), so the encoding is unambiguous.
- */
-private val MusicPlayRequestSaver: Saver<MusicPlayRequest?, List<String>> = Saver(
-    save = { request ->
-        if (request == null) {
-            emptyList()
-        } else {
-            listOf(
-                request.albumId.toString(),
-                request.albumTitle,
-                request.artistName.orEmpty(),
-                request.coverUrl.orEmpty(),
-                // Lists have no natural slot in this flat encoding; JSON is one symmetric line.
-                Json.encodeToString(request.tracks),
-            )
-        }
-    },
-    restore = { saved ->
-        if (saved.isEmpty()) {
-            null
-        } else {
-            MusicPlayRequest(
-                albumId = saved[0].toLong(),
-                albumTitle = saved[1],
-                artistName = saved[2].ifEmpty { null },
-                coverUrl = saved[3].ifEmpty { null },
-                tracks = Json.decodeFromString<List<MusicPlayTrack>>(saved[4]),
-            )
-        }
-    },
-)
 
 @Composable
 fun IglooApp(

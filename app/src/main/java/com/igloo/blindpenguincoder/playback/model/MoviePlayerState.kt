@@ -144,13 +144,11 @@ data class MoviePlayerState(
         else -> copy(currentTimeSec = clampToPlayable(targetSec))
     }
 
-    private fun clampToPlayable(seconds: Double): Double = when {
-        durationSec > 0.0 -> seconds.coerceIn(0.0, durationSec)
-        else -> seconds.coerceAtLeast(0.0)
-    }
+    private fun clampToPlayable(seconds: Double): Double =
+        clampSecondsToDuration(seconds, durationSec)
 
     private fun keptDuration(incoming: Double): Double =
-        if (incoming > 0.0) incoming else durationSec
+        nonShrinkingDuration(incoming, durationSec)
 }
 
 /** The existing polite live region prefers actionable wait detail over generic phase copy. */

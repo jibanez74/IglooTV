@@ -96,7 +96,7 @@ class MusicPlayerScreenTest {
         request: MusicPlayRequest = playRequest(),
         spokenAccessibilityEnabled: Boolean = false,
     ) {
-        engine = FakeMusicPlayerEngine()
+        engine = FakeMusicPlayerEngine(request.tracks.map { it.durationSec })
         createdEngines.clear()
         closes = 0
         open = true
@@ -150,8 +150,8 @@ class MusicPlayerScreenTest {
                                 closes += 1
                                 open = false
                             },
-                            engineFactory = { _, _ ->
-                                FakeMusicPlayerEngine().also {
+                            engineFactory = { _, played ->
+                                FakeMusicPlayerEngine(played.tracks.map { it.durationSec }).also {
                                     engine = it
                                     createdEngines += it
                                 }
@@ -173,6 +173,18 @@ class MusicPlayerScreenTest {
     private fun pressBack() {
         composeRule.runOnUiThread {
             (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.waitForIdle()
+    }
+
+    /** Home and back: the trip that releases the engine and rebuilds a paused replacement. */
+    private fun backgroundAndReturn() {
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.CREATED
+        }
+        composeRule.waitForIdle()
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         }
         composeRule.waitForIdle()
     }
@@ -407,7 +419,7 @@ class MusicPlayerScreenTest {
         retry.assertIsFocused()
 
         // The retry press lands on a fresh engine; swap the fake the factory hands out first.
-        engine = FakeMusicPlayerEngine()
+        engine = FakeMusicPlayerEngine(playRequest().tracks.map { it.durationSec })
         retry.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
 
@@ -504,7 +516,7 @@ class MusicPlayerScreenTest {
         oldEngine.play()
         assertEquals(transportBeforeStandby, oldEngine.playbackCommands)
 
-        engine = FakeMusicPlayerEngine()
+        engine = FakeMusicPlayerEngine(playRequest().tracks.map { it.durationSec })
         composeRule.runOnUiThread {
             lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         }
@@ -518,6 +530,29 @@ class MusicPlayerScreenTest {
         playPause.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
         assertEquals(listOf("start:1:42.0:false", "play"), engine.playbackCommands)
+    }
+
+    /**
+     * A replacement engine reports the queue's own start index the moment its playlist is set —
+     * setting a playlist is itself an item transition. That report names the track already
+     * current, so it must not be read as an advance: doing so zeroes the saved playhead, and
+     * nothing repairs it before the next rebuild if no position tick ever arrives (a track that
+     * fails before READY never produces one).
+     */
+    @Test
+    fun theQueuesStartupTrackReportDoesNotEraseTheSavedPlayhead() {
+        setContent()
+        startPlaying()
+        advanceToSecondTrack()
+
+        engine = FakeMusicPlayerEngine(playRequest().tracks.map { it.durationSec })
+        backgroundAndReturn()
+        assertEquals(listOf("start:1:42.0:false"), engine.playbackCommands)
+
+        // A second trip with no position tick in between: the playhead is still this visit's.
+        engine = FakeMusicPlayerEngine(playRequest().tracks.map { it.durationSec })
+        backgroundAndReturn()
+        assertEquals(listOf("start:1:42.0:false"), engine.playbackCommands)
     }
 
     @Test

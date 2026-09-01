@@ -110,6 +110,33 @@ class MusicPlayerStateMachineTest {
     }
 
     @Test
+    fun `a track change naming the current index keeps the playhead`() {
+        // Setting the playlist is itself an item transition, so the engine reports the queue's
+        // own start index before a frame plays. Treating that as an advance would zero the
+        // position a Retry and a background return both resume from.
+        val state = playing(duration = 240.0, position = 42.0)
+            .onEvent(MusicPlayerEvent.TrackChanged(0, 240.0))
+        assertEquals(0, state.currentTrackIndex)
+        assertEquals(42.0, state.currentTimeSec, 0.0)
+        assertEquals(240.0, state.durationSec, 0.0)
+    }
+
+    @Test
+    fun `a same-index track change still refreshes a known duration`() {
+        val restored = MusicPlayerState(currentTrackIndex = 1, currentTimeSec = 42.0)
+        val state = restored.onEvent(MusicPlayerEvent.TrackChanged(1, 187.0))
+        assertEquals(42.0, state.currentTimeSec, 0.0)
+        assertEquals(187.0, state.durationSec, 0.0)
+    }
+
+    @Test
+    fun `a same-index track change never shrinks the duration back to zero`() {
+        val state = playing(duration = 240.0, position = 42.0)
+            .onEvent(MusicPlayerEvent.TrackChanged(0, 0.0))
+        assertEquals(240.0, state.durationSec, 0.0)
+    }
+
+    @Test
     fun `track change keeps the playing phase - auto-advance is not a stop`() {
         val state = playing().onEvent(MusicPlayerEvent.TrackChanged(1, 187.0))
         assertEquals(MusicPlayerPhase.Playing, state.phase)

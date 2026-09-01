@@ -1,5 +1,8 @@
 package com.igloo.blindpenguincoder.playback.youtube
 
+import com.igloo.blindpenguincoder.playback.model.clampSecondsToDuration
+import com.igloo.blindpenguincoder.playback.model.nonShrinkingDuration
+
 /** The trailer player's phases; the chrome renders exactly one of these at a time. */
 enum class TrailerPhase { Loading, Playing, Paused, Buffering, Ended, Error }
 
@@ -87,13 +90,11 @@ data class TrailerPlayerState(
         else -> copy(currentTimeSec = clampToPlayable(targetSec))
     }
 
-    private fun clampToPlayable(seconds: Double): Double = when {
-        durationSec > 0.0 -> seconds.coerceIn(0.0, durationSec)
-        else -> seconds.coerceAtLeast(0.0)
-    }
+    private fun clampToPlayable(seconds: Double): Double =
+        clampSecondsToDuration(seconds, durationSec)
 
     private fun keptDuration(incoming: Double): Double =
-        if (incoming > 0.0) incoming else durationSec
+        nonShrinkingDuration(incoming, durationSec)
 
     private fun errorMessage(code: Int): String = when (code) {
         API_LOAD_TIMEOUT -> "The YouTube player took too long to load."

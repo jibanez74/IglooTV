@@ -8,7 +8,6 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.C
-import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -48,9 +47,10 @@ internal class ExoMusicPlayerEngine(
         .setAudioAttributes(musicPlaybackAudioAttributes, /* handleAudioFocus= */ true)
         .build()
 
+    // Queue and seek commands pass straight through; only transport is re-routed.
     private val session = buildMusicMediaSession(
         context,
-        IntentRoutingPlayer(player),
+        IntentRoutingPlayer(player, playbackIntent, ::play, ::pause),
         request.albumId,
     )
 
@@ -95,15 +95,16 @@ internal class ExoMusicPlayerEngine(
         }
     }
 
-    private val ticker = object : Runnable {
-        override fun run() {
-            if (!playbackIntent.acceptsCommands) return
+    private val ticker = PlaybackTicker(handler) {
+        if (!playbackIntent.acceptsCommands) {
+            false
+        } else {
             if (player.playbackState == Player.STATE_READY ||
                 player.playbackState == Player.STATE_BUFFERING
             ) {
                 emit(MusicPlayerEvent.Time(player.currentPosition / 1000.0, durationSec()))
             }
-            handler.postDelayed(this, TICK_INTERVAL_MS)
+            true
         }
     }
 
@@ -117,11 +118,18 @@ internal class ExoMusicPlayerEngine(
         initialPlayWhenReady: Boolean,
     ) {
         if (!playbackIntent.start(initialPlayWhenReady)) return
+        // An album with no tracks composes no Play button, so this is unreachable through the
+        // UI; preparing an empty playlist anyway would report a silent Ended, which reads to
+        // the host as "the album finished". Fail where the cause is legible instead.
+        if (mediaItems.isEmpty()) {
+            transitionToTerminal(MusicPlayerEvent.Error("This album has no playable tracks."))
+            return
+        }
         emitDesiredPlayWhenReady()
-        handler.post(ticker)
+        ticker.start()
         player.setMediaItems(
             mediaItems,
-            startTrackIndex.coerceIn(0, (mediaItems.size - 1).coerceAtLeast(0)),
+            startTrackIndex.coerceIn(0, mediaItems.size - 1),
             (startPositionSec * 1000).toLong().coerceAtLeast(0L),
         )
         player.playWhenReady = playbackIntent.shouldPlay
@@ -168,7 +176,7 @@ internal class ExoMusicPlayerEngine(
 
     override fun release() {
         if (!playbackIntent.release()) return
-        handler.removeCallbacks(ticker)
+        ticker.stop()
         // Media3 requires the session gone before its player.
         session.release()
         player.release()
@@ -186,7 +194,7 @@ internal class ExoMusicPlayerEngine(
 
     private fun errorEvent(error: PlaybackException): MusicPlayerEvent.Error {
         val http = httpErrorCause(error)
-        val mapped = playerErrorEvent(
+        val failure = playerFailure(
             errorCode = error.errorCode,
             errorCodeName = error.errorCodeName,
             httpResponseCode = http?.responseCode,
@@ -194,7 +202,7 @@ internal class ExoMusicPlayerEngine(
             httpRequestPath = http?.dataSpec?.uri?.path,
             mediaNoun = "track",
         )
-        return MusicPlayerEvent.Error(mapped.message, mapped.unauthorized)
+        return MusicPlayerEvent.Error(failure.message, failure.unauthorized)
     }
 
     private fun emit(event: MusicPlayerEvent) {
@@ -213,43 +221,13 @@ internal class ExoMusicPlayerEngine(
     private fun transitionToTerminal(error: MusicPlayerEvent.Error) {
         if (!playbackIntent.failTerminal()) return
         player.removeListener(listener)
-        handler.removeCallbacks(ticker)
+        ticker.stop()
         emitDesiredPlayWhenReady()
         emit(error)
         player.stop()
         player.clearMediaItems()
     }
 
-    /**
-     * The MediaSession's view of the player. Play/pause route through the engine so
-     * [PlaybackIntent] stays authoritative — an Assistant "play" while the host is paused must
-     * not restart audio behind a covered screen — and playWhenReady reports that intent, the
-     * same §11.8 rule the on-screen toggle renders. Queue and seek commands pass through:
-     * they carry no transport intent.
-     */
-    private inner class IntentRoutingPlayer(player: Player) : ForwardingPlayer(player) {
-        override fun getPlayWhenReady(): Boolean = playbackIntent.shouldPlay
-
-        override fun play() {
-            this@ExoMusicPlayerEngine.play()
-        }
-
-        override fun pause() {
-            this@ExoMusicPlayerEngine.pause()
-        }
-
-        override fun setPlayWhenReady(playWhenReady: Boolean) {
-            if (playWhenReady) {
-                this@ExoMusicPlayerEngine.play()
-            } else {
-                this@ExoMusicPlayerEngine.pause()
-            }
-        }
-    }
-
-    private companion object {
-        const val TICK_INTERVAL_MS = 500L
-    }
 }
 
 fun exoMusicPlayerEngine(

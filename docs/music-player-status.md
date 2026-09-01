@@ -72,8 +72,65 @@ conditional metadata reading stop.
 **Review validation on the Shield.** The automated screen suite verified host keep-awake
 ownership and both conditional focus routes on-device. A second live-server playback pass could
 not be performed after installing the current `com.igloo.blindpenguincoder` build because that
-package had no configured server or profile and opened at Welcome. The device's original
-30-minute display timeout and disabled accessibility state were recorded and left unchanged.
+package had no configured server or profile and opened at Welcome. (Done in the review pass
+below, by signing that package in through quick connect.) The device's original 30-minute
+display timeout and disabled accessibility state were recorded and left unchanged.
+
+## Review pass (2026-09-01)
+
+**The bug the tests could not see.** Setting an ExoPlayer playlist is itself an item
+transition, so the engine reported `TrackChanged` with the queue's own start index before a
+single frame played — and both the reducer and the screen read that as an advance and zeroed
+the playhead. A position tick normally repaired it within half a second, but **not when the
+track never reaches READY**: a stream that failed on load left the saved position at 0, so the
+pinned **Retry restarted the track from the top** instead of this visit's playhead, and a
+second background trip did the same. `FakeMusicPlayerEngine` never emitted that startup
+report, so the screen suite was exercising a friendlier event order than the real engine's and
+passed throughout. Fixed in both consumers — a report naming the index already current only
+refreshes the duration — and the fake now emits it, so the suite sees what the device sees.
+
+**Other fixes.** Both overlay request savers moved to `feature/home/PlayerRequestSavers.kt`
+and restore defensively: they parse numbers, an enum name, and JSON out of a bundle a possibly
+older build wrote, inside saved-state restoration, where a throw is a crash on relaunch — an
+unparseable slot now comes back as "no overlay". The engine refuses an empty queue with a
+named error rather than preparing nothing and reporting a silent `Ended` the host reads as
+"the album finished". Entry-focus requests across all three players go through
+`requestFocusSafely`.
+
+**Duplication removed.** The music pass reused everything already shared and then copied what
+was not, so the copies were promoted: `PlayerChromeCommon` gained `PlayerTopBar`, the two
+scrim modifiers, `transportFocus`, `PoliteAnnouncement`, and `PlayerFailureSurface`; a new
+`PlayerHostLifecycle` owns the ON_PAUSE/ON_STOP/ON_RESUME contract and the "a lifecycle
+silence is not transport intent" rule the movie and music screens had line for line;
+`PlaybackTicker`, `IntentRoutingPlayer`, and `buildIglooMediaSession` replace each engine's
+own copy; `playerErrorEvent` became `playerFailure` returning a neutral `PlaybackFailure`, so
+the music stack no longer builds a `MoviePlayerEvent`. The trailer player came along for the
+scrims, transport edges, and announcement. `MusicPlayerScreen` split into orchestration plus
+`MusicPlayerChrome.kt`. **The three reducers stay separate** — only their `clampToPlayable`/
+`keptDuration` arithmetic moved out; the rest is different phase sets and three well-covered
+suites, and merging them would buy ceremony.
+
+**Tests.** 771 JVM tests pass (up from 750: three reducer tests pinning the startup report,
+nine saver round-trip and corruption tests, plus the movie-side savers now being reachable at
+all). The three new reducer tests were confirmed to fail before the fix. On the Shield the
+full connected run finished **441 tests, 10 expected pixel skips, 0 failures** (up from 435:
+a new `MusicMediaSessionTest` mirroring the movie one — the only structural gap left against
+the movie stack — and the playhead regression test, which was also confirmed to fail on-device
+before the fix).
+
+**Verified live on the Shield** against `https://swifty.hare-crocodile.ts.net`: a fresh
+install signed in by quick connect, Play Album on *You Get What You Give (Deluxe Version)* →
+audio playing with cover, "Let It Go", "Track 1 of 18 · Zac Brown Band", and an advancing
+seek bar; the per-album MediaSession live and correctly identified
+(`music-album-211-1`, state PLAYING); remote FastForward keys seeking ±10s within the track
+(16.6s → 141.4s across ten presses); Home releasing the session and audio completely (zero
+sessions while backgrounded).
+
+**Not verified live:** the return-from-background resume. The profile PIN gate re-arms on
+every return to the foreground and the sole profile's PIN is not written down anywhere, so the
+manual half of that check is unreachable on this device — it is covered on-device by the
+automated screen suite instead, including the new regression test. The device was left with
+the app's data cleared, `stayon` off, and its 30-minute display timeout unchanged.
 
 ## What remains
 

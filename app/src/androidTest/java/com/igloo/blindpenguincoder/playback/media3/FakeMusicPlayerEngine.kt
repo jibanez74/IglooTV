@@ -10,7 +10,14 @@ import kotlinx.coroutines.flow.SharedFlow
  * network. The [FakeMoviePlayerEngine] recipe minus the movie-only members (no surface, no
  * track/quality selection), plus the queue commands the music seam adds.
  */
-class FakeMusicPlayerEngine : MusicPlayerEngine {
+class FakeMusicPlayerEngine(
+    /**
+     * The queue's wire durations, so the startup [MusicPlayerEvent.TrackChanged] carries the
+     * same number the real engine's `durationSec()` falls back to. Empty means "unknown",
+     * which the reducer treats as "keep what you have".
+     */
+    private val trackDurationsSec: List<Double> = emptyList(),
+) : MusicPlayerEngine {
 
     private val _events = MutableSharedFlow<MusicPlayerEvent>(replay = 64)
     override val events: SharedFlow<MusicPlayerEvent> = _events
@@ -39,6 +46,15 @@ class FakeMusicPlayerEngine : MusicPlayerEngine {
         if (released) return
         commands += "start:$startTrackIndex:$startPositionSec:$initialPlayWhenReady"
         emit(MusicPlayerEvent.PlayWhenReadyChanged(initialPlayWhenReady))
+        // Setting a playlist is itself an item transition, so the real engine reports the
+        // queue's own start index before a frame plays. The fake must too, or the suite never
+        // exercises the event order that a restored playhead has to survive.
+        emit(
+            MusicPlayerEvent.TrackChanged(
+                index = startTrackIndex,
+                durationSec = trackDurationsSec.getOrNull(startTrackIndex) ?: 0.0,
+            ),
+        )
     }
 
     override fun play() {

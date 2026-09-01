@@ -4,7 +4,6 @@
 
 package com.igloo.blindpenguincoder.playback.media3
 
-import android.app.PendingIntent
 import android.content.Context
 import android.net.Uri
 import androidx.media3.common.MediaMetadata
@@ -13,10 +12,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
-import java.util.concurrent.atomic.AtomicLong
-
-/** Distinguishes sessions of the same album; see the id note in [buildMusicMediaSession]. */
-private val sessionInstance = AtomicLong(0)
 
 /**
  * One queue entry's system face. Carried per media item so the session surfaces the current
@@ -34,28 +29,17 @@ internal fun musicMediaMetadata(
     .build()
 
 /**
- * The music player's system face: now-playing surface, Assistant voice transport, and
- * media-button routing. The default callback is used deliberately, the movie session's
- * reasoning — it also maps dedicated SKIP commands onto [Player.seekToNext]/[Player.seekToPrevious],
- * the same split as the on-screen transport row. Unlike the movie's, the bitmap loader stays
- * Media3's default: the cover is an absolute Spotify URL that needs no bearer, and routing it
- * through the authenticated stack would attach nothing anyway (it only decorates same-origin
- * requests).
+ * The music player's system face, on [buildIglooMediaSession]'s shared shape. Unlike the
+ * movie's, the bitmap loader stays Media3's default: the cover is an absolute Spotify URL that
+ * needs no bearer, and routing it through the authenticated stack would attach nothing anyway
+ * (it only decorates same-origin requests).
  */
 internal fun buildMusicMediaSession(
     context: Context,
     player: Player,
     albumId: Long,
-): MediaSession {
-    val builder = MediaSession.Builder(context, player)
-        // On error-Retry the replacement engine (and its session) is constructed before the
-        // old one's disposal releases it; two live sessions with equal ids throw, so every
-        // instance gets its own.
-        .setId("music-album-$albumId-${sessionInstance.incrementAndGet()}")
-    context.packageManager.getLeanbackLaunchIntentForPackage(context.packageName)?.let { launch ->
-        builder.setSessionActivity(
-            PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_IMMUTABLE),
-        )
-    }
-    return builder.build()
-}
+): MediaSession = buildIglooMediaSession(
+    context = context,
+    player = player,
+    idPrefix = "music-album-$albumId",
+)

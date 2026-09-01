@@ -21,7 +21,6 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.text.CueGroup
@@ -39,7 +38,6 @@ import com.igloo.blindpenguincoder.playback.hls.HlsSessionStart
 import com.igloo.blindpenguincoder.playback.hls.HlsStartException
 import com.igloo.blindpenguincoder.playback.hls.effectivePlaybackMode
 import com.igloo.blindpenguincoder.playback.hls.hlsResumeStartSec
-import com.igloo.blindpenguincoder.playback.hls.isMovieHlsRequestPath
 import com.igloo.blindpenguincoder.playback.hls.shouldRebaseHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRecoverLostHlsSession
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
@@ -189,9 +187,10 @@ internal class ExoMoviePlayerEngine(
         }
     }
 
-    private val ticker = object : Runnable {
-        override fun run() {
-            if (!playbackIntent.acceptsCommands) return
+    private val ticker = PlaybackTicker(handler) {
+        if (!playbackIntent.acceptsCommands) {
+            false
+        } else {
             // A pending switch leaves the outgoing source frozen at a position that is no longer
             // where the viewer is going; reporting it snaps the seek bar back and feeds the
             // progress cadence a stale second.
@@ -203,7 +202,7 @@ internal class ExoMoviePlayerEngine(
             ) {
                 emit(MoviePlayerEvent.Time(currentAbsoluteSec(), durationSec()))
             }
-            handler.postDelayed(this, TICK_INTERVAL_MS)
+            true
         }
     }
 
@@ -239,7 +238,7 @@ internal class ExoMoviePlayerEngine(
     ) {
         if (!playbackIntent.start(initialPlayWhenReady)) return
         emitDesiredPlayWhenReady()
-        handler.post(ticker)
+        ticker.start()
         val targetSec = when {
             !isHls -> startPositionSec ?: 0.0
             // Resuming over HLS rewinds a little; the session then starts right at the target.
@@ -377,7 +376,7 @@ internal class ExoMoviePlayerEngine(
         if (!playbackIntent.release()) return
         restartGeneration++
         pendingMode = null
-        handler.removeCallbacks(ticker)
+        ticker.stop()
         restartJob?.cancel()
         restartJob = null
         controller.releaseAndStop()
@@ -704,13 +703,14 @@ internal class ExoMoviePlayerEngine(
 
     private fun errorEvent(error: PlaybackException): MoviePlayerEvent.Error {
         val http = httpErrorCause(error)
-        return playerErrorEvent(
+        val failure = playerFailure(
             errorCode = error.errorCode,
             errorCodeName = error.errorCodeName,
             httpResponseCode = http?.responseCode,
             isHls = isHls,
             httpRequestPath = http?.dataSpec?.uri?.path,
         )
+        return MoviePlayerEvent.Error(failure.message, failure.unauthorized)
     }
 
     private fun emit(event: MoviePlayerEvent) {
@@ -731,7 +731,7 @@ internal class ExoMoviePlayerEngine(
         if (!playbackIntent.failTerminal()) return
         restartGeneration++
         pendingMode = null
-        handler.removeCallbacks(ticker)
+        ticker.stop()
         restartJob?.cancel()
         restartJob = null
         controller.releaseAndStop()
@@ -742,11 +742,16 @@ internal class ExoMoviePlayerEngine(
     }
 
     /**
-     * The MediaSession's view of the player, shifted onto the absolute movie timeline so the
-     * system's now-playing surface and Assistant seeks agree with the on-screen seek bar, and
-     * every seek routes through the engine's rebase logic.
+     * [IntentRoutingPlayer] shifted onto the absolute movie timeline, so the system's
+     * now-playing surface and Assistant seeks agree with the on-screen seek bar and every seek
+     * routes through the engine's rebase logic.
      */
-    private inner class AbsoluteTimelinePlayer(player: Player) : ForwardingPlayer(player) {
+    private inner class AbsoluteTimelinePlayer(player: Player) : IntentRoutingPlayer(
+        player,
+        playbackIntent,
+        onPlay = { this@ExoMoviePlayerEngine.play() },
+        onPause = { this@ExoMoviePlayerEngine.pause() },
+    ) {
         private val offsetMs: Long
             get() = (timelineOffsetSec * 1000).toLong()
 
@@ -758,25 +763,6 @@ internal class ExoMoviePlayerEngine(
             durationSec().takeIf { it > 0.0 }?.let { (it * 1000).toLong() } ?: super.getDuration()
 
         override fun getContentDuration(): Long = getDuration()
-
-        override fun getPlayWhenReady(): Boolean =
-            playbackIntent.shouldPlay
-
-        override fun play() {
-            this@ExoMoviePlayerEngine.play()
-        }
-
-        override fun pause() {
-            this@ExoMoviePlayerEngine.pause()
-        }
-
-        override fun setPlayWhenReady(playWhenReady: Boolean) {
-            if (playWhenReady) {
-                this@ExoMoviePlayerEngine.play()
-            } else {
-                this@ExoMoviePlayerEngine.pause()
-            }
-        }
 
         override fun seekTo(positionMs: Long) {
             this@ExoMoviePlayerEngine.seekTo(positionMs / 1000.0)
@@ -797,10 +783,6 @@ internal class ExoMoviePlayerEngine(
 
     /** Instrumentation seam: the deterministic subtitle off/on contract is asserted on these. */
     internal val currentTrackSelectionParameters get() = player.trackSelectionParameters
-
-    private companion object {
-        const val TICK_INTERVAL_MS = 500L
-    }
 }
 
 fun exoMoviePlayerEngine(

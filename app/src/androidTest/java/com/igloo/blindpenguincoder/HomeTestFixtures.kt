@@ -174,7 +174,7 @@ internal val fakeMoviePlayerEngineFactory: (Context, MoviePlayRequest) -> MovieP
     { _, _ -> FakeMoviePlayerEngine() }
 
 internal val fakeMusicPlayerEngineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine =
-    { _, _ -> FakeMusicPlayerEngine() }
+    { _, request -> FakeMusicPlayerEngine(request.tracks.map { it.durationSec }) }
 
 /**
  * The Playback Settings dialog through the real mapping, so fixture labels and resolution rules

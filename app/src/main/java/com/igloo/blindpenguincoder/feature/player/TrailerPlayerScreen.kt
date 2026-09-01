@@ -3,21 +3,14 @@ package com.igloo.blindpenguincoder.feature.player
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -33,30 +26,16 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEvent
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.isTraversalGroup
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.paneTitle
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -65,17 +44,11 @@ import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
-import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
-import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooText
-import com.igloo.blindpenguincoder.core.ui.focusRing
-import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
-import com.igloo.blindpenguincoder.core.ui.formatTimecode
-import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
-import com.igloo.blindpenguincoder.core.ui.progressFraction
+import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPhase
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerState
@@ -172,7 +145,7 @@ fun TrailerPlayerScreen(
         if (state.phase == TrailerPhase.Error) {
             retryRequester.requestFocus()
         } else {
-            playPauseRequester.requestFocus()
+            playPauseRequester.requestFocusSafely()
         }
     }
 
@@ -209,7 +182,7 @@ fun TrailerPlayerScreen(
                     pause = pause,
                     togglePlayPause = togglePlayPause,
                     seekBy = seekBy,
-                    focusPlayPause = { playPauseRequester.requestFocus() },
+                    focusPlayPause = { playPauseRequester.requestFocusSafely() },
                 )
             }
             .semantics {
@@ -253,24 +226,14 @@ fun TrailerPlayerScreen(
             )
         }
 
-        // The transport announcement for a TalkBack focus parked anywhere: play state flips are
-        // otherwise silent when driven by media keys. Polite — it narrates, it never interrupts.
-        val playStateAnnouncement = when (state.phase) {
-            TrailerPhase.Playing -> "Playing: $title"
-            TrailerPhase.Paused -> "Paused: $title"
-            TrailerPhase.Loading -> "Loading trailer"
-            else -> null
-        }
-        if (playStateAnnouncement != null) {
-            Box(
-                modifier = Modifier
-                    .size(1.dp)
-                    .clearAndSetSemantics {
-                        liveRegion = LiveRegionMode.Polite
-                        contentDescription = playStateAnnouncement
-                    },
-            )
-        }
+        PoliteAnnouncement(
+            when (state.phase) {
+                TrailerPhase.Playing -> "Playing: $title"
+                TrailerPhase.Paused -> "Paused: $title"
+                TrailerPhase.Loading -> "Loading trailer"
+                else -> null
+            },
+        )
     }
 }
 
@@ -306,12 +269,7 @@ private fun PlayerChrome(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = SCRIM_STRENGTH),
-                        1f to Color.Black.copy(alpha = 0f),
-                    ),
-                )
+                .playerTopScrim()
                 .padding(
                     horizontal = layout.safeAreaHorizontal,
                     vertical = layout.safeAreaVertical,
@@ -370,12 +328,7 @@ private fun PlayerChrome(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0f),
-                        1f to Color.Black.copy(alpha = SCRIM_STRENGTH),
-                    ),
-                )
+                .playerBottomScrim()
                 .padding(
                     horizontal = layout.safeAreaHorizontal,
                     vertical = layout.safeAreaVertical,
@@ -392,12 +345,7 @@ private fun PlayerChrome(
                     label = "Rewind 10 seconds",
                     onClick = { onSeekBy(-SEEK_STEP_SEC) },
                     modifier = Modifier
-                        .onFocusChanged { if (it.isFocused) onAnyControlFocused() }
-                        .focusProperties {
-                            left = FocusRequester.Cancel
-                            up = backRequester
-                            down = FocusRequester.Cancel
-                        }
+                        .transportFocus(backRequester, isFirst = true, onFocused = onAnyControlFocused)
                         .testTag("trailer_rewind"),
                 )
                 TransportButton(
@@ -406,11 +354,7 @@ private fun PlayerChrome(
                     onClick = onTogglePlayPause,
                     modifier = Modifier
                         .focusRequester(playPauseRequester)
-                        .onFocusChanged { if (it.isFocused) onAnyControlFocused() }
-                        .focusProperties {
-                            up = backRequester
-                            down = FocusRequester.Cancel
-                        }
+                        .transportFocus(backRequester, onFocused = onAnyControlFocused)
                         .testTag("trailer_play_pause"),
                 )
                 TransportButton(
@@ -418,12 +362,7 @@ private fun PlayerChrome(
                     label = "Forward 10 seconds",
                     onClick = { onSeekBy(SEEK_STEP_SEC) },
                     modifier = Modifier
-                        .onFocusChanged { if (it.isFocused) onAnyControlFocused() }
-                        .focusProperties {
-                            right = FocusRequester.Cancel
-                            up = backRequester
-                            down = FocusRequester.Cancel
-                        }
+                        .transportFocus(backRequester, isLast = true, onFocused = onAnyControlFocused)
                         .testTag("trailer_forward"),
                 )
             }

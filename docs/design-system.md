@@ -1943,8 +1943,13 @@ chapters. What it keeps and what it changes:
 disc-then-track order, so auto-advance and skip semantics live **below the engine seam**;
 the chrome only learns "the queue moved" through a `TrackChanged` event, the one licensed
 reset of the duration-never-shrinks rule (each track's timeline is genuinely new; the wire
-duration bridges the gap until the container is parsed). Previous is the platform's standard:
-restart past ~3s, cross to the prior track under it.
+duration bridges the gap until the container is parsed). The licence is **an index that
+actually changed**: setting a playlist is itself an item transition, so a replacement engine
+reports the queue's own start index before a frame plays, and reading that as an advance would
+zero the very playhead a Retry or a background return is resuming from — with no position tick
+to repair it when the track never reaches READY. A report naming the current index only
+refreshes the duration. Previous is the platform's standard: restart past ~3s, cross to the
+prior track under it.
 
 **No surface on the seam.** The screen draws the album art itself (`AsyncImage`, cover-fill
 over the over-media control fill, Music-glyph fallback, decorative); the engine interface is
@@ -2106,6 +2111,35 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-09-01 — Music-player review: the startup queue report, and shared player chrome.**
+
+- **Fix (§11.8.2):** a `TrackChanged` naming the index already current no longer resets the
+  playhead. Setting the playlist is itself an item transition, so the real engine reports the
+  start index before a frame plays; both the reducer and the screen were treating that as an
+  advance, so a Retry or a background return could restart the track from 0:00 whenever no
+  position tick arrived in between (a stream that fails before READY never produces one). The
+  fake engine now emits that startup report too, so the screen suite exercises the real event
+  order rather than a friendlier one.
+- Both overlay request savers moved to `feature/home/PlayerRequestSavers.kt` and now restore
+  defensively: a slot an older build wrote that will not parse comes back as "no overlay"
+  instead of throwing inside saved-state restoration, which crashes the relaunch.
+- The engine refuses an empty queue with a named error rather than preparing nothing and
+  reporting a silent `Ended` that reads to the host as "the album finished".
+- Every entry-focus request across the three players now goes through `requestFocusSafely`.
+- **Shared (§11.8):** `PlayerChromeCommon` gains `PlayerTopBar`, `playerTopScrim`/
+  `playerBottomScrim`, `transportFocus`, `PoliteAnnouncement`, and `PlayerFailureSurface`;
+  the movie/music/trailer screens had copies of each. `PlayerHostLifecycle` now owns the
+  ON_PAUSE/ON_STOP/ON_RESUME contract and the "a lifecycle silence is not transport intent"
+  rule that the movie and music screens had duplicated line for line. In `playback/media3`,
+  `PlaybackTicker` and `IntentRoutingPlayer` replace each engine's own copy, and
+  `buildIglooMediaSession` holds the per-instance id and launch-activity wiring both session
+  builders had. `playerErrorEvent` became `playerFailure` returning a neutral
+  `PlaybackFailure`, so the music stack no longer constructs a `MoviePlayerEvent`.
+- The three reducers' `clampToPlayable`/`keptDuration` arithmetic moved to
+  `playback/model/PlayheadArithmetic.kt`. **The reducers themselves stay separate** —
+  different phase sets (`AwaitingResume`), three well-covered state-machine suites, and after
+  the arithmetic moved there is nothing left to merge but ceremony.
 
 **2026-09-01 — Music-player review hardening (§11.8.2).**
 

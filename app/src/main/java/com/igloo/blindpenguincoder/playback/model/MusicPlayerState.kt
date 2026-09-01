@@ -62,9 +62,15 @@ data class MusicPlayerState(
      * so time and duration reset — the one licensed exception to duration-never-shrinks. The
      * engine's duration is often still unknown at the transition; it sends the wire duration
      * then, and the real one arrives with the next Ready or Time.
+     *
+     * A transition that names the index already current is not an advance: setting the
+     * playlist is itself an item transition, so the queue's own start index arrives before a
+     * frame plays. Resetting there would discard the restored playhead that a Retry and a
+     * background return both resume from. Such a report only refreshes the duration.
      */
-    fun onTrackChanged(index: Int, durationSec: Double): MusicPlayerState = when (phase) {
-        MusicPlayerPhase.Error, MusicPlayerPhase.Ended -> this
+    fun onTrackChanged(index: Int, durationSec: Double): MusicPlayerState = when {
+        phase == MusicPlayerPhase.Error || phase == MusicPlayerPhase.Ended -> this
+        index.coerceAtLeast(0) == currentTrackIndex -> copy(durationSec = keptDuration(durationSec))
         else -> copy(
             currentTrackIndex = index.coerceAtLeast(0),
             currentTimeSec = 0.0,
@@ -105,13 +111,11 @@ data class MusicPlayerState(
         else -> copy(currentTimeSec = clampToPlayable(targetSec))
     }
 
-    private fun clampToPlayable(seconds: Double): Double = when {
-        durationSec > 0.0 -> seconds.coerceIn(0.0, durationSec)
-        else -> seconds.coerceAtLeast(0.0)
-    }
+    private fun clampToPlayable(seconds: Double): Double =
+        clampSecondsToDuration(seconds, durationSec)
 
     private fun keptDuration(incoming: Double): Double =
-        if (incoming > 0.0) incoming else durationSec
+        nonShrinkingDuration(incoming, durationSec)
 }
 
 /**

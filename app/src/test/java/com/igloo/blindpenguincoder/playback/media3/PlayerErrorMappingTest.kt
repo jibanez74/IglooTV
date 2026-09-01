@@ -22,7 +22,7 @@ class PlayerErrorMappingTest {
         } else {
             null
         },
-    ) = playerErrorEvent(errorCode, errorCodeName, httpResponseCode, isHls, httpRequestPath)
+    ) = playerFailure(errorCode, errorCodeName, httpResponseCode, isHls, httpRequestPath)
 
     // --- HTTP statuses outrank error codes ---
 
