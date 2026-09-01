@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.player
 
 import android.app.Activity
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -9,7 +10,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -37,6 +40,7 @@ import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -62,6 +66,7 @@ class MusicPlayerScreenTest {
     private lateinit var engine: FakeMusicPlayerEngine
     private var closes = 0
     private var hostActivity: Activity? = null
+    private var hostView: View? = null
     private lateinit var restorationTester: StateRestorationTester
     private val createdEngines = mutableListOf<FakeMusicPlayerEngine>()
 
@@ -87,7 +92,10 @@ class MusicPlayerScreenTest {
         ),
     )
 
-    private fun setContent(request: MusicPlayRequest = playRequest()) {
+    private fun setContent(
+        request: MusicPlayRequest = playRequest(),
+        spokenAccessibilityEnabled: Boolean = false,
+    ) {
         engine = FakeMusicPlayerEngine()
         createdEngines.clear()
         closes = 0
@@ -96,7 +104,11 @@ class MusicPlayerScreenTest {
         lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         composeRule.setContent {
             val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
+            val view = LocalView.current
+            SideEffect {
+                hostActivity = context.findActivity()
+                hostView = view
+            }
             IglooTheme {
                 CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
                     if (open) {
@@ -110,6 +122,7 @@ class MusicPlayerScreenTest {
                                 createdEngines += engine
                                 engine
                             },
+                            spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                         )
                     }
                 }
@@ -274,6 +287,7 @@ class MusicPlayerScreenTest {
         setContent()
         startPlaying()
 
+        composeRule.onNodeWithTag("music_track_metadata").assertDoesNotExist()
         composeRule.onNodeWithTag("music_play_pause")
             .performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.onNodeWithTag("music_back").assertIsFocused()
@@ -281,6 +295,55 @@ class MusicPlayerScreenTest {
         composeRule.onNodeWithTag("music_back")
             .performKeyInput { pressKey(Key.DirectionDown) }
         composeRule.onNodeWithTag("music_play_pause").assertIsFocused()
+    }
+
+    @Test
+    fun spokenAccessibilityAddsAnActionlessMetadataStopToTheVerticalFocusChain() {
+        setContent(spokenAccessibilityEnabled = true)
+        startPlaying()
+
+        val metadata = composeRule.onNodeWithTag("music_track_metadata")
+        metadata
+            .assertContentDescriptionEquals("Yesterday. Track 1 of 3 · The Beatles.")
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+
+        composeRule.onNodeWithTag("music_play_pause")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        metadata.assertIsFocused()
+
+        metadata.performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("music_back").assertIsFocused()
+
+        composeRule.onNodeWithTag("music_back")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        metadata.assertIsFocused()
+
+        metadata.performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("music_play_pause").assertIsFocused()
+    }
+
+    @Test
+    fun playerKeepsTheHostAwakeAndRestoresThePreviousFlagOnUnmount() {
+        setContent()
+        val mountedHostView = checkNotNull(hostView)
+
+        assertTrue(mountedHostView.keepScreenOn)
+        composeRule.runOnUiThread { open = false }
+        composeRule.waitForIdle()
+        assertFalse(mountedHostView.keepScreenOn)
+
+        // A host that already owned wakefulness keeps it after the player leaves.
+        composeRule.runOnUiThread {
+            mountedHostView.keepScreenOn = true
+            open = true
+        }
+        composeRule.waitForIdle()
+        assertTrue(mountedHostView.keepScreenOn)
+        composeRule.runOnUiThread { open = false }
+        composeRule.waitForIdle()
+        assertTrue(mountedHostView.keepScreenOn)
+
+        composeRule.runOnUiThread { mountedHostView.keepScreenOn = false }
     }
 
     @Test

@@ -212,11 +212,12 @@ internal class ExoMusicPlayerEngine(
      */
     private fun transitionToTerminal(error: MusicPlayerEvent.Error) {
         if (!playbackIntent.failTerminal()) return
+        player.removeListener(listener)
         handler.removeCallbacks(ticker)
-        player.stop()
-        player.clearMediaItems()
         emitDesiredPlayWhenReady()
         emit(error)
+        player.stop()
+        player.clearMediaItems()
     }
 
     /**

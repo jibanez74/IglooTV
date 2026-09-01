@@ -1956,8 +1956,13 @@ do use the bearer data-source factory.
 static cover is not one — so there is no auto-hide clock, no reveal step, and **Back always
 means leave** (one press, unlike the movie's dismiss-then-close). Layout: top bar (Back +
 album title), centered cover, bottom block — track title over "Track N of M · artist" (one
-cleared TalkBack stop), seek bar, and a five-button transport: previous, rewind 10s,
-play/pause (the entry anchor), forward 10s, next. Row edges pinned, up returns to Back.
+cleared semantics node), seek bar, and a five-button transport: previous, rewind 10s,
+play/pause (the entry anchor), forward 10s, next. Row edges are pinned. Without a spoken
+accessibility service, Up and Down connect the transport directly to Back. While a spoken
+service runs, the metadata pair becomes an actionless **reading stop** in that route:
+transport Up → metadata → Back, and Back Down → metadata → transport. It speaks title, track
+position, and artist as one sentence and wears the §6.1 panel treatment with no scale; the
+extra press never enters the sighted path.
 
 **The key map grows a music pre-handler.** `MediaNext`/`MediaPrevious` and
 `MediaSkipForward`/`MediaSkipBackward` mean **tracks**, intercepted before the shared
@@ -1968,8 +1973,12 @@ swallowed without acting.
 
 **Session and lifecycle.** A per-album MediaSession (`music-album-<id>-<instance>`) carries
 per-track `MediaMetadata` (title/artist/album/artwork, `MEDIA_TYPE_MUSIC`), so the system's
-now-playing surface tracks auto-advance for free. The §11.8 lifecycle contract is verbatim:
-`ON_PAUSE` silences, a non-configuration `ON_STOP` fully releases player and session
+now-playing surface tracks auto-advance for free. For the overlay's complete mounted lifetime —
+playing, paused, loading, buffering, or error — the Compose host view keeps the display awake,
+preventing inactivity-driven Ambient Mode from interrupting the visit. Disposal restores the
+view's exact prior keep-awake value. This does not authorize background playback: the §11.8
+lifecycle contract remains verbatim. `ON_PAUSE` silences, a non-configuration `ON_STOP` fully
+releases player and session
 (**stop-on-exit: no background playback**, a deliberate scope decision), and returning
 rebuilds a fresh engine **paused** at the saved track index and position. A polite 1dp live
 region narrates play state with the track title riding in the sentence, so an auto-advance —
@@ -1978,10 +1987,14 @@ same phase, new track — still announces.
 **Ends and errors.** The album finishing closes the player through the host (focus restores
 to Play Album, like every overlay). Errors are the movie recipe minus HLS recovery: sticky
 first error, pinned Retry that rebuilds the engine at this visit's own playhead with a fresh
-play intent, Close instead when the session is revoked. Deliberately not duplicated from the
-movie engine: HLS controller/preflight/recovery, quality/audio/subtitle selection, timeline
-offsets, progress saves. Play-stats reporting (`POST /api/music/user-stats/play`) is a named
-follow-up — and without it there is no ViewModel at all: screen + engine + reducer.
+play intent, Close instead when the session is revoked. Entering the terminal boundary detaches
+the ExoPlayer listener before `stop()` or playlist clearing and emits the intentional paused
+transport state plus the error directly; teardown therefore cannot publish a false
+`TrackChanged(0)` or replace the later-track playhead Retry must preserve. Deliberately not
+duplicated from the movie engine: HLS controller/preflight/recovery,
+quality/audio/subtitle selection, timeline offsets, progress saves. Play-stats reporting
+(`POST /api/music/user-stats/play`) is a named follow-up — and without it there is no ViewModel
+at all: screen + engine + reducer.
 
 ### 11.9 Notifications
 
@@ -2093,6 +2106,16 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-09-01 — Music-player review hardening (§11.8.2).**
+
+- The full player-overlay lifetime now owns the Compose host view's keep-awake flag and restores
+  its exact previous value on disposal; the real-background stop/release contract is unchanged.
+- Track metadata becomes a conditional TalkBack reading stop between the transport and Back,
+  while the sighted focus route remains direct.
+- A terminal stream failure detaches the ExoPlayer listener before playlist teardown and emits
+  its paused intent and error explicitly, preventing a teardown `TrackChanged(0)` from corrupting
+  later-track Retry state.
 
 **2026-09-01 — Music player: Play Album is live (§11.8.2, §11.5.1).**
 

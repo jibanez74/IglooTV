@@ -39,6 +39,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -60,7 +61,9 @@ import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
+import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
+import com.igloo.blindpenguincoder.feature.shared.readingStopTarget
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
@@ -84,11 +87,22 @@ fun MusicPlayerScreen(
     request: MusicPlayRequest,
     onClose: () -> Unit,
     engineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine,
+    spokenAccessibilityEnabled: Boolean = rememberSpokenAccessibilityEnabled(),
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val hostView = LocalView.current
     var reloadKey by remember { mutableIntStateOf(0) }
     val engine = remember(reloadKey) { engineFactory(context, request) }
+
+    // The overlay owns wakefulness, not the engine: loading, paused, and error states still need
+    // to remain visible. A real host background trip is handled separately by the lifecycle
+    // observer below and continues to release playback.
+    DisposableEffect(hostView) {
+        val previousKeepScreenOn = hostView.keepScreenOn
+        hostView.keepScreenOn = true
+        onDispose { hostView.keepScreenOn = previousKeepScreenOn }
+    }
 
     // The queue position and transport intent survive recreation; the intent starts armed
     // because Play Album is itself the play press, and a replacement engine after a background
@@ -114,6 +128,7 @@ fun MusicPlayerScreen(
 
     val playPauseRequester = remember { FocusRequester() }
     val backRequester = remember { FocusRequester() }
+    val metadataRequester = remember { FocusRequester() }
     val retryRequester = remember { FocusRequester() }
 
     DisposableEffect(engine) {
@@ -288,6 +303,8 @@ fun MusicPlayerScreen(
                 trackTitle = currentTrack?.title ?: "",
                 playPauseRequester = playPauseRequester,
                 backRequester = backRequester,
+                metadataRequester = metadataRequester,
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 onBack = closeAndRelease,
                 onTogglePlayPause = togglePlayPause,
                 onSeekBy = seekBy,
@@ -352,6 +369,8 @@ private fun MusicPlayerChrome(
     trackTitle: String,
     playPauseRequester: FocusRequester,
     backRequester: FocusRequester,
+    metadataRequester: FocusRequester,
+    spokenAccessibilityEnabled: Boolean,
     onBack: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onSeekBy: (Double) -> Unit,
@@ -360,6 +379,8 @@ private fun MusicPlayerChrome(
 ) {
     val layout = IglooTheme.layout
     val playing = state.playWhenReady
+    val transportUpRequester = if (spokenAccessibilityEnabled) metadataRequester else backRequester
+    val backDownRequester = if (spokenAccessibilityEnabled) metadataRequester else playPauseRequester
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -392,7 +413,7 @@ private fun MusicPlayerChrome(
                         left = FocusRequester.Cancel
                         right = FocusRequester.Cancel
                         up = FocusRequester.Cancel
-                        down = playPauseRequester
+                        down = backDownRequester
                     }
                     .testTag("music_back"),
             )
@@ -444,15 +465,29 @@ private fun MusicPlayerChrome(
                 ),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
-            // The track line is one TalkBack stop; the live region narrates the same change,
-            // so the visible pair carries a single spoken sentence rather than two fragments.
+            // The visible pair carries one spoken sentence. TV TalkBack can reach it through a
+            // focus-only reading stop; sighted users keep the direct transport-to-Back route.
             val positionLine = listOfNotNull(
                 "Track ${state.currentTrackIndex + 1} of ${request.tracks.size}",
                 request.artistName,
             ).joinToString(" · ")
+            var metadataFocused by remember { mutableStateOf(false) }
             Column(
-                modifier = Modifier.clearAndSetSemantics {
-                    contentDescription = "$trackTitle. $positionLine."
+                modifier = if (spokenAccessibilityEnabled) {
+                    Modifier.readingStopTarget(
+                        tag = "music_track_metadata",
+                        focused = metadataFocused,
+                        requester = metadataRequester,
+                        upRequester = backRequester,
+                        downRequester = playPauseRequester,
+                        onFocusChanged = { metadataFocused = it },
+                        description = "$trackTitle. $positionLine.",
+                        radius = IglooTheme.radius.lg,
+                    )
+                } else {
+                    Modifier.clearAndSetSemantics {
+                        contentDescription = "$trackTitle. $positionLine."
+                    }
                 },
             ) {
                 IglooText(
@@ -475,13 +510,13 @@ private fun MusicPlayerChrome(
                 durationSec = state.durationSec,
                 seekTrackTag = "music_seek_track",
             )
-            // Every control pins up to Back and down to Cancel; only the row's outer edges
-            // cancel sideways — the movie transport's exact contract.
+            // Every control pins up through the conditional accessibility route and down to
+            // Cancel; only the row's outer edges cancel sideways.
             fun Modifier.transportFocus(isFirst: Boolean = false, isLast: Boolean = false) = this
                 .focusProperties {
                     if (isFirst) left = FocusRequester.Cancel
                     if (isLast) right = FocusRequester.Cancel
-                    up = backRequester
+                    up = transportUpRequester
                     down = FocusRequester.Cancel
                 }
             Row(

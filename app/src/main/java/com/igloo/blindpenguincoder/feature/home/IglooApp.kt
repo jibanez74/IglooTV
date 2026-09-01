@@ -698,6 +698,7 @@ fun IglooApp(
                 request = request,
                 onClose = closeMusicPlayer,
                 engineFactory = musicPlayerEngineFactory,
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
         }
         moviePlayRequest?.let { request ->
