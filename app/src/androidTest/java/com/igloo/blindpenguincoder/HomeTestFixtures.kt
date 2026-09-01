@@ -31,8 +31,11 @@ import com.igloo.blindpenguincoder.feature.music.AlbumFactUi
 import com.igloo.blindpenguincoder.feature.music.AlbumTrackUi
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.AudioStream
 import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
@@ -169,6 +172,9 @@ internal fun rememberInertMoviePlayerViewModel(): MoviePlayerViewModel = remembe
 
 internal val fakeMoviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine =
     { _, _ -> FakeMoviePlayerEngine() }
+
+internal val fakeMusicPlayerEngineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine =
+    { _, _ -> FakeMusicPlayerEngine() }
 
 /**
  * The Playback Settings dialog through the real mapping, so fixture labels and resolution rules
@@ -338,6 +344,7 @@ internal fun testAlbumDetails(
                     title = "Yesterday",
                     genresLine = "Rock, Pop",
                     durationText = "2:05",
+                    durationSec = 125.0,
                     contentDescription = "Disc 1. Track 1. Yesterday. Rock, Pop. " +
                         "2 minutes and 5 seconds.",
                 ),
@@ -347,6 +354,7 @@ internal fun testAlbumDetails(
                     title = "Ticket to Ride",
                     genresLine = null,
                     durationText = "3:10",
+                    durationSec = 190.0,
                     contentDescription = "Track 2. Ticket to Ride. 3 minutes and 10 seconds.",
                 ),
             ),
@@ -360,6 +368,7 @@ internal fun testAlbumDetails(
                     title = "Act Naturally",
                     genresLine = null,
                     durationText = "1:50",
+                    durationSec = 110.0,
                     contentDescription = "Disc 2. Track 1. Act Naturally. " +
                         "1 minute and 50 seconds.",
                 ),

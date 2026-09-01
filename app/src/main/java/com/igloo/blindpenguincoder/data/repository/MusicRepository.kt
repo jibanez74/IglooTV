@@ -27,4 +27,6 @@ class MusicRepository(
                 ?: error("Missing data in album details response")
         },
     )
+
+    fun trackStreamUrl(id: Long): String = api.trackStreamUrl(id)
 }

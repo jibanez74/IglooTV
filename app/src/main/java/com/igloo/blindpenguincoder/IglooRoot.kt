@@ -50,6 +50,7 @@ import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.MoviePlaybackServices
 import com.igloo.blindpenguincoder.playback.media3.deviceCanPlayAudioMime
 import com.igloo.blindpenguincoder.playback.media3.exoMoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.exoMusicPlayerEngine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -333,6 +334,16 @@ fun IglooRoot(container: IglooAppContainer) {
                                     },
                                     stopScope = container.applicationScope,
                                 ),
+                            )
+                        },
+                        musicPlayerEngineFactory = { context, request ->
+                            exoMusicPlayerEngine(
+                                context = context,
+                                request = request,
+                                // The same bearer-injecting factory the movie's direct stream
+                                // uses; /music/tracks/{id}/stream sits behind the same auth.
+                                dataSourceFactory = container.streamDataSourceFactory,
+                                trackStreamUrl = container.musicRepository::trackStreamUrl,
                             )
                         },
                         albumDetails = albumDetails,

@@ -284,6 +284,39 @@ object IglooIcons {
         }
     }
 
+    val SkipPrevious: ImageVector by lazy {
+        icon("SkipPrevious") {
+            // A Pause-width bar and a left-pointing triangle on the Play glyph's vertical span.
+            path(fill = SolidColor(Color.White)) {
+                moveTo(4.4f, 4.8f)
+                lineTo(7.6f, 4.8f)
+                lineTo(7.6f, 19.2f)
+                lineTo(4.4f, 19.2f)
+                close()
+                moveTo(19.6f, 4.8f)
+                lineTo(8.8f, 12f)
+                lineTo(19.6f, 19.2f)
+                close()
+            }
+        }
+    }
+
+    val SkipNext: ImageVector by lazy {
+        icon("SkipNext") {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(4.4f, 4.8f)
+                lineTo(15.2f, 12f)
+                lineTo(4.4f, 19.2f)
+                close()
+                moveTo(16.4f, 4.8f)
+                lineTo(19.6f, 4.8f)
+                lineTo(19.6f, 19.2f)
+                lineTo(16.4f, 19.2f)
+                close()
+            }
+        }
+    }
+
     val ArrowBack: ImageVector by lazy {
         icon("ArrowBack") {
             path(fill = SolidColor(Color.White)) {

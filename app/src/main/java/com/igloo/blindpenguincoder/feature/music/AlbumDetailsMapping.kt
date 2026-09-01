@@ -5,6 +5,8 @@ import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.data.model.AlbumDetailsData
 import com.igloo.blindpenguincoder.data.model.AlbumTrack
+import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -53,6 +55,8 @@ data class AlbumTrackUi(
     val title: String,
     val genresLine: String?,
     val durationText: String,
+    /** Seconds for the play queue; 0.0 where the wire has no usable duration. */
+    val durationSec: Double,
     /** The row's one spoken sentence; TV TalkBack reads a row as a single node (section 12). */
     val contentDescription: String,
 )
@@ -120,6 +124,26 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
 }
 
 /**
+ * The Play Album press mapped onto the player's queue: every disc's tracks flattened in the
+ * order the page lists them (disc, then track index).
+ */
+internal fun toMusicPlayRequest(album: AlbumDetailsUi): MusicPlayRequest = MusicPlayRequest(
+    albumId = album.id,
+    albumTitle = album.title,
+    artistName = album.artistName,
+    coverUrl = album.coverUrl,
+    tracks = album.discs.flatMap { disc ->
+        disc.tracks.map { track ->
+            MusicPlayTrack(
+                id = track.id,
+                title = track.title,
+                durationSec = track.durationSec,
+            )
+        }
+    },
+)
+
+/**
  * Tracks grouped and ordered by disc, then track index. A disc of 0 or below is disc 1 — the
  * web's `track.disc || 1` for an untagged rip.
  */
@@ -160,6 +184,7 @@ private fun toTrackUi(track: AlbumTrack, genres: List<String>, discSpoken: Long?
         title = track.title,
         genresLine = genresLine,
         durationText = durationText,
+        durationSec = if (track.duration > 0) track.duration / 1000.0 else 0.0,
         contentDescription = listOfNotNull(
             discSpoken?.let { "Disc $it" },
             "Track ${track.trackIndex}",

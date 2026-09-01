@@ -18,4 +18,11 @@ class MusicApi(
 
     suspend fun albumDetails(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/music/albums/details/$id")
+
+    /**
+     * Absolute URL of a track's direct stream. Media3 fetches it on its own HTTP stack
+     * (Range/206), not through Ktor, so this is a string rather than a request.
+     */
+    fun trackStreamUrl(id: Long): String =
+        "${serverUrl.require().apiBaseUrl}/music/tracks/$id/stream"
 }

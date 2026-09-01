@@ -1,8 +1,6 @@
 package com.igloo.blindpenguincoder.feature.player
 
-import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -526,12 +524,6 @@ fun MoviePlayerScreen(
             )
         }
     }
-}
-
-private tailrec fun Context.findHostActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findHostActivity()
-    else -> null
 }
 
 /** The in-player menus; which one is up is plain screen state. */

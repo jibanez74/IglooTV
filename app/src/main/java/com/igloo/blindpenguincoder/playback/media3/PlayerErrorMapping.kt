@@ -33,6 +33,7 @@ internal fun playerErrorEvent(
     httpResponseCode: Int?,
     isHls: Boolean,
     httpRequestPath: String?,
+    mediaNoun: String = "movie",
 ): MoviePlayerEvent.Error = when {
     httpResponseCode == 401 -> MoviePlayerEvent.Error(
         message = PLAYBACK_UNAUTHORIZED_MESSAGE,
@@ -49,11 +50,11 @@ internal fun playerErrorEvent(
         errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
         MoviePlayerEvent.Error(PLAYBACK_SERVER_UNREACHABLE_MESSAGE)
     errorCode in DECODING_ERROR_CODES -> MoviePlayerEvent.Error(
-        "This TV couldn't decode the movie ($errorCodeName). " +
+        "This TV couldn't decode the $mediaNoun ($errorCodeName). " +
             "The file may use a codec this device doesn't support.",
     )
     errorCode in PARSING_ERROR_CODES -> MoviePlayerEvent.Error(
-        "The movie's ${if (isHls) "stream" else "file"} could not be read ($errorCodeName).",
+        "The $mediaNoun's ${if (isHls) "stream" else "file"} could not be read ($errorCodeName).",
     )
     else -> MoviePlayerEvent.Error("Playback failed ($errorCodeName).")
 }

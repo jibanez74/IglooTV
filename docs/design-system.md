@@ -1751,9 +1751,11 @@ would claim it as ours. The meter is silent and unfocusable; its score rides the
 stop's sentence and the facts panel's row.
 
 **Actions.** Play Album (Primary, the entry anchor, held through the loading→loaded swap by the
-skeleton's geometry-matched stub) and Shuffle (Ghost, over-media resting fill per §3.2). Both
-are **host-owned stubs until playback lands** — the More-menu precedent: real, focusable
-controls with honest labels that claim no state, wired to no-ops in `IglooRoot`. An album with
+skeleton's geometry-matched stub) and Shuffle (Ghost, over-media resting fill per §3.2).
+**Play Album is live** — it maps the loaded details into the §11.8.2 music player
+synchronously (the tracks are already on screen; no deferred-play flow). Shuffle remains a
+**host-owned stub until its own pass lands** — the More-menu precedent: a real, focusable
+control with an honest label that claims no state, wired to a no-op in the host. An album with
 **no tracks composes no action row at all** (web parity, and the inert-control rule); the facts
 panel takes the entry anchor, requested safely. Row edges pinned; up reaches the hero reading
 stop only while a spoken reader runs.
@@ -1930,6 +1932,57 @@ guard on the IFrame API script, which names the narrower cause, inside a **12s**
 player-ready that catches everything else that stalls. Activity recreation restarts the trailer
 at 0:00 — a WebView cannot be parceled, an accepted trade for trailers.
 
+#### 11.8.2 Music player (Play Album), as built
+
+The album overlay's one player layer — the movie player's sibling in every host contract
+(existence, Back gating, focus restore all live in the host) — and a §11.8 reduction the way
+the trailer player is: no resume prompt, no track/quality menus, no progress saves, no
+chapters. What it keeps and what it changes:
+
+**One playlist, not one item.** The whole album is a single ExoPlayer playlist in
+disc-then-track order, so auto-advance and skip semantics live **below the engine seam**;
+the chrome only learns "the queue moved" through a `TrackChanged` event, the one licensed
+reset of the duration-never-shrinks rule (each track's timeline is genuinely new; the wire
+duration bridges the gap until the container is parsed). Previous is the platform's standard:
+restart past ~3s, cross to the prior track under it.
+
+**No surface on the seam.** The screen draws the album art itself (`AsyncImage`, cover-fill
+over the over-media control fill, Music-glyph fallback, decorative); the engine interface is
+pure Kotlin. The cover is the album page's verbatim absolute Spotify URL — the session's
+bitmap loader is deliberately **not** the movie's bearer-authed one, while the track streams
+do use the bearer data-source factory.
+
+**Chrome never hides.** §11.8 licenses resting chrome only over a moving picture, and a
+static cover is not one — so there is no auto-hide clock, no reveal step, and **Back always
+means leave** (one press, unlike the movie's dismiss-then-close). Layout: top bar (Back +
+album title), centered cover, bottom block — track title over "Track N of M · artist" (one
+cleared TalkBack stop), seek bar, and a five-button transport: previous, rewind 10s,
+play/pause (the entry anchor), forward 10s, next. Row edges pinned, up returns to Back.
+
+**The key map grows a music pre-handler.** `MediaNext`/`MediaPrevious` and
+`MediaSkipForward`/`MediaSkipBackward` mean **tracks**, intercepted before the shared
+`handlePlayerKey` would spend the Skip keys on ±10s seeks; `MediaRewind`/`MediaFastForward`
+(and d-pad on the transport) keep the in-track seek. The §11.8 intent rule carries over:
+the play/pause icon follows `playWhenReady`, and on the error surface every media key is
+swallowed without acting.
+
+**Session and lifecycle.** A per-album MediaSession (`music-album-<id>-<instance>`) carries
+per-track `MediaMetadata` (title/artist/album/artwork, `MEDIA_TYPE_MUSIC`), so the system's
+now-playing surface tracks auto-advance for free. The §11.8 lifecycle contract is verbatim:
+`ON_PAUSE` silences, a non-configuration `ON_STOP` fully releases player and session
+(**stop-on-exit: no background playback**, a deliberate scope decision), and returning
+rebuilds a fresh engine **paused** at the saved track index and position. A polite 1dp live
+region narrates play state with the track title riding in the sentence, so an auto-advance —
+same phase, new track — still announces.
+
+**Ends and errors.** The album finishing closes the player through the host (focus restores
+to Play Album, like every overlay). Errors are the movie recipe minus HLS recovery: sticky
+first error, pinned Retry that rebuilds the engine at this visit's own playhead with a fresh
+play intent, Close instead when the session is revoked. Deliberately not duplicated from the
+movie engine: HLS controller/preflight/recovery, quality/audio/subtitle selection, timeline
+offsets, progress saves. Play-stats reporting (`POST /api/music/user-stats/play`) is a named
+follow-up — and without it there is no ViewModel at all: screen + engine + reducer.
+
 ### 11.9 Notifications
 
 A badge on the spine when unread. At 10 feet a small anchored popover reads poorly — prefer a
@@ -2041,7 +2094,21 @@ forgot to change the code.**
 
 ## Changelog
 
-**2026-08-31 — Album detail: the third occupant of the one details slot (§11.5.1).**
+**2026-09-01 — Music player: Play Album is live (§11.8.2, §11.5.1).**
+
+- New **§11.8.2**: the music player as built — the album as one ExoPlayer playlist (auto-advance
+  and skip semantics below the engine seam, `TrackChanged` as the one duration reset), a
+  pure-Kotlin seam with no surface member (the screen draws the cover itself), always-visible
+  chrome with one-press Back (nothing to reveal over a static cover), the music key pre-handler
+  (Skip keys mean tracks, Rewind/FastForward stay ±10s), a per-album MediaSession with
+  per-track metadata, and the verbatim §11.8 lifecycle contract with **stop-on-exit — no
+  background playback** recorded as a deliberate scope decision. No ViewModel: play-stats
+  reporting is a named follow-up, and without it the player is screen + engine + reducer.
+- **§11.5.1** flips its Actions paragraph: Play Album now maps the loaded details into the
+  player synchronously (no deferred-play flow); Shuffle stays the honest stub for its own pass.
+- §5.4's icon set gains `SkipPrevious`/`SkipNext` in the hand-authored 24dp style;
+  `findHostActivity()` hoisted to `PlayerChromeCommon` (third caller);
+  `playerErrorEvent` gains a `mediaNoun` so one mapping speaks for movies and albums.
 
 - New **§11.5.1**: the album detail overlay as built — cover-as-backdrop with §11.4.1's scrims,
   square cover geometry, the Spotify popularity meter (brand green `#1DB954`, the app's one

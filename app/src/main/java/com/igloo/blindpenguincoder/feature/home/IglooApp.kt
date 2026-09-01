@@ -80,14 +80,20 @@ import com.igloo.blindpenguincoder.feature.movies.MoviesScreen
 import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
 import com.igloo.blindpenguincoder.feature.movies.VideoLaunchSite
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsScreen
+import com.igloo.blindpenguincoder.feature.music.AlbumDetailsState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
+import com.igloo.blindpenguincoder.feature.music.toMusicPlayRequest
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerScreen
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
+import com.igloo.blindpenguincoder.feature.player.MusicPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.ProgressSyncUiState
 import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
@@ -231,6 +237,41 @@ private val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Save
     },
 )
 
+/**
+ * What the music player overlay is playing, saveable like [MoviePlayRequestSaver] so the
+ * overlay survives activity recreation. Nullable fields ride as "" — the album title is never
+ * blank (the mapping's "Untitled album" fallback), so the encoding is unambiguous.
+ */
+private val MusicPlayRequestSaver: Saver<MusicPlayRequest?, List<String>> = Saver(
+    save = { request ->
+        if (request == null) {
+            emptyList()
+        } else {
+            listOf(
+                request.albumId.toString(),
+                request.albumTitle,
+                request.artistName.orEmpty(),
+                request.coverUrl.orEmpty(),
+                // Lists have no natural slot in this flat encoding; JSON is one symmetric line.
+                Json.encodeToString(request.tracks),
+            )
+        }
+    },
+    restore = { saved ->
+        if (saved.isEmpty()) {
+            null
+        } else {
+            MusicPlayRequest(
+                albumId = saved[0].toLong(),
+                albumTitle = saved[1],
+                artistName = saved[2].ifEmpty { null },
+                coverUrl = saved[3].ifEmpty { null },
+                tracks = Json.decodeFromString<List<MusicPlayTrack>>(saved[4]),
+            )
+        }
+    },
+)
+
 @Composable
 fun IglooApp(
     user: AuthUser,
@@ -244,13 +285,10 @@ fun IglooApp(
     albumDetails: AlbumDetailsUiState,
     onRetryAlbumDetails: () -> Unit,
     onAlbumSelected: ((Long) -> Unit)?,
-    // Host-owned stubs until playback lands (section 11.5.1): the buttons are real, focusable
-    // controls whose behavior arrives with the playback pass, the More-menu item precedent.
-    onPlayAlbum: () -> Unit = {},
-    onShuffleAlbum: () -> Unit = {},
     onRequestPlayback: () -> Unit,
     moviePlayerViewModel: MoviePlayerViewModel,
     moviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine,
+    musicPlayerEngineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine,
     playRequests: Flow<MoviePlayRequest> = emptyFlow(),
     onRetryRail: (HomeRail) -> Unit,
     onMovieSelected: ((Long) -> Unit)?,
@@ -309,6 +347,15 @@ fun IglooApp(
         mutableStateOf<MoviePlayRequest?>(null)
     }
     val playerOpen = moviePlayRequest != null
+    // The music player is the album overlay's one player layer, the movie player's sibling in
+    // every host contract: existence, Back gating, and focus restore all live here.
+    var musicPlayRequest by rememberSaveable(stateSaver = MusicPlayRequestSaver) {
+        mutableStateOf<MusicPlayRequest?>(null)
+    }
+    val musicPlayerOpen = musicPlayRequest != null
+    // Parked on the album page's Play Album button, so closing the player restores focus to
+    // the control that launched it (section 6.3).
+    val albumPlayReturnRequester = remember { FocusRequester() }
     val progressSync by moviePlayerViewModel.progressSyncUiState.collectAsStateWithLifecycle()
     val progressSyncError = (progressSync as? ProgressSyncUiState.Failed)?.message
     val playReturnRequester = remember { FocusRequester() }
@@ -362,6 +409,23 @@ fun IglooApp(
             moviePlayRequest = null
         }
     }
+    // The player must not outlive the album page it launched from — a profile switch or
+    // session revalidation that closes the overlay takes the album with it, and stop-on-exit
+    // means the audio goes too.
+    LaunchedEffect(albumOpen) {
+        if (!albumOpen) {
+            musicPlayRequest = null
+        }
+    }
+    val closeMusicPlayer: () -> Unit = {
+        musicPlayRequest = null
+        // In the callback, not an effect, for the detach-race reason the details close
+        // documents. The Play Album button is still composed in every reachable case; the
+        // pane's anchor is the same last-resort fallback the other overlays use.
+        if (!albumPlayReturnRequester.requestFocusSafely()) {
+            contentStartRequester.requestFocusSafely()
+        }
+    }
     val closeMoviePlayer: () -> Unit = {
         moviePlayRequest = null
         // In the callback, not an effect, for the detach-race reason the details close
@@ -413,7 +477,7 @@ fun IglooApp(
     // player is up, Back belongs to its own screen (chrome dismissal, then close).
     BackHandler(
         enabled = (detailsOpen || albumOpen) && !signOut.confirming && !trailerOpen &&
-            !playerOpen && !moreMenuOpen && !playbackSettingsOpen,
+            !playerOpen && !musicPlayerOpen && !moreMenuOpen && !playbackSettingsOpen,
     ) {
         val origin = detailsOrigin
         detailsOrigin = null
@@ -437,14 +501,14 @@ fun IglooApp(
     }
     BackHandler(
         enabled = !detailsOpen && !albumOpen && !signOut.confirming && !trailerOpen &&
-            !playerOpen && !railHasFocus,
+            !playerOpen && !musicPlayerOpen && !railHasFocus,
     ) {
         railOpenedByBack = true
         navigationRequesters.getValue(currentDestination).requestFocus()
     }
     BackHandler(
         enabled = !detailsOpen && !albumOpen && !signOut.confirming && !trailerOpen &&
-            !playerOpen && railHasFocus && !railOpenedByBack,
+            !playerOpen && !musicPlayerOpen && railHasFocus && !railOpenedByBack,
     ) {
         contentStartRequester.requestFocus()
     }
@@ -504,14 +568,34 @@ fun IglooApp(
         // screen stays composed (its extras rail holds the focus memory the player's close
         // restores onto) but leaves TalkBack traversal, exactly as the shell does under it.
         if (albumOpen) {
-            // The one details slot's third occupant. No inner accessibility gate: the album
-            // page launches no players or menus of its own yet, so nothing ever covers it.
-            Box(modifier = Modifier.testTag("details_layer")) {
+            // The one details slot's third occupant. hideFromAccessibility while the music
+            // player covers it, for the movie details layer's exact reason below.
+            Box(
+                modifier = Modifier
+                    .testTag("details_layer")
+                    .then(
+                        if (musicPlayerOpen) {
+                            Modifier.semantics { hideFromAccessibility() }
+                        } else {
+                            Modifier
+                        },
+                    ),
+            ) {
                 AlbumDetailsScreen(
                     state = albumDetails.details,
                     onRetry = onRetryAlbumDetails,
-                    onPlayAlbum = onPlayAlbum,
-                    onShuffle = onShuffleAlbum,
+                    // The album page only composes the action row with a loaded, non-empty
+                    // track list, so the press maps the details already on screen — no
+                    // deferred-play flow, unlike the movie's async technical details.
+                    onPlayAlbum = {
+                        (albumDetails.details as? AlbumDetailsState.Loaded)?.let { loaded ->
+                            musicPlayRequest = toMusicPlayRequest(loaded.album)
+                        }
+                    },
+                    // Host-owned stub until the shuffle pass lands (section 11.5.1): a real,
+                    // focusable control whose behavior arrives with its own branch.
+                    onShuffle = {},
+                    playReturnRequester = albumPlayReturnRequester,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
@@ -606,6 +690,16 @@ fun IglooApp(
                 engineFactory = trailerEngineFactory,
             )
         }
+        // The album overlay's own player layer: mutually exclusive with the two above by
+        // construction — it can only launch from the album overlay, which occupies the one
+        // details slot the movie surfaces launch from.
+        musicPlayRequest?.let { request ->
+            MusicPlayerScreen(
+                request = request,
+                onClose = closeMusicPlayer,
+                engineFactory = musicPlayerEngineFactory,
+            )
+        }
         moviePlayRequest?.let { request ->
             MoviePlayerScreen(
                 request = request,
@@ -640,7 +734,7 @@ fun IglooApp(
     // card the user had just activated. Skipped entirely when something is already over the
     // shell — this effect runs after the overlay's own, so it would take focus off it.
     LaunchedEffect(Unit) {
-        if (!detailsOpen && !albumOpen && !trailerOpen && !playerOpen) {
+        if (!detailsOpen && !albumOpen && !trailerOpen && !playerOpen && !musicPlayerOpen) {
             contentStartRequester.requestFocus()
         }
     }

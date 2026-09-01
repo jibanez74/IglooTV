@@ -63,6 +63,7 @@ internal fun AlbumDetailsHeader(
     spokenAccessibilityEnabled: Boolean,
     heroInfoRequester: FocusRequester,
     primaryRequester: FocusRequester,
+    playReturnRequester: FocusRequester,
     shuffleRequester: FocusRequester,
     downRequester: FocusRequester,
     onActionFocused: (FocusRequester) -> Unit,
@@ -96,6 +97,7 @@ internal fun AlbumDetailsHeader(
                 AlbumActionRow(
                     overMedia = overMedia,
                     playRequester = primaryRequester,
+                    playReturnRequester = playReturnRequester,
                     shuffleRequester = shuffleRequester,
                     upRequester = actionUpRequester,
                     downRequester = downRequester,
@@ -356,6 +358,7 @@ private fun SpotifyPopularityMeter(
 private fun AlbumActionRow(
     overMedia: Boolean,
     playRequester: FocusRequester,
+    playReturnRequester: FocusRequester,
     shuffleRequester: FocusRequester,
     upRequester: FocusRequester,
     downRequester: FocusRequester,
@@ -390,6 +393,9 @@ private fun AlbumActionRow(
             modifier = Modifier
                 .testTag("album_play")
                 .focusRequester(playRequester)
+                // The node the music player restores focus to on close — two requesters on
+                // one button, the same pairing the movie details' Play carries.
+                .focusRequester(playReturnRequester)
                 .then(rowFocus)
                 .focusProperties {
                     left = Cancel

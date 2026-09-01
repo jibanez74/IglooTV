@@ -1,0 +1,471 @@
+package com.igloo.blindpenguincoder.feature.player
+
+import android.app.Activity
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.junit4.StateRestorationTester
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.feature.home.findActivity
+import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
+import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
+import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/**
+ * The music player's contract (design-system.md section 11.8's music subsection), driven
+ * entirely through the fake engine: playback starts at the queue position immediately (no
+ * resume prompt), the skip keys mean tracks while Rewind/FastForward stay in-track seeks, an
+ * auto-advance re-titles the chrome and the live region, and the player resolves the same ways
+ * the movie player does — Ended and Back close it through the host, an error pins Retry, a
+ * revoked session pins Close.
+ */
+@RunWith(AndroidJUnit4::class)
+class MusicPlayerScreenTest {
+
+    @get:Rule(order = 0)
+    val animationScale = AnimationScaleRule()
+
+    @get:Rule(order = 1)
+    val composeRule = createComposeRule()
+
+    private lateinit var engine: FakeMusicPlayerEngine
+    private var closes = 0
+    private var hostActivity: Activity? = null
+    private lateinit var restorationTester: StateRestorationTester
+    private val createdEngines = mutableListOf<FakeMusicPlayerEngine>()
+
+    /** The host contract: closing unmounts the screen. */
+    private var open by mutableStateOf(true)
+
+    private class TestLifecycleOwner : LifecycleOwner {
+        val registry = LifecycleRegistry.createUnsafe(this)
+        override val lifecycle: Lifecycle get() = registry
+    }
+
+    private lateinit var lifecycleOwner: TestLifecycleOwner
+
+    private fun playRequest() = MusicPlayRequest(
+        albumId = 11,
+        albumTitle = "Help!",
+        artistName = "The Beatles",
+        coverUrl = null,
+        tracks = listOf(
+            MusicPlayTrack(id = 901, title = "Yesterday", durationSec = 125.0),
+            MusicPlayTrack(id = 902, title = "Ticket to Ride", durationSec = 190.0),
+            MusicPlayTrack(id = 903, title = "Act Naturally", durationSec = 110.0),
+        ),
+    )
+
+    private fun setContent(request: MusicPlayRequest = playRequest()) {
+        engine = FakeMusicPlayerEngine()
+        createdEngines.clear()
+        closes = 0
+        open = true
+        lifecycleOwner = TestLifecycleOwner()
+        lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
+        composeRule.setContent {
+            val context = LocalContext.current
+            SideEffect { hostActivity = context.findActivity() }
+            IglooTheme {
+                CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
+                    if (open) {
+                        MusicPlayerScreen(
+                            request = request,
+                            onClose = {
+                                closes += 1
+                                open = false
+                            },
+                            engineFactory = { _, _ ->
+                                createdEngines += engine
+                                engine
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun setRestorableContent(request: MusicPlayRequest = playRequest()) {
+        createdEngines.clear()
+        closes = 0
+        open = true
+        lifecycleOwner = TestLifecycleOwner()
+        lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
+        restorationTester = StateRestorationTester(composeRule)
+        restorationTester.setContent {
+            val context = LocalContext.current
+            SideEffect { hostActivity = context.findActivity() }
+            IglooTheme {
+                CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
+                    if (open) {
+                        MusicPlayerScreen(
+                            request = request,
+                            onClose = {
+                                closes += 1
+                                open = false
+                            },
+                            engineFactory = { _, _ ->
+                                FakeMusicPlayerEngine().also {
+                                    engine = it
+                                    createdEngines += it
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun startPlaying(durationSec: Double = 125.0) {
+        engine.emit(MusicPlayerEvent.Ready(durationSec))
+        engine.emit(MusicPlayerEvent.IsPlayingChanged(true))
+        composeRule.waitForIdle()
+    }
+
+    private fun pressBack() {
+        composeRule.runOnUiThread {
+            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.waitForIdle()
+    }
+
+    /** The second track becomes current at 42 seconds in — the playhead every rebuild test uses. */
+    private fun advanceToSecondTrack() {
+        engine.emit(MusicPlayerEvent.TrackChanged(index = 1, durationSec = 190.0))
+        engine.emit(MusicPlayerEvent.Time(currentSec = 42.0, durationSec = 190.0))
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun startsAtTrackOneImmediatelyWithFocusOnPlayPause() {
+        setContent()
+
+        // No resume prompt: Play Album was itself the play press.
+        assertEquals(listOf("start:0:0.0:true"), engine.playbackCommands)
+        composeRule.onNodeWithTag("music_play_pause").assertIsFocused()
+        composeRule.onNodeWithTag("music_loading").assertExists()
+        composeRule.onNodeWithTag("music_track_title", useUnmergedTree = true)
+            .assertTextEquals("Yesterday")
+        composeRule.onNodeWithTag("music_track_position", useUnmergedTree = true)
+            .assertTextEquals("Track 1 of 3 · The Beatles")
+    }
+
+    @Test
+    fun centerTogglesPlayPauseAndTheLabelFollowsTheIntent() {
+        setContent()
+        startPlaying()
+
+        val playPause = composeRule.onNodeWithTag("music_play_pause")
+        playPause.assertContentDescriptionEquals("Pause")
+        playPause.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        // The fake echoes the intent, which is what flips the label (section 11.8's intent rule).
+        assertEquals(listOf("start:0:0.0:true", "pause"), engine.playbackCommands)
+        playPause.assertContentDescriptionEquals("Play")
+
+        playPause.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("start:0:0.0:true", "pause", "play"), engine.playbackCommands)
+        playPause.assertContentDescriptionEquals("Pause")
+    }
+
+    @Test
+    fun dedicatedPlayPauseAndToggleKeysStayDistinct() {
+        setContent()
+        startPlaying()
+        val transport = composeRule.onNodeWithTag("music_play_pause")
+
+        transport.performKeyInput { pressKey(Key.MediaPause) }
+        transport.performKeyInput { pressKey(Key.MediaPause) }
+        transport.performKeyInput { pressKey(Key.MediaPlay) }
+        transport.performKeyInput { pressKey(Key.MediaPlay) }
+        transport.performKeyInput { pressKey(Key.MediaPlayPause) }
+        composeRule.waitForIdle()
+
+        assertEquals(
+            listOf("start:0:0.0:true", "pause", "pause", "play", "play", "pause"),
+            engine.playbackCommands,
+        )
+    }
+
+    @Test
+    fun skipKeysChangeTracksWhileRewindAndFastForwardSeekWithinTheTrack() {
+        setContent()
+        startPlaying()
+        engine.emit(MusicPlayerEvent.Time(currentSec = 30.0, durationSec = 125.0))
+        composeRule.waitForIdle()
+
+        // On an album the skip keys mean tracks — intercepted before the shared map could
+        // spend them on ±10s seeks — while Rewind/FastForward keep the in-track seek.
+        val playPause = composeRule.onNodeWithTag("music_play_pause")
+        playPause.performKeyInput { pressKey(Key.MediaNext) }
+        playPause.performKeyInput { pressKey(Key.MediaSkipForward) }
+        playPause.performKeyInput { pressKey(Key.MediaPrevious) }
+        playPause.performKeyInput { pressKey(Key.MediaSkipBackward) }
+        playPause.performKeyInput { pressKey(Key.MediaRewind) }
+        playPause.performKeyInput { pressKey(Key.MediaFastForward) }
+        composeRule.waitForIdle()
+
+        assertEquals(
+            listOf(
+                "start:0:0.0:true",
+                "next", "next", "previous", "previous",
+                "seek:20.0", "seek:30.0",
+            ),
+            engine.playbackCommands,
+        )
+    }
+
+    @Test
+    fun transportButtonsSkipTracksThroughTheEngine() {
+        setContent()
+        startPlaying()
+
+        composeRule.onNodeWithTag("music_next").requestFocus()
+        composeRule.onNodeWithTag("music_next")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.onNodeWithTag("music_previous").requestFocus()
+        composeRule.onNodeWithTag("music_previous")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("start:0:0.0:true", "next", "previous"), engine.playbackCommands)
+    }
+
+    @Test
+    fun upFromTheTransportLandsOnBackAndDownReturnsToPlayPause() {
+        setContent()
+        startPlaying()
+
+        composeRule.onNodeWithTag("music_play_pause")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("music_back").assertIsFocused()
+
+        composeRule.onNodeWithTag("music_back")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("music_play_pause").assertIsFocused()
+    }
+
+    @Test
+    fun aTrackChangeRetitlesTheChromeAndTheLiveRegionAnnouncesTheNewTrack() {
+        setContent()
+        startPlaying()
+
+        engine.emit(MusicPlayerEvent.TrackChanged(index = 1, durationSec = 190.0))
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("music_track_title", useUnmergedTree = true)
+            .assertTextEquals("Ticket to Ride")
+        composeRule.onNodeWithTag("music_track_position", useUnmergedTree = true)
+            .assertTextEquals("Track 2 of 3 · The Beatles")
+        // The auto-advance narration: same Playing phase, new sentence because the title rides
+        // in it. Polite — it narrates, it never interrupts.
+        composeRule.onNodeWithContentDescription("Playing: Ticket to Ride")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
+    }
+
+    @Test
+    fun endedClosesThePlayerAndReleasesTheEngine() {
+        setContent()
+        startPlaying()
+
+        engine.emit(MusicPlayerEvent.Ended)
+        composeRule.waitForIdle()
+
+        assertEquals(1, closes)
+        assertTrue(engine.released)
+    }
+
+    @Test
+    fun backClosesInOnePressAndReleasesTheEngine() {
+        setContent()
+        startPlaying()
+
+        // No chrome-dismissal step: the chrome never hides, so Back always means leave.
+        pressBack()
+
+        assertEquals(1, closes)
+        assertTrue(engine.released)
+    }
+
+    @Test
+    fun errorPinsRetryAndRetryRebuildsAtThisVisitsPlayhead() {
+        setContent()
+        val failedEngine = engine
+        startPlaying()
+        advanceToSecondTrack()
+        engine.emit(MusicPlayerEvent.Error("The album stream stopped unexpectedly."))
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("The album stream stopped unexpectedly.").assertExists()
+        val retry = composeRule.onNodeWithContentDescription("Retry playing album")
+        retry.assertIsFocused()
+
+        // The retry press lands on a fresh engine; swap the fake the factory hands out first.
+        engine = FakeMusicPlayerEngine()
+        retry.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertTrue("the failed engine must be released", failedEngine.released)
+        assertEquals(listOf("start:1:42.0:true"), engine.playbackCommands)
+        composeRule.onNodeWithTag("music_play_pause").assertIsFocused()
+    }
+
+    @Test
+    fun unauthorizedErrorOffersCloseInsteadOfRetry() {
+        setContent()
+        engine.emit(
+            MusicPlayerEvent.Error("Your session is no longer valid.", unauthorized = true),
+        )
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithContentDescription("Retry playing album").assertDoesNotExist()
+        val close = composeRule.onNodeWithContentDescription("Close player")
+        close.assertIsFocused()
+        close.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(1, closes)
+        assertTrue(engine.released)
+    }
+
+    @Test
+    fun mediaTransportAndSkipKeysAreInertOnTheErrorSurface() {
+        setContent()
+        startPlaying()
+        engine.emit(MusicPlayerEvent.Error("The album stream stopped unexpectedly."))
+        composeRule.waitForIdle()
+        val commandsBefore = engine.playbackCommands.toList()
+
+        // Swallowed, not just unhandled: an unhandled media key would fall back to the active
+        // MediaSession and drive playback underneath the error surface.
+        composeRule.onNodeWithContentDescription("Retry playing album").performKeyInput {
+            pressKey(Key.MediaPlay)
+            pressKey(Key.MediaPlayPause)
+            pressKey(Key.MediaFastForward)
+            pressKey(Key.MediaNext)
+            pressKey(Key.MediaPrevious)
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(commandsBefore, engine.playbackCommands)
+        composeRule.onNodeWithText("The album stream stopped unexpectedly.").assertExists()
+    }
+
+    @Test
+    fun savedStateRestorationKeepsTheQueuePositionAndPausedIntent() {
+        setRestorableContent()
+        startPlaying()
+        advanceToSecondTrack()
+        val playPause = composeRule.onNodeWithTag("music_play_pause")
+        playPause.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        playPause.assertContentDescriptionEquals("Play")
+        val originalEngine = engine
+
+        restorationTester.emulateSavedInstanceStateRestore()
+        composeRule.waitForIdle()
+
+        assertTrue(originalEngine.released)
+        assertEquals(2, createdEngines.size)
+        assertEquals(listOf("start:1:42.0:false"), engine.playbackCommands)
+        composeRule.onNodeWithTag("music_track_title", useUnmergedTree = true)
+            .assertTextEquals("Ticket to Ride")
+        composeRule.onNodeWithTag("music_play_pause")
+            .assertIsFocused()
+            .assertContentDescriptionEquals("Play")
+
+        composeRule.onNodeWithTag("music_play_pause")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("start:1:42.0:false", "play"), engine.playbackCommands)
+    }
+
+    @Test
+    fun backgroundReleasesTheEngineAndReturnRebuildsPausedAtThePosition() {
+        setContent()
+        startPlaying()
+        advanceToSecondTrack()
+        val oldEngine = engine
+        val transportBeforeStandby = oldEngine.playbackCommands
+
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.CREATED
+        }
+        composeRule.waitForIdle()
+        assertTrue(oldEngine.released)
+        // A late system/media command has no path back into a released background engine.
+        oldEngine.play()
+        assertEquals(transportBeforeStandby, oldEngine.playbackCommands)
+
+        engine = FakeMusicPlayerEngine()
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
+        }
+        composeRule.waitForIdle()
+
+        // The replacement resumes this visit's own playhead, paused: standby silenced the
+        // music and only an explicit Play may bring it back.
+        assertEquals(listOf("start:1:42.0:false"), engine.playbackCommands)
+        val playPause = composeRule.onNodeWithTag("music_play_pause")
+        playPause.assertContentDescriptionEquals("Play")
+        playPause.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        assertEquals(listOf("start:1:42.0:false", "play"), engine.playbackCommands)
+    }
+
+    @Test
+    fun hostDrivenUnmountReleasesTheEngineImmediately() {
+        setContent()
+        val mountedEngine = engine
+
+        composeRule.runOnUiThread { open = false }
+        composeRule.waitForIdle()
+
+        assertTrue(mountedEngine.released)
+        assertEquals(1, mountedEngine.releaseCount)
+    }
+}

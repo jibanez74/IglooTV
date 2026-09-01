@@ -1,5 +1,8 @@
 package com.igloo.blindpenguincoder.feature.player
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -285,6 +288,13 @@ internal fun handlePlayerKey(
     // interaction so the auto-hide clock restarts.
     showChrome()
     return false
+}
+
+/** The Activity behind a composition's context; every player's ON_STOP asks it about config changes. */
+internal tailrec fun Context.findHostActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findHostActivity()
+    else -> null
 }
 
 // The section 3.2 over-media literals, which deliberately do not track the theme: the chrome sits

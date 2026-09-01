@@ -29,8 +29,9 @@ endpoint reports durations in **milliseconds** while the tracks-list endpoint us
 conversion happens once, at the mapping edge, and is pinned by tests.
 
 **Deliberate scope choices (agreed up front):**
-- Play Album and Shuffle are real, focusable buttons that **do nothing yet** — playback is a
-  later pass. Same for track rows: one focus stop each, no play/like/overflow buttons yet.
+- ~~Play Album and Shuffle are real, focusable buttons that **do nothing yet**~~ — **Play Album
+  is now live** (2026-09-01, see `music-player-status.md`); Shuffle stays a stub for its own
+  branch. Track rows are still one focus stop each, no play/like/overflow buttons yet.
 - An album with zero tracks shows no Play/Shuffle at all (web parity).
 - Artist chips are display-only — there's no musician screen to open yet.
 
@@ -49,9 +50,9 @@ changelog entry, including the recorded deferral of §11.5's three-action track 
 
 ## What remains
 
-- **Playback wiring** — Play Album, Shuffle, and per-track play (plus the like toggle and
-  overflow menu §11.5 promises on each row). The buttons and callbacks are already threaded
-  through the host, so the playback pass plugs in without layout changes.
+- **Playback wiring** — ~~Play Album~~ done (2026-09-01, the music player pass —
+  `music-player-status.md`). Still open: Shuffle, per-track play, and the like toggle and
+  overflow menu §11.5 promises on each row.
 - **A Music destination screen** — the spine's Music tab is still a placeholder; the albums
   rail on Home is currently the only way into an album.
 - **Musician details** — the artist chips stay inert until a musician screen exists.

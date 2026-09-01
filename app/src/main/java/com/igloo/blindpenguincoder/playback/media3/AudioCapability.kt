@@ -18,6 +18,12 @@ internal val moviePlaybackAudioAttributes: AudioAttributes = AudioAttributes.Bui
     .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
     .build()
 
+/** The music player's identity: same media usage and focus handling, music content. */
+internal val musicPlaybackAudioAttributes: AudioAttributes = AudioAttributes.Builder()
+    .setUsage(C.USAGE_MEDIA)
+    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+    .build()
+
 /**
  * Whether this device can make the selected audio track audible at all: either the current
  * output route passes the encoding through (HDMI/ARC to a receiver or the TV's own decoder),

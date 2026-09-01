@@ -65,8 +65,11 @@ import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
  * The backdrop is the album cover blown up full-bleed (the web page's treatment): there is no
  * separate backdrop asset for music, and the cover URL is used verbatim.
  *
- * [onPlayAlbum] and [onShuffle] are host-owned stubs until playback lands (the More-menu item
- * precedent): styled, focusable, with honest semantics — they just do nothing yet.
+ * [onPlayAlbum] opens the host's music player overlay; [playReturnRequester] is parked on the
+ * Play Album button so closing that player restores focus to the control that launched it
+ * (section 6.3), the movie details screen's exact pairing. [onShuffle] remains a host-owned
+ * stub until the shuffle pass lands (the More-menu item precedent): styled, focusable, with
+ * honest semantics — it just does nothing yet.
  */
 @Composable
 fun AlbumDetailsScreen(
@@ -74,6 +77,7 @@ fun AlbumDetailsScreen(
     onRetry: () -> Unit,
     onPlayAlbum: () -> Unit,
     onShuffle: () -> Unit,
+    playReturnRequester: FocusRequester,
     modifier: Modifier = Modifier,
     // Parameterized so tests can force both states: the reading-stop chain below depends on it,
     // and a test device with TalkBack running would otherwise pin the gate open.
@@ -139,6 +143,7 @@ fun AlbumDetailsScreen(
                 album = state.album,
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 entryRequester = entryRequester,
+                playReturnRequester = playReturnRequester,
                 onPlayAlbum = onPlayAlbum,
                 onShuffle = onShuffle,
             )
@@ -151,6 +156,7 @@ private fun AlbumDetailsContent(
     album: AlbumDetailsUi,
     spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
+    playReturnRequester: FocusRequester,
     onPlayAlbum: () -> Unit,
     onShuffle: () -> Unit,
 ) {
@@ -270,6 +276,7 @@ private fun AlbumDetailsContent(
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 heroInfoRequester = heroInfoRequester,
                 primaryRequester = entryRequester,
+                playReturnRequester = playReturnRequester,
                 shuffleRequester = shuffleRequester,
                 downRequester = belowActions,
                 onActionFocused = { lastFocusedAction = it },
