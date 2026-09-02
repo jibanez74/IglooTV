@@ -74,7 +74,10 @@ data class MoviesUiState(
     val genre: MoviesFilter.Genre? = null,
     /** Title direction for the current list — the only sort the backend offers. */
     val sort: SortOrder = SortOrder.Ascending,
-    /** All movie genres with counts; empty until the fetch lands, stale over a failed re-read. */
+    /**
+     * All movie genres with counts; empty before the first success or after an authoritative
+     * empty success, and stale only over a failed re-read.
+     */
     val genres: List<MovieGenreWithCount> = emptyList(),
     val grid: IglooRailState<MoviePosterItem> = IglooRailState.Loading,
     val append: MoviesAppendState = MoviesAppendState.Idle,
@@ -443,36 +446,43 @@ class MoviesViewModel(
 
     /**
      * The Genres tab's picker. Same stance as [loadStats]: a failure keeps whatever was shown
-     * last and never reports — the tab degrades to a placeholder until a later refresh lands.
+     * last and never reports. A successful response is authoritative, including an empty list.
      * A landing list re-resolves the remembered genre (a renamed tag follows the list; a
-     * vanished genre falls back to the first), and a Genres tab that was waiting on it fetches
-     * that genre's page one — nothing was pressed, so no Refreshing label.
+     * vanished genre falls back to the first), and an active Genres tab fetches page one when
+     * that changes the selected id — nothing was pressed, so no Refreshing label.
      */
     private fun loadGenres() {
         genresJob?.cancel()
         genresJob = viewModelScope.launch {
             val result = movies.movieGenres()
             if (result !is ApiResult.Success) return@launch
-            val wasWaiting = _uiState.value.let { it.tab == MoviesTab.Genres && it.genre == null }
+            val previousGenreId = _uiState.value.genre?.id
             _uiState.update {
                 it.copy(
                     genres = result.value,
                     genre = it.genre.resolveAgainst(result.value),
                 )
             }
-            if (wasWaiting && _uiState.value.genre != null) loadFirstPage(userInitiated = false)
+            val resolved = _uiState.value
+            if (
+                resolved.tab == MoviesTab.Genres &&
+                resolved.genre != null &&
+                resolved.genre.id != previousGenreId
+            ) {
+                loadFirstPage(userInitiated = false)
+            }
         }
     }
 
     /**
      * The genre the Genres tab should show given [genres]: the remembered one if it is still
-     * listed (by id, with the list's current tag), else the first, else nothing. A remembered
-     * genre survives an empty list so a transient failure cannot forget the user's choice.
+     * listed (by id, with the list's current tag), else the first, else nothing. Failures never
+     * call this resolver, so only a successful empty list clears the remembered choice.
      */
     private fun MoviesFilter.Genre?.resolveAgainst(
         genres: List<MovieGenreWithCount>,
     ): MoviesFilter.Genre? {
-        if (genres.isEmpty()) return this
+        if (genres.isEmpty()) return null
         val match = genres.firstOrNull { it.genreId == this?.id } ?: genres.first()
         return MoviesFilter.Genre(match.genreId, match.genreTag)
     }

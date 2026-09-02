@@ -651,6 +651,107 @@ class MoviesViewModelTest {
     }
 
     @Test
+    fun `a genre disappearing during refresh selects and pages the first remaining genre`() =
+        runTest {
+            var refreshed = false
+            val http = routedHttp(
+                genres = {
+                    if (refreshed) {
+                        jsonResponse(
+                            moviesGenresJson(
+                                movieGenreWithCountJson(id = 9, tag = "Drama"),
+                                movieGenreWithCountJson(id = 11, tag = "Comedy"),
+                            ),
+                        )
+                    } else {
+                        jsonResponse(
+                            moviesGenresJson(
+                                movieGenreWithCountJson(id = 7, tag = "Action"),
+                                movieGenreWithCountJson(id = 9, tag = "Drama"),
+                            ),
+                        )
+                    }
+                },
+                genreMovies = {
+                    val genreId = GENRE_MOVIES_PATH
+                        .matchEntire(it.url.encodedPath)
+                        ?.groupValues
+                        ?.get(1)
+                    when (genreId to it.page()) {
+                        "7" to "1" -> jsonResponse(
+                            page(number = 1, total = 3, totalPages = 1, ids = 1L..3L),
+                        )
+                        "9" to "1" -> jsonResponse(
+                            page(number = 1, total = 6, totalPages = 2, ids = 10L..12L),
+                        )
+                        else -> jsonResponse(
+                            page(number = 2, total = 6, totalPages = 2, ids = 13L..15L),
+                        )
+                    }
+                },
+            )
+            val model = loaded(http)
+            model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+
+            refreshed = true
+            model.refresh()
+
+            assertEquals(MoviesFilter.Genre(id = 9, tag = "Drama"), model.uiState.value.genre)
+            assertEquals(listOf(10L, 11L, 12L), model.uiState.value.gridIds())
+            assertEquals(6L, model.uiState.value.totalMovies)
+            assertEquals(listOf("7:1", "9:1"), http.genrePages)
+            assertTrue(!model.uiState.value.refreshing)
+
+            model.loadMore()
+
+            assertEquals(listOf("7:1", "9:1", "9:2"), http.genrePages)
+            assertEquals((10L..15L).toList(), model.uiState.value.gridIds())
+        }
+
+    @Test
+    fun `a successful empty genre refresh clears selection and retains the hidden grid`() =
+        runTest {
+            var empty = false
+            val http = routedHttp(
+                genres = {
+                    if (empty) {
+                        jsonResponse(moviesGenresJson())
+                    } else {
+                        jsonResponse(
+                            moviesGenresJson(movieGenreWithCountJson(id = 7, tag = "Action")),
+                        )
+                    }
+                },
+                library = {
+                    jsonResponse(page(number = 1, totalPages = 1, ids = 20L..22L))
+                },
+                genreMovies = {
+                    jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
+                },
+            )
+            val model = loaded(http)
+            model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+
+            empty = true
+            model.refresh()
+
+            assertTrue(model.uiState.value.genres.isEmpty())
+            assertNull(model.uiState.value.genre)
+            assertNull(model.uiState.value.filter)
+            assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+            assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+            assertEquals(listOf("7:1"), http.genrePages)
+
+            model.selectTab(MoviesTab.All)
+            model.selectTab(MoviesTab.Genres)
+
+            assertNull(model.uiState.value.genre)
+            assertNull(model.uiState.value.filter)
+            assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+            assertEquals(listOf("7:1"), http.genrePages)
+        }
+
+    @Test
     fun `selecting the genres tab with no genres issues no request and shows the placeholder`() =
         runTest {
             val http = routedHttp(
