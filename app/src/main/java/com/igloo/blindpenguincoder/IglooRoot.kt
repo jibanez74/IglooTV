@@ -275,7 +275,8 @@ fun IglooRoot(container: IglooAppContainer) {
                             onRetryFirstPage = moviesViewModel::retryFirstPage,
                             onRetryAppend = moviesViewModel::retryAppend,
                             onLoadMore = moviesViewModel::loadMore,
-                            onSelectFilter = moviesViewModel::selectFilter,
+                            onSelectTab = moviesViewModel::selectTab,
+                            onSelectGenre = moviesViewModel::selectGenre,
                             onToggleSort = moviesViewModel::toggleSort,
                         )
                     }

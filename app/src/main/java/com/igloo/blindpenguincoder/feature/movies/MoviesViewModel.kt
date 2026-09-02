@@ -34,6 +34,13 @@ sealed interface MoviesFilter {
 }
 
 /**
+ * The index's three sections (docs/design-system.md section 11.4), mirroring the web client's
+ * tab strip with Liked standing in for Playlists until playlists have a screen of their own.
+ * [Genres] hosts a picker; the other two are a list each.
+ */
+enum class MoviesTab { All, Genres, Liked }
+
+/**
  * What sits below the last loaded row. The grid is infinite (docs/design-system.md section
  * 11.4), so the tail is the only place the user ever sees paging.
  *
@@ -55,11 +62,16 @@ data class MoviesUiState(
     /** Count for the current [filter]: library-wide stats for All, the pages' `total` otherwise. */
     val totalMovies: Long? = null,
     /**
-     * The requested filter — chips highlight it the moment it is pressed. It snaps back to the
-     * last committed one if the switch's first page fails, so a selected chip never lies about
-     * the grid beneath it.
+     * The requested tab — it highlights the moment focus lands on it. It snaps back to the last
+     * committed one if the switch's first page fails, so a selected tab never lies about the
+     * grid beneath it.
      */
-    val filter: MoviesFilter = MoviesFilter.All,
+    val tab: MoviesTab = MoviesTab.All,
+    /**
+     * The Genres tab's choice. Remembered across tab switches so coming back lands on the same
+     * genre; null until the genre list has landed, or when it is empty.
+     */
+    val genre: MoviesFilter.Genre? = null,
     /** Title direction for the current list — the only sort the backend offers. */
     val sort: SortOrder = SortOrder.Ascending,
     /** All movie genres with counts; empty until the fetch lands, stale over a failed re-read. */
@@ -81,7 +93,19 @@ data class MoviesUiState(
     val contentGeneration: Int = 0,
     /** Bumped after a successful silent replacement of the shown Liked grid. */
     val silentReconcileGeneration: Int = 0,
-)
+) {
+    /**
+     * Which list the grid shows, derived so it can never disagree with [tab] and [genre]. Null
+     * is the Genres tab with nothing to choose from: there is no endpoint for it, so nothing is
+     * fetched and the screen draws a placeholder instead.
+     */
+    val filter: MoviesFilter?
+        get() = when (tab) {
+            MoviesTab.All -> MoviesFilter.All
+            MoviesTab.Liked -> MoviesFilter.Liked
+            MoviesTab.Genres -> genre
+        }
+}
 
 /**
  * The library grid's paging machine.
@@ -104,10 +128,12 @@ class MoviesViewModel(
     private var nextPage = FIRST_PAGE
 
     /**
-     * The filter and sort whose page 1 last landed — what the grid actually shows. Appends page
-     * these, and a failed switch reverts the requested [MoviesUiState.filter]/`sort` to them.
+     * The tab, genre and sort whose page 1 last landed — what the grid actually shows. Appends
+     * page these, and a failed switch reverts the requested [MoviesUiState.tab]/`genre`/`sort`
+     * to them.
      */
-    private var committedFilter: MoviesFilter = MoviesFilter.All
+    private var committedTab: MoviesTab = MoviesTab.All
+    private var committedGenre: MoviesFilter.Genre? = null
     private var committedSort: SortOrder = SortOrder.Ascending
 
     /**
@@ -152,15 +178,36 @@ class MoviesViewModel(
      */
     fun reload() {
         if (_uiState.value.refreshing) return
+        // Page one goes first: from the Genres placeholder it has nothing to request, and the
+        // genre list landing afterwards is what fetches — one request, not two.
+        loadFirstPage(userInitiated = true)
         loadStats()
         loadGenres()
+    }
+
+    /**
+     * A tab taking focus (or a press on it). Re-selecting the current tab is a no-op rather than
+     * a surprise refresh — which is also what makes focus landing on the selected tab free.
+     * Entering Genres resolves the remembered genre against the current list, falling back to
+     * the first genre; with no list yet there is nothing to fetch and the screen shows a
+     * placeholder until [loadGenres] lands.
+     */
+    fun selectTab(tab: MoviesTab) {
+        if (tab == _uiState.value.tab) return
+        _uiState.update {
+            it.copy(
+                tab = tab,
+                genre = if (tab == MoviesTab.Genres) it.genre.resolveAgainst(it.genres) else it.genre,
+            )
+        }
         loadFirstPage(userInitiated = true)
     }
 
-    /** A chip press. Re-pressing the selected chip is a no-op rather than a surprise refresh. */
-    fun selectFilter(filter: MoviesFilter) {
-        if (filter == _uiState.value.filter) return
-        _uiState.update { it.copy(filter = filter) }
+    /** A genre chip press on the Genres tab. Re-pressing the selected chip is a no-op. */
+    fun selectGenre(genre: MoviesFilter.Genre) {
+        val state = _uiState.value
+        if (state.tab == MoviesTab.Genres && state.genre?.id == genre.id) return
+        _uiState.update { it.copy(tab = MoviesTab.Genres, genre = genre) }
         loadFirstPage(userInitiated = true)
     }
 
@@ -184,7 +231,7 @@ class MoviesViewModel(
      */
     fun onLikeCommitted() {
         val state = _uiState.value
-        if (state.filter != MoviesFilter.Liked) return
+        if (state.tab != MoviesTab.Liked) return
         if (state.grid !is IglooRailState.Loaded) return
         loadFirstPage(userInitiated = false, silent = true)
     }
@@ -222,10 +269,15 @@ class MoviesViewModel(
      * failure keeps the existing content and messaging.
      */
     private fun loadFirstPage(userInitiated: Boolean, silent: Boolean = false) {
+        val requested = _uiState.value
+        // The Genres tab with no genre to show has no endpoint: nothing is requested and nothing
+        // in the state moves, so the last committed list stays intact under the placeholder.
+        val filter = requested.filter ?: return
         pageJob?.cancel()
         val startedIn = ++generation
-        val filter = _uiState.value.filter
-        val sort = _uiState.value.sort
+        val tab = requested.tab
+        val genre = requested.genre
+        val sort = requested.sort
         if (silent) {
             _uiState.update {
                 it.copy(
@@ -252,7 +304,8 @@ class MoviesViewModel(
                     nextPage = FIRST_PAGE + 1
                     seenIds.clear()
                     seenIds += items.map { it.id }
-                    committedFilter = filter
+                    committedTab = tab
+                    committedGenre = genre
                     committedSort = sort
                     _uiState.update {
                         it.copy(
@@ -281,8 +334,9 @@ class MoviesViewModel(
                         val hadContent = it.grid is IglooRailState.Loaded
                         it.copy(
                             // The grid still shows the committed list, so the selection snaps
-                            // back to it — a chip must never claim a filter the grid isn't in.
-                            filter = committedFilter,
+                            // back to it — a tab must never claim a list the grid isn't in.
+                            tab = committedTab,
+                            genre = committedGenre,
                             sort = committedSort,
                             grid = IglooRailState.Error(message).orKeepContent(it.grid),
                             append = it.append.resetIfLoading(),
@@ -301,11 +355,12 @@ class MoviesViewModel(
     private fun appendNextPage() {
         val page = nextPage
         val startedIn = generation
+        // Appends page the *committed* list — the one the grid actually shows — never the
+        // requested one, which may belong to a switch that hasn't landed.
+        val filter = committedFilter() ?: return
         _uiState.update { it.copy(append = MoviesAppendState.Loading) }
         pageJob = viewModelScope.launch {
-            // Appends page the *committed* filter/sort — the list the grid actually shows —
-            // never the requested one, which may belong to a switch that hasn't landed.
-            val result = fetchPage(committedFilter, committedSort, page)
+            val result = fetchPage(filter, committedSort, page)
             // A refresh can land between the request and its response; appending then would
             // resurrect a page belonging to a list that no longer exists.
             if (startedIn != generation) return@launch
@@ -346,6 +401,13 @@ class MoviesViewModel(
         }
     }
 
+    /** Null only before any page has landed, when there is no append to make anyway. */
+    private fun committedFilter(): MoviesFilter? = when (committedTab) {
+        MoviesTab.All -> MoviesFilter.All
+        MoviesTab.Liked -> MoviesFilter.Liked
+        MoviesTab.Genres -> committedGenre
+    }
+
     /** The one place the three sources differ: which endpoint serves the page. */
     private suspend fun fetchPage(
         filter: MoviesFilter,
@@ -369,7 +431,7 @@ class MoviesViewModel(
             val result = movies.movieStats()
             if (result is ApiResult.Success) {
                 _uiState.update {
-                    if (it.filter == MoviesFilter.All) {
+                    if (it.tab == MoviesTab.All) {
                         it.copy(totalMovies = result.value.totalMovies)
                     } else {
                         it
@@ -380,17 +442,39 @@ class MoviesViewModel(
     }
 
     /**
-     * The chip row's genres. Same stance as [loadStats]: a failure keeps whatever was shown
-     * last and never reports — the row degrades to All and Liked until a later refresh lands.
+     * The Genres tab's picker. Same stance as [loadStats]: a failure keeps whatever was shown
+     * last and never reports — the tab degrades to a placeholder until a later refresh lands.
+     * A landing list re-resolves the remembered genre (a renamed tag follows the list; a
+     * vanished genre falls back to the first), and a Genres tab that was waiting on it fetches
+     * that genre's page one — nothing was pressed, so no Refreshing label.
      */
     private fun loadGenres() {
         genresJob?.cancel()
         genresJob = viewModelScope.launch {
             val result = movies.movieGenres()
-            if (result is ApiResult.Success) {
-                _uiState.update { it.copy(genres = result.value) }
+            if (result !is ApiResult.Success) return@launch
+            val wasWaiting = _uiState.value.let { it.tab == MoviesTab.Genres && it.genre == null }
+            _uiState.update {
+                it.copy(
+                    genres = result.value,
+                    genre = it.genre.resolveAgainst(result.value),
+                )
             }
+            if (wasWaiting && _uiState.value.genre != null) loadFirstPage(userInitiated = false)
         }
+    }
+
+    /**
+     * The genre the Genres tab should show given [genres]: the remembered one if it is still
+     * listed (by id, with the list's current tag), else the first, else nothing. A remembered
+     * genre survives an empty list so a transient failure cannot forget the user's choice.
+     */
+    private fun MoviesFilter.Genre?.resolveAgainst(
+        genres: List<MovieGenreWithCount>,
+    ): MoviesFilter.Genre? {
+        if (genres.isEmpty()) return this
+        val match = genres.firstOrNull { it.genreId == this?.id } ?: genres.first()
+        return MoviesFilter.Genre(match.genreId, match.genreTag)
     }
 
     /**

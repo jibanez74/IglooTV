@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.feature.movies
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -182,26 +183,59 @@ class MoviesGridAccessibilityTest {
             .assertIsFocused()
     }
 
-    // --- the filter row and header -----------------------------------------------------------
+    // --- the tab strip, the genre row, and the header ----------------------------------------
+
+    /** One cleared node per tab, a Tab role, and `selected` only on the one that is. */
+    @Test
+    fun eachTabAnnouncesItsNameRoleAndSelection() {
+        setContent()
+
+        composeRule.onNodeWithTag("movies_tab_all")
+            .assertContentDescriptionEquals("All movies")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+            .assertHasClickAction()
+
+        // Never `selected = false`: TalkBack would append "not selected" to every other tab.
+        composeRule.onNodeWithTag("movies_tab_liked")
+            .assertContentDescriptionEquals("Liked movies")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Selected))
+            .assertHasClickAction()
+    }
 
     /** One cleared node per chip: the drawn "Action · 26" must not leak past the spoken form. */
     @Test
-    fun eachChipAnnouncesItsNameCountAndSelection() {
-        setContent()
-
-        val action = composeRule.onNodeWithTag("movies_filter_genre_7")
-        action.assertContentDescriptionEquals("Action, 26 movies")
-        action.assertHasClickAction()
-        action.assert(
-            SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription),
+    fun eachGenreChipAnnouncesItsNameCountAndSelection() {
+        setContent(
+            testMoviesState(
+                tab = MoviesTab.Genres,
+                genre = MoviesFilter.Genre(id = 7, tag = "Action"),
+            ),
         )
 
-        // Only the selected chip carries the state; every other chip stays silent about it.
-        composeRule.onNodeWithTag("movies_filter_all")
-            .assertContentDescriptionEquals("All movies")
+        composeRule.onNodeWithTag("movies_genre_7")
+            .assertContentDescriptionEquals("Action, 26 movies")
+            .assertHasClickAction()
             .assert(
                 SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"),
             )
+
+        // Only the selected chip carries the state; every other chip stays silent about it.
+        composeRule.onNodeWithTag("movies_genre_9")
+            .assertContentDescriptionEquals("Drama, 14 movies")
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+    }
+
+    @Test
+    fun theGenresTabWithoutGenresAnnouncesThePlaceholder() {
+        setContent(testMoviesState(tab = MoviesTab.Genres, genre = null, genres = emptyList()))
+
+        composeRule.onNodeWithContentDescription(
+            "Genres aren't available right now. Refresh to try again.",
+        ).assertIsFocused()
+        composeRule.onNodeWithTag("movies_count")
+            .assertContentDescriptionEquals("Genres unavailable")
     }
 
     @Test
@@ -220,7 +254,7 @@ class MoviesGridAccessibilityTest {
     fun theCountSpeaksTheActiveFilter() {
         setContent(
             testMoviesState(
-                filter = MoviesFilter.Liked,
+                tab = MoviesTab.Liked,
                 grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
                 totalMovies = 3,
             ),
@@ -234,7 +268,7 @@ class MoviesGridAccessibilityTest {
     fun anEmptyLikedViewAnnouncesItself() {
         setContent(
             testMoviesState(
-                filter = MoviesFilter.Liked,
+                tab = MoviesTab.Liked,
                 grid = IglooRailState.Loaded(emptyList()),
             ),
         )
@@ -248,7 +282,8 @@ class MoviesGridAccessibilityTest {
     fun anEmptyGenreViewAnnouncesItself() {
         setContent(
             testMoviesState(
-                filter = MoviesFilter.Genre(id = 7, tag = "Action"),
+                tab = MoviesTab.Genres,
+                genre = MoviesFilter.Genre(id = 7, tag = "Action"),
                 grid = IglooRailState.Loaded(emptyList()),
             ),
         )

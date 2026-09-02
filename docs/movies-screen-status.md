@@ -1,61 +1,59 @@
-# Movies screen — status after the filters & sort pass (2026-08-29)
+# Movies screen — status after the tabs pass (2026-09-02)
 
-Plain-language record of where the Movies screen stands after this pass, which brought it to
-feature parity with the web app's movies page (adapted for TV).
+Plain-language record of where the Movies screen stands after replacing the filter chip row
+with a tab control, the way the web app's movies page is organised.
 
 ## What was done
 
-**Sort toggle.** The header gained an A–Z ⇄ Z–A button next to Refresh. It only flips
-direction because that is all the server supports — there is no sort-by-year or by-rating on
-the backend. The button never disables, reserves the width of both labels so it doesn't jump
-when pressed, and tells TalkBack its current order and what a press will do.
+**Tabs instead of chips.** The single row of chips (All · Liked · one per genre) is now a strip
+of three tabs — **All Movies · Genres · Liked** — sitting between the header and the grid. This
+is the web page's shape (All Movies · Genres · Playlists), with Liked standing in for Playlists
+until playlists have a TV screen of their own. The strip is fixed and never scrolls.
 
-**Genre filtering.** A chip row now sits between the header and the grid: All · Liked · one
-chip per genre with its movie count ("Action · 145"). Selecting a chip swaps the grid to that
-genre's movies, keeps the current sort direction, and shows that view's own count. The genre
-list loads alongside the library; if that fetch fails the row quietly shows just All and Liked
-until a later refresh — no error card for something that decorative.
+**Tabs switch on focus.** Landing the d-pad on a tab is the switch — no press needed, the way
+Android TV's own tabs behave. Sliding from Liked back to All passes over Genres, which briefly
+loads and is immediately superseded; the view model cancels that request and ignores any late
+response, so nothing wrong can land. A press on a tab also selects it, which is how TalkBack
+activates it and how you retry after a failed switch.
 
-**Liked movies view.** The Liked chip shows everything you've liked. Liking and unliking still
-happens on a movie's details page — and a shown Liked grid now quietly updates itself when you
-toggle a like there, so coming Back never shows a stale list. Each view has its own empty
-message ("No liked movies yet…", "No Action movies in your library.").
+**The Genres tab has a picker.** Under the strip, one chip per genre with its count ("Action ·
+146"). Press a chip to see that genre's movies. The tab remembers the last genre you chose, so
+coming back lands on it; if the genre list is refreshed and the genre was renamed, the chip
+follows the new name, and if it vanished the first genre is chosen instead. If the genre list
+can't be loaded at all, the tab shows a short placeholder ("Genres aren't available right now.
+Refresh to try again.") that still takes focus, and the moment the list arrives the first genre
+is picked and shown.
 
-**Failure behavior.** If switching filters or sort fails (server unreachable), the grid you
-were looking at stays put, the chip selection snaps back to match it, and the failure is
-reported as a one-line notice by the header — same contract Refresh already had.
-
-**A real bug found and fixed during on-device verification.** Unliking the *only* liked movie
-and pressing Back used to dump focus onto the navigation rail instead of the Movies pane. Root
-cause: Back tries to restore focus to the card you came from; that card no longer existed, and
-Compose reports that focus request as "fine" while doing nothing. The pane's card-less states
-(loading, error, empty) now also carry the Back-return anchor, so Back always lands inside the
-pane. There's a regression test for it.
+**Focus was the tricky part, and it's handled.** Every content replacement used to pull focus
+into the grid — right for Refresh, Sort and chip presses, but fatal for a tab that selects on
+focus: you could never get past the first tab. A switch that lands while you're standing on a
+tab now leaves focus there (the grid still returns to the top, so one press down is the first
+card). Refresh and Sort go *down* to the selected tab specifically, so a diagonal press can't
+accidentally switch sections.
 
 **Everything is tested and verified.**
-- 36 JVM tests on the movies view model (12 new: filters, sort, revert-on-failure, silent
-  liked reconcile, count rules) plus 2 new details-view-model listener tests — all green.
-- 46 instrumented tests on the emulator (10 new focus/behavior, 5 new TalkBack) — all green.
-- Verified end-to-end on the TV emulator against the real backend: sort flip, genre paging
-  (network requests confirmed hitting the right endpoints), the full like → Liked → unlike
-  round trip, and the server-down failure path. Screenshots taken at every step.
+- 51 JVM tests on the movies view model (9 new: tab selection, remembered genre, renamed genre,
+  empty-genres placeholder, auto-select when genres land, superseded pass-over fetch, tab and
+  genre revert on failure) — all green.
+- 71 instrumented tests on the emulator across the behaviour and accessibility suites (about 20
+  new or rewritten for the strip, the picker and the placeholder) — all green.
+- Verified end-to-end on the Shield against the live server: the strip renders, focusing Genres
+  shows the picker and Action's grid with focus staying on the tab, pressing Adventure swaps the
+  grid and lands on its first card, Liked shows the two liked movies, sliding back to All over
+  Genres lands cleanly on the full library, Genres remembers Adventure, and Refresh → down
+  returns to the selected tab. Screenshots taken at every step.
 
-**Docs updated.** design-system.md §11.4 was rewritten (it previously *forbade* sort and
-filters on this screen), §9.1 documents the new `IglooFilterChip` primitive, and the changelog
-records the pass including the focus bug.
+**Docs updated.** design-system.md §11.4 was rewritten for the tab model and its focus contract,
+§9.1 documents the new `IglooTabRow` / `IglooTab` primitive, §9.2 records why tv-material's
+`TabRow` was not adopted, and the changelog has the entry.
 
 ## What remains
 
-- **Playlists** — deliberately left out of this pass. The server supports browsing and even
-  adding movies to playlists, but the web app itself can't add movies to playlists yet, so TV
-  would be building ahead of web. Needs its own screen and its own pass.
-- **Search** — its own destination in the spine, still a placeholder. The design system
-  already sketches it (§11.6); the movies search endpoint is ready on the server.
-- **Request Movie** — skipped as desktop-shaped (free-text TMDB search). Could become a
-  voice-input flow later if wanted.
-- **Shield sanity pass** — everything was verified on the emulator; the chip row's d-pad
-  edges (first-chip-left, last-chip-right) deserve a one-minute check on the Shield next time
-  it's convenient, since it's the primary real device.
-- **Anything needing richer server support** — watched/year filters, other sort fields,
-  progress bars on library cards — all blocked on backend work first; the API only offers
-  title-direction sort and single-genre filtering today.
+- **Server-down revert on a tab switch** was verified by unit test only (the live server on the
+  tailnet can't be cut from the Shield without cutting adb). The rule: the grid stays, the tab
+  and genre snap back, the notice reports, and a press on the still-focused tab retries.
+- **Playlists** — still out. When it has a screen, it becomes the third tab and Liked moves
+  inside it, as on the web.
+- **Search** and **Request Movie** — unchanged from the previous pass.
+- **Anything needing richer server support** — watched/year filters, other sort fields — still
+  blocked on backend work.

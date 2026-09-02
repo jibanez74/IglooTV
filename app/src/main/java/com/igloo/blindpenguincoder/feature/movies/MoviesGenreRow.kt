@@ -25,75 +25,51 @@ import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
 
 /**
- * The Movies index's filter chips: All · Liked · one chip per genre, with counts
- * (docs/design-system.md section 11.4).
+ * The Genres tab's picker: one chip per genre, with counts (docs/design-system.md section
+ * 11.4). Only composed while the Genres tab is selected and has a list to show.
  *
  * A plain [Row] under [horizontalScroll], deliberately not a `LazyRow`: a library's genre list
  * is bounded (tens, not thousands), and keeping every chip composed keeps every focus requester
- * permanently attached — the grid's `up = filterRowRequester` can never target a disposed node,
+ * permanently attached — the grid's `up = genreRowRequester` can never target a disposed node,
  * and no rail-style entry-key machinery is needed. A focused chip brings itself into view.
  * Revisit with a `LazyRow` only if genre counts ever invalidate that assumption.
  *
- * All and Liked render before the genres fetch lands, so the row's height is set immediately
- * and genre chips appearing later never reflow the grid under a focused cell. A failed genres
- * fetch simply leaves the row at All + Liked — the view model degrades it silently.
- *
- * Focus contract: every chip goes up to Refresh and down to the pane's content anchor (whatever
- * the grid state put there — entry card, skeleton anchor, error Retry, or the empty box); the
- * first chip exits left to the navigation spine and the last chip's right edge is pinned. The
- * selected chip carries [filterRowRequester] so the grid's first row lands back on it; if the
- * selected genre ever vanishes from a refreshed list, the requester falls back to All so the
- * grid's `up` edge always resolves.
+ * Focus contract: every chip goes up to the selected tab and down to the pane's content anchor
+ * (whatever the grid state put there — entry card, skeleton anchor, error Retry, or the empty
+ * box); the first chip exits left to the navigation spine and the last chip's right edge is
+ * pinned. The selected chip carries [genreRowRequester] so the grid's first row lands back on
+ * it; if the selected genre ever vanishes from a refreshed list, the requester falls back to the
+ * first chip so the grid's `up` edge always resolves.
  */
 @Composable
-internal fun MoviesFilterRow(
+internal fun MoviesGenreRow(
     genres: List<MovieGenreWithCount>,
-    selected: MoviesFilter,
+    selected: MoviesFilter.Genre?,
     contentInset: PaddingValues,
-    filterRowRequester: FocusRequester,
+    genreRowRequester: FocusRequester,
     navigationRequester: FocusRequester,
-    refreshRequester: FocusRequester,
+    tabRowRequester: FocusRequester,
     contentStartRequester: FocusRequester,
-    onSelectFilter: (MoviesFilter) -> Unit,
+    onSelectGenre: (MoviesFilter.Genre) -> Unit,
     onFocusChanged: (String, Boolean) -> Unit,
 ) {
     val direction = LocalLayoutDirection.current
     val chips = remember(genres) {
-        buildList {
-            add(
-                MoviesFilterChipSpec(
-                    filter = MoviesFilter.All,
-                    text = "All",
-                    semanticLabel = "All movies",
-                    actionLabel = "Show all movies",
-                    testTag = "movies_filter_all",
-                ),
+        genres.map { genre ->
+            val count = integerCountFormat.format(genre.movieCount)
+            MoviesGenreChipSpec(
+                genre = MoviesFilter.Genre(genre.genreId, genre.genreTag),
+                text = "${genre.genreTag} · $count",
+                semanticLabel = "${genre.genreTag}, $count ${movieNoun(genre.movieCount)}",
+                actionLabel = "Show ${genre.genreTag} movies",
+                testTag = "movies_genre_${genre.genreId}",
             )
-            add(
-                MoviesFilterChipSpec(
-                    filter = MoviesFilter.Liked,
-                    text = "Liked",
-                    semanticLabel = "Liked movies",
-                    actionLabel = "Show liked movies",
-                    testTag = "movies_filter_liked",
-                ),
-            )
-            genres.forEach { genre ->
-                val count = integerCountFormat.format(genre.movieCount)
-                add(
-                    MoviesFilterChipSpec(
-                        filter = MoviesFilter.Genre(genre.genreId, genre.genreTag),
-                        text = "${genre.genreTag} · $count",
-                        semanticLabel = "${genre.genreTag}, $count ${movieNoun(genre.movieCount)}",
-                        actionLabel = "Show ${genre.genreTag} movies",
-                        testTag = "movies_filter_genre_${genre.genreId}",
-                    ),
-                )
-            }
         }
     }
-    // The anchor must always attach somewhere the row actually renders; All always does.
-    val anchor = if (chips.any { it.filter.matches(selected) }) selected else MoviesFilter.All
+    // Genre identity is the id: a renamed tag on a refreshed list must not deselect the chip.
+    // The anchor must always attach somewhere the row actually renders; the first chip does.
+    val anchorId = selected?.id?.takeIf { id -> chips.any { it.genre.id == id } }
+        ?: chips.first().genre.id
 
     Row(
         modifier = Modifier
@@ -105,23 +81,24 @@ internal fun MoviesFilterRow(
             .padding(
                 start = contentInset.calculateStartPadding(direction),
                 end = contentInset.calculateEndPadding(direction),
-            ),
+            )
+            .testTag("movies_genre_row"),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
         chips.forEachIndexed { index, chip ->
             IglooFilterChip(
                 text = chip.text,
-                selected = chip.filter.matches(selected),
-                onClick = { onSelectFilter(chip.filter) },
+                selected = chip.genre.id == selected?.id,
+                onClick = { onSelectGenre(chip.genre) },
                 semanticLabel = chip.semanticLabel,
                 actionLabel = chip.actionLabel,
                 modifier = Modifier
-                    .withRequester(filterRowRequester.takeIf { chip.filter.matches(anchor) })
+                    .withRequester(genreRowRequester.takeIf { chip.genre.id == anchorId })
                     .onFocusChanged { onFocusChanged(chip.testTag, it.isFocused) }
                     .focusProperties {
-                        // The header and the grid are siblings of this scroll surface, so both
+                        // The tab row and the grid are siblings of this scroll surface, so both
                         // vertical edges are wired rather than resolved spatially.
-                        up = refreshRequester
+                        up = tabRowRequester
                         down = contentStartRequester
                         if (index == 0) left = navigationRequester
                         if (index == chips.lastIndex) right = FocusRequester.Cancel
@@ -132,16 +109,10 @@ internal fun MoviesFilterRow(
     }
 }
 
-private data class MoviesFilterChipSpec(
-    val filter: MoviesFilter,
+private data class MoviesGenreChipSpec(
+    val genre: MoviesFilter.Genre,
     val text: String,
     val semanticLabel: String,
     val actionLabel: String,
     val testTag: String,
 )
-
-/** Genre identity is the id: a renamed tag on a refreshed list must not deselect the chip. */
-private fun MoviesFilter.matches(selected: MoviesFilter): Boolean = when {
-    this is MoviesFilter.Genre && selected is MoviesFilter.Genre -> id == selected.id
-    else -> this == selected
-}

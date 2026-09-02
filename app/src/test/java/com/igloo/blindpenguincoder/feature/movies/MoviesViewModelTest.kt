@@ -558,13 +558,13 @@ class MoviesViewModelTest {
     // --- filters and sort -------------------------------------------------------------------
 
     @Test
-    fun `selecting the liked filter requests page one of the liked endpoint`() = runTest {
+    fun `selecting the liked tab requests page one of the liked endpoint`() = runTest {
         val http = routedHttp(
             liked = { jsonResponse(page(number = 1, total = 3, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
 
-        model.selectFilter(MoviesFilter.Liked)
+        model.selectTab(MoviesTab.Liked)
 
         assertEquals(listOf("1"), http.likedPages)
         assertEquals(MoviesFilter.Liked, model.uiState.value.filter)
@@ -579,11 +579,142 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        model.selectFilter(MoviesFilter.Genre(id = 7, tag = "Action"))
+        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
 
         assertEquals(listOf("7:1"), http.genrePages)
         assertEquals(listOf("48", "48"), http.perPages)
         assertEquals(26L, model.uiState.value.totalMovies)
+        assertEquals(MoviesTab.Genres, model.uiState.value.tab)
+    }
+
+    @Test
+    fun `selecting the genres tab picks the first genre and requests its movies`() = runTest {
+        val http = routedHttp(
+            genres = {
+                jsonResponse(
+                    moviesGenresJson(
+                        movieGenreWithCountJson(id = 7, tag = "Action"),
+                        movieGenreWithCountJson(id = 9, tag = "Drama"),
+                    ),
+                )
+            },
+            genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+
+        model.selectTab(MoviesTab.Genres)
+
+        assertEquals(listOf("7:1"), http.genrePages)
+        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
+    }
+
+    @Test
+    fun `selecting the genres tab reuses the remembered genre while it is still listed`() = runTest {
+        val http = routedHttp(
+            genres = {
+                jsonResponse(
+                    moviesGenresJson(
+                        movieGenreWithCountJson(id = 7, tag = "Action"),
+                        movieGenreWithCountJson(id = 9, tag = "Drama"),
+                    ),
+                )
+            },
+            genreMovies = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        model.selectGenre(MoviesFilter.Genre(id = 9, tag = "Drama"))
+
+        model.selectTab(MoviesTab.All)
+        model.selectTab(MoviesTab.Genres)
+
+        assertEquals(listOf("9:1", "9:1"), http.genrePages)
+    }
+
+    @Test
+    fun `a renamed genre keeps its selection and takes the list's new tag`() = runTest {
+        var renamed = false
+        val http = routedHttp(
+            genres = {
+                val tag = if (renamed) "Action & Adventure" else "Action"
+                jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = tag)))
+            },
+            genreMovies = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        model.selectTab(MoviesTab.Genres)
+
+        renamed = true
+        model.reload()
+
+        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action & Adventure"), model.uiState.value.genre)
+        assertEquals(listOf("7:1", "7:1"), http.genrePages)
+    }
+
+    @Test
+    fun `selecting the genres tab with no genres issues no request and shows the placeholder`() =
+        runTest {
+            val http = routedHttp(
+                genres = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+                library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+            )
+            val model = loaded(http)
+
+            model.selectTab(MoviesTab.Genres)
+
+            assertEquals(emptyList<String>(), http.genrePages)
+            assertEquals(MoviesTab.Genres, model.uiState.value.tab)
+            assertNull(model.uiState.value.filter)
+            assertTrue(!model.uiState.value.refreshing)
+            // The committed list is untouched underneath the placeholder.
+            assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+        }
+
+    @Test
+    fun `genres landing on the waiting genres tab auto-select the first and fetch it`() = runTest {
+        var fail = true
+        val http = routedHttp(
+            genres = {
+                if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                else jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = "Action")))
+            },
+            genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        model.selectTab(MoviesTab.Genres)
+        val generationBefore = model.uiState.value.contentGeneration
+
+        fail = false
+        model.reload()
+
+        assertEquals(listOf("7:1"), http.genrePages)
+        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
+        assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+        assertEquals(generationBefore + 1, model.uiState.value.contentGeneration)
+        assertTrue(!model.uiState.value.refreshing)
+    }
+
+    @Test
+    fun `a superseded genres fetch on the way to another tab never lands`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+            genreMovies = {
+                gate.await()
+                jsonResponse(page(number = 1, totalPages = 1, ids = 10L..12L))
+            },
+            liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 20L..22L)) },
+        )
+        val model = loaded(http)
+        model.selectTab(MoviesTab.Liked)
+
+        // D-pad from Liked back to All passes over Genres, which selects on focus.
+        model.selectTab(MoviesTab.Genres)
+        model.selectTab(MoviesTab.All)
+        gate.complete(Unit)
+
+        assertEquals(MoviesTab.All, model.uiState.value.tab)
+        assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+        assertTrue(!model.uiState.value.refreshing)
     }
 
     @Test
@@ -592,7 +723,7 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        model.selectFilter(MoviesFilter.Genre(id = 7, tag = "Action"))
+        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
 
         model.toggleSort()
 
@@ -604,18 +735,41 @@ class MoviesViewModelTest {
     }
 
     @Test
-    fun `a failed filter switch keeps the grid, reverts the selection, and reports a notice`() = runTest {
+    fun `a failed tab switch keeps the grid, reverts the tab, and reports a notice`() = runTest {
         val http = routedHttp(
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
             liked = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
         )
         val model = loaded(http)
 
-        model.selectFilter(MoviesFilter.Liked)
+        model.selectTab(MoviesTab.Liked)
 
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+        assertEquals(MoviesTab.All, model.uiState.value.tab)
         assertEquals(MoviesFilter.All, model.uiState.value.filter)
         assertTrue(model.uiState.value.notice != null)
+    }
+
+    @Test
+    fun `a failed genre switch reverts to the committed genre`() = runTest {
+        var failingGenre: Long? = null
+        val http = routedHttp(
+            genreMovies = {
+                if (it.url.encodedPath.contains("/genres/$failingGenre/")) {
+                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                } else {
+                    jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
+                }
+            },
+        )
+        val model = loaded(http)
+        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+
+        failingGenre = 9
+        model.selectGenre(MoviesFilter.Genre(id = 9, tag = "Drama"))
+
+        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.genre)
+        assertEquals(MoviesTab.Genres, model.uiState.value.tab)
     }
 
     @Test
@@ -654,7 +808,7 @@ class MoviesViewModelTest {
         val model = loaded(http)
         model.loadMore()
 
-        model.selectFilter(MoviesFilter.Liked)
+        model.selectTab(MoviesTab.Liked)
         gate.complete(Unit)
 
         assertEquals(listOf(10L, 11L, 12L), model.uiState.value.gridIds())
@@ -671,7 +825,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        model.selectFilter(MoviesFilter.Liked)
+        model.selectTab(MoviesTab.Liked)
 
         model.loadMore()
 
@@ -687,7 +841,7 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        model.selectFilter(MoviesFilter.Genre(id = 7, tag = "Action"))
+        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
 
         // The start effect re-fires on every return to the foreground and re-reads stats.
         model.refresh()
@@ -696,16 +850,29 @@ class MoviesViewModelTest {
     }
 
     @Test
-    fun `re-pressing the selected filter is a no-op`() = runTest {
+    fun `re-selecting the current tab is a no-op`() = runTest {
         val http = routedHttp(
             liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        model.selectFilter(MoviesFilter.Liked)
+        model.selectTab(MoviesTab.Liked)
 
-        model.selectFilter(MoviesFilter.Liked)
+        model.selectTab(MoviesTab.Liked)
 
         assertEquals(listOf("1"), http.likedPages)
+    }
+
+    @Test
+    fun `re-pressing the selected genre chip is a no-op`() = runTest {
+        val http = routedHttp(
+            genreMovies = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+
+        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+
+        assertEquals(listOf("7:1"), http.genrePages)
     }
 
     @Test
@@ -729,7 +896,7 @@ class MoviesViewModelTest {
     // --- liked reconcile --------------------------------------------------------------------
 
     @Test
-    fun `a like commit on the liked filter re-reads page one silently`() = runTest {
+    fun `a like commit on the liked tab re-reads page one silently`() = runTest {
         var unliked = false
         val http = routedHttp(
             liked = {
@@ -738,7 +905,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        model.selectFilter(MoviesFilter.Liked)
+        model.selectTab(MoviesTab.Liked)
         val generationBefore = model.uiState.value.contentGeneration
         val silentGenerationBefore = model.uiState.value.silentReconcileGeneration
 
@@ -771,7 +938,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        model.selectFilter(MoviesFilter.Liked)
+        model.selectTab(MoviesTab.Liked)
         model.reload()
         val before = model.uiState.value
         assertTrue(before.notice != null)
@@ -810,7 +977,7 @@ class MoviesViewModelTest {
                 },
             )
             val model = loaded(http)
-            model.selectFilter(MoviesFilter.Liked)
+            model.selectTab(MoviesTab.Liked)
 
             model.reload()
             assertTrue(model.uiState.value.refreshing)
@@ -846,7 +1013,7 @@ class MoviesViewModelTest {
                 },
             )
             val model = loaded(http)
-            model.selectFilter(MoviesFilter.Liked)
+            model.selectTab(MoviesTab.Liked)
             val silentGenerationBefore = model.uiState.value.silentReconcileGeneration
 
             model.reload()
@@ -881,7 +1048,7 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        model.selectFilter(MoviesFilter.Liked)
+        model.selectTab(MoviesTab.Liked)
         assertTrue(model.uiState.value.refreshing)
         model.onLikeCommitted()
         assertTrue(!model.uiState.value.refreshing)
@@ -910,7 +1077,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        model.selectFilter(MoviesFilter.Liked)
+        model.selectTab(MoviesTab.Liked)
         model.onLikeCommitted()
         assertTrue(!model.uiState.value.refreshing)
 
@@ -922,7 +1089,7 @@ class MoviesViewModelTest {
     }
 
     @Test
-    fun `a like commit on another filter issues no request`() = runTest {
+    fun `a like commit on another tab issues no request`() = runTest {
         val http = routedHttp()
         val model = loaded(http)
 

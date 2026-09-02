@@ -18,6 +18,7 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesAppendState
 import com.igloo.blindpenguincoder.feature.movies.MoviesFilter
+import com.igloo.blindpenguincoder.feature.movies.MoviesTab
 import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
 import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
@@ -72,7 +73,8 @@ internal fun testMoviesState(
     grid: IglooRailState<MoviePosterItem> = IglooRailState.Loaded(testMovieGridItems),
     append: MoviesAppendState = MoviesAppendState.Idle,
     totalMovies: Long? = 96,
-    filter: MoviesFilter = MoviesFilter.All,
+    tab: MoviesTab = MoviesTab.All,
+    genre: MoviesFilter.Genre? = null,
     sort: SortOrder = SortOrder.Ascending,
     genres: List<MovieGenreWithCount> = testGenres,
     refreshing: Boolean = false,
@@ -82,7 +84,8 @@ internal fun testMoviesState(
     silentReconcileGeneration: Int = 0,
 ) = MoviesUiState(
     totalMovies = totalMovies,
-    filter = filter,
+    tab = tab,
+    genre = genre,
     sort = sort,
     genres = genres,
     grid = grid,
@@ -99,7 +102,8 @@ internal val inertMoviesActions = MoviesActions(
     onRetryFirstPage = {},
     onRetryAppend = {},
     onLoadMore = {},
-    onSelectFilter = {},
+    onSelectTab = {},
+    onSelectGenre = {},
     onToggleSort = {},
 )
 

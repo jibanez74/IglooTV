@@ -742,7 +742,8 @@ until 2026-08-19.
 |---|---|
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
 | `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `restingFill` / `contentColor` carry the §3.2 over-media ground where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. |
-| `IglooFilterChip` | One choice in a row of mutually exclusive filters (the Movies index's filter row, §11.4): `heightIn(min = sizes.controlHeight)`, radius `lg`, `spacing.md` horizontal padding, `bodyMedium` label. Selection and focus compose rather than compete — selected is a `primary` fill that holds while unfocused, focus is the §6.1 ring/scale/glow over whatever fill the chip has; unselected rests as the ring's hairline border and takes the Ghost focus fill. Not an `IglooButton` variant: a selected-state fill on an unfocused node is outside the button contract. One cleared node: `semanticLabel` replaces the drawn text ("Action · 26" speaks as "Action, 26 movies"), the selected chip announces "Selected" via state description, and `actionLabel` names the press. |
+| `IglooFilterChip` | One choice in a row of mutually exclusive filters (the Movies index's genre picker, §11.4): `heightIn(min = sizes.controlHeight)`, radius `lg`, `spacing.md` horizontal padding, `bodyMedium` label. Selection and focus compose rather than compete — selected is a `primary` fill that holds while unfocused, focus is the §6.1 ring/scale/glow over whatever fill the chip has; unselected rests as the ring's hairline border and takes the Ghost focus fill. Not an `IglooButton` variant: a selected-state fill on an unfocused node is outside the button contract. One cleared node: `semanticLabel` replaces the drawn text ("Action · 26" speaks as "Action, 26 movies"), the selected chip announces "Selected" via state description, and `actionLabel` names the press. |
+| `IglooTabRow` / `IglooTab` | A strip of mutually exclusive sections (the Movies index, §11.4) — the web client's tab list. The row is one bordered pill on `muted @ 0.50` with a `border @ 0.50` hairline at `focus.restWidth`, radius `lg`, `spacing.xs` padding and gap, sized to its content and never scrolling (more tabs than fit the panel is too many tabs). A tab is `controlHeight` minus the row's padding, radius `md`, `spacing.md` horizontal padding, `bodyMedium` label: `primary` fill / `primaryForeground` selected, `card @ 0.72` / `foreground` focused, transparent / `mutedForeground` at rest — selection and focus compose as on the chip, but **no focus scale**, since a lifted tab would overlap the row's border. **Selects on focus**: d-pad landing on a tab is the switch, the Android TV convention; a press selects too — TalkBack's click action, and the way back after a failed switch reverted the selection out from under a focused tab. One cleared node with `Role.Tab`, `selected` set only when true (never false — TalkBack would say "not selected" on every other tab) and `actionLabel` on the press; the row is a `selectableGroup`. Hand-rolled on Foundation, not `androidx.tv.material3.TabRow` (§9.2). |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
 | `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, compact `formatRemainingTime` ("2h 20m left"), spoken `formatSpokenRemainingTime` ("2 hours and 20 minutes remaining"), `formatTimecode` ("1:01:15"), sparse `formatSpokenTime` ("1 hour and 15 seconds"), and exact `formatSpokenTimeThroughSeconds` ("1 hour, 0 minutes, and 15 seconds"). Both remaining-time forms clamp overshoot and round partial minutes up; they use "Less than 1m left" / "Less than 1 minute remaining" below one minute and defensively fall back to "In progress" for an invalid duration. The exact resume form floors to the last completed second and includes every unit from the largest relevant one through seconds, never a leading zero hour. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
@@ -774,6 +775,10 @@ Available and appropriate to adopt where it saves hand-rolling:
 - `ListItem`, `TabRow` / `Tab`, `Card`
 
 Adopt these for *behavior*; always configure them with Igloo tokens, never their defaults.
+
+Nothing has been adopted yet. The Movies tab strip (§9.1 `IglooTabRow`) deliberately stayed on
+Foundation: every other control wears §6.1's `focusRing`, and a Material tab would have been the
+one node in the app with a focus treatment of its own.
 
 ### 9.3 The confirmation dialog
 
@@ -1341,44 +1346,64 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
 ### 11.4 Movies
 
 - **Index** — a heading, the current view's count, **Sort (A–Z ⇄ Z–A)** and **Refresh**
-  actions, and a **filter row** (All · Liked · one chip per genre, with counts) over a poster
-  grid at `gridColumns`, **paged by infinite scroll**. Still no tab control: the web movies
-  page's Genres and Liked views land here as chips in a single row — one press to filter, no
-  second screen. Playlists remain out until they have a screen of their own.
+  actions, a **tab strip** (All Movies · Genres · Liked), the Genres tab's **genre picker** (one
+  chip per genre, with counts), and a poster grid at `gridColumns`, **paged by infinite
+  scroll**. The strip mirrors the web movies page's All Movies · Genres · Playlists, with Liked
+  standing in for Playlists until playlists have a screen of their own.
 
   **This reverses the earlier "no sort control, no filters" rule** ("the grid is All Movies and
-  nothing else"). Sort is **direction only** — the backend orders by title and offers no field
-  choice — so the control is a Ghost button beside Refresh with reserved label variants
+  nothing else") and the 2026-08-29 "still no tab control" rule that put All, Liked and every
+  genre in one chip row. Sort is **direction only** — the backend orders by title and offers no
+  field choice — so the control is a Ghost button beside Refresh with reserved label variants
   ("A–Z"/"Z–A", §9.1), never disabled for the same focus-tree reason as Refresh, announcing
   "Sort order" with an "A to Z"/"Z to A" state description.
 
-  **The filter row** sits between the header and the grid and renders in every grid state — an
-  empty Liked view or a failed first page must still let the user switch filters. It is one
-  horizontally scrollable plain `Row`, deliberately not lazy: genre lists are bounded (tens),
-  and keeping every chip composed keeps every focus requester permanently attached, so the
-  grid's wired `up` edge can never target a disposed node. All and Liked render before the
-  genres fetch lands and fix the row's height, so genre chips arriving later never reflow the
-  grid or move focus. Genres load with every refresh and **degrade silently**: a failed read
-  keeps the last known list — or just All + Liked — and never shows an error in the row. The
-  selected chip wears the `primary` fill while focus stays the §6.1 ring (the two compose, not
-  compete) and announces "Selected"; chips draw "Action · 26" and speak "Action, 26 movies".
-  Genre chip identity is the id, so a renamed tag cannot deselect the chip.
+  **The tab strip** sits between the header and the grid and renders in every grid state — an
+  empty Liked view or a failed first page must still let the user switch sections. **Tabs
+  select on focus** (§9.1): landing on a tab is the switch, so flipping sections is one press
+  per tab with nothing to confirm. Passing over Genres on the way from Liked to All fires a
+  fetch that the next tab immediately supersedes — the view model cancels the page job and
+  bumps its generation, so the superseded response can never land — and the transient Genres
+  highlight is the platform's own tab behaviour. The one cost worth naming: a switch that lands
+  while the user is still on the tab must **not** re-anchor focus on the grid (the yank every
+  other replacement performs), or the strip becomes impossible to traverse; the grid still
+  scrolls to top so the next press down lands on its first card. Refresh and Sort wire their
+  `down` to the *selected* tab for the same reason — a spatial search would land on whichever
+  tab sits beneath the button and switch to it.
 
-  **Focus contract:** the grid's first row goes up to the selected chip; every chip goes up to
-  Refresh and down to the pane's content anchor — entry card, skeleton anchor, error Retry, or
-  the empty box, whichever the state drew; the first chip exits left to the spine and the last
-  chip's right edge is pinned. The header's left chain is Refresh → Sort → spine. In the states
-  with no cards the anchor also carries the overlay-return requester: the details overlay can
-  outlive the card that opened it (the Liked reconcile empties the grid underneath), and a
-  detached return requester does not *fail* its focus request — it silently no-ops, the host's
-  anchor fallback never runs, and the overlay's disposal hands focus to the platform fallback in
-  the navigation rail. Back must always find a live node inside the pane.
+  **The genre picker** is the Genres tab's second row, composed only while that tab is selected
+  and has a list to show. It is one horizontally scrollable plain `Row`, deliberately not lazy:
+  genre lists are bounded (tens), and keeping every chip composed keeps every focus requester
+  permanently attached, so the grid's wired `up` edge can never target a disposed node. Genres
+  load with every refresh and **degrade silently**: a failed read keeps the last known list and
+  never shows an error in the row. With no list at all the tab shows a placeholder ("Genres
+  aren't available right now. Refresh to try again.") that carries the pane's focus anchor;
+  nothing is fetched, the last committed pages stay intact underneath, and the list landing
+  later auto-selects the first genre and fetches it. Entering the tab re-resolves the
+  **remembered** genre against the current list — by id, so a renamed tag follows the list and
+  a vanished genre falls back to the first. The selected chip wears the `primary` fill while
+  focus stays the §6.1 ring (the two compose, not compete) and announces "Selected"; chips draw
+  "Action · 26" and speak "Action, 26 movies". Chips keep select-on-press.
 
-  **Transitions.** A filter or sort change is a wholesale replacement, exactly like Refresh:
-  the chip highlights on the press, the loaded grid stays on screen while page one is in
-  flight, and success scrolls to top and re-anchors focus on the first card. Failure keeps the
-  grid, **reverts the selection** to the view the grid still shows, and reports in the notice —
-  a chip must never claim a filter the grid isn't in. Counts belong to the active view: the
+  **Focus contract:** the grid's first row goes up to the selected genre chip on the Genres
+  tab, else to the selected tab; every chip goes up to the selected tab and down to the pane's
+  content anchor; every tab goes up to Refresh and down to the picker when it is shown, else to
+  the content anchor — entry card, skeleton anchor, error Retry, the empty box, or the genres
+  placeholder, whichever the state drew. The first tab and the first chip exit left to the
+  spine; the last tab's and the last chip's right edges are pinned. The header's left chain is
+  Refresh → Sort → spine, and both buttons go down to the selected tab. In the states with no
+  cards the anchor also carries the overlay-return requester: the details overlay can outlive
+  the card that opened it (the Liked reconcile empties the grid underneath), and a detached
+  return requester does not *fail* its focus request — it silently no-ops, the host's anchor
+  fallback never runs, and the overlay's disposal hands focus to the platform fallback in the
+  navigation rail. Back must always find a live node inside the pane.
+
+  **Transitions.** A tab, genre or sort change is a wholesale replacement, exactly like
+  Refresh: the tab or chip highlights at once, the loaded grid stays on screen while page one is
+  in flight, and success scrolls to top and re-anchors focus on the first card — except under a
+  focused tab, above. Failure keeps the grid, **reverts the tab and genre** to the view the grid
+  still shows, and reports in the notice — a tab must never claim a list the grid isn't in; the
+  reverted tab stays focused, and a press on it is the retry. Counts belong to the active view: the
   library-wide stat backs All only, and filtered views read their own responses' `total`. Each
   view has its own empty copy ("No liked movies yet. Like a movie from its details page and it
   will appear here.", "No {genre} movies in your library."). A like toggle committed in the
@@ -2111,6 +2136,21 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-09-02 — Movies index: a tab control (§11.4, §9.1, §9.2).**
+
+- **§11.4 reverses the 2026-08-29 "still no tab control" rule.** The single chip row (All ·
+  Liked · every genre) becomes a fixed **tab strip** — All Movies · Genres · Liked, the web
+  page's shape with Liked standing in for Playlists — and the genres move into a **picker row**
+  under the Genres tab, still `IglooFilterChip`s. Tabs **select on focus**; the section records
+  why the superseded pass-over fetch is harmless, why a switch landing under a focused tab must
+  not re-anchor focus, why Refresh and Sort wire `down` to the selected tab, the no-genres
+  placeholder, the remembered genre and its by-id re-resolution, and the tab + genre revert on
+  failure.
+- **§9.1** gains `IglooTabRow` / `IglooTab`; **§9.2** records that tv-material's `TabRow` was
+  deliberately not adopted.
+- `MoviesUiState.filter` is now derived from `tab` + `genre` (nullable for the placeholder);
+  `MoviesActions.onSelectFilter` splits into `onSelectTab` and `onSelectGenre`.
 
 **2026-09-01 — Music-player review: the startup queue report, and shared player chrome.**
 

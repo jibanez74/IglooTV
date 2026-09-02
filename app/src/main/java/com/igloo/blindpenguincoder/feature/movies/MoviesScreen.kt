@@ -46,6 +46,8 @@ import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooSkeletonAnchorCell
 import com.igloo.blindpenguincoder.core.ui.IglooSkeletonTextureCell
+import com.igloo.blindpenguincoder.core.ui.IglooTab
+import com.igloo.blindpenguincoder.core.ui.IglooTabRow
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.integerCountFormat
 import com.igloo.blindpenguincoder.core.ui.movieNoun
@@ -60,14 +62,15 @@ data class MoviesActions(
     val onRetryFirstPage: () -> Unit,
     val onRetryAppend: () -> Unit,
     val onLoadMore: () -> Unit,
-    val onSelectFilter: (MoviesFilter) -> Unit,
+    val onSelectTab: (MoviesTab) -> Unit,
+    val onSelectGenre: (MoviesFilter.Genre) -> Unit,
     val onToggleSort: () -> Unit,
 )
 
 /**
  * The movie library index (docs/design-system.md section 11.4): a heading with the current
- * view's count, Sort and Refresh actions, and a filter chip row (All · Liked · genres) over an
- * infinite-scrolling poster grid.
+ * view's count, Sort and Refresh actions, a tab strip (All Movies · Genres · Liked), the Genres
+ * tab's chip picker, and an infinite-scrolling poster grid.
  *
  * The grid pages itself. Unlike the web client's numbered pagination a d-pad user never sees a
  * page control — scrolling within [PREFETCH_ROWS] rows of the end asks for the next page, and
@@ -75,10 +78,11 @@ data class MoviesActions(
  *
  * [contentStartRequester] lands on the grid's entry cell — the remembered card if there is one,
  * otherwise the first — so entering the pane puts focus on content rather than on chrome, with
- * the filter chips one d-pad press above it and the header a press above them. In the states
- * with no cards the anchor moves to whatever the screen draws instead, because the shell's
- * focus model assumes the pane always has somewhere to land. The chip row renders in every grid
- * state — an empty Liked view or a failed first page must still let the user switch filters.
+ * the tabs (and, on Genres, the picker) one d-pad press above it and the header a press above
+ * them. In the states with no cards the anchor moves to whatever the screen draws instead,
+ * because the shell's focus model assumes the pane always has somewhere to land. The tab strip
+ * renders in every grid state, and the picker in every grid state while the Genres tab has a
+ * list — an empty Liked view or a failed first page must still let the user switch sections.
  */
 @Composable
 fun MoviesScreen(
@@ -97,10 +101,15 @@ fun MoviesScreen(
     val content = state.toMoviesContent()
     val refreshRequester = remember { FocusRequester() }
     val sortRequester = remember { FocusRequester() }
-    val filterRowRequester = remember { FocusRequester() }
+    val tabRowRequester = remember { FocusRequester() }
+    val genreRowRequester = remember { FocusRequester() }
     val firstCardRequester = remember { FocusRequester() }
     val cardlessHandoffRequester = remember { FocusRequester() }
     val focusOwnership = remember { MoviesFocusOwnership() }
+    // The picker only exists with a list to pick from; without it the content's way up is the
+    // tab strip, so the wired edge follows whichever row is actually composed.
+    val genreRowShown = state.tab == MoviesTab.Genres && state.genres.isNotEmpty()
+    val contentUp = if (genreRowShown) genreRowRequester else tabRowRequester
 
     Column(
         // No horizontal padding here: the grid carries the pane's gutter as contentPadding so
@@ -121,22 +130,36 @@ fun MoviesScreen(
             navigationRequester = navigationRequester,
             sortRequester = sortRequester,
             refreshRequester = refreshRequester,
+            tabRowRequester = tabRowRequester,
             onToggleSort = actions.onToggleSort,
             onRefresh = actions.onRefresh,
             onFocusChanged = focusOwnership::onChromeFocusChanged,
         )
 
-        MoviesFilterRow(
-            genres = state.genres,
-            selected = state.filter,
+        MoviesTabRow(
+            selected = state.tab,
             contentInset = contentInset,
-            filterRowRequester = filterRowRequester,
+            tabRowRequester = tabRowRequester,
             navigationRequester = navigationRequester,
             refreshRequester = refreshRequester,
-            contentStartRequester = contentStartRequester,
-            onSelectFilter = actions.onSelectFilter,
-            onFocusChanged = focusOwnership::onChromeFocusChanged,
+            downRequester = if (genreRowShown) genreRowRequester else contentStartRequester,
+            onSelectTab = actions.onSelectTab,
+            onFocusChanged = focusOwnership::onTabFocusChanged,
         )
+
+        if (genreRowShown) {
+            MoviesGenreRow(
+                genres = state.genres,
+                selected = state.genre,
+                contentInset = contentInset,
+                genreRowRequester = genreRowRequester,
+                navigationRequester = navigationRequester,
+                tabRowRequester = tabRowRequester,
+                contentStartRequester = contentStartRequester,
+                onSelectGenre = actions.onSelectGenre,
+                onFocusChanged = focusOwnership::onChromeFocusChanged,
+            )
+        }
 
         // In the states with no cards the anchor also carries [returnRequester]: the details
         // overlay can outlive the card that opened it (the Liked reconcile empties the grid
@@ -149,7 +172,7 @@ fun MoviesScreen(
             .withRequester(cardlessHandoffRequester)
             .focusProperties {
                 left = navigationRequester
-                up = filterRowRequester
+                up = contentUp
                 right = FocusRequester.Cancel
             }
             .onFocusChanged { focusOwnership.onCardlessFocusChanged(it.isFocused) }
@@ -180,10 +203,16 @@ fun MoviesScreen(
                 modifier = Modifier.padding(contentInset),
             )
 
-            is MoviesContent.Empty -> IglooFocusableEmpty(
+            // The placeholder shares the empty box's shape so the focus coordinator can treat
+            // the two alike: one anchored node, nothing else to land on.
+            is MoviesContent.Empty, MoviesContent.NoGenres -> IglooFocusableEmpty(
                 anchorModifier = cardlessAnchor,
                 icon = IglooIcons.Movies,
-                message = emptyMessage(content.filter),
+                message = if (content is MoviesContent.Empty) {
+                    emptyMessage(content.filter)
+                } else {
+                    NO_GENRES_MESSAGE
+                },
                 contentPadding = IglooTheme.spacing.lg,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -204,7 +233,7 @@ fun MoviesScreen(
                 navigationRequester = navigationRequester,
                 returnRequester = returnRequester,
                 firstCardRequester = firstCardRequester,
-                filterRowRequester = filterRowRequester,
+                upRequester = contentUp,
                 lastFocusedMovieId = lastFocusedMovieId,
                 onMovieFocused = onMovieFocused,
                 focusOwnership = focusOwnership,
@@ -220,7 +249,7 @@ fun MoviesScreen(
 private fun MoviesHeader(
     totalMovies: Long?,
     loadedCount: Int?,
-    filter: MoviesFilter,
+    filter: MoviesFilter?,
     append: MoviesAppendState,
     sort: SortOrder,
     refreshing: Boolean,
@@ -229,6 +258,7 @@ private fun MoviesHeader(
     navigationRequester: FocusRequester,
     sortRequester: FocusRequester,
     refreshRequester: FocusRequester,
+    tabRowRequester: FocusRequester,
     onToggleSort: () -> Unit,
     onRefresh: () -> Unit,
     onFocusChanged: (String, Boolean) -> Unit,
@@ -256,7 +286,7 @@ private fun MoviesHeader(
             // changes, and a TalkBack user must not have the whole grid read back at them on
             // every appended page (section 12).
             IglooText(
-                text = countLine(totalMovies),
+                text = if (filter == null) countLine(null) else countLine(totalMovies),
                 style = IglooTheme.typography.bodyMedium,
                 color = colors.mutedForeground,
                 modifier = Modifier
@@ -287,7 +317,12 @@ private fun MoviesHeader(
             modifier = Modifier
                 .focusRequester(sortRequester)
                 .onFocusChanged { onFocusChanged(SORT_FOCUS_KEY, it.isFocused) }
-                .focusProperties { left = navigationRequester },
+                // Down is wired to the *selected* tab: tabs select on focus, and a spatial
+                // search would land on whichever tab happens to sit beneath and switch to it.
+                .focusProperties {
+                    left = navigationRequester
+                    down = tabRowRequester
+                },
         )
         IglooButton(
             // A label swap, not a spinner: nothing in the product loops (section 7.2).
@@ -307,10 +342,83 @@ private fun MoviesHeader(
                 .focusRequester(refreshRequester)
                 .onFocusChanged { onFocusChanged(REFRESH_FOCUS_KEY, it.isFocused) }
                 // A deterministic left chain: Refresh → Sort → the navigation spine.
-                .focusProperties { left = sortRequester },
+                .focusProperties {
+                    left = sortRequester
+                    down = tabRowRequester
+                },
         )
     }
 }
+
+/**
+ * The three sections as an [IglooTabRow]. The selected tab carries [tabRowRequester] — the grid,
+ * the picker and the header all wire their edges to it — and it always attaches, because the
+ * strip is fixed. Tabs select on focus; see [IglooTab].
+ */
+@Composable
+private fun MoviesTabRow(
+    selected: MoviesTab,
+    contentInset: PaddingValues,
+    tabRowRequester: FocusRequester,
+    navigationRequester: FocusRequester,
+    refreshRequester: FocusRequester,
+    downRequester: FocusRequester,
+    onSelectTab: (MoviesTab) -> Unit,
+    onFocusChanged: (String, Boolean) -> Unit,
+) {
+    val direction = LocalLayoutDirection.current
+    IglooTabRow(
+        modifier = Modifier
+            .padding(
+                start = contentInset.calculateStartPadding(direction),
+                end = contentInset.calculateEndPadding(direction),
+            )
+            .testTag("movies_tabs"),
+    ) {
+        MoviesTab.entries.forEachIndexed { index, tab ->
+            IglooTab(
+                text = tab.label,
+                selected = tab == selected,
+                onSelect = { onSelectTab(tab) },
+                semanticLabel = tab.semanticLabel,
+                actionLabel = "Show ${tab.semanticLabel.lowercase()}",
+                modifier = Modifier
+                    .withRequester(tabRowRequester.takeIf { tab == selected })
+                    .onFocusChanged { onFocusChanged(tab.testTag, it.isFocused) }
+                    .focusProperties {
+                        // The header and the rows below are siblings of the strip, so both
+                        // vertical edges are wired rather than resolved spatially.
+                        up = refreshRequester
+                        down = downRequester
+                        if (index == 0) left = navigationRequester
+                        if (index == MoviesTab.entries.lastIndex) right = FocusRequester.Cancel
+                    }
+                    .testTag(tab.testTag),
+            )
+        }
+    }
+}
+
+private val MoviesTab.label: String
+    get() = when (this) {
+        MoviesTab.All -> "All Movies"
+        MoviesTab.Genres -> "Genres"
+        MoviesTab.Liked -> "Liked"
+    }
+
+private val MoviesTab.semanticLabel: String
+    get() = when (this) {
+        MoviesTab.All -> "All movies"
+        MoviesTab.Genres -> "Genres"
+        MoviesTab.Liked -> "Liked movies"
+    }
+
+private val MoviesTab.testTag: String
+    get() = when (this) {
+        MoviesTab.All -> "movies_tab_all"
+        MoviesTab.Genres -> "movies_tab_genres"
+        MoviesTab.Liked -> "movies_tab_liked"
+    }
 
 @Composable
 private fun MoviesGrid(
@@ -326,7 +434,7 @@ private fun MoviesGrid(
     navigationRequester: FocusRequester,
     returnRequester: FocusRequester,
     firstCardRequester: FocusRequester,
-    filterRowRequester: FocusRequester,
+    upRequester: FocusRequester,
     lastFocusedMovieId: Long?,
     onMovieFocused: (Long) -> Unit,
     focusOwnership: MoviesFocusOwnership,
@@ -424,10 +532,10 @@ private fun MoviesGrid(
                     )
                     .focusProperties {
                         if (index % columns == 0) left = navigationRequester
-                        // The chip row is a sibling of the scroll surface, so the first row's
-                        // way back up to the selected chip is wired rather than resolved
-                        // spatially.
-                        if (index < columns) up = filterRowRequester
+                        // The rows above are siblings of the scroll surface, so the first
+                        // row's way back up to the selected chip or tab is wired rather than
+                        // resolved spatially.
+                        if (index < columns) up = upRequester
                         if (lastRowIsTheEdge && index / columns == lastRow) {
                             down = FocusRequester.Cancel
                         }
@@ -435,7 +543,7 @@ private fun MoviesGrid(
                         // legitimate to go — and neither has the final card of a partial last
                         // row, whose remaining cells are unfocusable tail skeletons. Unpinned,
                         // the search leaves the grid and resolves against the pane's siblings,
-                        // landing back on the filter chips.
+                        // landing back on the rows above.
                         if (index % columns == columns - 1 || index == items.lastIndex) {
                             right = FocusRequester.Cancel
                         }
@@ -552,14 +660,18 @@ private fun countLine(totalMovies: Long?): String =
         "${integerCountFormat.format(totalMovies)} ${movieNoun(totalMovies)}"
     }
 
-/** The visible line stays generic; only the spoken form names the active filter. */
+/**
+ * The visible line stays generic; only the spoken form names the active filter. A null
+ * [filter] is the Genres placeholder, where the count belongs to a list the user cannot see.
+ */
 private fun spokenCount(
     totalMovies: Long?,
     loadedCount: Int?,
-    filter: MoviesFilter,
+    filter: MoviesFilter?,
     appendState: MoviesAppendState,
 ): String =
     when {
+        filter == null -> "Genres unavailable"
         totalMovies == null -> "Loading the movie library"
         loadedCount == null -> countLine(totalMovies)
         else -> buildString {
@@ -584,6 +696,7 @@ private fun emptyMessage(filter: MoviesFilter): String = when (filter) {
     is MoviesFilter.Genre -> "No ${filter.tag} movies in your library."
 }
 
+private const val NO_GENRES_MESSAGE = "Genres aren't available right now. Refresh to try again."
 private const val REFRESH_LABEL = "Refresh"
 private const val REFRESHING_LABEL = "Refreshing…"
 private const val SORT_ASCENDING_LABEL = "A–Z"
