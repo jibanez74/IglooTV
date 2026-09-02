@@ -1088,6 +1088,40 @@ class MoviesViewModelTest {
         assertEquals(emptyList<String>(), http.likedPages)
     }
 
+    @Test
+    fun `focus selecting a tab waits for the debounce before requesting it`() = runTest {
+        val http = routedHttp(
+            liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 20L..22L)) },
+        )
+        val model = loaded(http)
+
+        model.selectTab(MoviesTab.Liked)
+        advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS - 1)
+
+        assertEquals(emptyList<String>(), http.likedPages)
+
+        advanceTimeBy(2)
+
+        assertEquals(listOf("1"), http.likedPages)
+    }
+
+    @Test
+    fun `pressing the pending tab requests immediately without a delayed duplicate`() = runTest {
+        val http = routedHttp(
+            liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 20L..22L)) },
+        )
+        val model = loaded(http)
+
+        model.selectTab(MoviesTab.Liked)
+        model.pressTab(MoviesTab.Liked)
+
+        assertEquals(listOf("1"), http.likedPages)
+
+        advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS + 1)
+
+        assertEquals(listOf("1"), http.likedPages)
+    }
+
     /** A press is deliberate, so it skips the wait — and still supersedes what was in flight. */
     @Test
     fun `pressing a tab fetches at once and cancels the switch it interrupts`() = runTest {
@@ -1265,6 +1299,19 @@ class MoviesViewModelTest {
         landOn(model, MoviesTab.Liked)
 
         landOn(model, MoviesTab.Liked)
+
+        assertEquals(listOf("1"), http.likedPages)
+    }
+
+    @Test
+    fun `pressing the committed tab is a no-op`() = runTest {
+        val http = routedHttp(
+            liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        landOn(model, MoviesTab.Liked)
+
+        model.pressTab(MoviesTab.Liked)
 
         assertEquals(listOf("1"), http.likedPages)
     }

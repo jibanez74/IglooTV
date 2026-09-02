@@ -733,6 +733,29 @@ class MoviesGridBehaviorTest {
     }
 
     @Test
+    fun genresLandingExposesTheRetainedGridAndKeepsFocusThereAfterPageFailure() {
+        setContent(
+            testMoviesState(
+                tab = MoviesTab.Genres,
+                genre = null,
+                genres = emptyList(),
+                genresLoaded = false,
+            ),
+        )
+        composeRule.onNodeWithContentDescription("Loading genres").assertIsFocused()
+
+        moviesState = genresTabState()
+        composeRule.waitForIdle()
+
+        card(1).assertIsFocused()
+
+        moviesState = testMoviesState(notice = "The server is unreachable.")
+        composeRule.waitForIdle()
+
+        card(1).assertIsFocused()
+    }
+
+    @Test
     fun anEmptyLikedViewStillReachesTheTabRow() {
         setContent(
             testMoviesState(

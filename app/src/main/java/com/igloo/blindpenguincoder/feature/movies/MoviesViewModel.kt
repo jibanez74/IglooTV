@@ -164,6 +164,9 @@ class MoviesViewModel(
     /** One slot for both the first page and appends, so a refresh cancels a prefetch mid-flight. */
     private var pageJob: Job? = null
 
+    /** The tab whose page-one request has not left the focus debounce yet. */
+    private var pendingDebounceTab: MoviesTab? = null
+
     /**
      * One slot each for the side loads too: [refresh] fires on every lifecycle START, and two
      * overlapping responses would otherwise race — the older one landing last and winning.
@@ -222,17 +225,29 @@ class MoviesViewModel(
     /**
      * A press on a tab — TalkBack's click action, and the retry after a failed switch reverted
      * the selection out from under a focused tab. Deliberate rather than a pass-over, so it
-     * skips [selectTab]'s delay.
+     * skips [selectTab]'s delay. If that focus landing is still pending, the press replaces its
+     * delayed job; once the request starts, another press is a no-op.
      */
-    fun pressTab(tab: MoviesTab) = switchTab(tab, delayMs = 0L)
+    fun pressTab(tab: MoviesTab) {
+        if (tab == committedTab) return
+        if (tab == _uiState.value.tab && pendingDebounceTab != tab) return
+        switchTab(tab, delayMs = 0L)
+    }
 
     private fun switchTab(tab: MoviesTab, delayMs: Long) {
-        if (tab == _uiState.value.tab) return
-        _uiState.update {
-            it.copy(
-                tab = tab,
-                genre = if (tab == MoviesTab.Genres) it.genre.resolveAgainst(it.genres) else it.genre,
-            )
+        val pendingPress = delayMs == 0L && pendingDebounceTab == tab
+        if (tab == _uiState.value.tab && !pendingPress) return
+        if (tab != _uiState.value.tab) {
+            _uiState.update {
+                it.copy(
+                    tab = tab,
+                    genre = if (tab == MoviesTab.Genres) {
+                        it.genre.resolveAgainst(it.genres)
+                    } else {
+                        it.genre
+                    },
+                )
+            }
         }
         loadFirstPage(userInitiated = true, delayMs = delayMs)
     }
@@ -315,6 +330,7 @@ class MoviesViewModel(
         // suspension point would otherwise still commit — or, on a failure, revert the very tab
         // that just took focus.
         pageJob?.cancel()
+        pendingDebounceTab = null
         val startedIn = ++generation
         val requested = _uiState.value
         val tab = requested.tab
@@ -331,9 +347,12 @@ class MoviesViewModel(
         // A delayed switch holds the chrome back with the request: the Refreshing label must not
         // flip, and the count must not re-announce, for a tab the d-pad is only passing over.
         if (delayMs == 0L) applyFirstPageRequestState(userInitiated, silent)
+        else pendingDebounceTab = tab
         pageJob = viewModelScope.launch {
             if (delayMs > 0L) {
                 delay(delayMs)
+                if (startedIn != generation) return@launch
+                pendingDebounceTab = null
                 applyFirstPageRequestState(userInitiated, silent)
             }
             val result = fetchPage(filter, sort, FIRST_PAGE)

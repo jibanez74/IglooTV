@@ -73,7 +73,7 @@ private class MoviesFocusHandoffMemory(
 /**
  * Repairs focus when the pane's content changes underneath it: a replacement scrolls to top and
  * re-anchors, a silent Liked reconcile re-anchors only when the focused movie disappeared, and a
- * skeleton resolving into an error, empty or no-genres state keeps focus in the pane.
+ * skeleton resolving into cards or a cardless state keeps focus in the pane.
  *
  * The one replacement that does not re-anchor is a tab switch: tabs select on focus, so the
  * page landing was caused by the tab the user is standing on, and pulling focus into the grid
@@ -136,6 +136,13 @@ internal fun MoviesFocusHandoffCoordinator(
                     is MoviesContent.Empty -> cardlessHandoffRequester.requestFocusSafely()
                     else -> Unit
                 }
+            }
+
+            outgoingContent.isSkeleton &&
+                cardlessFocused &&
+                content is MoviesContent.Populated -> {
+                gridState.scrollToItem(0)
+                firstCardRequester.requestFocusSafely()
             }
 
             outgoingContent.isSkeleton && cardlessFocused && content.isCardless ->
