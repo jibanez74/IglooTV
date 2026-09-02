@@ -24,6 +24,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
+ * How long a tab taking focus waits before it fetches. Tabs select on focus, so a slide across
+ * the strip lands on every tab in between; without this each pass-over puts a request on the
+ * wire and flips the header's label on its way past. Visible to the tests so they can wait out
+ * exactly this rather than a number that has to be kept in step by hand.
+ */
+internal const val TAB_SWITCH_DEBOUNCE_MS = 300L
+
+/**
  * Which list the grid shows. The three are the same paged, title-ordered shape server-side;
  * the filter only picks the endpoint.
  */
@@ -79,6 +87,13 @@ data class MoviesUiState(
      * empty success, and stale only over a failed re-read.
      */
     val genres: List<MovieGenreWithCount> = emptyList(),
+    /**
+     * True once a genres request has settled, success or failure. Before that the Genres tab
+     * draws a loading surface: an empty [genres] on its own cannot tell "not asked yet" from
+     * "there are none", and claiming the list is unavailable while it is still in flight is a
+     * failure the user never had.
+     */
+    val genresLoaded: Boolean = false,
     val grid: IglooRailState<MoviePosterItem> = IglooRailState.Loading,
     val append: MoviesAppendState = MoviesAppendState.Idle,
     /** True from a Refresh press until page 1 resolves; swaps the button's label. */
@@ -183,19 +198,35 @@ class MoviesViewModel(
         if (_uiState.value.refreshing) return
         // Page one goes first: from the Genres placeholder it has nothing to request, and the
         // genre list landing afterwards is what fetches — one request, not two.
+        val onThePlaceholder = _uiState.value.filter == null
         loadFirstPage(userInitiated = true)
         loadStats()
-        loadGenres()
+        // On the placeholder the genres round trip is the only request this press makes, so it
+        // carries the Refreshing label that page one had nothing to attach it to.
+        loadGenres(userInitiated = onThePlaceholder)
     }
 
     /**
-     * A tab taking focus (or a press on it). Re-selecting the current tab is a no-op rather than
-     * a surprise refresh — which is also what makes focus landing on the selected tab free.
-     * Entering Genres resolves the remembered genre against the current list, falling back to
-     * the first genre; with no list yet there is nothing to fetch and the screen shows a
-     * placeholder until [loadGenres] lands.
+     * A tab taking focus. Re-selecting the current tab is a no-op rather than a surprise
+     * refresh — which is also what makes focus landing on the selected tab free. Entering
+     * Genres resolves the remembered genre against the current list, falling back to the first
+     * genre; with no list yet there is nothing to fetch and the screen shows a placeholder until
+     * [loadGenres] lands.
+     *
+     * The highlight moves at once but the fetch waits [TAB_SWITCH_DEBOUNCE_MS]: a slide across
+     * the strip lands on every tab in between, and a tab the d-pad is only passing over must not
+     * put a request on the wire, flip the Refreshing label, or re-announce the count.
      */
-    fun selectTab(tab: MoviesTab) {
+    fun selectTab(tab: MoviesTab) = switchTab(tab, delayMs = TAB_SWITCH_DEBOUNCE_MS)
+
+    /**
+     * A press on a tab — TalkBack's click action, and the retry after a failed switch reverted
+     * the selection out from under a focused tab. Deliberate rather than a pass-over, so it
+     * skips [selectTab]'s delay.
+     */
+    fun pressTab(tab: MoviesTab) = switchTab(tab, delayMs = 0L)
+
+    private fun switchTab(tab: MoviesTab, delayMs: Long) {
         if (tab == _uiState.value.tab) return
         _uiState.update {
             it.copy(
@@ -203,7 +234,7 @@ class MoviesViewModel(
                 genre = if (tab == MoviesTab.Genres) it.genre.resolveAgainst(it.genres) else it.genre,
             )
         }
-        loadFirstPage(userInitiated = true)
+        loadFirstPage(userInitiated = true, delayMs = delayMs)
     }
 
     /** A genre chip press on the Genres tab. Re-pressing the selected chip is a no-op. */
@@ -216,6 +247,9 @@ class MoviesViewModel(
 
     /** The header's Sort. Flips the direction and re-reads page 1 of the current filter. */
     fun toggleSort() {
+        // Nothing to sort and nothing to request: flipping the label here would leave the header
+        // claiming a direction the committed grid under the placeholder is not in.
+        if (_uiState.value.filter == null) return
         _uiState.update {
             it.copy(
                 sort = when (it.sort) {
@@ -271,33 +305,37 @@ class MoviesViewModel(
      * focus only if the overlay has already closed and the focused movie disappears. A silent
      * failure keeps the existing content and messaging.
      */
-    private fun loadFirstPage(userInitiated: Boolean, silent: Boolean = false) {
-        val requested = _uiState.value
-        // The Genres tab with no genre to show has no endpoint: nothing is requested and nothing
-        // in the state moves, so the last committed list stays intact under the placeholder.
-        val filter = requested.filter ?: return
+    private fun loadFirstPage(
+        userInitiated: Boolean,
+        silent: Boolean = false,
+        delayMs: Long = 0L,
+    ) {
+        // Cancelled and superseded before the endpoint check below can bail: a page in flight
+        // belongs to the list the user is leaving, and one that has resumed past its last
+        // suspension point would otherwise still commit — or, on a failure, revert the very tab
+        // that just took focus.
         pageJob?.cancel()
         val startedIn = ++generation
+        val requested = _uiState.value
         val tab = requested.tab
         val genre = requested.genre
         val sort = requested.sort
-        if (silent) {
+        // The Genres tab with no genre to show has no endpoint: nothing is requested, so the
+        // last committed list stays intact under the placeholder and no request is outstanding.
+        val filter = requested.filter ?: run {
             _uiState.update {
-                it.copy(
-                    append = it.append.resetIfLoading(),
-                    refreshing = false,
-                )
+                it.copy(append = it.append.resetIfLoading(), refreshing = false)
             }
-        } else if (userInitiated) {
-            _uiState.update {
-                it.copy(
-                    append = it.append.resetIfLoading(),
-                    refreshing = true,
-                    notice = null,
-                )
-            }
+            return
         }
+        // A delayed switch holds the chrome back with the request: the Refreshing label must not
+        // flip, and the count must not re-announce, for a tab the d-pad is only passing over.
+        if (delayMs == 0L) applyFirstPageRequestState(userInitiated, silent)
         pageJob = viewModelScope.launch {
+            if (delayMs > 0L) {
+                delay(delayMs)
+                applyFirstPageRequestState(userInitiated, silent)
+            }
             val result = fetchPage(filter, sort, FIRST_PAGE)
             if (startedIn != generation) return@launch
             when (result) {
@@ -339,7 +377,17 @@ class MoviesViewModel(
                             // The grid still shows the committed list, so the selection snaps
                             // back to it — a tab must never claim a list the grid isn't in.
                             tab = committedTab,
-                            genre = committedGenre,
+                            genre = when {
+                                // Not the Genres tab: the remembered genre is not what this
+                                // failure is about, so it survives untouched.
+                                committedTab != MoviesTab.Genres -> committedGenre
+                                // A genres response can have dropped the committed genre while
+                                // this request was out. Reviving it would strand the tab on a
+                                // genre with no chip to change it; the placeholder is honest.
+                                it.genres.none { listed -> listed.genreId == committedGenre?.id } ->
+                                    null
+                                else -> committedGenre
+                            },
                             sort = committedSort,
                             grid = IglooRailState.Error(message).orKeepContent(it.grid),
                             append = it.append.resetIfLoading(),
@@ -351,6 +399,18 @@ class MoviesViewModel(
                         )
                     }
                 }
+            }
+        }
+    }
+
+    /** The chrome a first-page request puts up, raised with the request rather than before it. */
+    private fun applyFirstPageRequestState(userInitiated: Boolean, silent: Boolean) {
+        when {
+            silent -> _uiState.update {
+                it.copy(append = it.append.resetIfLoading(), refreshing = false)
+            }
+            userInitiated -> _uiState.update {
+                it.copy(append = it.append.resetIfLoading(), refreshing = true, notice = null)
             }
         }
     }
@@ -449,18 +509,29 @@ class MoviesViewModel(
      * last and never reports. A successful response is authoritative, including an empty list.
      * A landing list re-resolves the remembered genre (a renamed tag follows the list; a
      * vanished genre falls back to the first), and an active Genres tab fetches page one when
-     * that changes the selected id — nothing was pressed, so no Refreshing label.
+     * that changes the selected id.
+     *
+     * Either outcome settles [MoviesUiState.genresLoaded], because either one ends the window in
+     * which the tab is still waiting rather than out of genres. [userInitiated] is the Refresh
+     * press made from the placeholder, where this is the only request the press produces and so
+     * the only one that can carry its label.
      */
-    private fun loadGenres() {
+    private fun loadGenres(userInitiated: Boolean = false) {
         genresJob?.cancel()
+        if (userInitiated) _uiState.update { it.copy(refreshing = true, notice = null) }
         genresJob = viewModelScope.launch {
             val result = movies.movieGenres()
-            if (result !is ApiResult.Success) return@launch
+            if (result !is ApiResult.Success) {
+                _uiState.update { it.copy(genresLoaded = true) }
+                if (userInitiated) clearRefreshing()
+                return@launch
+            }
             val previousGenreId = _uiState.value.genre?.id
             _uiState.update {
                 it.copy(
                     genres = result.value,
                     genre = it.genre.resolveAgainst(result.value),
+                    genresLoaded = true,
                 )
             }
             val resolved = _uiState.value
@@ -469,10 +540,15 @@ class MoviesViewModel(
                 resolved.genre != null &&
                 resolved.genre.id != previousGenreId
             ) {
-                loadFirstPage(userInitiated = false)
+                // Page one owns the label from here, whether or not anything was pressed.
+                loadFirstPage(userInitiated = userInitiated)
+            } else if (userInitiated) {
+                clearRefreshing()
             }
         }
     }
+
+    private fun clearRefreshing() = _uiState.update { it.copy(refreshing = false) }
 
     /**
      * The genre the Genres tab should show given [genres]: the remembered one if it is still

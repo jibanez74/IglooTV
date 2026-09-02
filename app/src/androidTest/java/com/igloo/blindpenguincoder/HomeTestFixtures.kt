@@ -75,6 +75,7 @@ internal fun testMoviesState(
     totalMovies: Long? = 96,
     tab: MoviesTab = MoviesTab.All,
     genre: MoviesFilter.Genre? = null,
+    genresLoaded: Boolean = true,
     sort: SortOrder = SortOrder.Ascending,
     genres: List<MovieGenreWithCount> = testGenres,
     refreshing: Boolean = false,
@@ -86,6 +87,7 @@ internal fun testMoviesState(
     totalMovies = totalMovies,
     tab = tab,
     genre = genre,
+    genresLoaded = genresLoaded,
     sort = sort,
     genres = genres,
     grid = grid,
@@ -103,6 +105,7 @@ internal val inertMoviesActions = MoviesActions(
     onRetryAppend = {},
     onLoadMore = {},
     onSelectTab = {},
+    onPressTab = {},
     onSelectGenre = {},
     onToggleSort = {},
 )

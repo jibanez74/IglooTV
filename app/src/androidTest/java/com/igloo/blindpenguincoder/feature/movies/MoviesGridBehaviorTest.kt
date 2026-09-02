@@ -56,6 +56,7 @@ class MoviesGridBehaviorTest {
     private var appendRetries = 0
     private var sortToggles = 0
     private val selectedTabs = mutableListOf<MoviesTab>()
+    private val pressedTabs = mutableListOf<MoviesTab>()
     private val selectedGenres = mutableListOf<MoviesFilter.Genre>()
     private val opened = mutableListOf<Long>()
     private var hostActivity: Activity? = null
@@ -72,6 +73,7 @@ class MoviesGridBehaviorTest {
         appendRetries = 0
         sortToggles = 0
         selectedTabs.clear()
+        pressedTabs.clear()
         selectedGenres.clear()
         opened.clear()
         detailsState = MovieDetailsUiState()
@@ -88,6 +90,7 @@ class MoviesGridBehaviorTest {
                         onRetryAppend = { appendRetries += 1 },
                         onLoadMore = { loadMoreCalls += 1 },
                         onSelectTab = { selectedTabs += it },
+                        onPressTab = { pressedTabs += it },
                         onSelectGenre = { selectedGenres += it },
                         onToggleSort = { sortToggles += 1 },
                     ),
@@ -369,6 +372,24 @@ class MoviesGridBehaviorTest {
         assertEquals(emptyList<MoviesTab>(), selectedTabs)
     }
 
+    /** Sort sits over the strip too, so its `down` needs the same wiring Refresh's test pins. */
+    @Test
+    fun downFromSortLandsOnTheSelectedTabWithoutSwitching() {
+        setContent(testMoviesState(tab = MoviesTab.Liked))
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_tab_liked")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithContentDescription("Refresh the movie library")
+            .performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.onNodeWithContentDescription("Sort order").assertIsFocused()
+
+        composeRule.onNodeWithContentDescription("Sort order")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+
+        composeRule.onNodeWithTag("movies_tab_liked").assertIsFocused()
+        assertEquals(emptyList<MoviesTab>(), selectedTabs)
+    }
+
     @Test
     fun downFromTheTabRowLandsOnTheGridsEntryCell() {
         setContent()
@@ -475,9 +496,13 @@ class MoviesGridBehaviorTest {
         composeRule.onNodeWithTag("movies_tab_genres").assertIsFocused()
     }
 
-    /** A press on a focused-but-unselected tab is the retry after a failed switch reverted it. */
+    /**
+     * A press on a focused-but-unselected tab is the retry after a failed switch reverted it.
+     * It reports as a press, not a second focus landing: the view model debounces the landing
+     * and a deliberate press must not wait behind it.
+     */
     @Test
-    fun pressingAnUnselectedTabReportsItAgain() {
+    fun pressingAnUnselectedTabReportsAPress() {
         setContent()
         card(1).performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.onNodeWithTag("movies_tab_all")
@@ -486,7 +511,34 @@ class MoviesGridBehaviorTest {
 
         composeRule.onNodeWithTag("movies_tab_genres").performClick()
 
-        assertEquals(listOf(MoviesTab.Genres, MoviesTab.Genres), selectedTabs)
+        assertEquals(listOf(MoviesTab.Genres), selectedTabs)
+        assertEquals(listOf(MoviesTab.Genres), pressedTabs)
+    }
+
+    /**
+     * The revert leaves a tab focused that the strip no longer highlights, and moves the grid's
+     * wired `up` edge onto the tab it snapped back to. Both have to keep working.
+     */
+    @Test
+    fun aRevertedTabStaysFocusedAndTheGridStillReachesTheStrip() {
+        setContent()
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_tab_all")
+            .performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.onNodeWithTag("movies_tab_genres").assertIsFocused()
+
+        // The switch failed: the grid never moved, so the selection snapped back to All.
+        moviesState = testMoviesState(notice = "The server is unreachable.")
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("movies_tab_genres").assertIsFocused()
+        composeRule.onNodeWithTag("movies_tab_genres")
+            .performKeyInput { pressKey(Key.DirectionDown) }
+        card(1).assertIsFocused()
+
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+
+        composeRule.onNodeWithTag("movies_tab_all").assertIsFocused()
     }
 
     /**
@@ -606,6 +658,78 @@ class MoviesGridBehaviorTest {
 
         card(1).assertIsFocused()
         composeRule.onNodeWithTag("movies_genre_row").assertIsDisplayed()
+    }
+
+    /**
+     * The strip renders outside the content `when`, so no grid state can take it away — an empty
+     * Liked view or a failed first page must still let the user switch sections.
+     */
+    @Test
+    fun theTabStripRendersInEveryGridState() {
+        setContent(testMoviesState(grid = IglooRailState.Loading))
+        composeRule.onNodeWithTag("movies_tabs").assertIsDisplayed()
+
+        moviesState = testMoviesState(grid = IglooRailState.Error("The server is unreachable."))
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("movies_tabs").assertIsDisplayed()
+
+        moviesState = testMoviesState(
+            tab = MoviesTab.Liked,
+            grid = IglooRailState.Loaded(emptyList()),
+        )
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("movies_tabs").assertIsDisplayed()
+    }
+
+    /** The remembered genre comes back selected, still carrying the grid's `up` edge. */
+    @Test
+    fun theGenrePickerReturnsWithTheRememberedChipAnchored() {
+        setContent(genresTabState())
+        composeRule.onNodeWithTag("movies_genre_9").assertIsDisplayed()
+
+        moviesState = testMoviesState(tab = MoviesTab.All, contentGeneration = 1)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("movies_genre_row").assertDoesNotExist()
+
+        moviesState = genresTabState(contentGeneration = 2)
+        composeRule.waitForIdle()
+
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_genre_9").assertIsFocused()
+    }
+
+    /**
+     * A refreshed list can drop the selected genre before the view model has re-resolved it. The
+     * anchor falls back to the first chip so the grid's wired `up` edge always resolves.
+     */
+    @Test
+    fun theGenreAnchorFallsBackToTheFirstChip() {
+        setContent(genresTabState(genre = MoviesFilter.Genre(id = 99, tag = "Gone")))
+
+        card(1).performKeyInput { pressKey(Key.DirectionUp) }
+
+        composeRule.onNodeWithTag("movies_genre_7").assertIsFocused()
+    }
+
+    /** The Genres tab before its list has settled is a wait, not a failure. */
+    @Test
+    fun theGenresTabWaitingOnItsListShowsTheSkeletonAnchor() {
+        setContent(
+            testMoviesState(
+                tab = MoviesTab.Genres,
+                genre = null,
+                genres = emptyList(),
+                genresLoaded = false,
+            ),
+        )
+
+        composeRule.onNodeWithContentDescription(NO_GENRES_MESSAGE).assertDoesNotExist()
+        val anchor = composeRule.onNodeWithContentDescription("Loading genres")
+        anchor.assertIsFocused()
+
+        anchor.performKeyInput { pressKey(Key.DirectionUp) }
+
+        composeRule.onNodeWithTag("movies_tab_genres").assertIsFocused()
     }
 
     @Test

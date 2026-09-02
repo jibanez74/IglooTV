@@ -62,7 +62,10 @@ data class MoviesActions(
     val onRetryFirstPage: () -> Unit,
     val onRetryAppend: () -> Unit,
     val onLoadMore: () -> Unit,
+    /** A tab taking focus — debounced by the view model, because a slide crosses every tab. */
     val onSelectTab: (MoviesTab) -> Unit,
+    /** A press on a tab: deliberate, so it switches at once. */
+    val onPressTab: (MoviesTab) -> Unit,
     val onSelectGenre: (MoviesFilter.Genre) -> Unit,
     val onToggleSort: () -> Unit,
 )
@@ -122,6 +125,7 @@ fun MoviesScreen(
             loadedCount = (content as? MoviesContent.Populated)?.items?.size
                 ?: 0.takeIf { content is MoviesContent.Empty },
             filter = state.filter,
+            genresLoading = content is MoviesContent.GenresLoading,
             append = state.append,
             sort = state.sort,
             refreshing = state.refreshing,
@@ -144,7 +148,8 @@ fun MoviesScreen(
             refreshRequester = refreshRequester,
             downRequester = if (genreRowShown) genreRowRequester else contentStartRequester,
             onSelectTab = actions.onSelectTab,
-            onFocusChanged = focusOwnership::onTabFocusChanged,
+            onPressTab = actions.onPressTab,
+            onFocusChanged = focusOwnership::onChromeFocusChanged,
         )
 
         if (genreRowShown) {
@@ -188,9 +193,17 @@ fun MoviesScreen(
         )
 
         when (content) {
-            MoviesContent.Loading -> MoviesGridSkeleton(
+            // The Genres tab waiting on its list is a skeleton like any other wait: the grid it
+            // will draw is unknown, and claiming the list is unavailable before it has landed
+            // reports a failure that has not happened.
+            MoviesContent.Loading, MoviesContent.GenresLoading -> MoviesGridSkeleton(
                 columns = columns,
                 contentInset = contentInset,
+                loadingLabel = if (content is MoviesContent.GenresLoading) {
+                    "Loading genres"
+                } else {
+                    "Loading movies"
+                },
                 anchorModifier = cardlessAnchor,
             )
 
@@ -250,6 +263,7 @@ private fun MoviesHeader(
     totalMovies: Long?,
     loadedCount: Int?,
     filter: MoviesFilter?,
+    genresLoading: Boolean,
     append: MoviesAppendState,
     sort: SortOrder,
     refreshing: Boolean,
@@ -292,7 +306,8 @@ private fun MoviesHeader(
                 modifier = Modifier
                     .testTag("movies_count")
                     .semantics {
-                        contentDescription = spokenCount(totalMovies, loadedCount, filter, append)
+                        contentDescription =
+                            spokenCount(totalMovies, loadedCount, filter, genresLoading, append)
                         liveRegion = LiveRegionMode.Polite
                     },
             )
@@ -364,6 +379,7 @@ private fun MoviesTabRow(
     refreshRequester: FocusRequester,
     downRequester: FocusRequester,
     onSelectTab: (MoviesTab) -> Unit,
+    onPressTab: (MoviesTab) -> Unit,
     onFocusChanged: (String, Boolean) -> Unit,
 ) {
     val direction = LocalLayoutDirection.current
@@ -376,15 +392,17 @@ private fun MoviesTabRow(
             .testTag("movies_tabs"),
     ) {
         MoviesTab.entries.forEachIndexed { index, tab ->
+            val spec = tab.presentation
             IglooTab(
-                text = tab.label,
+                text = spec.label,
                 selected = tab == selected,
                 onSelect = { onSelectTab(tab) },
-                semanticLabel = tab.semanticLabel,
-                actionLabel = "Show ${tab.semanticLabel.lowercase()}",
+                onPress = { onPressTab(tab) },
+                semanticLabel = spec.semanticLabel,
+                actionLabel = "Show ${spec.semanticLabel.lowercase()}",
                 modifier = Modifier
                     .withRequester(tabRowRequester.takeIf { tab == selected })
-                    .onFocusChanged { onFocusChanged(tab.testTag, it.isFocused) }
+                    .onFocusChanged { onFocusChanged(spec.key, it.isFocused) }
                     .focusProperties {
                         // The header and the rows below are siblings of the strip, so both
                         // vertical edges are wired rather than resolved spatially.
@@ -393,31 +411,25 @@ private fun MoviesTabRow(
                         if (index == 0) left = navigationRequester
                         if (index == MoviesTab.entries.lastIndex) right = FocusRequester.Cancel
                     }
-                    .testTag(tab.testTag),
+                    .testTag(spec.key),
             )
         }
     }
 }
 
-private val MoviesTab.label: String
-    get() = when (this) {
-        MoviesTab.All -> "All Movies"
-        MoviesTab.Genres -> "Genres"
-        MoviesTab.Liked -> "Liked"
-    }
+/** What the strip draws, speaks and is addressed by for one section — one lookup, not three. */
+internal data class MoviesTabPresentation(
+    val label: String,
+    val semanticLabel: String,
+    /** Doubles as the focus-ownership key ([MoviesFocusOwnership]) and the test tag. */
+    val key: String,
+)
 
-private val MoviesTab.semanticLabel: String
+internal val MoviesTab.presentation: MoviesTabPresentation
     get() = when (this) {
-        MoviesTab.All -> "All movies"
-        MoviesTab.Genres -> "Genres"
-        MoviesTab.Liked -> "Liked movies"
-    }
-
-private val MoviesTab.testTag: String
-    get() = when (this) {
-        MoviesTab.All -> "movies_tab_all"
-        MoviesTab.Genres -> "movies_tab_genres"
-        MoviesTab.Liked -> "movies_tab_liked"
+        MoviesTab.All -> MoviesTabPresentation("All Movies", "All movies", "movies_tab_all")
+        MoviesTab.Genres -> MoviesTabPresentation("Genres", "Genres", "movies_tab_genres")
+        MoviesTab.Liked -> MoviesTabPresentation("Liked", "Liked movies", "movies_tab_liked")
     }
 
 @Composable
@@ -609,6 +621,7 @@ private fun MoviesGrid(
 private fun MoviesGridSkeleton(
     columns: Int,
     contentInset: PaddingValues,
+    loadingLabel: String,
     anchorModifier: Modifier,
 ) {
     LazyVerticalGrid(
@@ -623,7 +636,7 @@ private fun MoviesGridSkeleton(
         item(key = "skeleton_anchor") {
             IglooSkeletonAnchorCell(
                 anchorModifier = anchorModifier,
-                loadingLabel = "Loading movies",
+                loadingLabel = loadingLabel,
                 cardAspect = IglooTheme.layout.posterAspect,
                 cardWidth = Dp.Unspecified,
             )
@@ -662,16 +675,20 @@ private fun countLine(totalMovies: Long?): String =
 
 /**
  * The visible line stays generic; only the spoken form names the active filter. A null
- * [filter] is the Genres placeholder, where the count belongs to a list the user cannot see.
+ * [filter] is one of the Genres tab's two card-less surfaces, where the count belongs to a list
+ * the user cannot see — and the two must not sound alike, because only one of them is a failure.
  */
 private fun spokenCount(
     totalMovies: Long?,
     loadedCount: Int?,
     filter: MoviesFilter?,
+    genresLoading: Boolean,
     appendState: MoviesAppendState,
 ): String =
     when {
-        filter == null -> "Genres unavailable"
+        // Not the anchor's own "Loading genres": two nodes speaking the same phrase is the
+        // redundant announcement section 12 rules out, and this line is about scale.
+        filter == null -> if (genresLoading) "Loading the genre list" else "Genres unavailable"
         totalMovies == null -> "Loading the movie library"
         loadedCount == null -> countLine(totalMovies)
         else -> buildString {

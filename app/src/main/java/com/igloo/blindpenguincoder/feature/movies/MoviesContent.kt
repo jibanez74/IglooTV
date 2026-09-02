@@ -4,22 +4,32 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
 
 /**
- * The five surfaces the Movies pane can draw — [IglooRailState] with the empty case made
- * explicit and the Genres tab's "nothing to pick" case added, so the screen and the focus
+ * The six surfaces the Movies pane can draw — [IglooRailState] with the empty case made explicit
+ * and the Genres tab's two "nothing to pick" cases added, so the screen and the focus
  * coordinator branch on one model.
  */
 internal sealed interface MoviesContent {
     data object Loading : MoviesContent
 
-    /** The Genres tab with no genre list to choose from; whatever pages exist stay hidden. */
+    /** The Genres tab before the genre list has settled; whatever pages exist stay hidden. */
+    data object GenresLoading : MoviesContent
+
+    /** The Genres tab with a settled list that has nothing in it, or that failed to load. */
     data object NoGenres : MoviesContent
+
     data class Error(val message: String) : MoviesContent
+
     data class Empty(val filter: MoviesFilter) : MoviesContent
+
     data class Populated(val items: List<MoviePosterItem>) : MoviesContent
 }
 
 internal fun MoviesUiState.toMoviesContent(): MoviesContent {
-    val filter = filter ?: return MoviesContent.NoGenres
+    // No filter is the Genres tab with nothing to page. Which of the two surfaces it draws turns
+    // on whether the genre list has been asked for yet: an empty list on its own cannot tell a
+    // request still in flight from a library with no genres, and only one of those is a failure.
+    val filter = filter
+        ?: return if (genresLoaded) MoviesContent.NoGenres else MoviesContent.GenresLoading
     return when (val grid = grid) {
         IglooRailState.Loading -> MoviesContent.Loading
         is IglooRailState.Error -> MoviesContent.Error(grid.message)
@@ -30,6 +40,19 @@ internal fun MoviesUiState.toMoviesContent(): MoviesContent {
         }
     }
 }
+
+/**
+ * A skeleton surface: card geometry with one focusable anchor, and nothing yet to hand focus to.
+ * The two differ only in what they are waiting for.
+ */
+internal val MoviesContent.isSkeleton: Boolean
+    get() = this is MoviesContent.Loading || this is MoviesContent.GenresLoading
+
+/** A surface with no cards, whose single anchored node is the pane's only focus target. */
+internal val MoviesContent.isCardless: Boolean
+    get() = this is MoviesContent.Error ||
+        this is MoviesContent.Empty ||
+        this is MoviesContent.NoGenres
 
 internal fun MoviesContent.containsMovie(movieId: Long): Boolean =
     this is MoviesContent.Populated && items.any { it.id == movieId }

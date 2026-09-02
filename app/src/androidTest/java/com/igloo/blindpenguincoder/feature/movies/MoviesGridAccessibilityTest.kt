@@ -3,8 +3,11 @@ package com.igloo.blindpenguincoder.feature.movies
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -197,11 +200,29 @@ class MoviesGridAccessibilityTest {
             .assertHasClickAction()
 
         // Never `selected = false`: TalkBack would append "not selected" to every other tab.
+        composeRule.onNodeWithTag("movies_tab_genres")
+            .assertContentDescriptionEquals("Genres")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Selected))
+            .assertHasClickAction()
+
         composeRule.onNodeWithTag("movies_tab_liked")
             .assertContentDescriptionEquals("Liked movies")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Selected))
             .assertHasClickAction()
+    }
+
+    /** The press names what it does, not just what it is (section 12). */
+    @Test
+    fun eachTabNamesTheActionAPressPerforms() {
+        setContent()
+
+        composeRule.onNodeWithTag("movies_tab_liked").assert(
+            SemanticsMatcher("announces \"Show liked movies\" as its click action") { node ->
+                node.config.getOrNull(SemanticsActions.OnClick)?.label == "Show liked movies"
+            },
+        )
     }
 
     /** One cleared node per chip: the drawn "Action · 26" must not leak past the spoken form. */
@@ -236,6 +257,52 @@ class MoviesGridAccessibilityTest {
         ).assertIsFocused()
         composeRule.onNodeWithTag("movies_count")
             .assertContentDescriptionEquals("Genres unavailable")
+    }
+
+    /** A list still in flight is a wait, and must not be spoken as a list that is unavailable. */
+    @Test
+    fun theGenresTabWaitingOnItsListAnnouncesTheWait() {
+        setContent(
+            testMoviesState(
+                tab = MoviesTab.Genres,
+                genre = null,
+                genres = emptyList(),
+                genresLoaded = false,
+            ),
+        )
+
+        composeRule.onNodeWithContentDescription("Loading genres").assertIsFocused()
+        composeRule.onNodeWithTag("movies_count")
+            .assertContentDescriptionEquals("Loading the genre list")
+    }
+
+    /** The spoken count names the active view; on Genres that is the genre, not "movies". */
+    @Test
+    fun theCountSpeaksTheSelectedGenre() {
+        setContent(
+            testMoviesState(
+                tab = MoviesTab.Genres,
+                genre = MoviesFilter.Genre(id = 7, tag = "Action"),
+                grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
+                totalMovies = 26,
+            ),
+        )
+
+        composeRule.onNodeWithTag("movies_count")
+            .assertContentDescriptionEquals("Showing 3 of 26 Action movies")
+    }
+
+    /**
+     * A refresh that failed with cards still on screen reports rather than interrupting: the
+     * notice is a polite live region, not an alert over a grid that still works (section 12).
+     */
+    @Test
+    fun aRefreshNoticeReportsPolitely() {
+        setContent(testMoviesState(notice = "The server is unreachable."))
+
+        composeRule.onNodeWithText("The server is unreachable.").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite),
+        )
     }
 
     @Test

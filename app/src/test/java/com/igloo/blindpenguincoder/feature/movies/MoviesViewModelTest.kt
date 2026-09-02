@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -564,7 +565,7 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        model.selectTab(MoviesTab.Liked)
+        landOn(model, MoviesTab.Liked)
 
         assertEquals(listOf("1"), http.likedPages)
         assertEquals(MoviesFilter.Liked, model.uiState.value.filter)
@@ -602,7 +603,7 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        model.selectTab(MoviesTab.Genres)
+        landOn(model, MoviesTab.Genres)
 
         assertEquals(listOf("7:1"), http.genrePages)
         assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
@@ -624,8 +625,8 @@ class MoviesViewModelTest {
         val model = loaded(http)
         model.selectGenre(MoviesFilter.Genre(id = 9, tag = "Drama"))
 
-        model.selectTab(MoviesTab.All)
-        model.selectTab(MoviesTab.Genres)
+        landOn(model, MoviesTab.All)
+        landOn(model, MoviesTab.Genres)
 
         assertEquals(listOf("9:1", "9:1"), http.genrePages)
     }
@@ -641,7 +642,7 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        model.selectTab(MoviesTab.Genres)
+        landOn(model, MoviesTab.Genres)
 
         renamed = true
         model.reload()
@@ -742,8 +743,8 @@ class MoviesViewModelTest {
             assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
             assertEquals(listOf("7:1"), http.genrePages)
 
-            model.selectTab(MoviesTab.All)
-            model.selectTab(MoviesTab.Genres)
+            landOn(model, MoviesTab.All)
+            landOn(model, MoviesTab.Genres)
 
             assertNull(model.uiState.value.genre)
             assertNull(model.uiState.value.filter)
@@ -760,7 +761,7 @@ class MoviesViewModelTest {
             )
             val model = loaded(http)
 
-            model.selectTab(MoviesTab.Genres)
+            landOn(model, MoviesTab.Genres)
 
             assertEquals(emptyList<String>(), http.genrePages)
             assertEquals(MoviesTab.Genres, model.uiState.value.tab)
@@ -781,7 +782,7 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        model.selectTab(MoviesTab.Genres)
+        landOn(model, MoviesTab.Genres)
         val generationBefore = model.uiState.value.contentGeneration
 
         fail = false
@@ -794,10 +795,307 @@ class MoviesViewModelTest {
         assertTrue(!model.uiState.value.refreshing)
     }
 
+    /**
+     * An empty genre list cannot tell a request still in flight from a library with no genres,
+     * and only one of those is a failure the user should be told about.
+     */
     @Test
-    fun `a superseded genres fetch on the way to another tab never lands`() = runTest {
+    fun `the genres tab waits on the list rather than calling it unavailable`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val http = routedHttp(
+            genres = {
+                gate.await()
+                jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = "Action")))
+            },
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+            genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+
+        landOn(model, MoviesTab.Genres)
+
+        assertTrue(!model.uiState.value.genresLoaded)
+        assertEquals(MoviesContent.GenresLoading, model.uiState.value.toMoviesContent())
+        assertEquals(emptyList<String>(), http.genrePages)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
+    }
+
+    /** A failed read settles it too: the wait is over, whatever the answer turned out to be. */
+    @Test
+    fun `a failed genres read settles the tab into the placeholder`() = runTest {
+        val http = routedHttp(
+            genres = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+
+        landOn(model, MoviesTab.Genres)
+
+        assertTrue(model.uiState.value.genresLoaded)
+        assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+    }
+
+    /** The placeholder tells the user to refresh, so the press has to visibly do something. */
+    @Test
+    fun `a refresh from the genres placeholder reports that it is working`() = runTest {
+        var genreListCalls = 0
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            genres = {
+                genreListCalls += 1
+                if (genreListCalls == 1) {
+                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                } else {
+                    gate.await()
+                    jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = "Action")))
+                }
+            },
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+            genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        landOn(model, MoviesTab.Genres)
+        assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+
+        model.reload()
+
+        // Page one has nothing to request here, so the genres round trip carries the label.
+        assertTrue(model.uiState.value.refreshing)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(!model.uiState.value.refreshing)
+        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
+    }
+
+    @Test
+    fun `a refresh that still cannot reach the genres stops reporting`() = runTest {
+        val http = routedHttp(
+            genres = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        landOn(model, MoviesTab.Genres)
+
+        model.reload()
+        advanceUntilIdle()
+
+        assertTrue(!model.uiState.value.refreshing)
+        assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+    }
+
+    /** Flipping the label with no list to sort would leave the header claiming a hidden order. */
+    @Test
+    fun `sorting from the genres placeholder changes nothing`() = runTest {
+        val http = routedHttp(
+            genres = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        landOn(model, MoviesTab.Genres)
+        val requestsBefore = http.libraryPages.size
+
+        model.toggleSort()
+
+        assertEquals(SortOrder.Ascending, model.uiState.value.sort)
+        assertEquals(requestsBefore, http.libraryPages.size)
+    }
+
+    /**
+     * The endpoint-less tab still supersedes: a page already on the wire belongs to the list the
+     * user just left, and letting its failure land would snap the tab back out from under them.
+     */
+    @Test
+    fun `a page in flight cannot revert the tab that left it behind`() = runTest {
+        var libraryCalls = 0
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            genres = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            library = {
+                libraryCalls += 1
+                if (libraryCalls == 1) {
+                    jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
+                } else {
+                    gate.await()
+                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                }
+            },
+        )
+        val model = loaded(http)
+        model.reload()
+        val generationBefore = model.uiState.value.contentGeneration
+
+        landOn(model, MoviesTab.Genres)
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(MoviesTab.Genres, model.uiState.value.tab)
+        assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+        assertNull(model.uiState.value.notice)
+        assertEquals(generationBefore, model.uiState.value.contentGeneration)
+        assertTrue(!model.uiState.value.refreshing)
+    }
+
+    /**
+     * The screen leaves focus on a tab whose switch failed *because* no generation moved. A
+     * regression that bumped one here would pass every other test and yank focus on device.
+     */
+    @Test
+    fun `a failed tab switch leaves the focus generations untouched`() = runTest {
+        val http = routedHttp(
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+            liked = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+        )
+        val model = loaded(http)
+        val before = model.uiState.value
+
+        landOn(model, MoviesTab.Liked)
+
+        assertEquals(before.contentGeneration, model.uiState.value.contentGeneration)
+        assertEquals(
+            before.silentReconcileGeneration,
+            model.uiState.value.silentReconcileGeneration,
+        )
+    }
+
+    @Test
+    fun `a failed tab switch leaves the append cursor on the committed list`() = runTest {
+        val http = routedHttp(
+            library = {
+                val requested = it.page().toLong()
+                jsonResponse(
+                    page(
+                        number = requested,
+                        totalPages = 3,
+                        ids = (requested * 48 - 47)..(requested * 48),
+                    ),
+                )
+            },
+            liked = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+        )
+        val model = loaded(http)
+        model.loadMore()
+        assertEquals(listOf("1", "2"), http.libraryPages)
+
+        landOn(model, MoviesTab.Liked)
+        model.loadMore()
+
+        assertEquals(listOf("1", "2", "3"), http.libraryPages)
+        assertEquals(MoviesTab.All, model.uiState.value.tab)
+    }
+
+    /** Every lifecycle START re-reads the genres; an unchanged list must not re-page the grid. */
+    @Test
+    fun `a genres list landing unchanged does not re-request the page`() = runTest {
+        val http = routedHttp(
+            genres = {
+                jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = "Action")))
+            },
+            genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        landOn(model, MoviesTab.Genres)
+        assertEquals(listOf("7:1"), http.genrePages)
+
+        model.refresh()
+        advanceUntilIdle()
+
+        assertEquals(listOf("7:1"), http.genrePages)
+    }
+
+    /**
+     * The revert restores the list the grid is still in — but not a genre the refreshed list has
+     * since dropped, which would strand the tab on a genre with no chip left to change it.
+     */
+    @Test
+    fun `a failed page whose genre the list has dropped falls back to the placeholder`() = runTest {
+        var listsAction = true
+        var failTheGenrePage = false
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            genres = {
+                if (listsAction) {
+                    jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = "Action")))
+                } else {
+                    jsonResponse(moviesGenresJson())
+                }
+            },
+            genreMovies = {
+                if (failTheGenrePage) {
+                    gate.await()
+                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                } else {
+                    jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L))
+                }
+            },
+        )
+        val model = loaded(http)
+        landOn(model, MoviesTab.Genres)
+        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
+
+        // The refreshed list is authoritatively empty, and it lands first — the page request it
+        // went out with fails afterwards.
+        listsAction = false
+        failTheGenrePage = true
+        model.reload()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(model.uiState.value.genre)
+        assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+    }
+
+    @Test
+    fun `a tab passed over on the way to another never reaches the wire`() = runTest {
+        val http = routedHttp(
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+            genreMovies = { jsonResponse(page(number = 1, totalPages = 1, ids = 10L..12L)) },
+            liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 20L..22L)) },
+        )
+        val model = loaded(http)
+        landOn(model, MoviesTab.Liked)
+
+        // D-pad from Liked back to All passes over Genres, which selects on focus. The highlight
+        // moves through it; the request never does, because All arrives inside the debounce.
+        model.selectTab(MoviesTab.Genres)
+        model.selectTab(MoviesTab.All)
+        advanceUntilIdle()
+
+        assertEquals(MoviesTab.All, model.uiState.value.tab)
+        assertEquals(emptyList<String>(), http.genrePages)
+        assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+        assertTrue(!model.uiState.value.refreshing)
+    }
+
+    /** The pass-over's chrome must stay put too: the label belongs to the request, not the focus. */
+    @Test
+    fun `a tab passed over never raises the refreshing label`() = runTest {
+        val http = routedHttp(
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+            liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 20L..22L)) },
+        )
+        val model = loaded(http)
+
+        model.selectTab(MoviesTab.Liked)
+
+        assertEquals(MoviesTab.Liked, model.uiState.value.tab)
+        assertTrue(!model.uiState.value.refreshing)
+        assertEquals(emptyList<String>(), http.likedPages)
+    }
+
+    /** A press is deliberate, so it skips the wait — and still supersedes what was in flight. */
+    @Test
+    fun `pressing a tab fetches at once and cancels the switch it interrupts`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            genres = {
+                jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = "Action")))
+            },
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
             genreMovies = {
                 gate.await()
@@ -806,15 +1104,15 @@ class MoviesViewModelTest {
             liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 20L..22L)) },
         )
         val model = loaded(http)
-        model.selectTab(MoviesTab.Liked)
+        model.pressTab(MoviesTab.Genres)
+        assertEquals(listOf("7:1"), http.genrePages)
 
-        // D-pad from Liked back to All passes over Genres, which selects on focus.
-        model.selectTab(MoviesTab.Genres)
-        model.selectTab(MoviesTab.All)
+        model.pressTab(MoviesTab.Liked)
         gate.complete(Unit)
+        advanceUntilIdle()
 
-        assertEquals(MoviesTab.All, model.uiState.value.tab)
-        assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
+        assertEquals(MoviesTab.Liked, model.uiState.value.tab)
+        assertEquals(listOf(20L, 21L, 22L), model.uiState.value.gridIds())
         assertTrue(!model.uiState.value.refreshing)
     }
 
@@ -843,7 +1141,7 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        model.selectTab(MoviesTab.Liked)
+        landOn(model, MoviesTab.Liked)
 
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
         assertEquals(MoviesTab.All, model.uiState.value.tab)
@@ -855,6 +1153,14 @@ class MoviesViewModelTest {
     fun `a failed genre switch reverts to the committed genre`() = runTest {
         var failingGenre: Long? = null
         val http = routedHttp(
+            genres = {
+                jsonResponse(
+                    moviesGenresJson(
+                        movieGenreWithCountJson(id = 7, tag = "Action"),
+                        movieGenreWithCountJson(id = 9, tag = "Drama"),
+                    ),
+                )
+            },
             genreMovies = {
                 if (it.url.encodedPath.contains("/genres/$failingGenre/")) {
                     jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
@@ -909,7 +1215,7 @@ class MoviesViewModelTest {
         val model = loaded(http)
         model.loadMore()
 
-        model.selectTab(MoviesTab.Liked)
+        landOn(model, MoviesTab.Liked)
         gate.complete(Unit)
 
         assertEquals(listOf(10L, 11L, 12L), model.uiState.value.gridIds())
@@ -926,7 +1232,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        model.selectTab(MoviesTab.Liked)
+        landOn(model, MoviesTab.Liked)
 
         model.loadMore()
 
@@ -956,9 +1262,9 @@ class MoviesViewModelTest {
             liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        model.selectTab(MoviesTab.Liked)
+        landOn(model, MoviesTab.Liked)
 
-        model.selectTab(MoviesTab.Liked)
+        landOn(model, MoviesTab.Liked)
 
         assertEquals(listOf("1"), http.likedPages)
     }
@@ -1006,7 +1312,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        model.selectTab(MoviesTab.Liked)
+        landOn(model, MoviesTab.Liked)
         val generationBefore = model.uiState.value.contentGeneration
         val silentGenerationBefore = model.uiState.value.silentReconcileGeneration
 
@@ -1039,7 +1345,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        model.selectTab(MoviesTab.Liked)
+        landOn(model, MoviesTab.Liked)
         model.reload()
         val before = model.uiState.value
         assertTrue(before.notice != null)
@@ -1078,7 +1384,7 @@ class MoviesViewModelTest {
                 },
             )
             val model = loaded(http)
-            model.selectTab(MoviesTab.Liked)
+            landOn(model, MoviesTab.Liked)
 
             model.reload()
             assertTrue(model.uiState.value.refreshing)
@@ -1114,7 +1420,7 @@ class MoviesViewModelTest {
                 },
             )
             val model = loaded(http)
-            model.selectTab(MoviesTab.Liked)
+            landOn(model, MoviesTab.Liked)
             val silentGenerationBefore = model.uiState.value.silentReconcileGeneration
 
             model.reload()
@@ -1149,7 +1455,7 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        model.selectTab(MoviesTab.Liked)
+        landOn(model, MoviesTab.Liked)
         assertTrue(model.uiState.value.refreshing)
         model.onLikeCommitted()
         assertTrue(!model.uiState.value.refreshing)
@@ -1178,7 +1484,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        model.selectTab(MoviesTab.Liked)
+        landOn(model, MoviesTab.Liked)
         model.onLikeCommitted()
         assertTrue(!model.uiState.value.refreshing)
 
@@ -1204,6 +1510,17 @@ class MoviesViewModelTest {
     /** The host's start effect is what fires the first load; there is no fetch in `init`. */
     private fun loaded(http: RoutedHttp) =
         MoviesViewModel(http.test.movieRepository, http.test.serverUrl).also { it.refresh() }
+
+    /**
+     * A tab taking focus and being stayed on: the switch, plus the debounce it waits out. Tests
+     * about the debounce itself call `selectTab` and drive the clock themselves.
+     */
+    private fun TestScope.landOn(model: MoviesViewModel, tab: MoviesTab) {
+        model.selectTab(tab)
+        // Past the debounce and no further: `advanceUntilIdle` here would run the virtual clock
+        // into the client's request timeout in the tests that deliberately hold a response open.
+        advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS + 1)
+    }
 
     private fun MoviesUiState.gridIds(): List<Long> =
         (grid as IglooRailState.Loaded).items.map { it.id }
