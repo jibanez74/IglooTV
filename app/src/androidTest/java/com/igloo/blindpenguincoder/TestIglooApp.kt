@@ -17,6 +17,8 @@ import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.queue.InertMusicQueueFetcher
+import com.igloo.blindpenguincoder.playback.queue.MusicQueueFetcher
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
 import kotlinx.coroutines.flow.Flow
@@ -64,6 +66,7 @@ internal fun TestIglooApp(
         fakeMoviePlayerEngineFactory,
     musicPlayerEngineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine =
         fakeMusicPlayerEngineFactory,
+    musicQueueFetcher: MusicQueueFetcher = InertMusicQueueFetcher,
     playRequests: Flow<MoviePlayRequest> = emptyFlow(),
     onRetryRail: (HomeRail) -> Unit = {},
     onMovieSelected: ((Long) -> Unit)? = null,
@@ -94,6 +97,7 @@ internal fun TestIglooApp(
         moviePlayerViewModel = moviePlayerViewModel,
         moviePlayerEngineFactory = moviePlayerEngineFactory,
         musicPlayerEngineFactory = musicPlayerEngineFactory,
+        musicQueueFetcher = musicQueueFetcher,
         playRequests = playRequests,
         onRetryRail = onRetryRail,
         onMovieSelected = onMovieSelected,

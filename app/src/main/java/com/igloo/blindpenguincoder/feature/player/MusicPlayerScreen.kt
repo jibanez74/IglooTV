@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -38,13 +39,22 @@ import com.igloo.blindpenguincoder.playback.model.MusicPlayerPhase
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerState
 import com.igloo.blindpenguincoder.playback.model.musicPlayerAnnouncement
 import com.igloo.blindpenguincoder.playback.model.onEvent
+import com.igloo.blindpenguincoder.playback.queue.MusicQueueController
+import com.igloo.blindpenguincoder.playback.queue.MusicQueueFetcher
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
- * The music player: a full-screen in-tree overlay over the album art, the movie player's shape
+ * The music player: a full-screen in-tree overlay over the cover art, the movie player's shape
  * with everything video-only removed. The chrome never hides — section 11.8 lets chrome rest
  * hidden only over a moving picture, and a cover is not one — so there is no auto-hide clock,
  * no reveal step, and Back always means leave. The host owns close and focus restoration;
  * playback stops with the screen (no background service in this pass).
+ *
+ * [request] only seeds the queue: a [MusicQueueController] owns it from then on, refilling an
+ * endless source through [queueFetcher] and reporting every growth through [onQueueChanged]
+ * so the host's saved request is the queue as it stands. The engine is built from the
+ * controller's queue, not the parameter, so a Retry or a rebuild after a background trip is
+ * seeded with everything appended so far.
  *
  * [engineFactory] has no default because the real engine needs the stream URLs and the
  * bearer-authenticated data-source factory, which are the host's to know.
@@ -54,15 +64,19 @@ fun MusicPlayerScreen(
     request: MusicPlayRequest,
     onClose: () -> Unit,
     engineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine,
+    queueFetcher: MusicQueueFetcher,
+    onQueueChanged: (MusicPlayRequest) -> Unit = {},
     spokenAccessibilityEnabled: Boolean = rememberSpokenAccessibilityEnabled(),
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val hostView = LocalView.current
-    // The intent starts armed: Play Album is itself the play press, so there is no paused
-    // first frame to click through.
+    // The intent starts armed: the launching press is itself the play press, so there is no
+    // paused first frame to click through.
     val host = rememberPlayerHostLifecycle(initialPlayWhenReady = true)
-    val engine = remember(host.reloadKey) { engineFactory(context, request) }
+    val controller = remember { MusicQueueController(request, queueFetcher) }
+    val queue by controller.state.collectAsState()
+    val engine = remember(host.reloadKey) { engineFactory(context, controller.state.value.request) }
 
     // The overlay owns wakefulness, not the engine: loading, paused, and error states still need
     // to remain visible. A real host background trip is handled separately by the lifecycle
@@ -83,11 +97,14 @@ fun MusicPlayerScreen(
                 playWhenReady = host.playWhenReadyIntent,
                 currentTrackIndex = lastTrackIndex,
                 currentTimeSec = lastPositionSec,
-                durationSec = request.tracks.getOrNull(lastTrackIndex)?.durationSec ?: 0.0,
+                durationSec = queue.request.tracks.getOrNull(lastTrackIndex)?.durationSec ?: 0.0,
             ),
         )
     }
     var unauthorized by remember(engine) { mutableStateOf(false) }
+    // The playhead the refill loop watches; a plain flow rather than the saveable, which is
+    // snapshot state the controller cannot collect.
+    val currentIndex = remember { MutableStateFlow(lastTrackIndex) }
 
     val playPauseRequester = remember { FocusRequester() }
     val backRequester = remember { FocusRequester() }
@@ -121,6 +138,7 @@ fun MusicPlayerScreen(
                         lastTrackIndex = index
                         lastPositionSec = 0.0
                     }
+                    currentIndex.value = index
                 }
                 is MusicPlayerEvent.Time -> lastPositionSec = event.currentSec
                 else -> Unit
@@ -128,8 +146,8 @@ fun MusicPlayerScreen(
         }
     }
 
-    // Started once per engine. There is no resume prompt — Play Album starts at the top, and a
-    // retry or recreation resumes this visit's own playhead.
+    // Started once per engine. There is no resume prompt — the queue starts where the press
+    // named, and a retry or recreation resumes this visit's own playhead.
     LaunchedEffect(engine) {
         engine.startPlayback(
             startTrackIndex = lastTrackIndex,
@@ -138,7 +156,13 @@ fun MusicPlayerScreen(
         )
     }
 
-    // Finishing the album exits like finishing a movie does; the host restores focus.
+    // The refill loop lives exactly as long as the screen: leaving cancels a fetch in flight,
+    // which is what keeps a late batch from ever landing in a queue nobody is playing.
+    LaunchedEffect(controller) { controller.keepFilled(currentIndex) }
+    LaunchedEffect(controller) { controller.state.collect { onQueueChanged(it.request) } }
+    LaunchedEffect(controller, engine) { controller.appended.collect(engine::appendTracks) }
+
+    // Finishing the queue exits like finishing a movie does; the host restores focus.
     LaunchedEffect(state.phase) {
         if (state.phase == MusicPlayerPhase.Ended) closeAndRelease()
     }
@@ -179,7 +203,7 @@ fun MusicPlayerScreen(
         onBackgroundRelease = { engine.release() },
     )
 
-    val currentTrack = request.tracks.getOrNull(state.currentTrackIndex)
+    val currentTrack = queue.request.tracks.getOrNull(state.currentTrackIndex)
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -214,7 +238,7 @@ fun MusicPlayerScreen(
             PlayerFailureSurface(
                 message = state.errorMessage,
                 unauthorized = unauthorized,
-                mediaNoun = "album",
+                mediaNoun = "music",
                 actionRequester = retryRequester,
                 onRetry = {
                     // Retry is a fresh, explicit Play intent after the failed engine's
@@ -225,9 +249,10 @@ fun MusicPlayerScreen(
             )
         } else {
             MusicPlayerChrome(
-                request = request,
+                request = queue.request,
                 state = state,
-                trackTitle = currentTrack?.title ?: "",
+                currentTrack = currentTrack,
+                notice = queue.notice,
                 playPauseRequester = playPauseRequester,
                 backRequester = backRequester,
                 metadataRequester = metadataRequester,
@@ -251,8 +276,8 @@ fun MusicPlayerScreen(
 }
 
 /**
- * The album player's addition to the global key map, checked before [handlePlayerKey] because
- * that map spends SkipForward/SkipBackward on ±10s seeks — on an album the skip keys mean
+ * The music player's addition to the global key map, checked before [handlePlayerKey] because
+ * that map spends SkipForward/SkipBackward on ±10s seeks — on a queue the skip keys mean
  * tracks. Rewind/FastForward (and d-pad on the transport) keep the in-track seek. While the
  * error surface is up the keys are swallowed without acting, the shared map's own rule.
  */

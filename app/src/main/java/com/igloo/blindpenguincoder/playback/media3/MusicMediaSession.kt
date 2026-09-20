@@ -10,21 +10,18 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
-import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 
 /**
  * One queue entry's system face. Carried per media item so the session surfaces the current
- * track's title/artist/art on every transition with no manual update code.
+ * track's title/artist/art on every transition with no manual update code — which is also
+ * what lets a library queue that crosses albums stay right without any per-track lookup.
  */
-internal fun musicMediaMetadata(
-    track: MusicPlayTrack,
-    request: MusicPlayRequest,
-): MediaMetadata = MediaMetadata.Builder()
+internal fun musicMediaMetadata(track: MusicPlayTrack): MediaMetadata = MediaMetadata.Builder()
     .setTitle(track.title)
-    .setArtist(request.artistName)
-    .setAlbumTitle(request.albumTitle)
-    .setArtworkUri(request.coverUrl?.let(Uri::parse))
+    .setArtist(track.artistName)
+    .setAlbumTitle(track.albumTitle)
+    .setArtworkUri(track.coverUrl?.let(Uri::parse))
     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
     .build()
 
@@ -37,9 +34,9 @@ internal fun musicMediaMetadata(
 internal fun buildMusicMediaSession(
     context: Context,
     player: Player,
-    albumId: Long,
+    sessionKey: String,
 ): MediaSession = buildIglooMediaSession(
     context = context,
     player = player,
-    idPrefix = "music-album-$albumId",
+    idPrefix = "music-$sessionKey",
 )

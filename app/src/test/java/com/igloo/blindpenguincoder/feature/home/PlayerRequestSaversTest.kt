@@ -4,7 +4,9 @@ import androidx.compose.runtime.saveable.SaverScope
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.MAX_QUEUE_TRACKS
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
+import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import org.junit.Assert.assertEquals
@@ -22,13 +24,11 @@ class PlayerRequestSaversTest {
     private val scope = SaverScope { true }
 
     private val album = MusicPlayRequest(
-        albumId = 11,
-        albumTitle = "Help!",
-        artistName = "The Beatles",
-        coverUrl = "https://i.scdn.co/image/abc",
+        source = MusicQueueSource.Album(albumId = 11, title = "Help!"),
+        startIndex = 1,
         tracks = listOf(
-            MusicPlayTrack(id = 901, title = "Yesterday", durationSec = 125.0),
-            MusicPlayTrack(id = 902, title = "Ticket to Ride", durationSec = 190.0),
+            MusicPlayTrack(901, "Yesterday", 125.0, "The Beatles", "Help!", "https://i.scdn.co/image/abc"),
+            MusicPlayTrack(902, "Ticket to Ride", 190.0, "The Beatles", "Help!", "https://i.scdn.co/image/abc"),
         ),
     )
 
@@ -57,8 +57,45 @@ class PlayerRequestSaversTest {
 
     @Test
     fun `a blank artist and cover restore as null, not as empty text`() {
-        val bare = album.copy(artistName = null, coverUrl = null)
+        val bare = album.copy(
+            tracks = album.tracks.map { it.copy(artistName = null, albumTitle = null, coverUrl = null) },
+        )
         assertEquals(bare, roundTrip(MusicPlayRequestSaver, bare))
+    }
+
+    /** Every source survives, including the in-order cursor an endless queue resumes from. */
+    @Test
+    fun `every queue source survives a round trip`() {
+        val sources = listOf(
+            MusicQueueSource.Musician(musicianId = 4, title = "The Beatles"),
+            MusicQueueSource.TrackList,
+            MusicQueueSource.LibraryInOrder(nextOffset = 150, total = 1234),
+            MusicQueueSource.LibraryShuffle,
+        )
+        sources.forEach { source ->
+            val request = album.copy(source = source)
+            assertEquals(request, roundTrip(MusicPlayRequestSaver, request))
+        }
+    }
+
+    @Test
+    fun `a queue past the ceiling saves as no overlay rather than a truncated queue`() {
+        val long = album.copy(
+            tracks = (1..MAX_QUEUE_TRACKS + 1).map { MusicPlayTrack(it.toLong(), "T$it", 100.0) },
+        )
+        assertNull(roundTrip(MusicPlayRequestSaver, long))
+
+        val atCeiling = album.copy(
+            tracks = (1..MAX_QUEUE_TRACKS).map { MusicPlayTrack(it.toLong(), "T$it", 100.0) },
+        )
+        assertEquals(atCeiling, roundTrip(MusicPlayRequestSaver, atCeiling))
+    }
+
+    @Test
+    fun `an unknown queue source restores as no overlay instead of throwing`() {
+        val saved = with(MusicPlayRequestSaver) { scope.save(album) }!!.toMutableList()
+        saved[0] = """{"type":"fromANewerBuild"}"""
+        assertNull(MusicPlayRequestSaver.restore(saved))
     }
 
     @Test
@@ -84,7 +121,7 @@ class PlayerRequestSaversTest {
 
     @Test
     fun `an unparseable queue restores as no overlay instead of throwing`() {
-        val corrupt = listOf("11", "Help!", "", "", "{not json")
+        val corrupt = listOf("""{"type":"tracks"}""", "0", "{not json")
         assertNull(MusicPlayRequestSaver.restore(corrupt))
     }
 
@@ -97,7 +134,7 @@ class PlayerRequestSaversTest {
 
     @Test
     fun `a truncated bundle restores as no overlay instead of throwing`() {
-        assertNull(MusicPlayRequestSaver.restore(listOf("11", "Help!")))
+        assertNull(MusicPlayRequestSaver.restore(listOf("""{"type":"tracks"}""", "0")))
         assertNull(MoviePlayRequestSaver.restore(listOf("7", "Arrival")))
     }
 }

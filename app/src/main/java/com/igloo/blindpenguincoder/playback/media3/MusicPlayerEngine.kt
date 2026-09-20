@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.playback.media3
 
+import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
 import kotlinx.coroutines.flow.SharedFlow
 
@@ -9,7 +10,7 @@ import kotlinx.coroutines.flow.SharedFlow
  * decoder. There is no surface member — the screen draws the album art itself — so the seam is
  * pure Kotlin. All members are main-thread only; [events] replays what a late collector missed.
  *
- * The engine owns the whole album as one ExoPlayer playlist, so auto-advance and skip
+ * The engine owns the whole queue as one ExoPlayer playlist, so auto-advance and skip
  * semantics live below this seam; the screen only learns "the queue moved" through
  * [MusicPlayerEvent.TrackChanged]. Positions and durations cross in plain track seconds.
  */
@@ -22,6 +23,13 @@ interface MusicPlayerEngine {
         startPositionSec: Double,
         initialPlayWhenReady: Boolean,
     )
+
+    /**
+     * An endless queue's refill: [tracks] join the end of the playlist and never move what is
+     * already there, so every index the screen holds stays valid. Ignored after a terminal
+     * failure — the replacement engine is seeded with the grown queue instead.
+     */
+    fun appendTracks(tracks: List<MusicPlayTrack>)
 
     fun play()
     fun pause()

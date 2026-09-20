@@ -65,11 +65,9 @@ import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
  * The backdrop is the album cover blown up full-bleed (the web page's treatment): there is no
  * separate backdrop asset for music, and the cover URL is used verbatim.
  *
- * [onPlayAlbum] opens the host's music player overlay; [playReturnRequester] is parked on the
- * Play Album button so closing that player restores focus to the control that launched it
- * (section 6.3), the movie details screen's exact pairing. [onShuffle] remains a host-owned
- * stub until the shuffle pass lands (the More-menu item precedent): styled, focusable, with
- * honest semantics — it just does nothing yet.
+ * [onPlayAlbum] and [onShuffle] open the host's music player overlay on the album's queue, in
+ * order or freshly shuffled; [playReturnRequester] is parked on the action that launched it so
+ * closing that player restores focus there (section 6.3), the movie details screen's pairing.
  */
 @Composable
 fun AlbumDetailsScreen(

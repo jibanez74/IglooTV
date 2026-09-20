@@ -4,7 +4,9 @@ import androidx.compose.runtime.saveable.Saver
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.MAX_QUEUE_TRACKS
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
+import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
@@ -72,20 +74,21 @@ internal val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Sav
 )
 
 /**
- * What the music player overlay is playing, encoded like [MoviePlayRequestSaver]. Nullable
- * fields ride as "" — the album title is never blank (the mapping's "Untitled album"
- * fallback), so the encoding is unambiguous.
+ * What the music player overlay is playing, encoded like [MoviePlayRequestSaver]: the source
+ * and the queue as JSON, the start index between them. The host keeps the request current as
+ * an endless queue grows, so what is saved is the queue as it stands. A queue past
+ * [MAX_QUEUE_TRACKS] — only a finite one can get there, an endless one stops refilling — is
+ * not saved at all: a truncated queue would desynchronize the screen's saved position, and
+ * "come back with no overlay" is the saver's honest degradation.
  */
 internal val MusicPlayRequestSaver: Saver<MusicPlayRequest?, List<String>> = Saver(
     save = { request ->
-        if (request == null) {
+        if (request == null || request.tracks.size > MAX_QUEUE_TRACKS) {
             emptyList()
         } else {
             listOf(
-                request.albumId.toString(),
-                request.albumTitle,
-                request.artistName.orEmpty(),
-                request.coverUrl.orEmpty(),
+                Json.encodeToString<MusicQueueSource>(request.source),
+                request.startIndex.toString(),
                 // Lists have no natural slot in this flat encoding; JSON is one symmetric line.
                 Json.encodeToString(request.tracks),
             )
@@ -97,11 +100,9 @@ internal val MusicPlayRequestSaver: Saver<MusicPlayRequest?, List<String>> = Sav
         } else {
             restoreOrDrop {
                 MusicPlayRequest(
-                    albumId = saved[0].toLong(),
-                    albumTitle = saved[1],
-                    artistName = saved[2].ifEmpty { null },
-                    coverUrl = saved[3].ifEmpty { null },
-                    tracks = Json.decodeFromString<List<MusicPlayTrack>>(saved[4]),
+                    source = Json.decodeFromString<MusicQueueSource>(saved[0]),
+                    startIndex = saved[1].toInt(),
+                    tracks = Json.decodeFromString<List<MusicPlayTrack>>(saved[2]),
                 )
             }
         }
@@ -109,4 +110,4 @@ internal val MusicPlayRequestSaver: Saver<MusicPlayRequest?, List<String>> = Sav
 )
 
 private const val MOVIE_SLOTS = 12
-private const val MUSIC_SLOTS = 5
+private const val MUSIC_SLOTS = 3

@@ -7,8 +7,11 @@ import com.igloo.blindpenguincoder.data.model.AlbumDetailsData
 import com.igloo.blindpenguincoder.data.model.AlbumTrack
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
+import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
+import com.igloo.blindpenguincoder.playback.queue.shuffledQueue
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlin.random.Random
 
 /**
  * Wire-to-[AlbumDetailsUi] rules for the album detail screen (docs/design-system.md section
@@ -16,8 +19,8 @@ import kotlin.math.roundToInt
  * Web parity throughout: the reference implementation is the web client's
  * `routes/_auth/music/album.$id.tsx`.
  *
- * All wire durations on this endpoint are **milliseconds** (unlike the tracks-list endpoint's
- * seconds); everything here divides by 1000 before reusing the seconds-based formatters.
+ * All wire durations on this endpoint are **milliseconds**; everything here divides by 1000
+ * before reusing the seconds-based formatters.
  */
 
 /** The one render model the album detail screen draws. */
@@ -124,24 +127,33 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
 }
 
 /**
- * The Play Album press mapped onto the player's queue: every disc's tracks flattened in the
- * order the page lists them (disc, then track index).
+ * A Play press mapped onto the player's queue: every disc's tracks flattened in the order the
+ * page lists them (disc, then track index), starting at [startIndex] — 0 for Play Album, the
+ * row's flat position for a row's own Play. The album's artist and cover ride on every entry.
  */
-internal fun toMusicPlayRequest(album: AlbumDetailsUi): MusicPlayRequest = MusicPlayRequest(
-    albumId = album.id,
-    albumTitle = album.title,
-    artistName = album.artistName,
-    coverUrl = album.coverUrl,
-    tracks = album.discs.flatMap { disc ->
-        disc.tracks.map { track ->
-            MusicPlayTrack(
-                id = track.id,
-                title = track.title,
-                durationSec = track.durationSec,
-            )
-        }
-    },
-)
+internal fun toMusicPlayRequest(album: AlbumDetailsUi, startIndex: Int = 0): MusicPlayRequest =
+    MusicPlayRequest(
+        source = MusicQueueSource.Album(albumId = album.id, title = album.title),
+        startIndex = startIndex,
+        tracks = album.discs.flatMap { disc ->
+            disc.tracks.map { track ->
+                MusicPlayTrack(
+                    id = track.id,
+                    title = track.title,
+                    durationSec = track.durationSec,
+                    artistName = album.artistName,
+                    albumTitle = album.title,
+                    coverUrl = album.coverUrl,
+                )
+            }
+        },
+    )
+
+/** The Shuffle press: the same queue in a fresh random order (docs/music-shuffle.md). */
+internal fun toShuffledMusicPlayRequest(
+    album: AlbumDetailsUi,
+    random: Random = Random.Default,
+): MusicPlayRequest = toMusicPlayRequest(album).let { it.copy(tracks = it.tracks.shuffledQueue(random)) }
 
 /**
  * Tracks grouped and ordered by disc, then track index. A disc of 0 or below is disc 1 — the

@@ -348,6 +348,7 @@ fun IglooRoot(container: IglooAppContainer) {
                                 trackStreamUrl = container.musicRepository::trackStreamUrl,
                             )
                         },
+                        musicQueueFetcher = container.musicRepository,
                         albumDetails = albumDetails,
                         onRetryAlbumDetails = albumDetailsViewModel::retry,
                         onRetryRail = homeViewModel::retry,

@@ -10,8 +10,8 @@ enum class MusicPlayerPhase { Loading, Playing, Paused, Buffering, Ended, Error 
  * The movie's two binding rules carry over: an [MusicPlayerPhase.Error] is sticky — later
  * events never downgrade the first failure the user saw — and a known [durationSec] never
  * shrinks back to zero *within a track*; [onTrackChanged] is the one deliberate reset, because
- * the next track's timeline is genuinely a new one. [playWhenReady] starts true: Play Album is
- * itself the play intent, so there is no paused first frame to click through.
+ * the next track's timeline is genuinely a new one. [playWhenReady] starts true: the launching
+ * press is itself the play intent, so there is no paused first frame to click through.
  */
 data class MusicPlayerState(
     val phase: MusicPlayerPhase = MusicPlayerPhase.Loading,
@@ -78,7 +78,7 @@ data class MusicPlayerState(
         )
     }
 
-    /** The whole album finished — the engine only reports Ended past the last queue item. */
+    /** The whole queue finished — the engine only reports Ended past the last queue item. */
     fun onEnded(): MusicPlayerState = when (phase) {
         MusicPlayerPhase.Error -> this
         else -> copy(
@@ -128,7 +128,7 @@ internal fun musicPlayerAnnouncement(
 ): String? = when (phase) {
     MusicPlayerPhase.Playing -> "Playing: $trackTitle"
     MusicPlayerPhase.Paused -> "Paused: $trackTitle"
-    MusicPlayerPhase.Loading -> "Loading album"
+    MusicPlayerPhase.Loading -> "Loading"
     MusicPlayerPhase.Buffering -> "Buffering"
     else -> null
 }

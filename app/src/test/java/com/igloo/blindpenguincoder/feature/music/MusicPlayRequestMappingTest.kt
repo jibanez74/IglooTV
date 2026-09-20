@@ -6,9 +6,12 @@ import com.igloo.blindpenguincoder.data.model.AlbumTrack
 import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
+import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
+import kotlin.random.Random
 
 class MusicPlayRequestMappingTest {
 
@@ -85,16 +88,37 @@ class MusicPlayRequestMappingTest {
     }
 
     @Test
-    fun `album identity rides along verbatim`() {
+    fun `album identity is the source and rides on every entry`() {
         val request = toMusicPlayRequest(
             toAlbumDetailsUi(
-                details(track(id = 1, title = "One", index = 1, disc = 1, durationMs = 1000)),
+                details(
+                    track(id = 1, title = "One", index = 1, disc = 1, durationMs = 1000),
+                    track(id = 2, title = "Two", index = 2, disc = 1, durationMs = 1000),
+                ),
             ),
         )
-        assertEquals(7L, request.albumId)
-        assertEquals("Test Album", request.albumTitle)
-        assertEquals("Test Artist", request.artistName)
-        assertEquals("https://i.scdn.co/image/abc", request.coverUrl)
+        assertEquals(MusicQueueSource.Album(albumId = 7L, title = "Test Album"), request.source)
+        assertEquals(0, request.startIndex)
+        request.tracks.forEach { entry ->
+            assertEquals("Test Artist", entry.artistName)
+            assertEquals("Test Album", entry.albumTitle)
+            assertEquals("https://i.scdn.co/image/abc", entry.coverUrl)
+        }
+    }
+
+    @Test
+    fun `a row's play names its flat position as the start`() {
+        val request = toMusicPlayRequest(
+            toAlbumDetailsUi(
+                details(
+                    track(id = 11, title = "D1 T1", index = 1, disc = 1, durationMs = 1000),
+                    track(id = 21, title = "D2 T1", index = 1, disc = 2, durationMs = 1000),
+                ),
+            ),
+            startIndex = 1,
+        )
+        assertEquals(1, request.startIndex)
+        assertEquals(21L, request.tracks[request.startIndex].id)
     }
 
     @Test
@@ -108,7 +132,33 @@ class MusicPlayRequestMappingTest {
             totalDuration = 1000.0,
         )
         val request = toMusicPlayRequest(toAlbumDetailsUi(data))
-        assertNull(request.artistName)
-        assertNull(request.coverUrl)
+        assertNull(request.tracks.single().artistName)
+        assertNull(request.tracks.single().coverUrl)
+    }
+
+    @Test
+    fun `shuffle is a permutation of the album that starts at the top and leaves the page alone`() {
+        val album = toAlbumDetailsUi(
+            details(
+                track(id = 11, title = "One", index = 1, disc = 1, durationMs = 1000),
+                track(id = 12, title = "Two", index = 2, disc = 1, durationMs = 1000),
+                track(id = 13, title = "Three", index = 3, disc = 1, durationMs = 1000),
+                track(id = 14, title = "Four", index = 4, disc = 1, durationMs = 1000),
+            ),
+        )
+        val inOrder = toMusicPlayRequest(album)
+
+        val shuffles = (1L..5L).map { seed -> toShuffledMusicPlayRequest(album, Random(seed)) }
+
+        shuffles.forEach { shuffled ->
+            assertEquals(inOrder.source, shuffled.source)
+            assertEquals(0, shuffled.startIndex)
+            assertEquals(inOrder.tracks.toSet(), shuffled.tracks.toSet())
+            assertEquals(4, shuffled.tracks.size)
+        }
+        // Any one seed may land on the identity; five in a row cannot.
+        assertTrue(shuffles.any { it.tracks != inOrder.tracks })
+        // The page's own order is untouched: the shuffle worked on a copy.
+        assertEquals(listOf(11L, 12L, 13L, 14L), album.discs.single().tracks.map { it.id })
     }
 }

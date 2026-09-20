@@ -22,6 +22,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
@@ -39,6 +40,16 @@ import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
+import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
+import com.igloo.blindpenguincoder.playback.queue.InertMusicQueueFetcher
+import com.igloo.blindpenguincoder.playback.queue.MusicQueueFetcher
+import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.data.model.ShuffleTracksData
+import com.igloo.blindpenguincoder.data.model.SqlNullInt64
+import com.igloo.blindpenguincoder.data.model.SqlNullString
+import com.igloo.blindpenguincoder.data.model.TrackListItem
+import com.igloo.blindpenguincoder.data.model.TracksData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -69,6 +80,8 @@ class MusicPlayerScreenTest {
     private var hostView: View? = null
     private lateinit var restorationTester: StateRestorationTester
     private val createdEngines = mutableListOf<FakeMusicPlayerEngine>()
+    private val engineRequests = mutableListOf<MusicPlayRequest>()
+    private val queueChanges = mutableListOf<MusicPlayRequest>()
 
     /** The host contract: closing unmounts the screen. */
     private var open by mutableStateOf(true)
@@ -80,24 +93,36 @@ class MusicPlayerScreenTest {
 
     private lateinit var lifecycleOwner: TestLifecycleOwner
 
-    private fun playRequest() = MusicPlayRequest(
-        albumId = 11,
-        albumTitle = "Help!",
+    private fun track(id: Long, title: String, durationSec: Double) = MusicPlayTrack(
+        id = id,
+        title = title,
+        durationSec = durationSec,
         artistName = "The Beatles",
+        albumTitle = "Help!",
         coverUrl = null,
+    )
+
+    private fun playRequest(
+        source: MusicQueueSource = MusicQueueSource.Album(albumId = 11, title = "Help!"),
+        startIndex: Int = 0,
+    ) = MusicPlayRequest(
+        source = source,
+        startIndex = startIndex,
         tracks = listOf(
-            MusicPlayTrack(id = 901, title = "Yesterday", durationSec = 125.0),
-            MusicPlayTrack(id = 902, title = "Ticket to Ride", durationSec = 190.0),
-            MusicPlayTrack(id = 903, title = "Act Naturally", durationSec = 110.0),
+            track(id = 901, title = "Yesterday", durationSec = 125.0),
+            track(id = 902, title = "Ticket to Ride", durationSec = 190.0),
+            track(id = 903, title = "Act Naturally", durationSec = 110.0),
         ),
     )
 
     private fun setContent(
         request: MusicPlayRequest = playRequest(),
         spokenAccessibilityEnabled: Boolean = false,
+        queueFetcher: MusicQueueFetcher = InertMusicQueueFetcher,
     ) {
         engine = FakeMusicPlayerEngine(request.tracks.map { it.durationSec })
         createdEngines.clear()
+        queueChanges.clear()
         closes = 0
         open = true
         lifecycleOwner = TestLifecycleOwner()
@@ -118,10 +143,13 @@ class MusicPlayerScreenTest {
                                 closes += 1
                                 open = false
                             },
-                            engineFactory = { _, _ ->
+                            engineFactory = { _, played ->
+                                engineRequests += played
                                 createdEngines += engine
                                 engine
                             },
+                            queueFetcher = queueFetcher,
+                            onQueueChanged = { queueChanges += it },
                             spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                         )
                     }
@@ -156,6 +184,7 @@ class MusicPlayerScreenTest {
                                     createdEngines += it
                                 }
                             },
+                            queueFetcher = InertMusicQueueFetcher,
                         )
                     }
                 }
@@ -415,7 +444,7 @@ class MusicPlayerScreenTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("The album stream stopped unexpectedly.").assertExists()
-        val retry = composeRule.onNodeWithContentDescription("Retry playing album")
+        val retry = composeRule.onNodeWithContentDescription("Retry playing music")
         retry.assertIsFocused()
 
         // The retry press lands on a fresh engine; swap the fake the factory hands out first.
@@ -436,7 +465,7 @@ class MusicPlayerScreenTest {
         )
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithContentDescription("Retry playing album").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Retry playing music").assertDoesNotExist()
         val close = composeRule.onNodeWithContentDescription("Close player")
         close.assertIsFocused()
         close.performKeyInput { pressKey(Key.DirectionCenter) }
@@ -456,7 +485,7 @@ class MusicPlayerScreenTest {
 
         // Swallowed, not just unhandled: an unhandled media key would fall back to the active
         // MediaSession and drive playback underneath the error surface.
-        composeRule.onNodeWithContentDescription("Retry playing album").performKeyInput {
+        composeRule.onNodeWithContentDescription("Retry playing music").performKeyInput {
             pressKey(Key.MediaPlay)
             pressKey(Key.MediaPlayPause)
             pressKey(Key.MediaFastForward)
@@ -555,6 +584,76 @@ class MusicPlayerScreenTest {
         assertEquals(listOf("start:1:42.0:false"), engine.playbackCommands)
     }
 
+    /**
+     * The endless sources refill through the controller: once the playhead is within ten
+     * tracks of the end, a batch is fetched, appended to the engine, and the chrome's count and
+     * the host's saved request both grow with it.
+     */
+    @Test
+    fun anEndlessQueueRefillsNearItsEndAndTheAppendReachesTheEngineAndTheHost() {
+        val fetcher = ScriptedFetcher(
+            pages = mutableListOf(
+                (904L..953L).map { id -> libraryTrack(id, "Track $id") },
+            ),
+        )
+        setContent(
+            request = playRequest(source = MusicQueueSource.LibraryInOrder(nextOffset = 3, total = 53)),
+            queueFetcher = fetcher,
+        )
+        startPlaying()
+        composeRule.waitForIdle()
+
+        // Three tracks loaded, playhead at 0: nine of runway is under the threshold.
+        composeRule.waitUntil(5_000) { engine.commands.any { it.startsWith("append:") } }
+        composeRule.waitForIdle()
+
+        assertEquals(1, fetcher.pageRequests.size)
+        assertEquals(3L, fetcher.pageRequests.single())
+        assertTrue(engine.commands.single { it.startsWith("append:") }.startsWith("append:904,905,"))
+        composeRule.onNodeWithTag("music_track_position", useUnmergedTree = true)
+            .assertTextEquals("Track 1 of 53 · The Beatles · Help!")
+        assertEquals(53, queueChanges.last().tracks.size)
+        composeRule.onNodeWithTag("music_queue_notice").assertDoesNotExist()
+    }
+
+    @Test
+    fun aFailedRefillKeepsTheQueueAndShowsThePoliteNotice() {
+        setContent(
+            request = playRequest(source = MusicQueueSource.LibraryShuffle),
+            queueFetcher = InertMusicQueueFetcher,
+        )
+        startPlaying()
+
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("music_queue_notice").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("music_queue_notice")
+            .assertContentDescriptionEquals("Couldn't load more tracks. The queue will play out.")
+        composeRule.onNodeWithTag("music_track_position", useUnmergedTree = true)
+            .assertTextEquals("Track 1 · The Beatles · Help!")
+        assertTrue(engine.commands.none { it.startsWith("append:") })
+    }
+
+    /** A rebuilt engine must start from the grown queue, not the request that launched the screen. */
+    @Test
+    fun aRebuiltEngineIsSeededWithTheGrownQueue() {
+        val fetcher = ScriptedFetcher(
+            pages = mutableListOf((904L..953L).map { id -> libraryTrack(id, "Track $id") }),
+        )
+        setContent(
+            request = playRequest(source = MusicQueueSource.LibraryInOrder(nextOffset = 3, total = 53)),
+            queueFetcher = fetcher,
+        )
+        startPlaying()
+        composeRule.waitUntil(5_000) { engine.commands.any { it.startsWith("append:") } }
+        composeRule.waitForIdle()
+
+        engine = FakeMusicPlayerEngine()
+        backgroundAndReturn()
+
+        assertEquals(53, engineRequests.last().tracks.size)
+    }
+
     @Test
     fun hostDrivenUnmountReleasesTheEngineImmediately() {
         setContent()
@@ -565,5 +664,42 @@ class MusicPlayerScreenTest {
 
         assertTrue(mountedEngine.released)
         assertEquals(1, mountedEngine.releaseCount)
+    }
+
+    private fun libraryTrack(id: Long, title: String) = TrackListItem(
+        id = id,
+        title = title,
+        duration = 200_000,
+        codec = "flac",
+        bitRate = 900_000,
+        albumId = SqlNullInt64(11, valid = true),
+        albumTitle = SqlNullString("Help!", valid = true),
+        albumCover = SqlNullString("", valid = false),
+        musicianId = SqlNullInt64(4, valid = true),
+        musicianName = SqlNullString("The Beatles", valid = true),
+    )
+
+    /** Answers the in-order pages it was given, then an empty last page. */
+    private class ScriptedFetcher(
+        private val pages: MutableList<List<TrackListItem>>,
+    ) : MusicQueueFetcher {
+        val pageRequests = mutableListOf<Long>()
+
+        override suspend fun tracks(limit: Long, offset: Long): ApiResult<TracksData> {
+            pageRequests += offset
+            val page = pages.removeFirstOrNull().orEmpty()
+            return ApiResult.Success(
+                TracksData(
+                    tracks = page,
+                    total = 53,
+                    offset = offset,
+                    limit = limit,
+                    hasMore = pages.isNotEmpty(),
+                ),
+            )
+        }
+
+        override suspend fun shuffleTracks(limit: Long, exclude: List<Long>): ApiResult<ShuffleTracksData> =
+            ApiResult.Failure(AppError.Unexpected("not scripted"))
     }
 }

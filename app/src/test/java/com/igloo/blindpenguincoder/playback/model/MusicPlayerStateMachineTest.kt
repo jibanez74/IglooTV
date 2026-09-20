@@ -207,7 +207,7 @@ class MusicPlayerStateMachineTest {
             "Paused: Song Two",
             musicPlayerAnnouncement(MusicPlayerPhase.Paused, "Song Two"),
         )
-        assertEquals("Loading album", musicPlayerAnnouncement(MusicPlayerPhase.Loading, "Song"))
+        assertEquals("Loading", musicPlayerAnnouncement(MusicPlayerPhase.Loading, "Song"))
         assertEquals("Buffering", musicPlayerAnnouncement(MusicPlayerPhase.Buffering, "Song"))
         assertNull(musicPlayerAnnouncement(MusicPlayerPhase.Ended, "Song"))
         assertNull(musicPlayerAnnouncement(MusicPlayerPhase.Error, "Song"))

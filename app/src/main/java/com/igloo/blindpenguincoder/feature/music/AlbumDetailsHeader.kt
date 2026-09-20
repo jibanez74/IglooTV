@@ -349,10 +349,9 @@ private fun SpotifyPopularityMeter(
 }
 
 /**
- * Play Album and Shuffle. Both are host-owned stubs until playback lands (the More-menu item
- * precedent) with honest labels — no state or progress is claimed. Every direction out of the
- * row is pinned: the shell is still composed under this overlay, so an unpinned edge lets a
- * spatial search land on a card the user cannot see. Down is hand-wired to the first track row.
+ * Play Album and Shuffle. Every direction out of the row is pinned: the shell is still composed
+ * under this overlay, so an unpinned edge lets a spatial search land on a card the user cannot
+ * see. Down is hand-wired to the first track row.
  */
 @Composable
 private fun AlbumActionRow(

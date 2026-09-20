@@ -29,6 +29,7 @@ import com.igloo.blindpenguincoder.feature.music.AlbumDetailsState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueMovies
@@ -131,11 +132,38 @@ class MusicPlayerOverlayFocusTest {
         assertEquals(listOf("start:0:0.0:true"), engines.single().playbackCommands)
         // The press mapped the details already on screen: disc-then-track order, no fetch.
         val request = engineRequests.single()
-        assertEquals("Help!", request.albumTitle)
+        assertEquals(MusicQueueSource.Album(albumId = 11, title = "Help!"), request.source)
+        assertEquals(0, request.startIndex)
         assertEquals(
             listOf("Yesterday", "Ticket to Ride", "Act Naturally"),
             request.tracks.map { it.title },
         )
+        // The album's artist and cover ride on every entry, so the chrome needs no lookup.
+        assertEquals("The Beatles", request.tracks.first().artistName)
+        assertEquals("Help!", request.tracks.first().albumTitle)
+    }
+
+    @Test
+    fun pressingShuffleOpensThePlayerOnAPermutationAndBackReturnsToShuffle() {
+        setShellContent()
+        openAlbumCard()
+
+        composeRule.onNodeWithTag("album_play").performKeyInput { pressKey(Key.DirectionRight) }
+        val shuffle = composeRule.onNodeWithTag("album_shuffle")
+        shuffle.assertIsFocused()
+        shuffle.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("music_player").assertExists()
+        val request = engineRequests.single()
+        assertEquals(MusicQueueSource.Album(albumId = 11, title = "Help!"), request.source)
+        assertEquals(setOf(901L, 902L, 903L), request.tracks.map { it.id }.toSet())
+        assertEquals(3, request.tracks.size)
+
+        pressBack()
+
+        composeRule.onNodeWithTag("music_player").assertDoesNotExist()
+        composeRule.onNodeWithTag("album_shuffle").assertIsFocused()
     }
 
     @Test

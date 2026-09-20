@@ -31,19 +31,27 @@ import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.feature.shared.readingStopTarget
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
+import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerPhase
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerState
 
-/** The always-visible chrome: top title bar, centered cover, bottom track block + transport. */
+/**
+ * The always-visible chrome: top title bar named after the queue's source, centered cover of
+ * the current track, bottom track block + transport. [notice] is the queue's one refill
+ * message (docs/design-system.md section 10): announced politely, never a focus stop.
+ */
 @Composable
 internal fun MusicPlayerChrome(
     request: MusicPlayRequest,
     state: MusicPlayerState,
-    trackTitle: String,
+    currentTrack: MusicPlayTrack?,
+    notice: String?,
     playPauseRequester: FocusRequester,
     backRequester: FocusRequester,
     metadataRequester: FocusRequester,
@@ -56,12 +64,13 @@ internal fun MusicPlayerChrome(
 ) {
     val layout = IglooTheme.layout
     val playing = state.playWhenReady
+    val trackTitle = currentTrack?.title ?: ""
     val transportUpRequester = if (spokenAccessibilityEnabled) metadataRequester else backRequester
     val backDownRequester = if (spokenAccessibilityEnabled) metadataRequester else playPauseRequester
 
     Column(modifier = Modifier.fillMaxSize()) {
         PlayerTopBar(
-            title = request.albumTitle,
+            title = request.source.title,
             backRequester = backRequester,
             downRequester = backDownRequester,
             backTag = "music_back",
@@ -75,9 +84,9 @@ internal fun MusicPlayerChrome(
                 .padding(vertical = IglooTheme.spacing.md),
             contentAlignment = Alignment.Center,
         ) {
-            MusicPlayerCover(coverUrl = request.coverUrl)
+            MusicPlayerCover(coverUrl = currentTrack?.coverUrl)
             val holdMessage = when (state.phase) {
-                MusicPlayerPhase.Loading -> "Loading album…"
+                MusicPlayerPhase.Loading -> "Loading…"
                 MusicPlayerPhase.Buffering -> "Buffering…"
                 else -> null
             }
@@ -103,12 +112,17 @@ internal fun MusicPlayerChrome(
                 ),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
+            if (notice != null) {
+                IglooNotice(text = notice, modifier = Modifier.testTag("music_queue_notice"))
+            }
             // The visible pair carries one spoken sentence. TV TalkBack can reach it through a
             // focus-only reading stop; sighted users keep the direct transport-to-Back route.
-            val positionLine = listOfNotNull(
-                "Track ${state.currentTrackIndex + 1} of ${request.tracks.size}",
-                request.artistName,
-            ).joinToString(" · ")
+            val positionLine = musicPositionLine(
+                source = request.source,
+                index = state.currentTrackIndex,
+                queueSize = request.tracks.size,
+                track = currentTrack,
+            )
             var metadataFocused by remember { mutableStateOf(false) }
             Column(
                 modifier = if (spokenAccessibilityEnabled) {
@@ -202,6 +216,29 @@ internal fun MusicPlayerChrome(
             }
         }
     }
+}
+
+/**
+ * "Track N of M · artist · album": the count names the whole queue for a finite source, the
+ * library's total for Play all, and nothing for a shuffle that has no end to count to. The
+ * album name is dropped when the source is the album — the top bar already carries it.
+ */
+internal fun musicPositionLine(
+    source: MusicQueueSource,
+    index: Int,
+    queueSize: Int,
+    track: MusicPlayTrack?,
+): String {
+    val position = when (source) {
+        is MusicQueueSource.LibraryInOrder -> "Track ${index + 1} of ${source.total}"
+        MusicQueueSource.LibraryShuffle -> "Track ${index + 1}"
+        else -> "Track ${index + 1} of $queueSize"
+    }
+    return listOfNotNull(
+        position,
+        track?.artistName,
+        track?.albumTitle?.takeUnless { source is MusicQueueSource.Album },
+    ).joinToString(" · ")
 }
 
 /** Decorative — the artwork repeats nothing the track block does not say, so TalkBack skips it. */

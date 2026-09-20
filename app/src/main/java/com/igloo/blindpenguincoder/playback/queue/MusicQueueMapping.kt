@@ -1,0 +1,23 @@
+package com.igloo.blindpenguincoder.playback.queue
+
+import com.igloo.blindpenguincoder.data.model.TrackListItem
+import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
+import kotlin.random.Random
+
+/** A library row as a queue entry: milliseconds to seconds, `Valid`-gated columns to nulls. */
+fun TrackListItem.toMusicPlayTrack(): MusicPlayTrack = MusicPlayTrack(
+    id = id,
+    title = title,
+    durationSec = if (duration > 0) duration / 1000.0 else 0.0,
+    artistName = musicianName.orNullIfBlank(),
+    albumTitle = albumTitle.orNullIfBlank(),
+    coverUrl = albumCover.orNullIfBlank(),
+)
+
+/**
+ * A finite queue's shuffle (docs/music-shuffle.md): Fisher-Yates over a copy of the known
+ * membership, never the cached list itself, with duplicate ids dropped first so the queue
+ * cannot hold one track twice.
+ */
+fun List<MusicPlayTrack>.shuffledQueue(random: Random = Random.Default): List<MusicPlayTrack> =
+    distinctBy { it.id }.shuffled(random)

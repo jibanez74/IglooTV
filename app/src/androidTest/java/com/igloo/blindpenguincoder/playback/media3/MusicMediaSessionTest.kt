@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
+import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -54,13 +55,11 @@ class MusicMediaSessionTest {
         artistName: String? = "The Beatles",
         coverUrl: String? = "https://i.scdn.co/image/help.jpg",
     ) = MusicPlayRequest(
-        albumId = 11,
-        albumTitle = "Help!",
-        artistName = artistName,
-        coverUrl = coverUrl,
+        source = MusicQueueSource.Album(albumId = 11, title = "Help!"),
+        startIndex = 0,
         tracks = listOf(
-            MusicPlayTrack(id = 901, title = "Yesterday", durationSec = 125.0),
-            MusicPlayTrack(id = 902, title = "Ticket to Ride", durationSec = 190.0),
+            MusicPlayTrack(901, "Yesterday", 125.0, artistName, "Help!", coverUrl),
+            MusicPlayTrack(902, "Ticket to Ride", 190.0, artistName, "Help!", coverUrl),
         ),
     )
 
@@ -79,11 +78,11 @@ class MusicMediaSessionTest {
                     MediaItem.Builder()
                         .setUri("https://203.0.113.1/music/tracks/${track.id}/stream")
                         .setMediaId(track.id.toString())
-                        .setMediaMetadata(musicMediaMetadata(track, request))
+                        .setMediaMetadata(musicMediaMetadata(track))
                         .build()
                 },
             )
-            built = buildMusicMediaSession(context, player, request.albumId) to player
+            built = buildMusicMediaSession(context, player, request.source.sessionKey) to player
         }
         toRelease += built
         return built
@@ -113,7 +112,7 @@ class MusicMediaSessionTest {
     @Test
     fun metadataCarriesTheTrackTheAlbumAndTheMusicType() {
         val request = album()
-        val first = musicMediaMetadata(request.tracks[0], request)
+        val first = musicMediaMetadata(request.tracks[0])
 
         assertEquals("Yesterday", first.title.toString())
         assertEquals("The Beatles", first.artist.toString())
@@ -123,8 +122,8 @@ class MusicMediaSessionTest {
 
         // The album page's rule: a missing artist or cover is absent, never an empty string.
         val bare = album(artistName = null, coverUrl = null)
-        assertNull(musicMediaMetadata(bare.tracks[0], bare).artist)
-        assertNull(musicMediaMetadata(bare.tracks[0], bare).artworkUri)
+        assertNull(musicMediaMetadata(bare.tracks[0]).artist)
+        assertNull(musicMediaMetadata(bare.tracks[0]).artworkUri)
     }
 
     @Test

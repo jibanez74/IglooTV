@@ -83,6 +83,8 @@ import com.igloo.blindpenguincoder.feature.music.AlbumDetailsScreen
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.toMusicPlayRequest
+import com.igloo.blindpenguincoder.feature.music.toShuffledMusicPlayRequest
+import com.igloo.blindpenguincoder.playback.queue.MusicQueueFetcher
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerScreen
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.feature.player.MusicPlayerScreen
@@ -199,6 +201,7 @@ fun IglooApp(
     moviePlayerViewModel: MoviePlayerViewModel,
     moviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine,
     musicPlayerEngineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine,
+    musicQueueFetcher: MusicQueueFetcher,
     playRequests: Flow<MoviePlayRequest> = emptyFlow(),
     onRetryRail: (HomeRail) -> Unit,
     onMovieSelected: ((Long) -> Unit)?,
@@ -502,9 +505,11 @@ fun IglooApp(
                             musicPlayRequest = toMusicPlayRequest(loaded.album)
                         }
                     },
-                    // Host-owned stub until the shuffle pass lands (section 11.5.1): a real,
-                    // focusable control whose behavior arrives with its own branch.
-                    onShuffle = {},
+                    onShuffle = {
+                        (albumDetails.details as? AlbumDetailsState.Loaded)?.let { loaded ->
+                            musicPlayRequest = toShuffledMusicPlayRequest(loaded.album)
+                        }
+                    },
                     playReturnRequester = albumPlayReturnRequester,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
@@ -608,6 +613,10 @@ fun IglooApp(
                 request = request,
                 onClose = closeMusicPlayer,
                 engineFactory = musicPlayerEngineFactory,
+                queueFetcher = musicQueueFetcher,
+                // The saved request follows the queue as it grows, so a recreation restores
+                // every track appended so far rather than the launch's first batch.
+                onQueueChanged = { musicPlayRequest = it },
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
         }

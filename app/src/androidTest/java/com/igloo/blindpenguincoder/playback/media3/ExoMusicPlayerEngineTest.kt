@@ -12,6 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
+import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
 import java.io.FileNotFoundException
 import org.junit.After
@@ -40,10 +41,8 @@ class ExoMusicPlayerEngineTest {
     @Test
     fun terminalFailureOnALaterTrackDoesNotPublishAQueueReset() {
         val request = MusicPlayRequest(
-            albumId = 11,
-            albumTitle = "Help!",
-            artistName = "The Beatles",
-            coverUrl = null,
+            source = MusicQueueSource.Album(albumId = 11, title = "Help!"),
+            startIndex = 0,
             tracks = listOf(
                 MusicPlayTrack(id = 901, title = "Yesterday", durationSec = 125.0),
                 MusicPlayTrack(id = 902, title = "Ticket to Ride", durationSec = 190.0),

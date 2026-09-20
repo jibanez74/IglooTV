@@ -16,13 +16,14 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 /**
- * The real engine: one ExoPlayer holding the whole album as its playlist, so auto-advance is
+ * The real engine: one ExoPlayer holding the whole queue as its playlist, so auto-advance is
  * the player's own item transition and skip is [Player.seekToNext]/[Player.seekToPrevious]'s
  * standard semantics. Direct progressive streams only — the backend serves audio files as-is —
  * so none of the movie engine's HLS machinery exists here. The container is never told its
@@ -31,9 +32,9 @@ import kotlinx.coroutines.flow.asSharedFlow
  */
 internal class ExoMusicPlayerEngine(
     context: Context,
-    private val request: MusicPlayRequest,
+    request: MusicPlayRequest,
     dataSourceFactory: DataSource.Factory,
-    trackStreamUrl: (Long) -> String,
+    private val trackStreamUrl: (Long) -> String,
 ) : MusicPlayerEngine {
 
     private val _events = MutableSharedFlow<MusicPlayerEvent>(replay = 64)
@@ -51,23 +52,25 @@ internal class ExoMusicPlayerEngine(
     private val session = buildMusicMediaSession(
         context,
         IntentRoutingPlayer(player, playbackIntent, ::play, ::pause),
-        request.albumId,
+        request.source.sessionKey,
     )
 
-    private val mediaItems = request.tracks.map { track ->
-        MediaItem.Builder()
-            .setUri(trackStreamUrl(track.id))
-            .setMediaId(track.id.toString())
-            .setMediaMetadata(musicMediaMetadata(track, request))
-            .build()
-    }
+    /** The queue as the player holds it; [appendTracks] grows it, nothing reorders it. */
+    private val tracks = request.tracks.toMutableList()
+    private var playlistSet = false
+
+    private fun mediaItem(track: MusicPlayTrack): MediaItem = MediaItem.Builder()
+        .setUri(trackStreamUrl(track.id))
+        .setMediaId(track.id.toString())
+        .setMediaMetadata(musicMediaMetadata(track))
+        .build()
 
     private val listener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
                 Player.STATE_READY -> emit(MusicPlayerEvent.Ready(durationSec()))
                 Player.STATE_BUFFERING -> emit(MusicPlayerEvent.Buffering)
-                // Only fires past the last playlist item, so this is the whole-album end.
+                // Only fires past the last playlist item, so this is the whole queue's end.
                 Player.STATE_ENDED -> emit(MusicPlayerEvent.Ended)
                 else -> Unit
             }
@@ -118,22 +121,30 @@ internal class ExoMusicPlayerEngine(
         initialPlayWhenReady: Boolean,
     ) {
         if (!playbackIntent.start(initialPlayWhenReady)) return
-        // An album with no tracks composes no Play button, so this is unreachable through the
-        // UI; preparing an empty playlist anyway would report a silent Ended, which reads to
-        // the host as "the album finished". Fail where the cause is legible instead.
-        if (mediaItems.isEmpty()) {
-            transitionToTerminal(MusicPlayerEvent.Error("This album has no playable tracks."))
+        // No launch site offers Play over zero tracks, so this is unreachable through the UI;
+        // preparing an empty playlist anyway would report a silent Ended, which reads to the
+        // host as "the queue finished". Fail where the cause is legible instead.
+        if (tracks.isEmpty()) {
+            transitionToTerminal(MusicPlayerEvent.Error("There are no playable tracks."))
             return
         }
         emitDesiredPlayWhenReady()
         ticker.start()
         player.setMediaItems(
-            mediaItems,
-            startTrackIndex.coerceIn(0, mediaItems.size - 1),
+            tracks.map(::mediaItem),
+            startTrackIndex.coerceIn(0, tracks.size - 1),
             (startPositionSec * 1000).toLong().coerceAtLeast(0L),
         )
+        playlistSet = true
         player.playWhenReady = playbackIntent.shouldPlay
         player.prepare()
+    }
+
+    override fun appendTracks(tracks: List<MusicPlayTrack>) {
+        if (!playbackIntent.acceptsCommands) return
+        this.tracks += tracks
+        // Before the playlist is set the grown list is what startPlayback will set.
+        if (playlistSet) player.addMediaItems(tracks.map(::mediaItem))
     }
 
     override fun play() {
@@ -189,7 +200,7 @@ internal class ExoMusicPlayerEngine(
      */
     private fun durationSec(): Double =
         player.duration.takeIf { it != C.TIME_UNSET }?.div(1000.0)
-            ?: request.tracks.getOrNull(player.currentMediaItemIndex)?.durationSec
+            ?: tracks.getOrNull(player.currentMediaItemIndex)?.durationSec
             ?: 0.0
 
     private fun errorEvent(error: PlaybackException): MusicPlayerEvent.Error {

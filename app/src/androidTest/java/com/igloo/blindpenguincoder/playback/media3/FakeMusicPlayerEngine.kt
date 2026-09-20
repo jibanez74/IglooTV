@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.playback.media3
 
+import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -55,6 +56,11 @@ class FakeMusicPlayerEngine(
                 durationSec = trackDurationsSec.getOrNull(startTrackIndex) ?: 0.0,
             ),
         )
+    }
+
+    override fun appendTracks(tracks: List<MusicPlayTrack>) {
+        if (released) return
+        commands += "append:" + tracks.joinToString(",") { it.id.toString() }
     }
 
     override fun play() {
