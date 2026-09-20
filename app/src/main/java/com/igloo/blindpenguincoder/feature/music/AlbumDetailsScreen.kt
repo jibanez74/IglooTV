@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -55,6 +56,7 @@ import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
+import com.igloo.blindpenguincoder.feature.shared.TrackRowMenu
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 
 /**
@@ -72,7 +74,9 @@ import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
  * the album's queue — in order, freshly shuffled, or in order from that row; [playReturnRequester]
  * is parked on whichever of those controls launched it so closing that player restores focus
  * there (section 6.3), the movie details screen's pairing. [likes] and [onToggleLike] are the
- * shared like state every track row reads; [notice] is its last failed write.
+ * shared like state every track row reads; [notice] is its last failed write. [onOpenMusician]
+ * replaces this overlay with a credited artist's — from a chip or a row's More — and is null
+ * only where no musician screen can be reached, which leaves the chips display-only.
  */
 @Composable
 fun AlbumDetailsScreen(
@@ -84,6 +88,7 @@ fun AlbumDetailsScreen(
     likes: TrackLikesUiState,
     onToggleLike: (Long) -> Unit,
     notice: String?,
+    onOpenMusician: ((Long) -> Unit)?,
     playReturnRequester: FocusRequester,
     modifier: Modifier = Modifier,
     // Parameterized so tests can force both states: the reading-stop chain below depends on it,
@@ -106,6 +111,10 @@ fun AlbumDetailsScreen(
     LaunchedEffect(state::class) {
         if (hadFocusAtSwap) entryRequester.requestFocusSafely()
     }
+    // The row whose More menu is open, and the requesters its dismissal returns focus through.
+    var trackMenu by remember(state::class) { mutableStateOf<Pair<Int, Rect>?>(null) }
+    val trackRows = (state as? AlbumDetailsState.Loaded)?.album?.discs?.flatMap { it.tracks }.orEmpty()
+    val trackRequesters = remember(trackRows.size) { List(trackRows.size) { TrackRowRequesters() } }
 
     Box(
         modifier = modifier
@@ -120,6 +129,13 @@ fun AlbumDetailsScreen(
             }
             .testTag("album_details"),
     ) {
+        // The menu is a small anchored card that occludes nothing, so the body leaves the
+        // semantics tree while it is up (the movie details rule); the tag stays outside.
+        Box(
+            modifier = Modifier
+                .testTag("album_details_body")
+                .then(if (trackMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
+        ) {
         when (state) {
             is AlbumDetailsState.Loading -> AlbumDetailsSkeleton(anchorRequester = entryRequester)
 
@@ -153,11 +169,33 @@ fun AlbumDetailsScreen(
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 entryRequester = entryRequester,
                 playReturnRequester = playReturnRequester,
+                trackRequesters = trackRequesters,
                 onPlayAlbum = onPlayAlbum,
                 onShuffle = onShuffle,
                 onPlayTrack = onPlayTrack,
                 onToggleLike = onToggleLike,
+                onOpenMusician = onOpenMusician,
+                onOpenMore = { index, bounds -> trackMenu = index to bounds },
             )
+        }
+        }
+
+        // Last child, over the body. Dismissal restores focus to the More that opened it, in
+        // the callback rather than an effect (section 9.3); an item that opened the artist
+        // replaces this overlay, so its restore finds nothing and safely no-ops.
+        trackMenu?.let { (index, bounds) ->
+            trackRows.getOrNull(index)?.let { track ->
+                TrackRowMenu(
+                    track = track,
+                    anchorBounds = bounds,
+                    onGoToAlbum = null,
+                    onGoToArtist = onOpenMusician,
+                    onDismiss = {
+                        trackMenu = null
+                        trackRequesters.getOrNull(index)?.more?.requestFocusSafely()
+                    },
+                )
+            }
         }
     }
 }
@@ -170,10 +208,13 @@ private fun AlbumDetailsContent(
     spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
     playReturnRequester: FocusRequester,
+    trackRequesters: List<TrackRowRequesters>,
     onPlayAlbum: () -> Unit,
     onShuffle: () -> Unit,
     onPlayTrack: (Int) -> Unit,
     onToggleLike: (Long) -> Unit,
+    onOpenMusician: ((Long) -> Unit)?,
+    onOpenMore: (Int, Rect) -> Unit,
 ) {
     val colors = IglooTheme.colors
     val layout = IglooTheme.layout
@@ -196,7 +237,11 @@ private fun AlbumDetailsContent(
     val heroInfoRequester = remember { FocusRequester() }
     val shuffleRequester = remember { FocusRequester() }
     val factsStop = remember { FocusRequester() }
-    val trackRequesters = remember(trackRows.size) { List(trackRows.size) { TrackRowRequesters() } }
+    // Chips are focus targets only with a musician screen to open and a real id to open it on.
+    val actionableArtists = onOpenMusician != null && album.artists.all { it.id > 0 }
+    val artistRequesters = remember(album.artists.size, actionableArtists) {
+        if (actionableArtists) List(album.artists.size) { FocusRequester() } else emptyList()
+    }
     // Which control launched the player, so its close lands back on that control: Play Album,
     // Shuffle, or one row's Play. Saved, because the player itself survives recreation and its
     // close afterwards still has to find the launching node.
@@ -211,7 +256,7 @@ private fun AlbumDetailsContent(
     var lastFocusedAction by remember(hasHeroActions) {
         mutableStateOf(entryRequester.takeIf { hasHeroActions })
     }
-    val belowActions = trackRequesters.firstOrNull()?.play ?: factsRequester
+    val belowActions = artistRequesters.firstOrNull() ?: trackRequesters.firstOrNull()?.play ?: factsRequester
     val upFromBelow = when {
         hasHeroActions -> lastFocusedAction
         spokenAccessibilityEnabled -> heroInfoRequester
@@ -338,16 +383,19 @@ private fun AlbumDetailsContent(
         AlbumDetailsSections(
             album = album,
             likes = likes,
+            artistRequesters = artistRequesters,
             trackRequesters = trackRequesters,
             factsRequester = factsRequester,
             upFromBelow = upFromBelow,
             playReturnRow = playReturnRow,
             playReturnRequester = playReturnRequester,
+            onOpenMusician = onOpenMusician?.takeIf { actionableArtists },
             onPlayTrack = { index ->
                 playLaunchSite = ROW_SITE_PREFIX + index
                 onPlayTrack(index)
             },
             onToggleLike = onToggleLike,
+            onOpenMore = onOpenMore,
             contentInset = PaddingValues(horizontal = layout.safeAreaHorizontal),
             modifier = Modifier
                 .fillMaxWidth()

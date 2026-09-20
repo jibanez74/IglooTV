@@ -50,6 +50,7 @@ class AlbumDetailsFocusTest {
 
     private var albumDetailsState by mutableStateOf(AlbumDetailsUiState())
     private val opened = mutableListOf<Long>()
+    private val openedMusicians = mutableListOf<Long>()
     private var hostActivity: Activity? = null
 
     private fun setShellContent(
@@ -60,9 +61,11 @@ class AlbumDetailsFocusTest {
         openLoads: (Long) -> AlbumDetailsState = { id ->
             AlbumDetailsState.Loaded(testAlbumDetails(id = id))
         },
+        withMusicianScreen: Boolean = false,
     ) {
         albumDetailsState = initialAlbumDetails
         opened.clear()
+        openedMusicians.clear()
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
@@ -86,6 +89,14 @@ class AlbumDetailsFocusTest {
                     },
                     onCloseDetails = {
                         albumDetailsState = AlbumDetailsUiState()
+                    },
+                    onMusicianSelected = if (withMusicianScreen) {
+                        { musicianId ->
+                            openedMusicians += musicianId
+                            albumDetailsState = AlbumDetailsUiState()
+                        }
+                    } else {
+                        null
                     },
                 )
             }
@@ -266,6 +277,43 @@ class AlbumDetailsFocusTest {
         facts.assertIsFocused()
         facts.performKeyInput { pressKey(Key.DirectionRight) }
         facts.assertIsFocused()
+    }
+
+    @Test
+    fun withAMusicianScreenTheArtistChipsJoinTheChainAndOpenTheArtist() {
+        setShellContent(loadedState(), withMusicianScreen = true)
+
+        val play = composeRule.onNodeWithTag("album_play")
+        play.requestFocus()
+        play.performKeyInput { pressKey(Key.DirectionDown) }
+        val chip = composeRule.onNodeWithTag("album_artist_4")
+        chip.assertIsFocused()
+        chip.performKeyInput { pressKey(Key.DirectionLeft) }
+        chip.assertIsFocused()
+        chip.performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("track_play_901").assertIsFocused()
+        composeRule.onNodeWithTag("track_play_901").performKeyInput { pressKey(Key.DirectionUp) }
+        chip.assertIsFocused()
+
+        chip.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        assertEquals(listOf(4L), openedMusicians)
+    }
+
+    @Test
+    fun withAMusicianScreenMoreOffersGoToArtist() {
+        setShellContent(loadedState(), withMusicianScreen = true)
+
+        val more = composeRule.onNodeWithTag("track_more_901")
+        more.requestFocus()
+        more.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        val goToArtist = composeRule.onNodeWithContentDescription("Go to artist")
+        goToArtist.assertIsFocused()
+        goToArtist.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        assertEquals(listOf(4L), openedMusicians)
     }
 
     @Test

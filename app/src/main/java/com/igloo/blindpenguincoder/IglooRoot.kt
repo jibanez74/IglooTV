@@ -48,6 +48,7 @@ import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicViewModel
+import com.igloo.blindpenguincoder.feature.music.MusicianDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.TrackLikesViewModel
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.MoviePlaybackServices
@@ -256,6 +257,12 @@ fun IglooRoot(container: IglooAppContainer) {
                     ) {
                         MusicViewModel(container.musicRepository)
                     }
+                    val musicianDetailsViewModel = viewModel(
+                        viewModelStoreOwner = authenticatedSessionOwner,
+                        key = "musician-details",
+                    ) {
+                        MusicianDetailsViewModel(container.musicRepository)
+                    }
                     // One liked-id set for every track row in the session, so no two surfaces
                     // can disagree about a heart; cleared with the rest on sign-out.
                     val trackLikesViewModel = viewModel(
@@ -274,6 +281,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         detailsViewModel,
                         theaterDetailsViewModel,
                         albumDetailsViewModel,
+                        musicianDetailsViewModel,
                         trackLikesViewModel,
                         moviesViewModel,
                         musicViewModel,
@@ -283,6 +291,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         detailsViewModel.refresh()
                         theaterDetailsViewModel.refresh()
                         albumDetailsViewModel.refresh()
+                        musicianDetailsViewModel.refresh()
                         trackLikesViewModel.refresh()
                         // Re-reads the count and, only if the grid has nothing yet, page one: a
                         // TV woken from standby must keep the pages the user scrolled through.
@@ -324,6 +333,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         .collectAsStateWithLifecycle()
                     val albumDetails by albumDetailsViewModel.uiState
                         .collectAsStateWithLifecycle()
+                    val musicianDetails by musicianDetailsViewModel.uiState.collectAsStateWithLifecycle()
                     val trackLikes by trackLikesViewModel.uiState.collectAsStateWithLifecycle()
                     // One overlay slot, two sources: the shell hosts a single details screen, so
                     // whichever view model is open feeds it and opening either closes the other.
@@ -393,22 +403,33 @@ fun IglooRoot(container: IglooAppContainer) {
                         musicPlayRequests = musicViewModel.playRequests,
                         albumDetails = albumDetails,
                         onRetryAlbumDetails = albumDetailsViewModel::retry,
+                        musicianDetails = musicianDetails,
+                        onRetryMusicianDetails = musicianDetailsViewModel::retry,
+                        onMusicianSelected = { musicianId ->
+                            detailsViewModel.close()
+                            theaterDetailsViewModel.close()
+                            albumDetailsViewModel.close()
+                            musicianDetailsViewModel.open(musicianId)
+                        },
                         trackLikes = trackLikes,
                         onToggleTrackLike = trackLikesViewModel::toggle,
                         onRetryRail = homeViewModel::retry,
                         onMovieSelected = { movieId ->
                             theaterDetailsViewModel.close()
                             albumDetailsViewModel.close()
+                            musicianDetailsViewModel.close()
                             detailsViewModel.open(movieId)
                         },
                         onTheaterMovieSelected = { tmdbId ->
                             detailsViewModel.close()
                             albumDetailsViewModel.close()
+                            musicianDetailsViewModel.close()
                             theaterDetailsViewModel.open(tmdbId)
                         },
                         onAlbumSelected = { albumId ->
                             detailsViewModel.close()
                             theaterDetailsViewModel.close()
+                            musicianDetailsViewModel.close()
                             albumDetailsViewModel.open(albumId)
                         },
                         // Back does not ask which one was up: closing a closed page is a no-op.
@@ -416,6 +437,7 @@ fun IglooRoot(container: IglooAppContainer) {
                             detailsViewModel.close()
                             theaterDetailsViewModel.close()
                             albumDetailsViewModel.close()
+                            musicianDetailsViewModel.close()
                         },
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },
                         onSignOut = signOutViewModel::request,

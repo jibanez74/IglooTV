@@ -107,13 +107,16 @@ class AlbumDetailsLayoutTest {
                         AlbumDetailsSections(
                             album = album,
                             likes = TrackLikesUiState(likedIds = emptySet()),
+                            artistRequesters = emptyList(),
                             trackRequesters = trackRequesters,
                             factsRequester = factsRequester,
                             upFromBelow = null,
                             playReturnRow = null,
                             playReturnRequester = playReturnRequester,
+                            onOpenMusician = null,
                             onPlayTrack = {},
                             onToggleLike = {},
+                            onOpenMore = { _, _ -> },
                             contentInset = PaddingValues(horizontal = safeAreaHorizontal),
                             modifier = Modifier.fillMaxWidth(),
                         )

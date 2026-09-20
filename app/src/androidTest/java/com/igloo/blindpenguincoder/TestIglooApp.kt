@@ -14,6 +14,7 @@ import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicUiState
+import com.igloo.blindpenguincoder.feature.music.MusicianDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
@@ -65,6 +66,9 @@ internal fun TestIglooApp(
     albumDetails: AlbumDetailsUiState = AlbumDetailsUiState(),
     onRetryAlbumDetails: () -> Unit = {},
     onAlbumSelected: ((Long) -> Unit)? = null,
+    musicianDetails: MusicianDetailsUiState = MusicianDetailsUiState(),
+    onRetryMusicianDetails: () -> Unit = {},
+    onMusicianSelected: ((Long) -> Unit)? = null,
     // Seeded and empty: rows are live but nothing is liked, so a suite asserts the resting
     // state unless it says otherwise.
     trackLikes: TrackLikesUiState = TrackLikesUiState(likedIds = emptySet()),
@@ -105,6 +109,9 @@ internal fun TestIglooApp(
         albumDetails = albumDetails,
         onRetryAlbumDetails = onRetryAlbumDetails,
         onAlbumSelected = onAlbumSelected,
+        musicianDetails = musicianDetails,
+        onRetryMusicianDetails = onRetryMusicianDetails,
+        onMusicianSelected = onMusicianSelected,
         trackLikes = trackLikes,
         onToggleTrackLike = onToggleTrackLike,
         onRequestPlayback = onRequestPlayback,

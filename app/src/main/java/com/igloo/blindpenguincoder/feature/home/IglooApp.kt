@@ -86,6 +86,9 @@ import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicScreen
 import com.igloo.blindpenguincoder.feature.music.MusicUiState
+import com.igloo.blindpenguincoder.feature.music.MusicianDetailsScreen
+import com.igloo.blindpenguincoder.feature.music.MusicianDetailsState
+import com.igloo.blindpenguincoder.feature.music.MusicianDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.TrackFocusMemory
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.music.toMusicPlayRequest
@@ -211,6 +214,9 @@ fun IglooApp(
     albumDetails: AlbumDetailsUiState,
     onRetryAlbumDetails: () -> Unit,
     onAlbumSelected: ((Long) -> Unit)?,
+    musicianDetails: MusicianDetailsUiState,
+    onRetryMusicianDetails: () -> Unit,
+    onMusicianSelected: ((Long) -> Unit)?,
     trackLikes: TrackLikesUiState,
     onToggleTrackLike: (Long) -> Unit,
     onRequestPlayback: () -> Unit,
@@ -268,6 +274,9 @@ fun IglooApp(
     // The album overlay shares the one details slot (section 11.5.1): the host's open callbacks
     // keep the detail view models mutually exclusive, so at most one of these is ever true.
     val albumOpen = albumDetails.openAlbumId != null
+    // The fourth occupant, under the same exclusivity.
+    val musicianOpen = musicianDetails.openMusicianId != null
+    val anyDetailsOpen = detailsOpen || albumOpen || musicianOpen
     // The trailer player is the third overlay layer (shell -> details -> player); the host owns
     // its existence and its focus restore, the same contract the details overlay lives under.
     var trailerRequest by rememberSaveable(stateSaver = TrailerRequest.Saver) {
@@ -293,6 +302,7 @@ fun IglooApp(
     // Parked on the album page's launching action — Play Album, Shuffle, or a row's Play — so
     // closing the player restores focus to the control that launched it (section 6.3).
     val albumPlayReturnRequester = remember { FocusRequester() }
+    val musicianPlayReturnRequester = remember { FocusRequester() }
     val progressSync by moviePlayerViewModel.progressSyncUiState.collectAsStateWithLifecycle()
     val progressSyncError = (progressSync as? ProgressSyncUiState.Failed)?.message
     val playReturnRequester = remember { FocusRequester() }
@@ -355,12 +365,18 @@ fun IglooApp(
             musicPlayOrigin = null
         }
     }
+    LaunchedEffect(musicianOpen) {
+        if (!musicianOpen && musicPlayOrigin == MusicPlayOrigin.MusicianDetails) {
+            musicPlayRequest = null
+            musicPlayOrigin = null
+        }
+    }
     // The Music pane's launches: a row's Play and Play all arrive at once, Shuffle all once its
     // first batch has landed. Accepted only while the pane is what the user is looking at — a
     // batch landing after they opened an overlay or left for Home would put a player over a
     // surface that never asked for one.
     val musicPaneCanPlay by rememberUpdatedState(
-        currentDestination == IglooDestination.Music && !detailsOpen && !albumOpen &&
+        currentDestination == IglooDestination.Music && !anyDetailsOpen &&
             !trailerOpen && !playerOpen && !musicPlayerOpen && !signOut.confirming,
     )
     LaunchedEffect(musicPlayRequests) {
@@ -380,6 +396,7 @@ fun IglooApp(
         // pane's anchor is the same last-resort fallback the other overlays use.
         val returnRequester = when (origin) {
             MusicPlayOrigin.AlbumDetails -> albumPlayReturnRequester
+            MusicPlayOrigin.MusicianDetails -> musicianPlayReturnRequester
             MusicPlayOrigin.MusicPane -> musicReturnRequester
             null -> null
         }
@@ -431,12 +448,18 @@ fun IglooApp(
             select(albumId)
         }
     }
+    val openMusician: ((DetailsOrigin, Long) -> Unit)? = onMusicianSelected?.let { select ->
+        { origin, musicianId ->
+            detailsOrigin = origin
+            select(musicianId)
+        }
+    }
 
     // Every handler is gated explicitly rather than left to win on registration order —
     // design-system.md section 9.3 requires the host to be deliberate about Back. While either
     // player is up, Back belongs to its own screen (chrome dismissal, then close).
     BackHandler(
-        enabled = (detailsOpen || albumOpen) && !signOut.confirming && !trailerOpen &&
+        enabled = anyDetailsOpen && !signOut.confirming && !trailerOpen &&
             !playerOpen && !musicPlayerOpen && !moreMenuOpen && !playbackSettingsOpen,
     ) {
         val origin = detailsOrigin
@@ -462,14 +485,14 @@ fun IglooApp(
         }
     }
     BackHandler(
-        enabled = !detailsOpen && !albumOpen && !signOut.confirming && !trailerOpen &&
+        enabled = !anyDetailsOpen && !signOut.confirming && !trailerOpen &&
             !playerOpen && !musicPlayerOpen && !railHasFocus,
     ) {
         railOpenedByBack = true
         navigationRequesters.getValue(currentDestination).requestFocus()
     }
     BackHandler(
-        enabled = !detailsOpen && !albumOpen && !signOut.confirming && !trailerOpen &&
+        enabled = !anyDetailsOpen && !signOut.confirming && !trailerOpen &&
             !playerOpen && !musicPlayerOpen && railHasFocus && !railOpenedByBack,
     ) {
         contentStartRequester.requestFocus()
@@ -490,12 +513,12 @@ fun IglooApp(
             // The details header owns the notice while the overlay is up; rendering it here too
             // would only shift Home's rails behind a screen nobody can see. It surfaces here
             // when Back closes an overlay whose write had already failed.
-            mutationNotice = (details.mutationNotice ?: trackLikes.notice)
-                .takeIf { !detailsOpen && !albumOpen },
+            mutationNotice = (details.mutationNotice ?: trackLikes.notice).takeIf { !anyDetailsOpen },
             onRetryRail = onRetryRail,
             openMovie = openMovie,
             openTheaterMovie = openTheaterMovie,
             openAlbum = openAlbum,
+            openMusician = openMusician,
             railReturnRequesters = railReturnRequesters,
             moviesReturnRequester = moviesReturnRequester,
             musicReturnRequester = musicReturnRequester,
@@ -508,7 +531,7 @@ fun IglooApp(
             // The overlay covers the shell completely, so the whole thing leaves TalkBack's
             // traversal while it is up — the same treatment the confirm dialog gets.
             // The music player can sit directly over the pane, with no overlay between.
-            hiddenFromAccessibility = signOut.confirming || detailsOpen || albumOpen || musicPlayerOpen,
+            hiddenFromAccessibility = signOut.confirming || anyDetailsOpen || musicPlayerOpen,
             onRailFocusChanged = { hasFocus ->
                 if (!hasFocus) railOpenedByBack = false
                 railHasFocus = hasFocus
@@ -535,7 +558,51 @@ fun IglooApp(
         // onto. The same reasoning stacks once more: while the trailer player is up the details
         // screen stays composed (its extras rail holds the focus memory the player's close
         // restores onto) but leaves TalkBack traversal, exactly as the shell does under it.
-        if (albumOpen) {
+        if (musicianOpen) {
+            // The one details slot's fourth occupant, on the album layer's exact contract.
+            Box(
+                modifier = Modifier
+                    .testTag("details_layer")
+                    .then(
+                        if (musicPlayerOpen) {
+                            Modifier.semantics { hideFromAccessibility() }
+                        } else {
+                            Modifier
+                        },
+                    ),
+            ) {
+                MusicianDetailsScreen(
+                    state = musicianDetails.details,
+                    onRetry = onRetryMusicianDetails,
+                    onPlayAll = {
+                        (musicianDetails.details as? MusicianDetailsState.Loaded)?.let { loaded ->
+                            musicPlayRequest = toMusicPlayRequest(loaded.musician)
+                            musicPlayOrigin = MusicPlayOrigin.MusicianDetails
+                        }
+                    },
+                    onShuffle = {
+                        (musicianDetails.details as? MusicianDetailsState.Loaded)?.let { loaded ->
+                            musicPlayRequest = toShuffledMusicPlayRequest(loaded.musician)
+                            musicPlayOrigin = MusicPlayOrigin.MusicianDetails
+                        }
+                    },
+                    onPlayTrack = { index ->
+                        (musicianDetails.details as? MusicianDetailsState.Loaded)?.let { loaded ->
+                            musicPlayRequest = toMusicPlayRequest(loaded.musician, startIndex = index)
+                            musicPlayOrigin = MusicPlayOrigin.MusicianDetails
+                        }
+                    },
+                    likes = trackLikes,
+                    onToggleLike = onToggleTrackLike,
+                    notice = trackLikes.notice,
+                    // A same-slot replacement: the origin stays what opened this overlay, so
+                    // Back from the album lands where the musician was opened from.
+                    onOpenAlbum = { albumId -> onAlbumSelected?.invoke(albumId) },
+                    playReturnRequester = musicianPlayReturnRequester,
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                )
+            }
+        } else if (albumOpen) {
             // The one details slot's third occupant. hideFromAccessibility while the music
             // player covers it, for the movie details layer's exact reason below.
             Box(
@@ -576,6 +643,8 @@ fun IglooApp(
                     likes = trackLikes,
                     onToggleLike = onToggleTrackLike,
                     notice = trackLikes.notice,
+                    // Same-slot replacement, origin untouched (see the musician layer above).
+                    onOpenMusician = onMusicianSelected,
                     playReturnRequester = albumPlayReturnRequester,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
@@ -720,7 +789,7 @@ fun IglooApp(
     // card the user had just activated. Skipped entirely when something is already over the
     // shell — this effect runs after the overlay's own, so it would take focus off it.
     LaunchedEffect(Unit) {
-        if (!detailsOpen && !albumOpen && !trailerOpen && !playerOpen && !musicPlayerOpen) {
+        if (!anyDetailsOpen && !trailerOpen && !playerOpen && !musicPlayerOpen) {
             contentStartRequester.requestFocus()
         }
     }
@@ -742,6 +811,7 @@ private fun IglooShell(
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
     openAlbum: ((DetailsOrigin, Long) -> Unit)?,
+    openMusician: ((DetailsOrigin, Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     moviesReturnRequester: FocusRequester,
     musicReturnRequester: FocusRequester,
@@ -813,6 +883,7 @@ private fun IglooShell(
                 openMovie = openMovie,
                 openTheaterMovie = openTheaterMovie,
                 openAlbum = openAlbum,
+                openMusician = openMusician,
                 railReturnRequesters = railReturnRequesters,
                 moviesReturnRequester = moviesReturnRequester,
                 musicReturnRequester = musicReturnRequester,
@@ -893,6 +964,7 @@ private fun ContentPane(
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
     openAlbum: ((DetailsOrigin, Long) -> Unit)?,
+    openMusician: ((DetailsOrigin, Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     moviesReturnRequester: FocusRequester,
     musicReturnRequester: FocusRequester,
@@ -1009,7 +1081,9 @@ private fun ContentPane(
                 onAlbumFocused = { lastFocusedAlbumId = it },
                 lastFocusedTrack = lastFocusedTrack,
                 onTrackFocused = { lastFocusedTrack = it },
-                onMusicianSelected = null,
+                onMusicianSelected = openMusician?.let { open ->
+                    { musicianId -> open(DetailsOrigin.Music, musicianId) }
+                },
                 onAlbumSelected = openAlbum?.let { open ->
                     { albumId -> open(DetailsOrigin.Music, albumId) }
                 },
@@ -1051,7 +1125,7 @@ private fun paneBranchOf(destination: IglooDestination): PaneBranch = when (dest
 }
 
 /** Which surface launched the music player; see `musicPlayOrigin` in [IglooApp]. */
-private enum class MusicPlayOrigin { AlbumDetails, MusicPane }
+private enum class MusicPlayOrigin { AlbumDetails, MusicianDetails, MusicPane }
 
 @Composable
 private fun HomeRails(

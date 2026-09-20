@@ -293,7 +293,7 @@ internal fun AlbumDetailChip(
  * the meter itself is silent.
  */
 @Composable
-private fun SpotifyPopularityMeter(
+internal fun SpotifyPopularityMeter(
     score: Int,
     overMedia: Boolean,
 ) {

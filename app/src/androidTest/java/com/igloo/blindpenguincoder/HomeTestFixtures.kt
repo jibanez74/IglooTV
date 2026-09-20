@@ -39,6 +39,7 @@ import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicTab
 import com.igloo.blindpenguincoder.feature.music.MusicUiState
 import com.igloo.blindpenguincoder.feature.music.MusicianCardUi
+import com.igloo.blindpenguincoder.feature.music.MusicianDetailsUi
 import com.igloo.blindpenguincoder.feature.music.PagedState
 import com.igloo.blindpenguincoder.feature.music.TracksEntry
 import com.igloo.blindpenguincoder.feature.music.tracksEntries
@@ -538,4 +539,77 @@ internal val inertMusicActions = MusicActions(
     onPlayAll = {},
     onShuffleAll = {},
     onToggleLike = {},
+)
+
+/**
+ * Thumb-less for the glyph fallback; two albums and three tracks so the chain has a rail and
+ * rows to walk; the spoken strings are pinned literals of the mapping contract.
+ */
+internal fun testMusicianDetails(
+    id: Long = 4,
+    name: String = "The Beatles",
+) = MusicianDetailsUi(
+    id = id,
+    name = name,
+    thumbUrl = null,
+    summary = "Liverpool, 1960.",
+    albumCountText = "2 albums",
+    trackCountText = "3 tracks",
+    totalDurationText = "7m 5s",
+    genresLine = "Rock · Pop",
+    popularity = 88,
+    followersText = "25,000,000 Spotify followers",
+    albums = listOf(
+        AlbumCardUi(id = 11, title = "Help!", musician = "1965", coverUrl = null),
+        AlbumCardUi(id = 12, title = "Revolver", musician = "1966", coverUrl = null),
+    ),
+    tracks = listOf(
+        TrackRowUi(
+            id = 951,
+            title = "Yesterday",
+            subtitle = "Help!",
+            indexText = null,
+            durationText = "2:05",
+            durationSec = 125.0,
+            albumId = 11,
+            musicianId = null,
+            spokenInfo = "Yesterday. Help!. 2 minutes and 5 seconds.",
+        ),
+        TrackRowUi(
+            id = 952,
+            title = "Taxman",
+            subtitle = "Revolver",
+            indexText = null,
+            durationText = "2:39",
+            durationSec = 159.0,
+            albumId = 12,
+            musicianId = null,
+            spokenInfo = "Taxman. Revolver. 2 minutes and 39 seconds.",
+        ),
+        TrackRowUi(
+            id = 953,
+            title = "Untagged Demo",
+            subtitle = null,
+            indexText = null,
+            durationText = "1:50",
+            durationSec = 110.0,
+            albumId = null,
+            musicianId = null,
+            spokenInfo = "Untagged Demo. 1 minute and 50 seconds.",
+        ),
+    ),
+    facts = listOf(
+        AlbumFactUi("Albums", "2"),
+        AlbumFactUi("Tracks", "3"),
+        AlbumFactUi("Total duration", "7m 5s"),
+        AlbumFactUi("Genres", "Rock, Pop"),
+        AlbumFactUi("Spotify popularity", "88 / 100"),
+        AlbumFactUi("Spotify followers", "25,000,000"),
+        AlbumFactUi("About", "Liverpool, 1960."),
+    ),
+    factsDescription = "Artist details. Albums: 2. Tracks: 3. Total duration: 7m 5s. " +
+        "Genres: Rock, Pop. Spotify popularity: 88 / 100. Spotify followers: 25,000,000. " +
+        "About: Liverpool, 1960.",
+    heroInfoDescription = "The Beatles. 2 albums, 3 tracks. Total duration: 7 minutes and 5 seconds. " +
+        "Genres: Rock, Pop. Spotify popularity 88 out of 100.",
 )
