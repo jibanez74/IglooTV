@@ -11,7 +11,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
-
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -25,6 +24,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.feature.home.findActivity
+import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.testMovieDetails
 import com.igloo.blindpenguincoder.testMovieGridItems
 import com.igloo.blindpenguincoder.testMoviesState
@@ -123,7 +123,7 @@ class MoviesGridBehaviorTest {
      */
     private fun showRows(
         rows: Int,
-        append: MoviesAppendState = MoviesAppendState.Idle,
+        append: AppendState = AppendState.Idle,
         appendGeneration: Int = 0,
         refreshing: Boolean = false,
         notice: String? = null,
@@ -858,7 +858,7 @@ class MoviesGridBehaviorTest {
     @Test
     fun theTailSkeletonsAreNotFocusTargets() {
         setContent()
-        showRows(rows = 1, append = MoviesAppendState.Loading)
+        showRows(rows = 1, append = AppendState.Loading)
         card(1).performKeyInput { pressKey(Key.DirectionDown) }
 
         // The only row is the last, so down has nowhere legitimate to go: a focusable skeleton
@@ -870,7 +870,7 @@ class MoviesGridBehaviorTest {
     @Test
     fun aFailedAppendKeepsTheCardsAndOffersAReachableRetry() {
         setContent()
-        showRows(rows = 1, append = MoviesAppendState.Error("Something went wrong"))
+        showRows(rows = 1, append = AppendState.Error("Something went wrong"))
 
         card(1).assertIsDisplayed()
         card(1).performKeyInput { pressKey(Key.DirectionDown) }
@@ -884,24 +884,24 @@ class MoviesGridBehaviorTest {
     @Test
     fun retryFocusReturnsToThePreviousPosterAndStaysThereWhenTheAppendFinishes() {
         setContent()
-        showRows(rows = 1, append = MoviesAppendState.Error("Something went wrong"))
+        showRows(rows = 1, append = AppendState.Error("Something went wrong"))
 
         card(1).performKeyInput { pressKey(Key.DirectionDown) }
         val retry = composeRule.onNodeWithContentDescription("Retry loading more movies")
         retry.assertIsFocused()
         retry.performClick()
 
-        showRows(rows = 1, append = MoviesAppendState.Loading)
+        showRows(rows = 1, append = AppendState.Loading)
         card(1).assertIsFocused()
 
         showRows(
             rows = 2,
-            append = MoviesAppendState.Idle,
+            append = AppendState.Idle,
             appendGeneration = 1,
         )
         card(1).assertIsFocused()
 
-        showRows(rows = 2, append = MoviesAppendState.Error("Still unavailable"))
+        showRows(rows = 2, append = AppendState.Error("Still unavailable"))
         card(1).assertIsFocused()
     }
 
@@ -949,7 +949,7 @@ class MoviesGridBehaviorTest {
     fun aGridWithEveryPageLoadedNeverAsksForAnother() {
         setContent()
         loadMoreCalls = 0
-        showRows(rows = 2, append = MoviesAppendState.End)
+        showRows(rows = 2, append = AppendState.End)
 
         assertEquals(0, loadMoreCalls)
         composeRule.onNodeWithContentDescription("Loading more movies").assertDoesNotExist()

@@ -46,6 +46,8 @@ import com.igloo.blindpenguincoder.feature.movies.MoviesActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
+import com.igloo.blindpenguincoder.feature.music.MusicActions
+import com.igloo.blindpenguincoder.feature.music.MusicViewModel
 import com.igloo.blindpenguincoder.feature.music.TrackLikesViewModel
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.MoviePlaybackServices
@@ -246,6 +248,14 @@ fun IglooRoot(container: IglooAppContainer) {
                     ) {
                         AlbumDetailsViewModel(container.musicRepository)
                     }
+                    // Session-scoped like the Movies grid: the three tabs' pages and scroll
+                    // positions survive a Music -> Home -> Music trip.
+                    val musicViewModel = viewModel(
+                        viewModelStoreOwner = authenticatedSessionOwner,
+                        key = "music",
+                    ) {
+                        MusicViewModel(container.musicRepository)
+                    }
                     // One liked-id set for every track row in the session, so no two surfaces
                     // can disagree about a heart; cleared with the rest on sign-out.
                     val trackLikesViewModel = viewModel(
@@ -266,6 +276,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         albumDetailsViewModel,
                         trackLikesViewModel,
                         moviesViewModel,
+                        musicViewModel,
                     ) {
                         scope.launch { sessionManager.revalidateActive() }
                         homeViewModel.refresh()
@@ -276,6 +287,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         // Re-reads the count and, only if the grid has nothing yet, page one: a
                         // TV woken from standby must keep the pages the user scrolled through.
                         moviesViewModel.refresh()
+                        musicViewModel.refresh()
                         onStopOrDispose { }
                     }
                     val home by homeViewModel.uiState.collectAsStateWithLifecycle()
@@ -290,6 +302,21 @@ fun IglooRoot(container: IglooAppContainer) {
                             onPressTab = moviesViewModel::pressTab,
                             onSelectGenre = moviesViewModel::selectGenre,
                             onToggleSort = moviesViewModel::toggleSort,
+                        )
+                    }
+                    val music by musicViewModel.uiState.collectAsStateWithLifecycle()
+                    val musicActions = remember(musicViewModel, trackLikesViewModel) {
+                        MusicActions(
+                            onRefresh = musicViewModel::reload,
+                            onRetryFirstPage = musicViewModel::retryFirstPage,
+                            onRetryAppend = musicViewModel::retryAppend,
+                            onLoadMore = musicViewModel::loadMore,
+                            onSelectTab = musicViewModel::selectTab,
+                            onPressTab = musicViewModel::pressTab,
+                            onPlayTrack = musicViewModel::playTrack,
+                            onPlayAll = musicViewModel::playAll,
+                            onShuffleAll = musicViewModel::shuffleAll,
+                            onToggleLike = trackLikesViewModel::toggle,
                         )
                     }
                     val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()
@@ -310,6 +337,8 @@ fun IglooRoot(container: IglooAppContainer) {
                         home = home,
                         movies = movies,
                         moviesActions = moviesActions,
+                        music = music,
+                        musicActions = musicActions,
                         details = if (theaterOpen) theaterDetails else libraryDetails,
                         detailsActions = if (theaterOpen) {
                             MovieDetailsActions.Theater(
@@ -361,6 +390,7 @@ fun IglooRoot(container: IglooAppContainer) {
                             )
                         },
                         musicQueueFetcher = container.musicRepository,
+                        musicPlayRequests = musicViewModel.playRequests,
                         albumDetails = albumDetails,
                         onRetryAlbumDetails = albumDetailsViewModel::retry,
                         trackLikes = trackLikes,

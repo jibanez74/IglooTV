@@ -27,7 +27,7 @@ enum class IglooDestination(
     ),
     Music(
         label = "Music",
-        supportingText = "Music playback dependencies are available for the next feature pass.",
+        supportingText = "Musicians, albums and tracks in your library.",
     ),
     Photos(
         label = "Photos",

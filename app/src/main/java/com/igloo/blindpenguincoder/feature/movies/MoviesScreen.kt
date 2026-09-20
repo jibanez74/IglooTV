@@ -54,6 +54,7 @@ import com.igloo.blindpenguincoder.core.ui.movieNoun
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.data.model.SortOrder
+import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
 
 /** What the Movies pane needs from its view model, bundled rather than threaded as six lambdas. */
@@ -264,7 +265,7 @@ private fun MoviesHeader(
     loadedCount: Int?,
     filter: MoviesFilter?,
     genresLoading: Boolean,
-    append: MoviesAppendState,
+    append: AppendState,
     sort: SortOrder,
     refreshing: Boolean,
     notice: String?,
@@ -435,7 +436,7 @@ internal val MoviesTab.presentation: MoviesTabPresentation
 @Composable
 private fun MoviesGrid(
     items: List<MoviePosterItem>,
-    append: MoviesAppendState,
+    append: AppendState,
     appendGeneration: Int,
     refreshing: Boolean,
     contentGeneration: Int,
@@ -488,7 +489,7 @@ private fun MoviesGrid(
         contentGeneration,
         refreshing,
     ) {
-        if (shouldPrefetch && append == MoviesAppendState.Idle && !refreshing) onLoadMore()
+        if (shouldPrefetch && append == AppendState.Idle && !refreshing) onLoadMore()
     }
 
     // Retry is the only focusable tail state. When it starts another request, move focus back to
@@ -496,7 +497,7 @@ private fun MoviesGrid(
     // card focused whether the append succeeds or fails again.
     LaunchedEffect(append, appendRetryHandoffPending, appendRetryReturnId) {
         if (
-            append == MoviesAppendState.Loading &&
+            append == AppendState.Loading &&
             appendRetryHandoffPending &&
             appendRetryReturnId != null
         ) {
@@ -523,7 +524,7 @@ private fun MoviesGrid(
         // Whether d-pad down from the last row has anywhere legitimate to go. The skeleton tail
         // is deliberately unfocusable, so without pinning this edge Compose's spatial search
         // leaves the pane entirely and lands in the navigation rail's lower section.
-        val lastRowIsTheEdge = append !is MoviesAppendState.Error
+        val lastRowIsTheEdge = append !is AppendState.Error
         val lastRow = items.lastIndex / columns
 
         itemsIndexed(items, key = { _, item -> "movie_${item.id}" }) { index, item ->
@@ -574,7 +575,7 @@ private fun MoviesGrid(
             // a focused cell. They are never a d-pad destination and never a TalkBack stop — a
             // node that vanishes when its page lands would drop focus on the floor (section 10)
             // — so d-pad down at the true end is a stable no-op until real cells replace them.
-            MoviesAppendState.Idle, MoviesAppendState.Loading -> items(
+            AppendState.Idle, AppendState.Loading -> items(
                 count = columns * PREFETCH_ROWS,
                 key = { "tail_skeleton_$it" },
             ) { index ->
@@ -587,7 +588,7 @@ private fun MoviesGrid(
 
             // Full width so d-pad down from any column reaches the Retry — the tail's one
             // focusable affordance, and exactly where focus is heading at that moment.
-            is MoviesAppendState.Error -> item(
+            is AppendState.Error -> item(
                 key = "tail_error",
                 span = { GridItemSpan(maxLineSpan) },
             ) {
@@ -611,7 +612,7 @@ private fun MoviesGrid(
                 )
             }
 
-            MoviesAppendState.End -> Unit
+            AppendState.End -> Unit
         }
     }
 }
@@ -683,7 +684,7 @@ private fun spokenCount(
     loadedCount: Int?,
     filter: MoviesFilter?,
     genresLoading: Boolean,
-    appendState: MoviesAppendState,
+    appendState: AppendState,
 ): String =
     when {
         // Not the anchor's own "Loading genres": two nodes speaking the same phrase is the
@@ -694,7 +695,7 @@ private fun spokenCount(
         else -> buildString {
             append("Showing $loadedCount of ")
             append("${integerCountFormat.format(totalMovies)} ${filterNoun(filter, totalMovies)}")
-            if (appendState == MoviesAppendState.Loading) {
+            if (appendState == AppendState.Loading) {
                 append(". Loading more movies.")
             }
         }

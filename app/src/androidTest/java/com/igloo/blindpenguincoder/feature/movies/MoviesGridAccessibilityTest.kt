@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.movies
 
 import androidx.compose.runtime.getValue
+import com.igloo.blindpenguincoder.feature.shared.AppendState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -69,7 +70,7 @@ class MoviesGridAccessibilityTest {
      * Swaps the state after composition. `gridColumns` is a theme value, so it is only known
      * once something has composed — a state built before `setContent` cannot size itself in rows.
      */
-    private fun showOneRow(append: MoviesAppendState) {
+    private fun showOneRow(append: AppendState) {
         moviesState = testMoviesState(
             grid = IglooRailState.Loaded(testMovieGridItems.take(columns)),
             append = append,
@@ -111,7 +112,7 @@ class MoviesGridAccessibilityTest {
     @Test
     fun thePersistentCountRegionAnnouncesThatMoreMoviesAreComingPolitely() {
         setContent()
-        showOneRow(MoviesAppendState.Loading)
+        showOneRow(AppendState.Loading)
 
         composeRule.onNodeWithTag("movies_count")
             .assertContentDescriptionEquals("Showing $columns of 96 movies. Loading more movies.")
@@ -126,7 +127,7 @@ class MoviesGridAccessibilityTest {
     @Test
     fun everyLoadingTailSkeletonIsHiddenFromAccessibility() {
         setContent()
-        showOneRow(MoviesAppendState.Loading)
+        showOneRow(AppendState.Loading)
 
         repeat(columns * 2) { index ->
             composeRule.onNodeWithTag("movies_grid")
@@ -143,11 +144,11 @@ class MoviesGridAccessibilityTest {
     @Test
     fun idleAndEndTailsRemoveTheLoadingPhrase() {
         setContent()
-        showOneRow(MoviesAppendState.Idle)
+        showOneRow(AppendState.Idle)
         composeRule.onNodeWithTag("movies_count")
             .assertContentDescriptionEquals("Showing $columns of 96 movies")
 
-        showOneRow(MoviesAppendState.End)
+        showOneRow(AppendState.End)
         composeRule.onNodeWithTag("movies_count")
             .assertContentDescriptionEquals("Showing $columns of 96 movies")
     }
@@ -155,7 +156,7 @@ class MoviesGridAccessibilityTest {
     @Test
     fun aFailedPageReportsPolitelyRatherThanInterrupting() {
         setContent()
-        showOneRow(MoviesAppendState.Error("Something went wrong"))
+        showOneRow(AppendState.Error("Something went wrong"))
 
         // The message is readable and the Retry is actionable; the card carries the Polite
         // live region so the report never cuts across whatever else is speaking.

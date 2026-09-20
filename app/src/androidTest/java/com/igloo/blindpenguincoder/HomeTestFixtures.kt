@@ -4,7 +4,14 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
+import com.igloo.blindpenguincoder.data.model.AudioStream
+import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.SortOrder
+import com.igloo.blindpenguincoder.data.model.SqlNullString
+import com.igloo.blindpenguincoder.data.model.Subtitle
 import com.igloo.blindpenguincoder.feature.home.HomeAlbum
 import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeHero
@@ -13,37 +20,41 @@ import com.igloo.blindpenguincoder.feature.movies.AboutUi
 import com.igloo.blindpenguincoder.feature.movies.CastMemberUi
 import com.igloo.blindpenguincoder.feature.movies.CrewEntry
 import com.igloo.blindpenguincoder.feature.movies.ExtraVideoUi
-import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
 import com.igloo.blindpenguincoder.feature.movies.MoviesActions
-import com.igloo.blindpenguincoder.feature.movies.MoviesAppendState
 import com.igloo.blindpenguincoder.feature.movies.MoviesFilter
 import com.igloo.blindpenguincoder.feature.movies.MoviesTab
 import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
-import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSettingsUi
 import com.igloo.blindpenguincoder.feature.movies.ProgressUi
 import com.igloo.blindpenguincoder.feature.movies.playbackSettingsUi
+import com.igloo.blindpenguincoder.data.model.MusicStats
+import com.igloo.blindpenguincoder.data.model.SqlNullInt64
+import com.igloo.blindpenguincoder.data.model.TrackListItem
+import com.igloo.blindpenguincoder.feature.music.AlbumArtistUi
+import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
+import com.igloo.blindpenguincoder.feature.music.MusicActions
+import com.igloo.blindpenguincoder.feature.music.MusicTab
+import com.igloo.blindpenguincoder.feature.music.MusicUiState
+import com.igloo.blindpenguincoder.feature.music.MusicianCardUi
+import com.igloo.blindpenguincoder.feature.music.PagedState
+import com.igloo.blindpenguincoder.feature.music.TracksEntry
+import com.igloo.blindpenguincoder.feature.music.tracksEntries
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUi
 import com.igloo.blindpenguincoder.feature.music.AlbumDiscUi
 import com.igloo.blindpenguincoder.feature.music.AlbumFactUi
-import com.igloo.blindpenguincoder.feature.music.AlbumArtistUi
-import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
+import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
+import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
-import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
-import com.igloo.blindpenguincoder.data.model.AudioStream
-import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
-import com.igloo.blindpenguincoder.data.model.SortOrder
-import com.igloo.blindpenguincoder.data.model.SqlNullString
-import com.igloo.blindpenguincoder.data.model.Subtitle
 
 /**
  * Poster-less movies for shell-level tests: the placeholder path renders deterministically
@@ -72,7 +83,7 @@ internal val testGenres = listOf(
 /** A grid that has loaded its first page and has more to come. */
 internal fun testMoviesState(
     grid: IglooRailState<MoviePosterItem> = IglooRailState.Loaded(testMovieGridItems),
-    append: MoviesAppendState = MoviesAppendState.Idle,
+    append: AppendState = AppendState.Idle,
     totalMovies: Long? = 96,
     tab: MoviesTab = MoviesTab.All,
     genre: MoviesFilter.Genre? = null,
@@ -445,4 +456,86 @@ internal fun testAlbumTrackRow(
     albumId = null,
     musicianId = musicianId,
     spokenInfo = spokenInfo,
+)
+
+/** Thumb-less musicians, enough to fill several rows at every `gridColumns` value. */
+internal val testMusicians = (1L..30L).map { id ->
+    MusicianCardUi(
+        id = id,
+        name = "Musician $id",
+        thumbUrl = null,
+        countsLine = "$id albums · ${id * 10} tracks",
+        spoken = "Musician $id. $id albums, ${id * 10} tracks.",
+    )
+}
+
+/** Cover-less albums for the Albums tab; ids offset so they never collide with the rail's. */
+internal val testMusicAlbums = (1L..30L).map { id ->
+    AlbumCardUi(id = 100 + id, title = "Album $id", musician = "Musician $id", coverUrl = null)
+}
+
+/**
+ * Five library rows through the real mapping, in server order: a `#` bucket first, then an
+ * A bucket with two rows (so the fold lands on exactly one), then B and C.
+ */
+internal val testLibraryTracks = listOf(
+    testLibraryTrack(id = 901, title = "1999"),
+    testLibraryTrack(id = 902, title = "Abbey Road"),
+    testLibraryTrack(id = 903, title = "All You Need Is Love"),
+    testLibraryTrack(id = 904, title = "Blackbird"),
+    testLibraryTrack(id = 905, title = "Come Together", albumId = null, musicianId = null),
+)
+
+internal val testTrackEntries: List<TracksEntry> = tracksEntries(testLibraryTracks)
+
+internal fun testLibraryTrack(
+    id: Long,
+    title: String,
+    albumId: Long? = 11,
+    musicianId: Long? = 4,
+) = TrackListItem(
+    id = id,
+    title = title,
+    duration = 125_000,
+    codec = "flac",
+    bitRate = 900_000,
+    albumId = SqlNullInt64(albumId ?: 0, valid = albumId != null),
+    albumTitle = SqlNullString(if (albumId != null) "Help!" else "", valid = albumId != null),
+    albumCover = SqlNullString("", valid = false),
+    musicianId = SqlNullInt64(musicianId ?: 0, valid = musicianId != null),
+    musicianName = SqlNullString(if (musicianId != null) "The Beatles" else "", valid = musicianId != null),
+)
+
+/** Every tab loaded with more to come, the Musicians tab selected. */
+internal fun testMusicState(
+    tab: MusicTab = MusicTab.Musicians,
+    musicians: PagedState<MusicianCardUi> = PagedState(IglooRailState.Loaded(testMusicians), total = 60),
+    albums: PagedState<AlbumCardUi> = PagedState(IglooRailState.Loaded(testMusicAlbums), total = 90),
+    tracks: PagedState<TracksEntry> = PagedState(IglooRailState.Loaded(testTrackEntries), total = 5, append = AppendState.End),
+    stats: MusicStats? = MusicStats(totalAlbums = 90, totalTracks = 5, totalMusicians = 60),
+    refreshing: Boolean = false,
+    notice: String? = null,
+    shufflePending: Boolean = false,
+) = MusicUiState(
+    tab = tab,
+    musicians = musicians,
+    albums = albums,
+    tracks = tracks,
+    stats = stats,
+    refreshing = refreshing,
+    notice = notice,
+    shufflePending = shufflePending,
+)
+
+internal val inertMusicActions = MusicActions(
+    onRefresh = {},
+    onRetryFirstPage = {},
+    onRetryAppend = {},
+    onLoadMore = {},
+    onSelectTab = {},
+    onPressTab = {},
+    onPlayTrack = {},
+    onPlayAll = {},
+    onShuffleAll = {},
+    onToggleLike = {},
 )

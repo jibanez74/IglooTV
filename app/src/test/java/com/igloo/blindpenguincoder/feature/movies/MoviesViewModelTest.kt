@@ -9,6 +9,7 @@ import com.igloo.blindpenguincoder.data.repository.movieLibraryItemJson
 import com.igloo.blindpenguincoder.data.repository.moviesGenresJson
 import com.igloo.blindpenguincoder.data.repository.moviesLibraryJson
 import com.igloo.blindpenguincoder.data.repository.moviesStatsJson
+import com.igloo.blindpenguincoder.feature.shared.AppendState
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -56,7 +57,7 @@ class MoviesViewModelTest {
 
         assertEquals((1L..48L).toList(), model.uiState.value.gridIds())
         assertEquals(96L, model.uiState.value.totalMovies)
-        assertEquals(MoviesAppendState.Idle, model.uiState.value.append)
+        assertEquals(AppendState.Idle, model.uiState.value.append)
         assertEquals(listOf("1"), http.libraryPages)
     }
 
@@ -83,7 +84,7 @@ class MoviesViewModelTest {
 
         assertTrue(state.grid is IglooRailState.Loaded)
         assertEquals(emptyList<Long>(), state.gridIds())
-        assertEquals(MoviesAppendState.End, state.append)
+        assertEquals(AppendState.End, state.append)
     }
 
     @Test
@@ -123,7 +124,7 @@ class MoviesViewModelTest {
         model.loadMore()
 
         assertEquals((1L..96L).toList(), model.uiState.value.gridIds())
-        assertEquals(MoviesAppendState.Idle, model.uiState.value.append)
+        assertEquals(AppendState.Idle, model.uiState.value.append)
         assertEquals(listOf("1", "2"), http.libraryPages)
     }
 
@@ -173,7 +174,7 @@ class MoviesViewModelTest {
         val model = loaded(http)
 
         model.loadMore()
-        assertEquals(MoviesAppendState.End, model.uiState.value.append)
+        assertEquals(AppendState.End, model.uiState.value.append)
         model.loadMore()
 
         assertEquals(listOf("1", "2"), http.libraryPages)
@@ -194,7 +195,7 @@ class MoviesViewModelTest {
 
         model.loadMore()
 
-        assertEquals(MoviesAppendState.End, model.uiState.value.append)
+        assertEquals(AppendState.End, model.uiState.value.append)
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
     }
 
@@ -240,13 +241,13 @@ class MoviesViewModelTest {
         // The page landed all-duplicates, so the walk holds: an immediate generation bump
         // would re-arm the prefetch effect and chase every remaining page at line rate.
         assertEquals(generationBefore, model.uiState.value.appendGeneration)
-        assertEquals(MoviesAppendState.Loading, model.uiState.value.append)
+        assertEquals(AppendState.Loading, model.uiState.value.append)
 
         advanceUntilIdle()
 
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
         assertEquals(generationBefore + 1, model.uiState.value.appendGeneration)
-        assertEquals(MoviesAppendState.Idle, model.uiState.value.append)
+        assertEquals(AppendState.Idle, model.uiState.value.append)
     }
 
     @Test
@@ -257,7 +258,7 @@ class MoviesViewModelTest {
         model.loadMore()
 
         assertEquals((1L..48L).toList(), model.uiState.value.gridIds())
-        assertTrue(model.uiState.value.append is MoviesAppendState.Error)
+        assertTrue(model.uiState.value.append is AppendState.Error)
     }
 
     @Test
@@ -280,7 +281,7 @@ class MoviesViewModelTest {
 
         assertEquals(listOf("1", "2", "2"), http.libraryPages)
         assertEquals((1L..6L).toList(), model.uiState.value.gridIds())
-        assertEquals(MoviesAppendState.End, model.uiState.value.append)
+        assertEquals(AppendState.End, model.uiState.value.append)
     }
 
     /** Only retryAppend clears an error tail; the scroll trigger must not hammer a down server. */
@@ -424,11 +425,11 @@ class MoviesViewModelTest {
         val model = loaded(http)
 
         model.loadMore()
-        assertEquals(MoviesAppendState.Loading, model.uiState.value.append)
+        assertEquals(AppendState.Loading, model.uiState.value.append)
         model.reload()
 
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
-        assertEquals(MoviesAppendState.Idle, model.uiState.value.append)
+        assertEquals(AppendState.Idle, model.uiState.value.append)
         assertTrue(!model.uiState.value.refreshing)
 
         model.loadMore()

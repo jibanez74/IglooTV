@@ -12,6 +12,8 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.movies.MoviesActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
+import com.igloo.blindpenguincoder.feature.music.MusicActions
+import com.igloo.blindpenguincoder.feature.music.MusicUiState
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
@@ -56,6 +58,8 @@ internal fun TestIglooApp(
     home: HomeUiState = HomeUiState(),
     movies: MoviesUiState = testMoviesState(),
     moviesActions: MoviesActions = inertMoviesActions,
+    music: MusicUiState = testMusicState(),
+    musicActions: MusicActions = inertMusicActions,
     details: MovieDetailsUiState = MovieDetailsUiState(),
     detailsActions: MovieDetailsActions = inertDetailsActions,
     albumDetails: AlbumDetailsUiState = AlbumDetailsUiState(),
@@ -73,6 +77,7 @@ internal fun TestIglooApp(
         fakeMusicPlayerEngineFactory,
     musicQueueFetcher: MusicQueueFetcher = InertMusicQueueFetcher,
     playRequests: Flow<MoviePlayRequest> = emptyFlow(),
+    musicPlayRequests: Flow<MusicPlayRequest> = emptyFlow(),
     onRetryRail: (HomeRail) -> Unit = {},
     onMovieSelected: ((Long) -> Unit)? = null,
     onTheaterMovieSelected: ((Long) -> Unit)? = null,
@@ -93,6 +98,8 @@ internal fun TestIglooApp(
         home = home,
         movies = movies,
         moviesActions = moviesActions,
+        music = music,
+        musicActions = musicActions,
         details = details,
         detailsActions = detailsActions,
         albumDetails = albumDetails,
@@ -106,6 +113,7 @@ internal fun TestIglooApp(
         musicPlayerEngineFactory = musicPlayerEngineFactory,
         musicQueueFetcher = musicQueueFetcher,
         playRequests = playRequests,
+        musicPlayRequests = musicPlayRequests,
         onRetryRail = onRetryRail,
         onMovieSelected = onMovieSelected,
         onTheaterMovieSelected = onTheaterMovieSelected,

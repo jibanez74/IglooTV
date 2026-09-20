@@ -31,6 +31,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
@@ -141,12 +142,16 @@ class IglooBaseAppTest {
         composeRule.onNodeWithContentDescription("Movies").performClick()
         composeRule.onNodeWithTag("movies_grid").assertIsDisplayed()
 
+        // Music has a real screen too: its pane is the tabbed library, identified by its strip.
+        composeRule.onNodeWithContentDescription("Music").performClick()
+        composeRule.onNodeWithTag("music_tabs").assertIsDisplayed()
+
         // A destination with no screen yet still swaps the pane. The placeholder is one cleared
         // node (section 10's inert-anchor contract), so it is identified by what it announces
         // rather than by a loose text node inside it.
-        composeRule.onNodeWithContentDescription("Music").performClick()
+        composeRule.onNodeWithContentDescription("TV Shows").performClick()
         composeRule.onNodeWithContentDescription(
-            "Music. Music playback dependencies are available for the next feature pass.",
+            "TV Shows. ${IglooDestination.TvShows.supportingText}",
         ).assertIsDisplayed()
     }
 

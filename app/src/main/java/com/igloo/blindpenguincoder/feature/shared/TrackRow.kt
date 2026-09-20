@@ -41,6 +41,8 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooIconButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.IglooMenu
+import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 
@@ -328,6 +330,42 @@ fun TrackRowSkeleton(
         }
     }
 }
+
+/**
+ * The row's More menu — "Go to album", "Go to artist" — anchored to the More control's bounds
+ * and hosted as the last child of the screen that owns the row (the [IglooMenu] contract). An
+ * item first hands the destination to the host, then dismisses; a row offers More at all only
+ * when [hasMoreActions] says one of the two can be opened from where it sits.
+ */
+@Composable
+fun TrackRowMenu(
+    track: TrackRowUi,
+    anchorBounds: Rect,
+    onGoToAlbum: ((Long) -> Unit)?,
+    onGoToArtist: ((Long) -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    val items = buildList {
+        val albumId = track.albumId
+        if (albumId != null && onGoToAlbum != null) {
+            add(IglooMenuItem("Go to album", onSelect = { onGoToAlbum(albumId); onDismiss() }))
+        }
+        val musicianId = track.musicianId
+        if (musicianId != null && onGoToArtist != null) {
+            add(IglooMenuItem("Go to artist", onSelect = { onGoToArtist(musicianId); onDismiss() }))
+        }
+    }
+    IglooMenu(
+        title = "More actions",
+        items = items,
+        anchorBounds = anchorBounds,
+        onDismiss = onDismiss,
+    )
+}
+
+/** Whether More has anywhere to go from this row, given what the host can open. */
+fun TrackRowUi.hasMoreActions(canOpenAlbum: Boolean, canOpenArtist: Boolean): Boolean =
+    (albumId != null && canOpenAlbum) || (musicianId != null && canOpenArtist)
 
 /** Wide enough for a two-digit index without the titles ragged-lefting between rows. */
 private val TRACK_INDEX_MIN_WIDTH = 28.dp

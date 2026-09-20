@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -82,6 +83,10 @@ import com.igloo.blindpenguincoder.feature.movies.VideoLaunchSite
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsScreen
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
+import com.igloo.blindpenguincoder.feature.music.MusicActions
+import com.igloo.blindpenguincoder.feature.music.MusicScreen
+import com.igloo.blindpenguincoder.feature.music.MusicUiState
+import com.igloo.blindpenguincoder.feature.music.TrackFocusMemory
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.music.toMusicPlayRequest
 import com.igloo.blindpenguincoder.feature.music.toShuffledMusicPlayRequest
@@ -108,6 +113,9 @@ private sealed interface DetailsOrigin {
     /** The Movies grid. No payload: the grid's own focus memory names the cell, not the origin. */
     data object MoviesGrid : DetailsOrigin
 
+    /** The Music pane, whichever tab: its selected surface parks the return requester itself. */
+    data object Music : DetailsOrigin
+
     companion object {
         /** One string, because the overlay outlives activity recreation but `remember` does not. */
         val Saver: Saver<DetailsOrigin?, String> = Saver(
@@ -116,6 +124,7 @@ private sealed interface DetailsOrigin {
                     is Rail -> origin.rail.name
                     Hero -> HERO
                     MoviesGrid -> MOVIES_GRID
+                    Music -> MUSIC
                     null -> NONE
                 }
             },
@@ -124,6 +133,7 @@ private sealed interface DetailsOrigin {
                     NONE -> null
                     HERO -> Hero
                     MOVIES_GRID -> MoviesGrid
+                    MUSIC -> Music
                     else -> Rail(HomeRail.valueOf(saved))
                 }
             },
@@ -131,6 +141,7 @@ private sealed interface DetailsOrigin {
 
         private const val HERO = "hero"
         private const val MOVIES_GRID = "movies_grid"
+        private const val MUSIC = "music"
         private const val NONE = "none"
     }
 }
@@ -193,6 +204,8 @@ fun IglooApp(
     home: HomeUiState,
     movies: MoviesUiState,
     moviesActions: MoviesActions,
+    music: MusicUiState,
+    musicActions: MusicActions,
     details: MovieDetailsUiState,
     detailsActions: MovieDetailsActions,
     albumDetails: AlbumDetailsUiState,
@@ -206,6 +219,7 @@ fun IglooApp(
     musicPlayerEngineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine,
     musicQueueFetcher: MusicQueueFetcher,
     playRequests: Flow<MoviePlayRequest> = emptyFlow(),
+    musicPlayRequests: Flow<MusicPlayRequest> = emptyFlow(),
     onRetryRail: (HomeRail) -> Unit,
     onMovieSelected: ((Long) -> Unit)?,
     onTheaterMovieSelected: ((Long) -> Unit)?,
@@ -238,6 +252,10 @@ fun IglooApp(
     // The grid's sibling of railReturnRequesters: parked on the Movies grid's entry cell in
     // every grid state, so Back out of details lands on the card that opened it.
     val moviesReturnRequester = remember { FocusRequester() }
+    // The Music pane's sibling of the two above: its selected surface parks it on the entry
+    // item — on the Tracks tab, on the remembered control of the entry row — so Back out of
+    // an overlay and a player's close both land exactly where the user left.
+    val musicReturnRequester = remember { FocusRequester() }
     // The rail expands exactly while d-pad focus is inside it; railOpenedByBack remembers
     // whether the rail was entered with the Back button, so Back can mean "step outward":
     // content -> rail -> exit, but a rail entered by d-pad steps back into content instead.
@@ -268,9 +286,12 @@ fun IglooApp(
     var musicPlayRequest by rememberSaveable(stateSaver = MusicPlayRequestSaver) {
         mutableStateOf<MusicPlayRequest?>(null)
     }
+    // Which surface launched the music player: it decides whose closing takes the player
+    // with it and which requester its own close returns focus to (section 6.3).
+    var musicPlayOrigin by rememberSaveable { mutableStateOf<MusicPlayOrigin?>(null) }
     val musicPlayerOpen = musicPlayRequest != null
-    // Parked on the album page's Play Album button, so closing the player restores focus to
-    // the control that launched it (section 6.3).
+    // Parked on the album page's launching action — Play Album, Shuffle, or a row's Play — so
+    // closing the player restores focus to the control that launched it (section 6.3).
     val albumPlayReturnRequester = remember { FocusRequester() }
     val progressSync by moviePlayerViewModel.progressSyncUiState.collectAsStateWithLifecycle()
     val progressSyncError = (progressSync as? ProgressSyncUiState.Failed)?.message
@@ -327,18 +348,42 @@ fun IglooApp(
     }
     // The player must not outlive the album page it launched from — a profile switch or
     // session revalidation that closes the overlay takes the album with it, and stop-on-exit
-    // means the audio goes too.
+    // means the audio goes too. A pane launch has no overlay under it and is left alone.
     LaunchedEffect(albumOpen) {
-        if (!albumOpen) {
+        if (!albumOpen && musicPlayOrigin == MusicPlayOrigin.AlbumDetails) {
             musicPlayRequest = null
+            musicPlayOrigin = null
+        }
+    }
+    // The Music pane's launches: a row's Play and Play all arrive at once, Shuffle all once its
+    // first batch has landed. Accepted only while the pane is what the user is looking at — a
+    // batch landing after they opened an overlay or left for Home would put a player over a
+    // surface that never asked for one.
+    val musicPaneCanPlay by rememberUpdatedState(
+        currentDestination == IglooDestination.Music && !detailsOpen && !albumOpen &&
+            !trailerOpen && !playerOpen && !musicPlayerOpen && !signOut.confirming,
+    )
+    LaunchedEffect(musicPlayRequests) {
+        musicPlayRequests.collect { request ->
+            if (musicPaneCanPlay) {
+                musicPlayRequest = request
+                musicPlayOrigin = MusicPlayOrigin.MusicPane
+            }
         }
     }
     val closeMusicPlayer: () -> Unit = {
+        val origin = musicPlayOrigin
         musicPlayRequest = null
+        musicPlayOrigin = null
         // In the callback, not an effect, for the detach-race reason the details close
-        // documents. The Play Album button is still composed in every reachable case; the
+        // documents. The launching control is still composed in every reachable case; the
         // pane's anchor is the same last-resort fallback the other overlays use.
-        if (!albumPlayReturnRequester.requestFocusSafely()) {
+        val returnRequester = when (origin) {
+            MusicPlayOrigin.AlbumDetails -> albumPlayReturnRequester
+            MusicPlayOrigin.MusicPane -> musicReturnRequester
+            null -> null
+        }
+        if (returnRequester == null || !returnRequester.requestFocusSafely()) {
             contentStartRequester.requestFocusSafely()
         }
     }
@@ -380,10 +425,9 @@ fun IglooApp(
             select(tmdbId)
         }
     }
-    // Likewise: the albums rail is the album page's only entrance today.
-    val openAlbum: ((Long) -> Unit)? = onAlbumSelected?.let { select ->
-        { albumId ->
-            detailsOrigin = DetailsOrigin.Rail(HomeRail.LatestAlbums)
+    val openAlbum: ((DetailsOrigin, Long) -> Unit)? = onAlbumSelected?.let { select ->
+        { origin, albumId ->
+            detailsOrigin = origin
             select(albumId)
         }
     }
@@ -405,6 +449,8 @@ fun IglooApp(
                 .takeIf { currentDestination == IglooDestination.Home }
             DetailsOrigin.MoviesGrid -> moviesReturnRequester
                 .takeIf { currentDestination == IglooDestination.Movies }
+            DetailsOrigin.Music -> musicReturnRequester
+                .takeIf { currentDestination == IglooDestination.Music }
             else -> null
         }
         // A rail whose list changed while the overlay was open — a refresh that dropped the
@@ -438,6 +484,9 @@ fun IglooApp(
             home = home,
             movies = movies,
             moviesActions = moviesActions,
+            music = music,
+            musicActions = musicActions,
+            trackLikes = trackLikes,
             // The details header owns the notice while the overlay is up; rendering it here too
             // would only shift Home's rails behind a screen nobody can see. It surfaces here
             // when Back closes an overlay whose write had already failed.
@@ -449,6 +498,7 @@ fun IglooApp(
             openAlbum = openAlbum,
             railReturnRequesters = railReturnRequesters,
             moviesReturnRequester = moviesReturnRequester,
+            musicReturnRequester = musicReturnRequester,
             // The rail stays open behind the dialog: the row that opened it must still be legible,
             // so the focus it gets back on cancel is not a surprise.
             railExpanded = railHasFocus || signOut.confirming,
@@ -457,7 +507,8 @@ fun IglooApp(
             scrimmed = railHasFocus || signOut.confirming,
             // The overlay covers the shell completely, so the whole thing leaves TalkBack's
             // traversal while it is up — the same treatment the confirm dialog gets.
-            hiddenFromAccessibility = signOut.confirming || detailsOpen || albumOpen,
+            // The music player can sit directly over the pane, with no overlay between.
+            hiddenFromAccessibility = signOut.confirming || detailsOpen || albumOpen || musicPlayerOpen,
             onRailFocusChanged = { hasFocus ->
                 if (!hasFocus) railOpenedByBack = false
                 railHasFocus = hasFocus
@@ -507,16 +558,19 @@ fun IglooApp(
                     onPlayAlbum = {
                         (albumDetails.details as? AlbumDetailsState.Loaded)?.let { loaded ->
                             musicPlayRequest = toMusicPlayRequest(loaded.album)
+                            musicPlayOrigin = MusicPlayOrigin.AlbumDetails
                         }
                     },
                     onShuffle = {
                         (albumDetails.details as? AlbumDetailsState.Loaded)?.let { loaded ->
                             musicPlayRequest = toShuffledMusicPlayRequest(loaded.album)
+                            musicPlayOrigin = MusicPlayOrigin.AlbumDetails
                         }
                     },
                     onPlayTrack = { index ->
                         (albumDetails.details as? AlbumDetailsState.Loaded)?.let { loaded ->
                             musicPlayRequest = toMusicPlayRequest(loaded.album, startIndex = index)
+                            musicPlayOrigin = MusicPlayOrigin.AlbumDetails
                         }
                     },
                     likes = trackLikes,
@@ -680,13 +734,17 @@ private fun IglooShell(
     home: HomeUiState,
     movies: MoviesUiState,
     moviesActions: MoviesActions,
+    music: MusicUiState,
+    musicActions: MusicActions,
+    trackLikes: TrackLikesUiState,
     mutationNotice: String?,
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
-    openAlbum: ((Long) -> Unit)?,
+    openAlbum: ((DetailsOrigin, Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     moviesReturnRequester: FocusRequester,
+    musicReturnRequester: FocusRequester,
     railExpanded: Boolean,
     scrimmed: Boolean,
     hiddenFromAccessibility: Boolean,
@@ -747,6 +805,9 @@ private fun IglooShell(
                 home = home,
                 movies = movies,
                 moviesActions = moviesActions,
+                music = music,
+                musicActions = musicActions,
+                trackLikes = trackLikes,
                 mutationNotice = mutationNotice,
                 onRetryRail = onRetryRail,
                 openMovie = openMovie,
@@ -754,6 +815,7 @@ private fun IglooShell(
                 openAlbum = openAlbum,
                 railReturnRequesters = railReturnRequesters,
                 moviesReturnRequester = moviesReturnRequester,
+                musicReturnRequester = musicReturnRequester,
                 contentStartRequester = contentStartRequester,
                 navigationRequesters = navigationRequesters,
                 // The pane fills the panel and applies no gutter of its own. It used to box every
@@ -823,13 +885,17 @@ private fun ContentPane(
     home: HomeUiState,
     movies: MoviesUiState,
     moviesActions: MoviesActions,
+    music: MusicUiState,
+    musicActions: MusicActions,
+    trackLikes: TrackLikesUiState,
     mutationNotice: String?,
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
-    openAlbum: ((Long) -> Unit)?,
+    openAlbum: ((DetailsOrigin, Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     moviesReturnRequester: FocusRequester,
+    musicReturnRequester: FocusRequester,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     modifier: Modifier = Modifier,
@@ -859,6 +925,16 @@ private fun ContentPane(
     // subtree is discarded on a destination switch. Held here, the grid's scroll position
     // survives a trip to Home and back.
     val moviesGridState = rememberLazyGridState()
+    // The Music pane's three surfaces keep their scroll and focus memory the same way; the
+    // Tracks tab remembers the control as well as the row, so a return lands on the exact node.
+    val musiciansGridState = rememberLazyGridState()
+    val albumsGridState = rememberLazyGridState()
+    val tracksListState = rememberLazyListState()
+    var lastFocusedMusicianId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var lastFocusedAlbumId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var lastFocusedTrack by rememberSaveable(stateSaver = TrackFocusMemory.Saver) {
+        mutableStateOf<TrackFocusMemory?>(null)
+    }
 
     // The pane's one gutter, handed to the sections instead of applied here: the collapsed rail
     // plus a reading gutter on the start, the overscan inset on the end. Chrome and text take it;
@@ -916,6 +992,29 @@ private fun ContentPane(
                 },
             )
 
+            IglooDestination.Music -> MusicScreen(
+                state = music,
+                likes = trackLikes,
+                actions = musicActions,
+                contentInset = contentInset,
+                musiciansGridState = musiciansGridState,
+                albumsGridState = albumsGridState,
+                tracksListState = tracksListState,
+                contentStartRequester = contentStartRequester,
+                navigationRequester = navigationRequesters.getValue(IglooDestination.Music),
+                returnRequester = musicReturnRequester,
+                lastFocusedMusicianId = lastFocusedMusicianId,
+                onMusicianFocused = { lastFocusedMusicianId = it },
+                lastFocusedAlbumId = lastFocusedAlbumId,
+                onAlbumFocused = { lastFocusedAlbumId = it },
+                lastFocusedTrack = lastFocusedTrack,
+                onTrackFocused = { lastFocusedTrack = it },
+                onMusicianSelected = null,
+                onAlbumSelected = openAlbum?.let { open ->
+                    { albumId -> open(DetailsOrigin.Music, albumId) }
+                },
+            )
+
             else -> PlaceholderContent(
                 currentDestination = currentDestination,
                 mutationNotice = mutationNotice,
@@ -942,13 +1041,17 @@ private fun ContentPane(
 }
 
 /** Which of ContentPane's trees a destination renders; the focus anchor moves with the branch. */
-private enum class PaneBranch { Home, Movies, Placeholder }
+private enum class PaneBranch { Home, Movies, Music, Placeholder }
 
 private fun paneBranchOf(destination: IglooDestination): PaneBranch = when (destination) {
     IglooDestination.Home -> PaneBranch.Home
     IglooDestination.Movies -> PaneBranch.Movies
+    IglooDestination.Music -> PaneBranch.Music
     else -> PaneBranch.Placeholder
 }
+
+/** Which surface launched the music player; see `musicPlayOrigin` in [IglooApp]. */
+private enum class MusicPlayOrigin { AlbumDetails, MusicPane }
 
 @Composable
 private fun HomeRails(
@@ -958,7 +1061,7 @@ private fun HomeRails(
     onRetryRail: (HomeRail) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
-    openAlbum: ((Long) -> Unit)?,
+    openAlbum: ((DetailsOrigin, Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
@@ -1091,7 +1194,9 @@ private fun HomeRails(
                 title = album.title,
                 subtitle = album.musician,
                 imageUrl = album.coverUrl,
-                onClick = openAlbum?.let { open -> { open(album.id) } },
+                onClick = openAlbum?.let { open ->
+                    { open(DetailsOrigin.Rail(HomeRail.LatestAlbums), album.id) }
+                },
                 aspect = cardAspect,
                 fallbackIcon = IglooIcons.Music,
                 modifier = itemModifier.testTag("album_card_${album.id}"),

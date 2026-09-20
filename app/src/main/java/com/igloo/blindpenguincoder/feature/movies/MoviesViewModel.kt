@@ -13,6 +13,7 @@ import com.igloo.blindpenguincoder.data.model.MoviesLibraryData
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
+import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
 import com.igloo.blindpenguincoder.feature.shared.moviePosterItem
 import kotlinx.coroutines.Job
@@ -48,23 +49,6 @@ sealed interface MoviesFilter {
  */
 enum class MoviesTab { All, Genres, Liked }
 
-/**
- * What sits below the last loaded row. The grid is infinite (docs/design-system.md section
- * 11.4), so the tail is the only place the user ever sees paging.
- *
- * [Idle] and [Loading] both draw the same skeletons, which is what keeps the grid from jumping:
- * the tail's height is identical before and during a request, so firing a prefetch never reflows
- * the surface under a focused cell.
- */
-sealed interface MoviesAppendState {
-    /** More pages exist and nothing is in flight. */
-    data object Idle : MoviesAppendState
-    data object Loading : MoviesAppendState
-    data class Error(val message: String) : MoviesAppendState
-    /** The last page has been loaded; there is no tail to draw. */
-    data object End : MoviesAppendState
-}
-
 /** Everything the Movies pane draws. */
 data class MoviesUiState(
     /** Count for the current [filter]: library-wide stats for All, the pages' `total` otherwise. */
@@ -95,7 +79,7 @@ data class MoviesUiState(
      */
     val genresLoaded: Boolean = false,
     val grid: IglooRailState<MoviePosterItem> = IglooRailState.Loading,
-    val append: MoviesAppendState = MoviesAppendState.Idle,
+    val append: AppendState = AppendState.Idle,
     /** True from a Refresh press until page 1 resolves; swaps the button's label. */
     val refreshing: Boolean = false,
     /** A refresh that failed with content still on screen — a notice, not an error card. */
@@ -302,14 +286,14 @@ class MoviesViewModel(
     fun loadMore() {
         if (pageJob?.isActive == true) return
         if (_uiState.value.grid !is IglooRailState.Loaded) return
-        if (_uiState.value.append != MoviesAppendState.Idle) return
+        if (_uiState.value.append != AppendState.Idle) return
         appendNextPage()
     }
 
     /** The Retry on a failed tail; re-requests the same page that failed. */
     fun retryAppend() {
         if (pageJob?.isActive == true) return
-        if (_uiState.value.append !is MoviesAppendState.Error) return
+        if (_uiState.value.append !is AppendState.Error) return
         appendNextPage()
     }
 
@@ -440,7 +424,7 @@ class MoviesViewModel(
         // Appends page the *committed* list — the one the grid actually shows — never the
         // requested one, which may belong to a switch that hasn't landed.
         val filter = committedFilter() ?: return
-        _uiState.update { it.copy(append = MoviesAppendState.Loading) }
+        _uiState.update { it.copy(append = AppendState.Loading) }
         pageJob = viewModelScope.launch {
             val result = fetchPage(filter, committedSort, page)
             // A refresh can land between the request and its response; appending then would
@@ -457,7 +441,7 @@ class MoviesViewModel(
                     // screen. The walk still advances, but only after a beat: the prefetch
                     // effect re-arms on the generation bump below, and without the pause it
                     // would chase every remaining page at line rate with the grid never growing.
-                    if (fresh.isEmpty() && tail == MoviesAppendState.Idle) {
+                    if (fresh.isEmpty() && tail == AppendState.Idle) {
                         delay(DUPLICATE_PAGE_BACKOFF_MS)
                         if (startedIn != generation) return@launch
                     }
@@ -477,7 +461,7 @@ class MoviesViewModel(
                 }
                 // Never a wipe: the loaded pages stay on screen and the tail becomes a Retry.
                 is ApiResult.Failure -> _uiState.update {
-                    it.copy(append = MoviesAppendState.Error(result.error.toLibraryDisplayMessage()))
+                    it.copy(append = AppendState.Error(result.error.toLibraryDisplayMessage()))
                 }
             }
         }
@@ -590,18 +574,18 @@ class MoviesViewModel(
     private fun apiBaseUrlOrNull(): String? = serverUrl.current.value?.apiBaseUrl
 
     /** A superseded request's Loading tail must not outlive the request it belonged to. */
-    private fun MoviesAppendState.resetIfLoading(): MoviesAppendState =
-        if (this == MoviesAppendState.Loading) MoviesAppendState.Idle else this
+    private fun AppendState.resetIfLoading(): AppendState =
+        if (this == AppendState.Loading) AppendState.Idle else this
 
     /**
      * `total_pages` is authoritative, but an empty page stops the grid regardless: a library
      * shrinking between requests can return nothing for page N while still claiming more exist.
      */
-    private fun MoviesLibraryData.appendStateFor(page: Long): MoviesAppendState =
+    private fun MoviesLibraryData.appendStateFor(page: Long): AppendState =
         if (page >= totalPages || movies.isEmpty()) {
-            MoviesAppendState.End
+            AppendState.End
         } else {
-            MoviesAppendState.Idle
+            AppendState.Idle
         }
 
     private fun MoviesLibraryData.toPosterItems(apiBaseUrl: String): List<MoviePosterItem> =
