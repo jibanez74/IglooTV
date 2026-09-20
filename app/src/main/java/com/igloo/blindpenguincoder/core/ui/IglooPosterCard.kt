@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -67,7 +68,12 @@ data class PosterCardProgress(
  *
  * [actionLabel] replaces the default "Open [title]" action label when pressing the card does
  * something other than open a page — a video card plays, so it says "Play …" (section 12: the
- * announced action must match what pressing actually does).
+ * announced action must match what pressing actually does). [semanticLabel] replaces the default
+ * "title, subtitle" announcement when the visible pair does not read well as a sentence.
+ *
+ * [artworkRadius] is the artwork's corner: `radius.lg` for posters and covers, `radius.pill` for
+ * a musician thumbnail, which the focus ring resolves to a circle (section 8.2). A circle wants
+ * its text centred beneath it, which is what [centerText] does.
  */
 @Composable
 fun IglooPosterCard(
@@ -77,16 +83,20 @@ fun IglooPosterCard(
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     actionLabel: String? = null,
+    semanticLabel: String? = null,
     progress: PosterCardProgress? = null,
     aspect: Float = IglooTheme.layout.posterAspect,
     width: Dp = IglooTheme.layout.posterWidth,
     fallbackIcon: ImageVector = IglooIcons.Movies,
+    artworkRadius: Dp = IglooTheme.radius.lg,
+    centerText: Boolean = false,
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
     var imageFailed by remember(imageUrl) { mutableStateOf(false) }
 
     Column(
+        horizontalAlignment = if (centerText) Alignment.CenterHorizontally else Alignment.Start,
         modifier = modifier
             .cardWidth(width)
             .onFocusChanged { focused = it.isFocused }
@@ -102,8 +112,8 @@ fun IglooPosterCard(
                 },
             )
             .clearAndSetSemantics {
-                contentDescription =
-                    listOfNotNull(title, subtitle, progress?.description).joinToString(", ")
+                contentDescription = semanticLabel
+                    ?: listOfNotNull(title, subtitle, progress?.description).joinToString(", ")
                 if (onClick != null) {
                     role = Role.Button
                     onClick(label = actionLabel ?: "Open $title") {
@@ -122,7 +132,7 @@ fun IglooPosterCard(
                 // nothing here may clip over it.
                 .focusRing(
                     focused = focused,
-                    radius = IglooTheme.radius.lg,
+                    radius = artworkRadius,
                     fill = colors.muted,
                 ),
             contentAlignment = Alignment.Center,
@@ -163,16 +173,17 @@ fun IglooPosterCard(
                 }
             }
         }
+        val textAlign = if (centerText) TextAlign.Center else TextAlign.Start
         IglooText(
             text = title,
-            style = IglooTheme.typography.bodyMedium,
+            style = IglooTheme.typography.bodyMedium.copy(textAlign = textAlign),
             color = colors.foreground,
             maxLines = 2,
         )
         if (subtitle != null) {
             IglooText(
                 text = subtitle,
-                style = IglooTheme.typography.label,
+                style = IglooTheme.typography.label.copy(textAlign = textAlign),
                 color = colors.mutedForeground,
                 maxLines = 1,
             )

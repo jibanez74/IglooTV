@@ -40,6 +40,7 @@ internal fun IglooSkeletonCell(
     cardAspect: Float,
     cardWidth: Dp,
     modifier: Modifier = Modifier,
+    artworkRadius: Dp = IglooTheme.radius.lg,
 ) {
     val colors = IglooTheme.colors
     val stubShape = RoundedCornerShape(IglooTheme.radius.sm)
@@ -53,7 +54,7 @@ internal fun IglooSkeletonCell(
                 .aspectRatio(cardAspect)
                 .focusRing(
                     focused = focused,
-                    radius = IglooTheme.radius.lg,
+                    radius = artworkRadius,
                     fill = colors.muted,
                 ),
         )
@@ -83,12 +84,14 @@ internal fun IglooSkeletonAnchorCell(
     loadingLabel: String,
     cardAspect: Float,
     cardWidth: Dp,
+    artworkRadius: Dp = IglooTheme.radius.lg,
 ) {
     var focused by remember { mutableStateOf(false) }
     IglooSkeletonCell(
         focused = focused,
         cardAspect = cardAspect,
         cardWidth = cardWidth,
+        artworkRadius = artworkRadius,
         modifier = anchorModifier
             .onFocusChanged { focused = it.isFocused }
             .focusable()
@@ -105,11 +108,13 @@ internal fun IglooSkeletonTextureCell(
     cardAspect: Float,
     cardWidth: Dp,
     modifier: Modifier = Modifier,
+    artworkRadius: Dp = IglooTheme.radius.lg,
 ) {
     IglooSkeletonCell(
         focused = false,
         cardAspect = cardAspect,
         cardWidth = cardWidth,
+        artworkRadius = artworkRadius,
         modifier = modifier.semantics { hideFromAccessibility() },
     )
 }

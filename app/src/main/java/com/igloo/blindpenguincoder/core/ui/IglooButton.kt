@@ -165,9 +165,14 @@ fun IglooButton(
 }
 
 /**
- * A square icon-only control for row ends (the details screen's More trigger). The glyph alone
- * says nothing to TalkBack, so the label is mandatory; when [onClick] is null the control stays
- * a focus target but announces no action, the same contract as an inert poster card.
+ * A square icon-only control for row ends (the details screen's More trigger, a track row's
+ * three actions). The glyph alone says nothing to TalkBack, so the label is mandatory; when
+ * [onClick] is null the control stays a focus target but announces no action, the same contract
+ * as an inert poster card.
+ *
+ * [stateDescription] and [actionLabel] make a toggle announce properly, exactly as on
+ * [IglooButton]; [iconTint] colours the glyph alone, for a heart that fills red while the
+ * control keeps its ghost ground.
  */
 @Composable
 fun IglooIconButton(
@@ -178,6 +183,9 @@ fun IglooIconButton(
     variant: IglooButtonVariant = IglooButtonVariant.Ghost,
     restingFill: Color? = null,
     contentColor: Color? = null,
+    iconTint: Color? = null,
+    stateDescription: String? = null,
+    actionLabel: String? = null,
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
@@ -219,9 +227,10 @@ fun IglooIconButton(
             )
             .clearAndSetSemantics {
                 contentDescription = semanticLabel
+                if (stateDescription != null) this.stateDescription = stateDescription
                 if (onClick != null) {
                     role = Role.Button
-                    onClick(label = semanticLabel) {
+                    onClick(label = actionLabel ?: semanticLabel) {
                         onClick()
                         true
                     }
@@ -232,7 +241,7 @@ fun IglooIconButton(
         Image(
             imageVector = icon,
             contentDescription = null,
-            colorFilter = ColorFilter.tint(foreground),
+            colorFilter = ColorFilter.tint(iconTint ?: foreground),
             modifier = Modifier.size(IglooTheme.icons.md),
         )
     }
