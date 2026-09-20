@@ -163,7 +163,11 @@ class MusicTabsBehaviorTest {
         composeRule.waitForIdle()
         assertEquals(1, retries)
 
-        musicState = testMusicState(musicians = PagedState(IglooRailState.Loaded(emptyList())))
+        // The retry's page lands as a replacement, generation bumped, the way the view model
+        // publishes it; that is what carries focus off the disposed Retry.
+        musicState = testMusicState(
+            musicians = PagedState(IglooRailState.Loaded(emptyList()), contentGeneration = 1),
+        )
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription(
             "No musicians in your library yet. Add a music folder on the server and run a scan.",

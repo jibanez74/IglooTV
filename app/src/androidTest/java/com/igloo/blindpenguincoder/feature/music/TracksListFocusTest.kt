@@ -11,7 +11,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -104,6 +106,11 @@ class TracksListFocusTest {
         composeRule.waitForIdle()
     }
 
+    /** The fixture's last rows sit below a 540dp viewport; the lazy list composes them on demand. */
+    private fun scrollTracksTo(tag: String) {
+        composeRule.onNodeWithTag("tracks_list").performScrollToNode(hasTestTag(tag))
+    }
+
     private fun pressBack() {
         composeRule.runOnUiThread {
             (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
@@ -170,6 +177,7 @@ class TracksListFocusTest {
             ),
         )
 
+        scrollTracksTo("track_play_905")
         val last = composeRule.onNodeWithTag("track_play_905")
         last.requestFocus()
         last.performKeyInput { pressKey(Key.DirectionDown) }
@@ -253,6 +261,7 @@ class TracksListFocusTest {
         setContent()
 
         // 905 has neither album nor musician on the wire.
+        scrollTracksTo("track_more_905")
         composeRule.onNodeWithTag("track_more_905").requestFocus()
         composeRule.onNodeWithTag("track_more_905").performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()

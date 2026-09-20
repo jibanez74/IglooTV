@@ -12,7 +12,9 @@ import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
@@ -115,6 +117,7 @@ class TracksListAccessibilityTest {
 
         composeRule.onNodeWithTag("track_more_902")
             .assertContentDescriptionEquals("More actions for Abbey Road")
+        composeRule.onNodeWithTag("tracks_list").performScrollToNode(hasTestTag("track_more_905"))
         composeRule.onNodeWithTag("track_more_905")
             .assertContentDescriptionEquals("More actions for Come Together. None available.")
             .assertHasNoClickAction()

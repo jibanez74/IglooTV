@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.music
 
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.SimpleAlbum
 import com.igloo.blindpenguincoder.data.model.SimpleMusician
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
@@ -123,5 +124,15 @@ class MusicMappingTest {
         assertEquals(MusicQueueSource.LibraryShuffle, request.source)
         assertEquals(listOf(5L, 6L), request.tracks.map { it.id })
         assertNull(shuffleAllRequest(emptyList()))
+    }
+
+    @Test
+    fun `the selected loaded count is rows only, so the Tracks tab does not count its letter headers`() {
+        val entries = tracksEntries(listOf(track(1, "Abbey Road"), track(2, "Blackbird"), track(3, "Because")))
+        val tracks = PagedState(IglooRailState.Loaded(entries), total = 3)
+
+        assertEquals(5, entries.size)
+        assertEquals(3, MusicUiState(tab = MusicTab.Tracks, tracks = tracks).selectedLoadedCount)
+        assertNull(MusicUiState(tab = MusicTab.Albums, tracks = tracks).selectedLoadedCount)
     }
 }

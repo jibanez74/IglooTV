@@ -87,8 +87,9 @@ fun MusicPlayerScreen(
         onDispose { hostView.keepScreenOn = previousKeepScreenOn }
     }
 
-    // The queue position survives recreation alongside the transport intent [host] keeps.
-    var lastTrackIndex by rememberSaveable { mutableIntStateOf(0) }
+    // The queue position survives recreation alongside the transport intent [host] keeps; it
+    // begins at the entry the press named.
+    var lastTrackIndex by rememberSaveable { mutableIntStateOf(request.startIndex) }
     var lastPositionSec by rememberSaveable { mutableStateOf(0.0) }
 
     var state by remember(engine) {
@@ -156,11 +157,13 @@ fun MusicPlayerScreen(
         )
     }
 
+    // The engine subscribes to appends before the refill loop starts: a short queue refills on
+    // the loop's first look, and a batch emitted with nobody collecting is simply dropped.
+    LaunchedEffect(controller, engine) { controller.appended.collect(engine::appendTracks) }
     // The refill loop lives exactly as long as the screen: leaving cancels a fetch in flight,
     // which is what keeps a late batch from ever landing in a queue nobody is playing.
     LaunchedEffect(controller) { controller.keepFilled(currentIndex) }
     LaunchedEffect(controller) { controller.state.collect { onQueueChanged(it.request) } }
-    LaunchedEffect(controller, engine) { controller.appended.collect(engine::appendTracks) }
 
     // Finishing the queue exits like finishing a movie does; the host restores focus.
     LaunchedEffect(state.phase) {

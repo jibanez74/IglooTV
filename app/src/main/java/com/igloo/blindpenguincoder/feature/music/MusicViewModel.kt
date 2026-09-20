@@ -43,9 +43,7 @@ data class PagedState<T>(
     val appendGeneration: Int = 0,
     /** Bumped whenever the list is replaced wholesale (Refresh, Retry), never on an append. */
     val contentGeneration: Int = 0,
-) {
-    val loadedCount: Int? get() = (content as? IglooRailState.Loaded)?.items?.size
-}
+)
 
 /** Everything the Music pane draws. */
 data class MusicUiState(
@@ -69,6 +67,16 @@ data class MusicUiState(
             MusicTab.Albums -> albums.total ?: stats?.totalAlbums
             MusicTab.Tracks -> tracks.total ?: stats?.totalTracks
         }
+
+    /** How many of the selected tab's items are on screen: rows only, never the letter headers. */
+    val selectedLoadedCount: Int?
+        get() = when (tab) {
+            MusicTab.Musicians -> musicians.loadedItems()?.size
+            MusicTab.Albums -> albums.loadedItems()?.size
+            MusicTab.Tracks -> tracks.loadedItems()?.count { it is TracksEntry.Track }
+        }
+
+    private fun <T> PagedState<T>.loadedItems(): List<T>? = (content as? IglooRailState.Loaded)?.items
 }
 
 /**

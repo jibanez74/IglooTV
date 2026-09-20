@@ -179,7 +179,7 @@ fun MusicScreen(
             MusicHeader(
                 tab = tab,
                 total = state.selectedTotal,
-                loadedCount = paged.loadedCount,
+                loadedCount = state.selectedLoadedCount,
                 append = paged.append,
                 refreshing = state.refreshing,
                 notice = menuNotice,

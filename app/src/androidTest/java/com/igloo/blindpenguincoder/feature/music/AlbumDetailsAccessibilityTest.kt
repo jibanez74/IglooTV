@@ -11,6 +11,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -202,7 +203,7 @@ class AlbumDetailsAccessibilityTest {
         )
 
         composeRule.onNodeWithTag("album_notice")
-            .assertContentDescriptionEquals(
+            .assertTextEquals(
                 "Couldn't update like: Something went wrong. Please try again.",
             )
             .assert(

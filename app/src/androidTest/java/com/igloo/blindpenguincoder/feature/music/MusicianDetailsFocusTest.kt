@@ -273,9 +273,8 @@ class MusicianDetailsFocusTest {
 
     @Test
     fun theErrorStateOffersAPinnedFocusedRetry() {
-        setShellContent(
-            MusicianDetailsUiState(openMusicianId = 2, details = MusicianDetailsState.Error("Couldn't load this artist.")),
-        )
+        setShellContent(openLoads = { MusicianDetailsState.Error("Couldn't load this artist.") })
+        openMusicianCard(2)
 
         val retry = composeRule.onNodeWithContentDescription("Retry loading artist details")
         retry.assertIsFocused()

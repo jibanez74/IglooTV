@@ -239,6 +239,18 @@ class MusicPlayerScreenTest {
             .assertTextEquals("Track 1 of 3 · The Beatles")
     }
 
+    /** A row's Play names an entry other than the first; the queue starts there, not at the top. */
+    @Test
+    fun startsAtTheEntryThePressNamed() {
+        setContent(request = playRequest(startIndex = 1))
+
+        assertEquals(listOf("start:1:0.0:true"), engine.playbackCommands)
+        composeRule.onNodeWithTag("music_track_title", useUnmergedTree = true)
+            .assertTextEquals("Ticket to Ride")
+        composeRule.onNodeWithTag("music_track_position", useUnmergedTree = true)
+            .assertTextEquals("Track 2 of 3 · The Beatles")
+    }
+
     @Test
     fun centerTogglesPlayPauseAndTheLabelFollowsTheIntent() {
         setContent()
@@ -628,7 +640,7 @@ class MusicPlayerScreenTest {
             composeRule.onAllNodesWithTag("music_queue_notice").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("music_queue_notice")
-            .assertContentDescriptionEquals("Couldn't load more tracks. The queue will play out.")
+            .assertTextEquals("Couldn't load more tracks. The queue will play out.")
         composeRule.onNodeWithTag("music_track_position", useUnmergedTree = true)
             .assertTextEquals("Track 1 · The Beatles · Help!")
         assertTrue(engine.commands.none { it.startsWith("append:") })
