@@ -36,8 +36,8 @@ import org.junit.runner.RunWith
  * The album detail overlay's focus contract (design-system.md sections 6.3 and 11.5.1):
  * opening it from an album card lands focus on Play Album — held by the skeleton's stub
  * through the load — Back closes it and puts focus back on the card that led away, the
- * vertical chain walks actions → track rows → facts panel, and no d-pad direction escapes
- * into the shell still composed underneath.
+ * vertical chain walks actions → track rows → facts panel keeping its column across the
+ * rows' three actions, and no d-pad direction escapes into the shell still composed underneath.
  */
 @RunWith(AndroidJUnit4::class)
 class AlbumDetailsFocusTest {
@@ -163,22 +163,53 @@ class AlbumDetailsFocusTest {
         play.requestFocus()
         play.assertIsFocused()
         play.performKeyInput { pressKey(Key.DirectionDown) }
-        composeRule.onNodeWithTag("album_track_901").assertIsFocused()
-        composeRule.onNodeWithTag("album_track_901")
+        composeRule.onNodeWithTag("track_play_901").assertIsFocused()
+        composeRule.onNodeWithTag("track_play_901")
             .performKeyInput { pressKey(Key.DirectionDown) }
-        composeRule.onNodeWithTag("album_track_902").assertIsFocused()
-        composeRule.onNodeWithTag("album_track_902")
+        composeRule.onNodeWithTag("track_play_902").assertIsFocused()
+        composeRule.onNodeWithTag("track_play_902")
             .performKeyInput { pressKey(Key.DirectionDown) }
         // The chain crosses the disc boundary as if the header text were not there.
-        composeRule.onNodeWithTag("album_track_903").assertIsFocused()
-        composeRule.onNodeWithTag("album_track_903")
+        composeRule.onNodeWithTag("track_play_903").assertIsFocused()
+        composeRule.onNodeWithTag("track_play_903")
             .performKeyInput { pressKey(Key.DirectionDown) }
         composeRule.onNodeWithTag("album_details_facts").assertIsFocused()
 
         // Up from the facts panel returns to the nearest row, not the top of the list.
         composeRule.onNodeWithTag("album_details_facts")
             .performKeyInput { pressKey(Key.DirectionUp) }
-        composeRule.onNodeWithTag("album_track_903").assertIsFocused()
+        composeRule.onNodeWithTag("track_play_903").assertIsFocused()
+    }
+
+    @Test
+    fun aRowsThreeActionsChainRightAndVerticalMovesKeepTheirColumn() {
+        setShellContent(loadedState())
+
+        val play = composeRule.onNodeWithTag("track_play_901")
+        play.requestFocus()
+        play.performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.onNodeWithTag("track_like_901").assertIsFocused()
+        composeRule.onNodeWithTag("track_like_901")
+            .performKeyInput { pressKey(Key.DirectionRight) }
+        val more = composeRule.onNodeWithTag("track_more_901")
+        more.assertIsFocused()
+        // The row's right edge is pinned: the shell is composed underneath.
+        more.performKeyInput { pressKey(Key.DirectionRight) }
+        more.assertIsFocused()
+
+        // Down from a column lands in the same column of the next row, and up returns.
+        more.performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("track_more_902").assertIsFocused()
+        composeRule.onNodeWithTag("track_more_902")
+            .performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.onNodeWithTag("track_like_902").assertIsFocused()
+        composeRule.onNodeWithTag("track_like_902")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("track_like_901").assertIsFocused()
+        // Up from any column of the first row returns to the hero's last-focused action.
+        composeRule.onNodeWithTag("track_like_901")
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("album_play").assertIsFocused()
     }
 
     @Test
@@ -191,9 +222,9 @@ class AlbumDetailsFocusTest {
         composeRule.onNodeWithTag("album_shuffle").assertIsFocused()
         composeRule.onNodeWithTag("album_shuffle")
             .performKeyInput { pressKey(Key.DirectionDown) }
-        composeRule.onNodeWithTag("album_track_901").assertIsFocused()
+        composeRule.onNodeWithTag("track_play_901").assertIsFocused()
 
-        composeRule.onNodeWithTag("album_track_901")
+        composeRule.onNodeWithTag("track_play_901")
             .performKeyInput { pressKey(Key.DirectionUp) }
 
         // The same focus memory the movie action row keeps: up lands on Shuffle, not Play.
@@ -218,12 +249,14 @@ class AlbumDetailsFocusTest {
         shuffle.performKeyInput { pressKey(Key.DirectionRight) }
         shuffle.assertIsFocused()
 
-        val row = composeRule.onNodeWithTag("album_track_901")
-        row.requestFocus()
-        row.performKeyInput { pressKey(Key.DirectionLeft) }
-        row.assertIsFocused()
-        row.performKeyInput { pressKey(Key.DirectionRight) }
-        row.assertIsFocused()
+        val rowPlay = composeRule.onNodeWithTag("track_play_901")
+        rowPlay.requestFocus()
+        rowPlay.performKeyInput { pressKey(Key.DirectionLeft) }
+        rowPlay.assertIsFocused()
+        val rowMore = composeRule.onNodeWithTag("track_more_901")
+        rowMore.requestFocus()
+        rowMore.performKeyInput { pressKey(Key.DirectionRight) }
+        rowMore.assertIsFocused()
 
         val facts = composeRule.onNodeWithTag("album_details_facts")
         facts.requestFocus()
@@ -236,15 +269,15 @@ class AlbumDetailsFocusTest {
     }
 
     @Test
-    fun trackRowsAreFocusTargetsWithNoClickAction() {
+    fun moreStaysAFocusTargetWithNoActionUntilItHasSomewhereToGo() {
         setShellContent(loadedState())
 
-        // The action arrives with the playback pass; until then a row must not promise one
-        // (section 11.5.1) while staying a landing site the d-pad can scroll with.
-        composeRule.onNodeWithTag("album_track_901")
+        // An album row can only go to its artist, and there is no musician screen yet: the
+        // control keeps its place in the column geometry but promises nothing (section 12).
+        composeRule.onNodeWithTag("track_more_901")
             .assertHasNoClickAction()
             .requestFocus()
-        composeRule.onNodeWithTag("album_track_901").assertIsFocused()
+        composeRule.onNodeWithTag("track_more_901").assertIsFocused()
     }
 
     @Test

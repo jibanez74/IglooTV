@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,14 +15,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.feature.shared.SectionHeading
+import com.igloo.blindpenguincoder.feature.shared.TrackRow
+import com.igloo.blindpenguincoder.feature.shared.TrackRowColumn
+import com.igloo.blindpenguincoder.feature.shared.TrackRowFocus
+import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.readingStopTarget
 
 /**
@@ -32,16 +33,22 @@ import com.igloo.blindpenguincoder.feature.shared.readingStopTarget
  * backdrop's fade, on the token canvas, so nothing here carries the section 3.2 over-media
  * treatment. Sections with nothing to show are skipped rather than rendering empty shells.
  *
- * The track rows are focus targets without actions — this pass ships the page's UI before
- * playback, and a row that announced "Play" and did nothing would spend a press teaching the
- * user it is empty. Section 11.5's three-action row arrives with the playback pass.
+ * The track rows are section 11.5's three-action rows, hand-wired end to end: every row's
+ * three controls know the row above and below in their own column, the first row's up is the
+ * hero's last-focused action, and the last row's down is the facts panel.
  */
 @Composable
 internal fun AlbumDetailsSections(
     album: AlbumDetailsUi,
-    trackRequesters: List<FocusRequester>,
+    likes: TrackLikesUiState,
+    trackRequesters: List<TrackRowRequesters>,
     factsRequester: FocusRequester,
     upFromBelow: FocusRequester?,
+    /** The flat row whose Play launched the player, so closing it lands back on that Play. */
+    playReturnRow: Int?,
+    playReturnRequester: FocusRequester,
+    onPlayTrack: (Int) -> Unit,
+    onToggleLike: (Long) -> Unit,
     /**
      * The overscan inset, applied per section (the movie sections' contract) so a future rail
      * can bleed past it while the prose stays inside it.
@@ -53,7 +60,7 @@ internal fun AlbumDetailsSections(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
     ) {
-        if (album.artistNames.isNotEmpty()) {
+        if (album.artists.isNotEmpty()) {
             ArtistsSection(
                 artistNames = album.artistNames,
                 modifier = Modifier.padding(contentInset),
@@ -61,15 +68,20 @@ internal fun AlbumDetailsSections(
         }
         TrackListSection(
             album = album,
+            likes = likes,
             trackRequesters = trackRequesters,
             upRequester = upFromBelow,
             downRequester = factsRequester,
+            playReturnRow = playReturnRow,
+            playReturnRequester = playReturnRequester,
+            onPlayTrack = onPlayTrack,
+            onToggleLike = onToggleLike,
             modifier = Modifier.padding(contentInset),
         )
         AlbumFactsSection(
             album = album,
             requester = factsRequester,
-            upRequester = trackRequesters.lastOrNull() ?: upFromBelow,
+            upRequester = trackRequesters.lastOrNull()?.play ?: upFromBelow,
             modifier = Modifier.padding(contentInset),
         )
     }
@@ -113,9 +125,14 @@ private fun ArtistsSection(
 @Composable
 private fun TrackListSection(
     album: AlbumDetailsUi,
-    trackRequesters: List<FocusRequester>,
+    likes: TrackLikesUiState,
+    trackRequesters: List<TrackRowRequesters>,
     upRequester: FocusRequester?,
     downRequester: FocusRequester,
+    playReturnRow: Int?,
+    playReturnRequester: FocusRequester,
+    onPlayTrack: (Int) -> Unit,
+    onToggleLike: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
@@ -150,79 +167,32 @@ private fun TrackListSection(
             }
             disc.tracks.forEach { track ->
                 val index = rowIndex++
-                AlbumTrackRow(
+                val focus = remember(trackRequesters, index, upRequester, downRequester, playReturnRow) {
+                    TrackRowFocus(
+                        requesters = trackRequesters[index],
+                        // A plain column composes every row, so each edge is wired outright
+                        // rather than left to a spatial search that could reach the shell.
+                        up = { column -> trackRequesters.getOrNull(index - 1)?.get(column) ?: upRequester ?: Cancel },
+                        down = { column -> trackRequesters.getOrNull(index + 1)?.get(column) ?: downRequester },
+                        left = Cancel,
+                        riders = { column ->
+                            listOfNotNull(
+                                playReturnRequester.takeIf { column == TrackRowColumn.Play && playReturnRow == index },
+                            )
+                        },
+                    )
+                }
+                TrackRow(
                     track = track,
-                    requester = trackRequesters[index],
-                    upRequester = trackRequesters.getOrNull(index - 1) ?: upRequester,
-                    downRequester = trackRequesters.getOrNull(index + 1) ?: downRequester,
+                    liked = likes.isLiked(track.id),
+                    likePending = track.id in likes.pendingIds,
+                    focus = focus,
+                    onPlay = { onPlayTrack(index) },
+                    onToggleLike = { onToggleLike(track.id) },
+                    // Inert until a musician screen exists for "Go to artist" to open.
+                    onOpenMore = null,
                 )
             }
-        }
-    }
-}
-
-/**
- * One track: a full-width focus target with no action — index, title, genre line, duration.
- * It wears the focus treatment as a row surface (ring and fill, no scale) rather than a button
- * outline, so focus arriving here does not promise a press; there is deliberately no clickable
- * and no role until playback lands. One cleared node speaks the sentence composed at mapping
- * time.
- */
-@Composable
-private fun AlbumTrackRow(
-    track: AlbumTrackUi,
-    requester: FocusRequester,
-    upRequester: FocusRequester?,
-    downRequester: FocusRequester?,
-) {
-    val colors = IglooTheme.colors
-    var focused by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .readingStopTarget(
-                tag = "album_track_${track.id}",
-                focused = focused,
-                requester = requester,
-                upRequester = upRequester,
-                downRequester = downRequester,
-                onFocusChanged = { focused = it },
-                description = track.contentDescription,
-                radius = IglooTheme.radius.lg,
-            )
-            .padding(horizontal = IglooTheme.spacing.md, vertical = IglooTheme.spacing.sm),
-        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-    ) {
-        IglooText(
-            text = track.indexText,
-            style = IglooTheme.typography.label,
-            color = colors.mutedForeground,
-            maxLines = 1,
-            modifier = Modifier.widthIn(min = TRACK_INDEX_MIN_WIDTH.scaled()),
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            IglooText(
-                text = track.title,
-                style = IglooTheme.typography.bodyMedium,
-                color = colors.foreground,
-                maxLines = 1,
-            )
-            if (track.genresLine != null) {
-                IglooText(
-                    text = track.genresLine,
-                    style = IglooTheme.typography.label,
-                    color = colors.mutedForeground,
-                    maxLines = 1,
-                )
-            }
-        }
-        if (track.durationText.isNotEmpty()) {
-            IglooText(
-                text = track.durationText,
-                style = IglooTheme.typography.label,
-                color = colors.mutedForeground,
-                maxLines = 1,
-            )
         }
     }
 }
@@ -277,6 +247,3 @@ private fun AlbumFactsSection(
         }
     }
 }
-
-/** Wide enough for a two-digit index without the titles ragged-lefting between rows. */
-private val TRACK_INDEX_MIN_WIDTH = 28.dp

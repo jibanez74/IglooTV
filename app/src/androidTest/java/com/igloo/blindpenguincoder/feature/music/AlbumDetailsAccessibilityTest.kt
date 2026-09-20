@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -52,12 +54,14 @@ class AlbumDetailsAccessibilityTest {
     private fun setContent(
         initialAlbumDetails: AlbumDetailsUiState = loadedState(),
         spokenAccessibilityEnabled: Boolean = false,
+        trackLikes: TrackLikesUiState = TrackLikesUiState(likedIds = emptySet()),
     ) {
         albumDetailsState = initialAlbumDetails
         composeRule.setContent {
             IglooTheme {
                 TestIglooApp(
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                    trackLikes = trackLikes,
                     home = HomeUiState(
                         hero = HomeHeroState.Hidden,
                         continueWatching = IglooRailState.Loaded(testContinueMovies),
@@ -127,21 +131,86 @@ class AlbumDetailsAccessibilityTest {
     }
 
     @Test
-    fun eachTrackRowIsOneNodeSpeakingTheMappingSentence() {
+    fun eachRowsPlaySpeaksTheMappingSentenceOnce() {
         setContent()
 
-        composeRule.onNodeWithTag("album_track_901").assertContentDescriptionEquals(
+        composeRule.onNodeWithTag("track_play_901").assertContentDescriptionEquals(
             "Disc 1. Track 1. Yesterday. Rock, Pop. 2 minutes and 5 seconds.",
         )
         // Only a disc's first row folds the disc in; the second row starts at the track.
-        composeRule.onNodeWithTag("album_track_902").assertContentDescriptionEquals(
+        composeRule.onNodeWithTag("track_play_902").assertContentDescriptionEquals(
             "Track 2. Ticket to Ride. 3 minutes and 10 seconds.",
         )
-        composeRule.onNodeWithTag("album_track_903").assertContentDescriptionEquals(
+        composeRule.onNodeWithTag("track_play_903").assertContentDescriptionEquals(
             "Disc 2. Track 1. Act Naturally. 1 minute and 50 seconds.",
         )
-        // The row's inner text nodes are cleared into the one sentence above.
+        // The row's inner text nodes are cleared into the one sentence above; the other two
+        // controls name only themselves and the track.
         composeRule.onNodeWithText("Ticket to Ride").assertDoesNotExist()
+        composeRule.onNodeWithTag("track_like_902").assertContentDescriptionEquals("Like")
+        composeRule.onNodeWithTag("track_more_902")
+            .assertContentDescriptionEquals("More actions for Ticket to Ride. None available.")
+    }
+
+    @Test
+    fun theLikeControlCarriesTheStateAndPlayRepeatsOnlyLiked() {
+        setContent(trackLikes = TrackLikesUiState(likedIds = setOf(901L)))
+
+        composeRule.onNodeWithTag("track_like_901")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Liked"))
+            .assert(clickActionLabelled("Unlike Yesterday"))
+        composeRule.onNodeWithTag("track_play_901")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Liked"))
+
+        composeRule.onNodeWithTag("track_like_902")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Not liked"))
+            .assert(clickActionLabelled("Like Ticket to Ride"))
+        composeRule.onNodeWithTag("track_play_902")
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+    }
+
+    @Test
+    fun aPendingLikeSaysSoOnTheControlThatStartedIt() {
+        setContent(trackLikes = TrackLikesUiState(likedIds = setOf(901L), pendingIds = setOf(901L)))
+
+        composeRule.onNodeWithTag("track_like_901")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Liked, saving"))
+            .assert(clickActionLabelled("Unlike Yesterday"))
+    }
+
+    @Test
+    fun anUnseededLikeSetLeavesTheControlInertButInPlace() {
+        setContent(trackLikes = TrackLikesUiState(likedIds = null))
+
+        composeRule.onNodeWithTag("track_like_901")
+            .assertHasNoClickAction()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    "Like status unavailable",
+                ),
+            )
+    }
+
+    @Test
+    fun aFailedLikeIsAnnouncedAsANoticeOnThePage() {
+        setContent(
+            trackLikes = TrackLikesUiState(
+                likedIds = emptySet(),
+                notice = "Couldn't update like: Something went wrong. Please try again.",
+            ),
+        )
+
+        composeRule.onNodeWithTag("album_notice")
+            .assertContentDescriptionEquals(
+                "Couldn't update like: Something went wrong. Please try again.",
+            )
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
     }
 
     @Test
@@ -184,7 +253,8 @@ class AlbumDetailsAccessibilityTest {
 
     @Test
     fun creditedCollaboratorsRideTheExistingReadingStops() {
-        val artistNames = listOf("The Beatles", "Billy Preston")
+        val artists = listOf(AlbumArtistUi(4, "The Beatles"), AlbumArtistUi(5, "Billy Preston"))
+        val artistNames = artists.map { it.name }
         val heroDescription = "Help! by The Beatles. Artists: The Beatles, Billy Preston. " +
             "3 tracks. Total duration: 7 minutes and 5 seconds. Genres: Rock, Pop. " +
             "Spotify popularity 73 out of 100."
@@ -194,7 +264,7 @@ class AlbumDetailsAccessibilityTest {
             "Spotify popularity: 73 / 100."
         val baseAlbum = testAlbumDetails()
         val album = baseAlbum.copy(
-            artistNames = artistNames,
+            artists = artists,
             facts = baseAlbum.facts.map { fact ->
                 if (fact.label == "Artist") fact.copy(value = artistNames.joinToString(", ")) else fact
             },
@@ -217,6 +287,10 @@ class AlbumDetailsAccessibilityTest {
         setContent(spokenAccessibilityEnabled = false)
 
         composeRule.onNodeWithTag("album_hero_info").assertDoesNotExist()
+    }
+
+    private fun clickActionLabelled(label: String) = SemanticsMatcher("click action labelled $label") {
+        it.config.getOrNull(SemanticsActions.OnClick)?.label == label
     }
 
     @Test

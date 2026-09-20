@@ -69,10 +69,6 @@ class TrackLikesViewModel(
         startWorker(id)
     }
 
-    fun clearNotice() {
-        _uiState.update { it.copy(notice = null) }
-    }
-
     private fun startWorker(id: Long) {
         if (workers[id]?.isActive == true) return
         workers[id] = viewModelScope.launch {

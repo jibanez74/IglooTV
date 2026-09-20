@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,11 +49,13 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
+import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
+import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 
 /**
  * The album detail screen (docs/design-system.md section 11.5.1): a full-screen in-tree overlay
@@ -65,9 +68,11 @@ import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
  * The backdrop is the album cover blown up full-bleed (the web page's treatment): there is no
  * separate backdrop asset for music, and the cover URL is used verbatim.
  *
- * [onPlayAlbum] and [onShuffle] open the host's music player overlay on the album's queue, in
- * order or freshly shuffled; [playReturnRequester] is parked on the action that launched it so
- * closing that player restores focus there (section 6.3), the movie details screen's pairing.
+ * [onPlayAlbum], [onShuffle] and a row's [onPlayTrack] open the host's music player overlay on
+ * the album's queue — in order, freshly shuffled, or in order from that row; [playReturnRequester]
+ * is parked on whichever of those controls launched it so closing that player restores focus
+ * there (section 6.3), the movie details screen's pairing. [likes] and [onToggleLike] are the
+ * shared like state every track row reads; [notice] is its last failed write.
  */
 @Composable
 fun AlbumDetailsScreen(
@@ -75,6 +80,10 @@ fun AlbumDetailsScreen(
     onRetry: () -> Unit,
     onPlayAlbum: () -> Unit,
     onShuffle: () -> Unit,
+    onPlayTrack: (Int) -> Unit,
+    likes: TrackLikesUiState,
+    onToggleLike: (Long) -> Unit,
+    notice: String?,
     playReturnRequester: FocusRequester,
     modifier: Modifier = Modifier,
     // Parameterized so tests can force both states: the reading-stop chain below depends on it,
@@ -139,11 +148,15 @@ fun AlbumDetailsScreen(
 
             is AlbumDetailsState.Loaded -> AlbumDetailsContent(
                 album = state.album,
+                likes = likes,
+                notice = notice,
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 entryRequester = entryRequester,
                 playReturnRequester = playReturnRequester,
                 onPlayAlbum = onPlayAlbum,
                 onShuffle = onShuffle,
+                onPlayTrack = onPlayTrack,
+                onToggleLike = onToggleLike,
             )
         }
     }
@@ -152,11 +165,15 @@ fun AlbumDetailsScreen(
 @Composable
 private fun AlbumDetailsContent(
     album: AlbumDetailsUi,
+    likes: TrackLikesUiState,
+    notice: String?,
     spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
     playReturnRequester: FocusRequester,
     onPlayAlbum: () -> Unit,
     onShuffle: () -> Unit,
+    onPlayTrack: (Int) -> Unit,
+    onToggleLike: (Long) -> Unit,
 ) {
     val colors = IglooTheme.colors
     val layout = IglooTheme.layout
@@ -179,7 +196,13 @@ private fun AlbumDetailsContent(
     val heroInfoRequester = remember { FocusRequester() }
     val shuffleRequester = remember { FocusRequester() }
     val factsStop = remember { FocusRequester() }
-    val trackRequesters = remember(trackRows.size) { List(trackRows.size) { FocusRequester() } }
+    val trackRequesters = remember(trackRows.size) { List(trackRows.size) { TrackRowRequesters() } }
+    // Which control launched the player, so its close lands back on that control: Play Album,
+    // Shuffle, or one row's Play. Saved, because the player itself survives recreation and its
+    // close afterwards still has to find the launching node.
+    var playLaunchSite by rememberSaveable { mutableStateOf(PLAY_ALBUM_SITE) }
+    val playReturnRow = playLaunchSite.removePrefix(ROW_SITE_PREFIX).toIntOrNull()
+        ?.takeIf { playLaunchSite.startsWith(ROW_SITE_PREFIX) && it in trackRows.indices }
     // With no action row the facts panel owns the entry anchor: the screen's requester *is* the
     // panel's, which lands entry focus there with every edge wired at the panel untouched.
     val factsRequester = if (hasHeroActions) factsStop else entryRequester
@@ -188,7 +211,7 @@ private fun AlbumDetailsContent(
     var lastFocusedAction by remember(hasHeroActions) {
         mutableStateOf(entryRequester.takeIf { hasHeroActions })
     }
-    val belowActions = trackRequesters.firstOrNull() ?: factsRequester
+    val belowActions = trackRequesters.firstOrNull()?.play ?: factsRequester
     val upFromBelow = when {
         hasHeroActions -> lastFocusedAction
         spokenAccessibilityEnabled -> heroInfoRequester
@@ -274,12 +297,19 @@ private fun AlbumDetailsContent(
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 heroInfoRequester = heroInfoRequester,
                 primaryRequester = entryRequester,
-                playReturnRequester = playReturnRequester,
+                playReturnRequester = playReturnRequester.takeIf { playLaunchSite == PLAY_ALBUM_SITE },
                 shuffleRequester = shuffleRequester,
+                shuffleReturnRequester = playReturnRequester.takeIf { playLaunchSite == SHUFFLE_SITE },
                 downRequester = belowActions,
                 onActionFocused = { lastFocusedAction = it },
-                onPlayAlbum = onPlayAlbum,
-                onShuffle = onShuffle,
+                onPlayAlbum = {
+                    playLaunchSite = PLAY_ALBUM_SITE
+                    onPlayAlbum()
+                },
+                onShuffle = {
+                    playLaunchSite = SHUFFLE_SITE
+                    onShuffle()
+                },
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
@@ -295,11 +325,29 @@ private fun AlbumDetailsContent(
             )
         }
 
+        if (notice != null) {
+            IglooNotice(
+                text = notice,
+                modifier = Modifier
+                    .padding(horizontal = layout.safeAreaHorizontal)
+                    .padding(bottom = IglooTheme.spacing.lg)
+                    .testTag("album_notice"),
+            )
+        }
+
         AlbumDetailsSections(
             album = album,
+            likes = likes,
             trackRequesters = trackRequesters,
             factsRequester = factsRequester,
             upFromBelow = upFromBelow,
+            playReturnRow = playReturnRow,
+            playReturnRequester = playReturnRequester,
+            onPlayTrack = { index ->
+                playLaunchSite = ROW_SITE_PREFIX + index
+                onPlayTrack(index)
+            },
+            onToggleLike = onToggleLike,
             contentInset = PaddingValues(horizontal = layout.safeAreaHorizontal),
             modifier = Modifier
                 .fillMaxWidth()
@@ -394,6 +442,10 @@ private fun AlbumDetailsSkeleton(anchorRequester: FocusRequester) {
 
 /** About 60% of the reference viewport's height (section 8.1); contains text, so a minimum. */
 private val HERO_MIN_HEIGHT = 320.dp
+
+private const val PLAY_ALBUM_SITE = "play"
+private const val SHUFFLE_SITE = "shuffle"
+private const val ROW_SITE_PREFIX = "row:"
 
 /** The Play Album button's approximate footprint, so focus taken while loading does not jump. */
 private val PLAY_ALBUM_STUB_WIDTH = 168.dp

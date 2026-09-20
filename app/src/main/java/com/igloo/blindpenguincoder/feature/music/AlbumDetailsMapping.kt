@@ -5,6 +5,8 @@ import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.data.model.AlbumDetailsData
 import com.igloo.blindpenguincoder.data.model.AlbumTrack
+import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
+import com.igloo.blindpenguincoder.feature.shared.trackSpokenInfo
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
@@ -36,8 +38,7 @@ data class AlbumDetailsUi(
     val genresLine: String?,
     /** Spotify popularity, rounded to 0..100; null when the scanner has none. */
     val popularity: Int?,
-    /** Display-only: there is no musician screen for these to open (section 11.5.1). */
-    val artistNames: List<String>,
+    val artists: List<AlbumArtistUi>,
     val discs: List<AlbumDiscUi>,
     val hasMultipleDiscs: Boolean,
     val facts: List<AlbumFactUi>,
@@ -45,23 +46,19 @@ data class AlbumDetailsUi(
     val factsDescription: String,
     /** The hero reading stop's one sentence (web `pageAnnouncement` parity, plus popularity). */
     val heroInfoDescription: String,
+) {
+    val artistNames: List<String> get() = artists.map { it.name }
+}
+
+/** A credited artist; the id is what the chip opens once a musician screen exists. */
+data class AlbumArtistUi(
+    val id: Long,
+    val name: String,
 )
 
 data class AlbumDiscUi(
     val disc: Long,
-    val tracks: List<AlbumTrackUi>,
-)
-
-data class AlbumTrackUi(
-    val id: Long,
-    val indexText: String,
-    val title: String,
-    val genresLine: String?,
-    val durationText: String,
-    /** Seconds for the play queue; 0.0 where the wire has no usable duration. */
-    val durationSec: Double,
-    /** The row's one spoken sentence; TV TalkBack reads a row as a single node (section 12). */
-    val contentDescription: String,
+    val tracks: List<TrackRowUi>,
 )
 
 /** One facts-panel row; absent values never become rows, so the panel renders what it holds. */
@@ -80,8 +77,9 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
     val trackCountText = "${data.tracks.size} " + if (data.tracks.size == 1) "track" else "tracks"
     val totalDurationText = formatAlbumDuration(data.totalDuration.toLong())
     val popularity = album.spotifyPopularity.orNull()?.roundToInt()?.coerceIn(0, 100)
-    val artistNames = data.artists.map { it.name }.filter { it.isNotBlank() }
-        .ifEmpty { listOfNotNull(artistName) }
+    val artists = data.artists.filter { it.name.isNotBlank() }.map { AlbumArtistUi(it.id, it.name) }
+    // With no credited rows the album's own musician is the one name, and it has no id to open.
+    val artistNames = artists.map { it.name }.ifEmpty { listOfNotNull(artistName) }
     val artistNamesLine = joinedLine(artistNames, ", ")
     val discs = discs(data.tracks, trackGenres = data.trackGenres.groupBy({ it.trackId }, { it.tag }))
     val audioQuality = audioQualitySummary(data.tracks)
@@ -108,7 +106,7 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
         totalDurationText = totalDurationText,
         genresLine = joinedLine(data.albumGenres, " · "),
         popularity = popularity,
-        artistNames = artistNames,
+        artists = artists.ifEmpty { listOfNotNull(artistName?.let { AlbumArtistUi(id = 0, name = it) }) },
         discs = discs,
         hasMultipleDiscs = discs.size > 1,
         facts = facts,
@@ -187,24 +185,26 @@ private fun discs(
 
 private fun discNumber(track: AlbumTrack): Long = if (track.disc > 0) track.disc else 1
 
-private fun toTrackUi(track: AlbumTrack, genres: List<String>, discSpoken: Long?): AlbumTrackUi {
+private fun toTrackUi(track: AlbumTrack, genres: List<String>, discSpoken: Long?): TrackRowUi {
     val genresLine = joinedLine(genres, ", ")
-    val durationText = formatTrackDuration(track.duration)
-    return AlbumTrackUi(
+    val durationSec = if (track.duration > 0) track.duration / 1000.0 else 0.0
+    return TrackRowUi(
         id = track.id,
-        indexText = "${track.trackIndex}",
         title = track.title,
-        genresLine = genresLine,
-        durationText = durationText,
-        durationSec = if (track.duration > 0) track.duration / 1000.0 else 0.0,
-        contentDescription = listOfNotNull(
-            discSpoken?.let { "Disc $it" },
-            "Track ${track.trackIndex}",
-            track.title,
-            genresLine,
-            durationText.takeIf { it.isNotEmpty() }
-                ?.let { formatSpokenTime(track.duration / 1000.0) },
-        ).joinToString(". ") + ".",
+        subtitle = genresLine,
+        indexText = "${track.trackIndex}",
+        durationText = formatTrackDuration(track.duration),
+        durationSec = durationSec,
+        // The row already sits on its album; More can only go to the artist.
+        albumId = null,
+        musicianId = track.musicianId.orNull(),
+        spokenInfo = trackSpokenInfo(
+            prefix = listOfNotNull(discSpoken?.let { "Disc $it" }, "Track ${track.trackIndex}")
+                .joinToString(". "),
+            title = track.title,
+            subtitle = genresLine,
+            durationSec = durationSec,
+        ),
     )
 }
 

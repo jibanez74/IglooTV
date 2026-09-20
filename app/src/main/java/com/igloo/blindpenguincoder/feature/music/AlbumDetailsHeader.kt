@@ -48,6 +48,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
+import com.igloo.blindpenguincoder.core.ui.withRequester
 
 /**
  * The album hero's content block (docs/design-system.md section 11.5.1): square cover left;
@@ -63,8 +64,10 @@ internal fun AlbumDetailsHeader(
     spokenAccessibilityEnabled: Boolean,
     heroInfoRequester: FocusRequester,
     primaryRequester: FocusRequester,
-    playReturnRequester: FocusRequester,
+    /** The player's return node when Play Album launched it; null when another control did. */
+    playReturnRequester: FocusRequester?,
     shuffleRequester: FocusRequester,
+    shuffleReturnRequester: FocusRequester?,
     downRequester: FocusRequester,
     onActionFocused: (FocusRequester) -> Unit,
     onPlayAlbum: () -> Unit,
@@ -99,6 +102,7 @@ internal fun AlbumDetailsHeader(
                     playRequester = primaryRequester,
                     playReturnRequester = playReturnRequester,
                     shuffleRequester = shuffleRequester,
+                    shuffleReturnRequester = shuffleReturnRequester,
                     upRequester = actionUpRequester,
                     downRequester = downRequester,
                     onActionFocused = onActionFocused,
@@ -357,8 +361,9 @@ private fun SpotifyPopularityMeter(
 private fun AlbumActionRow(
     overMedia: Boolean,
     playRequester: FocusRequester,
-    playReturnRequester: FocusRequester,
+    playReturnRequester: FocusRequester?,
     shuffleRequester: FocusRequester,
+    shuffleReturnRequester: FocusRequester?,
     upRequester: FocusRequester,
     downRequester: FocusRequester,
     onActionFocused: (FocusRequester) -> Unit,
@@ -393,8 +398,9 @@ private fun AlbumActionRow(
                 .testTag("album_play")
                 .focusRequester(playRequester)
                 // The node the music player restores focus to on close — two requesters on
-                // one button, the same pairing the movie details' Play carries.
-                .focusRequester(playReturnRequester)
+                // one button, the same pairing the movie details' Play carries — but only
+                // while this is the control that launched it.
+                .withRequester(playReturnRequester)
                 .then(rowFocus)
                 .focusProperties {
                     left = Cancel
@@ -416,6 +422,7 @@ private fun AlbumActionRow(
             modifier = Modifier
                 .testTag("album_shuffle")
                 .focusRequester(shuffleRequester)
+                .withRequester(shuffleReturnRequester)
                 .then(rowFocus)
                 .focusProperties { right = Cancel }
                 .onFocusChanged { if (it.isFocused) onActionFocused(shuffleRequester) },

@@ -150,11 +150,11 @@ class AlbumDetailsViewModelTest {
         val tracks = album.discs.single().tracks
         assertEquals(listOf("Northern Drift", "Cold Current"), tracks.map { it.title })
         assertEquals(listOf("3:34", "3:18"), tracks.map { it.durationText })
-        assertEquals("Ambient, Electronic", tracks[0].genresLine)
-        assertNull(tracks[1].genresLine)
+        assertEquals("Ambient, Electronic", tracks[0].subtitle)
+        assertNull(tracks[1].subtitle)
         assertEquals(
             "Track 1. Northern Drift. Ambient, Electronic. 3 minutes and 34 seconds.",
-            tracks[0].contentDescription,
+            tracks[0].spokenInfo,
         )
 
         assertEquals(
@@ -220,7 +220,7 @@ class AlbumDetailsViewModelTest {
         val track = album.discs.single().tracks.single()
         // Web parity: a missing duration renders nothing, and the sentence skips it too.
         assertEquals("", track.durationText)
-        assertEquals("Track 1. Yesterday.", track.contentDescription)
+        assertEquals("Track 1. Yesterday.", track.spokenInfo)
         assertEquals(
             listOf("Total tracks" to "1", "Total duration" to "0m 0s"),
             album.facts.map { it.label to it.value },
@@ -253,9 +253,9 @@ class AlbumDetailsViewModelTest {
         assertEquals(listOf("D2 T1"), album.discs[1].tracks.map { it.title })
         // The "Disc N" header is plain text a TV screen reader never reaches, so each disc's
         // first row folds it into its own sentence — and only the first row.
-        assertTrue(album.discs[0].tracks[0].contentDescription.startsWith("Disc 1. Track 1."))
-        assertTrue(album.discs[0].tracks[1].contentDescription.startsWith("Track 2."))
-        assertTrue(album.discs[1].tracks[0].contentDescription.startsWith("Disc 2. Track 1."))
+        assertTrue(album.discs[0].tracks[0].spokenInfo.startsWith("Disc 1. Track 1."))
+        assertTrue(album.discs[0].tracks[1].spokenInfo.startsWith("Track 2."))
+        assertTrue(album.discs[1].tracks[0].spokenInfo.startsWith("Disc 2. Track 1."))
         assertEquals(listOf("Discs" to "2"), album.facts.filter { it.label == "Discs" }.map { it.label to it.value })
     }
 

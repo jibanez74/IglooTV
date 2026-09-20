@@ -46,6 +46,7 @@ import com.igloo.blindpenguincoder.feature.movies.MoviesActions
 import com.igloo.blindpenguincoder.feature.movies.MoviesViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
+import com.igloo.blindpenguincoder.feature.music.TrackLikesViewModel
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.MoviePlaybackServices
 import com.igloo.blindpenguincoder.playback.media3.deviceCanPlayAudioMime
@@ -245,6 +246,14 @@ fun IglooRoot(container: IglooAppContainer) {
                     ) {
                         AlbumDetailsViewModel(container.musicRepository)
                     }
+                    // One liked-id set for every track row in the session, so no two surfaces
+                    // can disagree about a heart; cleared with the rest on sign-out.
+                    val trackLikesViewModel = viewModel(
+                        viewModelStoreOwner = authenticatedSessionOwner,
+                        key = "track-likes",
+                    ) {
+                        TrackLikesViewModel(container.musicRepository)
+                    }
                     // Device tokens are revoked server-side after long disuse, so a session
                     // resumed from the background is re-checked before it is trusted — and the
                     // library is re-read, because a TV can sit on this screen for days. The
@@ -255,6 +264,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         detailsViewModel,
                         theaterDetailsViewModel,
                         albumDetailsViewModel,
+                        trackLikesViewModel,
                         moviesViewModel,
                     ) {
                         scope.launch { sessionManager.revalidateActive() }
@@ -262,6 +272,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         detailsViewModel.refresh()
                         theaterDetailsViewModel.refresh()
                         albumDetailsViewModel.refresh()
+                        trackLikesViewModel.refresh()
                         // Re-reads the count and, only if the grid has nothing yet, page one: a
                         // TV woken from standby must keep the pages the user scrolled through.
                         moviesViewModel.refresh()
@@ -286,6 +297,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         .collectAsStateWithLifecycle()
                     val albumDetails by albumDetailsViewModel.uiState
                         .collectAsStateWithLifecycle()
+                    val trackLikes by trackLikesViewModel.uiState.collectAsStateWithLifecycle()
                     // One overlay slot, two sources: the shell hosts a single details screen, so
                     // whichever view model is open feeds it and opening either closes the other.
                     // A library id and a TMDB id are both plain numbers, which is exactly why the
@@ -351,6 +363,8 @@ fun IglooRoot(container: IglooAppContainer) {
                         musicQueueFetcher = container.musicRepository,
                         albumDetails = albumDetails,
                         onRetryAlbumDetails = albumDetailsViewModel::retry,
+                        trackLikes = trackLikes,
+                        onToggleTrackLike = trackLikesViewModel::toggle,
                         onRetryRail = homeViewModel::retry,
                         onMovieSelected = { movieId ->
                             theaterDetailsViewModel.close()

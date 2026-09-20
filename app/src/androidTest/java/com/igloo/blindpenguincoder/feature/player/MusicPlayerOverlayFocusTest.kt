@@ -167,6 +167,28 @@ class MusicPlayerOverlayFocusTest {
     }
 
     @Test
+    fun pressingARowsPlayOpensThePlayerAtThatRowAndBackReturnsToThatPlay() {
+        setShellContent()
+        openAlbumCard()
+
+        val rowPlay = composeRule.onNodeWithTag("track_play_902")
+        rowPlay.requestFocus()
+        rowPlay.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("music_player").assertExists()
+        val request = engineRequests.single()
+        assertEquals(1, request.startIndex)
+        assertEquals(listOf(901L, 902L, 903L), request.tracks.map { it.id })
+        assertEquals(listOf("start:1:0.0:true"), engines.single().playbackCommands)
+
+        pressBack()
+
+        composeRule.onNodeWithTag("music_player").assertDoesNotExist()
+        composeRule.onNodeWithTag("track_play_902").assertIsFocused()
+    }
+
+    @Test
     fun theAlbumOverlayLeavesTalkBackTraversalWhileThePlayerIsUp() {
         setShellContent()
         openAlbumCard()

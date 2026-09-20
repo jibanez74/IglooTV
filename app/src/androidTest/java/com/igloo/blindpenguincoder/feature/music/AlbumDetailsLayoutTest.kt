@@ -24,6 +24,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.core.design.viewportFactor
+import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.testAlbumDetails
 import kotlin.math.abs
 import org.junit.Assert.assertTrue
@@ -52,13 +53,15 @@ class AlbumDetailsLayoutTest {
                 composeRule.runOnUiThread {
                     uiScale = scale
                     fontScale = font
-                    album = testAlbumDetails().copy(artistNames = listOf("The Beatles"))
+                    album = testAlbumDetails().copy(artists = listOf(AlbumArtistUi(4, "The Beatles")))
                 }
                 composeRule.waitForIdle()
                 val oneRow = artistBounds()
 
                 composeRule.runOnUiThread {
-                    album = testAlbumDetails().copy(artistNames = WRAPPING_ARTISTS)
+                    album = testAlbumDetails().copy(
+                        artists = WRAPPING_ARTISTS.mapIndexed { index, name -> AlbumArtistUi(index.toLong(), name) },
+                    )
                 }
                 composeRule.waitForIdle()
                 val wrapped = artistBounds()
@@ -97,14 +100,20 @@ class AlbumDetailsLayoutTest {
                             .testTag(VIEWPORT_TAG),
                     ) {
                         val factsRequester = remember { FocusRequester() }
+                        val playReturnRequester = remember { FocusRequester() }
                         val trackRequesters = remember(album.discs) {
-                            List(album.discs.sumOf { it.tracks.size }) { FocusRequester() }
+                            List(album.discs.sumOf { it.tracks.size }) { TrackRowRequesters() }
                         }
                         AlbumDetailsSections(
                             album = album,
+                            likes = TrackLikesUiState(likedIds = emptySet()),
                             trackRequesters = trackRequesters,
                             factsRequester = factsRequester,
                             upFromBelow = null,
+                            playReturnRow = null,
+                            playReturnRequester = playReturnRequester,
+                            onPlayTrack = {},
+                            onToggleLike = {},
                             contentInset = PaddingValues(horizontal = safeAreaHorizontal),
                             modifier = Modifier.fillMaxWidth(),
                         )

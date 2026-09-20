@@ -82,6 +82,7 @@ import com.igloo.blindpenguincoder.feature.movies.VideoLaunchSite
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsScreen
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
+import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.music.toMusicPlayRequest
 import com.igloo.blindpenguincoder.feature.music.toShuffledMusicPlayRequest
 import com.igloo.blindpenguincoder.playback.queue.MusicQueueFetcher
@@ -197,6 +198,8 @@ fun IglooApp(
     albumDetails: AlbumDetailsUiState,
     onRetryAlbumDetails: () -> Unit,
     onAlbumSelected: ((Long) -> Unit)?,
+    trackLikes: TrackLikesUiState,
+    onToggleTrackLike: (Long) -> Unit,
     onRequestPlayback: () -> Unit,
     moviePlayerViewModel: MoviePlayerViewModel,
     moviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine,
@@ -438,7 +441,8 @@ fun IglooApp(
             // The details header owns the notice while the overlay is up; rendering it here too
             // would only shift Home's rails behind a screen nobody can see. It surfaces here
             // when Back closes an overlay whose write had already failed.
-            mutationNotice = details.mutationNotice.takeIf { !detailsOpen && !albumOpen },
+            mutationNotice = (details.mutationNotice ?: trackLikes.notice)
+                .takeIf { !detailsOpen && !albumOpen },
             onRetryRail = onRetryRail,
             openMovie = openMovie,
             openTheaterMovie = openTheaterMovie,
@@ -510,6 +514,14 @@ fun IglooApp(
                             musicPlayRequest = toShuffledMusicPlayRequest(loaded.album)
                         }
                     },
+                    onPlayTrack = { index ->
+                        (albumDetails.details as? AlbumDetailsState.Loaded)?.let { loaded ->
+                            musicPlayRequest = toMusicPlayRequest(loaded.album, startIndex = index)
+                        }
+                    },
+                    likes = trackLikes,
+                    onToggleLike = onToggleTrackLike,
+                    notice = trackLikes.notice,
                     playReturnRequester = albumPlayReturnRequester,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )

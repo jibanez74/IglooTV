@@ -29,7 +29,8 @@ import com.igloo.blindpenguincoder.feature.movies.playbackSettingsUi
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUi
 import com.igloo.blindpenguincoder.feature.music.AlbumDiscUi
 import com.igloo.blindpenguincoder.feature.music.AlbumFactUi
-import com.igloo.blindpenguincoder.feature.music.AlbumTrackUi
+import com.igloo.blindpenguincoder.feature.music.AlbumArtistUi
+import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
@@ -340,43 +341,43 @@ internal fun testAlbumDetails(
     totalDurationText = "7m 5s",
     genresLine = "Rock · Pop",
     popularity = 73,
-    artistNames = listOf("The Beatles"),
+    artists = listOf(AlbumArtistUi(id = 4, name = "The Beatles")),
     discs = listOf(
         AlbumDiscUi(
             disc = 1,
             tracks = listOf(
-                AlbumTrackUi(
+                testAlbumTrackRow(
                     id = 901,
                     indexText = "1",
                     title = "Yesterday",
-                    genresLine = "Rock, Pop",
+                    subtitle = "Rock, Pop",
                     durationText = "2:05",
                     durationSec = 125.0,
-                    contentDescription = "Disc 1. Track 1. Yesterday. Rock, Pop. " +
+                    spokenInfo = "Disc 1. Track 1. Yesterday. Rock, Pop. " +
                         "2 minutes and 5 seconds.",
                 ),
-                AlbumTrackUi(
+                testAlbumTrackRow(
                     id = 902,
                     indexText = "2",
                     title = "Ticket to Ride",
-                    genresLine = null,
+                    subtitle = null,
                     durationText = "3:10",
                     durationSec = 190.0,
-                    contentDescription = "Track 2. Ticket to Ride. 3 minutes and 10 seconds.",
+                    spokenInfo = "Track 2. Ticket to Ride. 3 minutes and 10 seconds.",
                 ),
             ),
         ),
         AlbumDiscUi(
             disc = 2,
             tracks = listOf(
-                AlbumTrackUi(
+                testAlbumTrackRow(
                     id = 903,
                     indexText = "1",
                     title = "Act Naturally",
-                    genresLine = null,
+                    subtitle = null,
                     durationText = "1:50",
                     durationSec = 110.0,
-                    contentDescription = "Disc 2. Track 1. Act Naturally. " +
+                    spokenInfo = "Disc 2. Track 1. Act Naturally. " +
                         "1 minute and 50 seconds.",
                 ),
             ),
@@ -422,4 +423,26 @@ internal val testCast = listOf(
     CastMemberUi(id = 101, name = "Al Pacino", character = "Vincent Hanna", photoUrl = null),
     CastMemberUi(id = 102, name = "Robert De Niro", character = "Neil McCauley", photoUrl = null),
     CastMemberUi(id = 103, name = "Val Kilmer", character = "Chris Shiherlis", photoUrl = null),
+)
+
+/** An album-page row: index gutter, genre subtitle, no album to go to, the album's artist. */
+internal fun testAlbumTrackRow(
+    id: Long,
+    indexText: String,
+    title: String,
+    subtitle: String?,
+    durationText: String,
+    durationSec: Double,
+    spokenInfo: String,
+    musicianId: Long? = 4,
+) = TrackRowUi(
+    id = id,
+    title = title,
+    subtitle = subtitle,
+    indexText = indexText,
+    durationText = durationText,
+    durationSec = durationSec,
+    albumId = null,
+    musicianId = musicianId,
+    spokenInfo = spokenInfo,
 )
