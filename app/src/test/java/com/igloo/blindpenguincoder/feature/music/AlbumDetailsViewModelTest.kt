@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.music
 
 import com.igloo.blindpenguincoder.data.model.AlbumTrack
+import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.albumArtistJson
 import com.igloo.blindpenguincoder.data.repository.albumDetailsJson
@@ -79,6 +80,7 @@ class AlbumDetailsViewModelTest {
         codec = codec,
         bitRate = bitRate,
         channelLayout = channelLayout,
+        musicianId = SqlNullInt64(4, valid = true),
     )
 
     @Test

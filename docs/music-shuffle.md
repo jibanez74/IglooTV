@@ -41,7 +41,6 @@ The response uses the shared JSON envelope:
         "duration": 213000,
         "codec": "flac",
         "bit_rate": 921600,
-        "file_path": "/srv/music/example.flac",
         "album_id": { "Int64": 7, "Valid": true },
         "album_title": { "String": "Example Album", "Valid": true },
         "album_cover": { "String": "/covers/example.jpg", "Valid": true },
@@ -63,7 +62,7 @@ An empty result is still a successful response:
 
 For an initial request, it means the library has no tracks. For a refill with exclusions, it means the server found no track outside the currently excluded set.
 
-The returned `file_path` is the server's local filesystem path. Never open it from a native client or expose it as a user-selectable URL. Play track `42` through authenticated `GET /api/music/tracks/42/stream`. Send the cookie or bearer credential on the stream request and on later byte-range requests used for seeking. The stream can return `200`, `206`, or `304`; handle `400`, `401`, `404`, `416`, and `500` as documented in the OpenAPI contract.
+The response carries no playback location. Play track `42` through authenticated `GET /api/music/tracks/42/stream`. Send the cookie or bearer credential on the stream request and on later byte-range requests used for seeking. The stream can return `200`, `206`, or `304`; handle `400`, `401`, `404`, `416`, and `500` as documented in the OpenAPI contract.
 
 ### Failures
 
@@ -201,7 +200,6 @@ Keep these concepts separate:
 - Queue identity: a generation used to reject stale asynchronous work.
 - Playback identity: the track ID used to construct `/api/music/tracks/{id}/stream`.
 - Display metadata: title plus nullable album cover, album title, and musician name stored per track when available.
-- Server storage metadata: `file_path`, which is not a client playback location.
 
 When advancing tracks, update displayed metadata from the new track rather than retaining the first track's album and musician. Remove metadata for history entries when those entries are trimmed. If the current track disappears unexpectedly from the queue, do not refill until queue state is repaired; a negative current index is an invalid runway, not an invitation to fetch.
 
@@ -213,7 +211,7 @@ When advancing tracks, update displayed metadata from the new track rather than 
 - Keep the existing queue when a refill fails or returns only duplicate IDs.
 - Latch and announce an empty refill once per generation.
 - Ignore late playlist pages after the user starts another queue.
-- Use authenticated stream URLs, never `file_path`.
+- Use authenticated stream URLs; the track rows carry no file path.
 - Interpret nullable values through `Valid`, and treat duration as milliseconds.
 
 ## Implementation References

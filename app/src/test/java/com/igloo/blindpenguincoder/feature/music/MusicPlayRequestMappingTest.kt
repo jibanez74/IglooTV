@@ -41,6 +41,7 @@ class MusicPlayRequestMappingTest {
             codec = "flac",
             bitRate = 900_000,
             channelLayout = "stereo",
+            musicianId = SqlNullInt64(4, valid = true),
         )
 
     private fun details(vararg tracks: AlbumTrack) = AlbumDetailsData(

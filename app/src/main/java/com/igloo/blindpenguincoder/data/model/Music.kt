@@ -13,21 +13,30 @@ data class SimpleAlbum(
     val year: SqlNullInt64,
 )
 
+/**
+ * One row of the library track list (`GET /music/tracks`, `/music/tracks/liked`,
+ * `/music/tracks/shuffle`). [duration] is in **milliseconds**. The album and musician columns
+ * are LEFT JOINs, so each arrives wrapped and is absent when the join found nothing.
+ */
 @Serializable
 data class TrackListItem(
     val id: Long,
     val title: String,
-    val duration: Double,
+    val duration: Long,
     val codec: String,
     @SerialName("bit_rate") val bitRate: Long,
-    @SerialName("file_path") val filePath: String,
+    @SerialName("album_id") val albumId: SqlNullInt64,
+    @SerialName("album_title") val albumTitle: SqlNullString,
+    @SerialName("album_cover") val albumCover: SqlNullString,
+    @SerialName("musician_id") val musicianId: SqlNullInt64,
+    @SerialName("musician_name") val musicianName: SqlNullString,
 )
 
+/** One `GET /music/musicians` list entry; the server sorts by a `sort_name` it does not send. */
 @Serializable
 data class SimpleMusician(
     val id: Long,
     val name: String,
-    @SerialName("sort_name") val sortName: String,
     val thumb: SqlNullString,
     @SerialName("album_count") val albumCount: Long,
     @SerialName("track_count") val trackCount: Long,
@@ -75,9 +84,8 @@ data class Album(
 )
 
 /**
- * A track as the album details payload carries it. The wire row is the full `Track` schema;
- * only the fields the detail page reads are typed. [duration] is in **milliseconds**, unlike
- * [TrackListItem.duration]'s seconds.
+ * A track as the album details payload carries it; only the fields the detail page reads are
+ * typed. [duration] is in **milliseconds**.
  */
 @Serializable
 data class AlbumTrack(
@@ -89,6 +97,7 @@ data class AlbumTrack(
     val codec: String,
     @SerialName("bit_rate") val bitRate: Long,
     @SerialName("channel_layout") val channelLayout: String,
+    @SerialName("musician_id") val musicianId: SqlNullInt64,
 )
 
 /** An album's artist — a musician row on the wire; only what the detail page reads is typed. */
@@ -127,12 +136,54 @@ data class MusiciansData(
     @SerialName("total_pages") val totalPages: Long,
 )
 
-/** Payload of `MusicianDetailsEnvelope.data`. Item shapes are untyped in the spec. */
+/** The full musician row, as `GET /music/musicians/{id}` returns it under `musician`. */
+@Serializable
+data class Musician(
+    val id: Long,
+    val name: String,
+    @SerialName("sort_name") val sortName: String,
+    val summary: SqlNullString,
+    @SerialName("spotify_id") val spotifyId: SqlNullString,
+    @SerialName("spotify_popularity") val spotifyPopularity: SqlNullFloat64,
+    @SerialName("spotify_followers") val spotifyFollowers: SqlNullInt64,
+    val thumb: SqlNullString,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+)
+
+/** One album of a musician's discography, newest release first. */
+@Serializable
+data class MusicianAlbum(
+    val id: Long,
+    val title: String,
+    val cover: SqlNullString,
+    val year: SqlNullInt64,
+    @SerialName("release_date") val releaseDate: SqlNullString,
+    @SerialName("track_count") val trackCount: Long,
+)
+
+/**
+ * One track across a musician's albums. Carries its album but no musician columns — the
+ * musician is the resource being read. [duration] is in **milliseconds**.
+ */
+@Serializable
+data class MusicianTrack(
+    val id: Long,
+    val title: String,
+    val duration: Long,
+    val codec: String,
+    @SerialName("bit_rate") val bitRate: Long,
+    @SerialName("album_id") val albumId: SqlNullInt64,
+    @SerialName("album_title") val albumTitle: SqlNullString,
+    @SerialName("album_cover") val albumCover: SqlNullString,
+)
+
+/** Payload of `MusicianDetailsEnvelope.data`. [totalDuration] is in milliseconds. */
 @Serializable
 data class MusicianDetailsData(
-    val musician: JsonObject,
-    val albums: List<JsonObject>,
-    val tracks: List<JsonObject>,
+    val musician: Musician,
+    val albums: List<MusicianAlbum>,
+    val tracks: List<MusicianTrack>,
     val genres: List<String>,
     @SerialName("total_duration") val totalDuration: Double,
 )

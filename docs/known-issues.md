@@ -17,8 +17,8 @@ Smaller things — duplication, organisation, coverage gaps and polish — live 
 ### The gap
 
 The models were generated once (`05ec605`, "Add API models generated from docs/openapi.json").
-`docs/openapi.json` has since been re-synced **six times** — `9852401`, `047499e`, `de5d43a`,
-`647001a`, `fa906c2`, `5e3a176` — with no regeneration and no check. A reviewer spotting two
+`docs/openapi.json` has since been re-synced **seven times** — `9852401`, `047499e`, `de5d43a`,
+`647001a`, `fa906c2`, `5e3a176`, `b8dc4c2` — with no regeneration and no check. A reviewer spotting two
 dropped fields by eye is what surfaced this; a full manual sweep then found three more, and the
 `AuthUser.avatar` decode bug (fixed 2026-08-14) was a sixth that a presence-only sweep still
 misses, because the field was present and only its *type* was wrong.
@@ -64,6 +64,16 @@ by hand:
   correct-looking model correct, and a spec-shaped fixture did — the hand-written serialization
   test passed against the object shape while the real payload could not decode at all. Whatever
   the check ends up being, it has to run against a live response, not only the document.
+- **A sync can break a model that used to decode.** Instances nine and ten, found 2026-09-19
+  wiring the Music screen, both came from the `b8dc4c2` sync: `TrackListItem` had lost
+  `file_path` and gained five nullable album/musician columns while `duration` became an
+  integer of milliseconds, and `SimpleMusician` had lost `sort_name`. Both Kotlin models kept
+  the removed field as a required non-nullable property, so `ignoreUnknownKeys` could not save
+  them — every list under `/music/tracks` and `/music/musicians` failed to decode outright.
+  Confirmed against the server's own row structs (`GetTracksAlphabeticalRow`,
+  `GetMusiciansAlphabeticalRow` in the main repository) rather than a populated live response,
+  because the local dev library is empty and the tailnet server needs its own credentials; the
+  same sync also typed `MusicianDetailsData`'s three `JsonObject` fields, now modelled.
 
 ### Related, smaller
 

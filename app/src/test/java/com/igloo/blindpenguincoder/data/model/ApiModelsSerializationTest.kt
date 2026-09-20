@@ -679,6 +679,203 @@ class ApiModelsSerializationTest {
         assertEquals(listOf("Ambient", "Electronic"), data.albumGenres)
     }
 
+    /**
+     * `GET /music/tracks`: a `limit`/`offset` window. Each row carries its LEFT-JOINed album and
+     * musician columns as wrappers, `duration` is integer milliseconds, and there is no
+     * `file_path` — the `b8dc4c2` sync removed it (known-issues.md, instance nine).
+     */
+    @Test
+    fun decodesTracksEnvelope() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "tracks": [
+                  {
+                    "id": 900, "title": "Northern Drift", "duration": 214000,
+                    "codec": "flac", "bit_rate": 900000,
+                    "album_id": {"Int64": 211, "Valid": true},
+                    "album_title": {"String": "Glacier Sessions", "Valid": true},
+                    "album_cover": {"String": "https://i.scdn.co/image/ab67.jpg", "Valid": true},
+                    "musician_id": {"Int64": 4, "Valid": true},
+                    "musician_name": {"String": "Aurora Pines", "Valid": true}
+                  },
+                  {
+                    "id": 901, "title": "1999", "duration": 180000,
+                    "codec": "mp3", "bit_rate": 320000,
+                    "album_id": {"Int64": 0, "Valid": false},
+                    "album_title": {"String": "", "Valid": false},
+                    "album_cover": {"String": "", "Valid": false},
+                    "musician_id": {"Int64": 0, "Valid": false},
+                    "musician_name": {"String": "", "Valid": false}
+                  }
+                ],
+                "total": 1234, "offset": 50, "limit": 50, "has_more": true
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<TracksData>>(body).data!!
+
+        assertEquals(listOf(900L, 901L), data.tracks.map { it.id })
+        assertEquals(214000L, data.tracks[0].duration)
+        assertEquals("Glacier Sessions", data.tracks[0].albumTitle.orNull())
+        assertEquals(4L, data.tracks[0].musicianId.orNull())
+        assertEquals("Aurora Pines", data.tracks[0].musicianName.orNull())
+        assertNull(data.tracks[1].albumId.orNull())
+        assertNull(data.tracks[1].albumCover.orNull())
+        assertNull(data.tracks[1].musicianName.orNull())
+        assertEquals(1234L, data.total)
+        assertEquals(50L, data.offset)
+        assertEquals(50L, data.limit)
+        assertTrue(data.hasMore)
+    }
+
+    /** `GET /music/tracks/shuffle`: the same rows as the track list, no paging counts at all. */
+    @Test
+    fun decodesShuffleTracksEnvelope() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "tracks": [
+                  {
+                    "id": 42, "title": "Example Track", "duration": 213000,
+                    "codec": "flac", "bit_rate": 921600,
+                    "album_id": {"Int64": 7, "Valid": true},
+                    "album_title": {"String": "Example Album", "Valid": true},
+                    "album_cover": {"String": "/covers/example.jpg", "Valid": true},
+                    "musician_id": {"Int64": 3, "Valid": true},
+                    "musician_name": {"String": "Example Musician", "Valid": true}
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val tracks = json.decodeFromString<ApiEnvelope<ShuffleTracksData>>(body).data!!.tracks
+
+        assertEquals(42L, tracks.single().id)
+        assertEquals("Example Musician", tracks.single().musicianName.orNull())
+    }
+
+    /**
+     * `GET /music/musicians`: page-based like albums. A row has no `sort_name` — the server sorts
+     * by it but does not send it (known-issues.md, instance ten).
+     */
+    @Test
+    fun decodesMusiciansEnvelope() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "musicians": [
+                  {
+                    "id": 4, "name": "Aurora Pines",
+                    "thumb": {"String": "https://i.scdn.co/image/aurora.jpg", "Valid": true},
+                    "album_count": 3, "track_count": 40
+                  },
+                  {
+                    "id": 5, "name": "Untagged",
+                    "thumb": {"String": "", "Valid": false},
+                    "album_count": 0, "track_count": 2
+                  }
+                ],
+                "total": 60, "page": 1, "per_page": 48, "total_pages": 2
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<MusiciansData>>(body).data!!
+
+        assertEquals(listOf("Aurora Pines", "Untagged"), data.musicians.map { it.name })
+        assertEquals("https://i.scdn.co/image/aurora.jpg", data.musicians[0].thumb.orNull())
+        assertNull(data.musicians[1].thumb.orNull())
+        assertEquals(3L, data.musicians[0].albumCount)
+        assertEquals(40L, data.musicians[0].trackCount)
+        assertEquals(60L, data.total)
+        assertEquals(2L, data.totalPages)
+    }
+
+    /**
+     * `GET /music/musicians/{id}`: the full musician row, a discography with per-album track
+     * counts, and tracks that carry their album but no musician columns. Durations are ms.
+     */
+    @Test
+    fun decodesMusicianDetailsEnvelope() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "musician": {
+                  "id": 4, "name": "Aurora Pines", "sort_name": "aurora pines",
+                  "summary": {"String": "Formed in 2019.", "Valid": true},
+                  "spotify_id": {"String": "artist123", "Valid": true},
+                  "spotify_popularity": {"Float64": 61.5, "Valid": true},
+                  "spotify_followers": {"Int64": 120000, "Valid": true},
+                  "thumb": {"String": "", "Valid": false},
+                  "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z"
+                },
+                "albums": [
+                  {
+                    "id": 211, "title": "Glacier Sessions",
+                    "cover": {"String": "https://i.scdn.co/image/ab67.jpg", "Valid": true},
+                    "year": {"Int64": 2026, "Valid": true},
+                    "release_date": {"String": "2026-02-13", "Valid": true},
+                    "track_count": 12
+                  }
+                ],
+                "tracks": [
+                  {
+                    "id": 900, "title": "Northern Drift", "duration": 214000,
+                    "codec": "flac", "bit_rate": 900000,
+                    "album_id": {"Int64": 211, "Valid": true},
+                    "album_title": {"String": "Glacier Sessions", "Valid": true},
+                    "album_cover": {"String": "https://i.scdn.co/image/ab67.jpg", "Valid": true}
+                  }
+                ],
+                "genres": ["Ambient", "Electronic"],
+                "total_duration": 214000
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<MusicianDetailsData>>(body).data!!
+
+        assertEquals("Aurora Pines", data.musician.name)
+        assertEquals("Formed in 2019.", data.musician.summary.orNull())
+        assertEquals(61.5, data.musician.spotifyPopularity.orNull())
+        assertEquals(120000L, data.musician.spotifyFollowers.orNull())
+        assertNull(data.musician.thumb.orNull())
+        assertEquals(12L, data.albums.single().trackCount)
+        assertEquals("2026-02-13", data.albums.single().releaseDate.orNull())
+        assertEquals(214000L, data.tracks.single().duration)
+        assertEquals(211L, data.tracks.single().albumId.orNull())
+        assertEquals(listOf("Ambient", "Electronic"), data.genres)
+        assertEquals(214000.0, data.totalDuration, 0.0)
+    }
+
+    /** `GET /music/tracks/liked-ids`, `POST /music/tracks/{id}/like`, `GET /music/stats`. */
+    @Test
+    fun decodesTrackLikeAndStatsEnvelopes() {
+        val liked = json.decodeFromString<ApiEnvelope<LikedTrackIdsData>>(
+            """{"error":false,"data":{"liked_track_ids":[3,5,900]}}""",
+        ).data!!
+        val toggle = json.decodeFromString<ApiEnvelope<TrackLikeToggleData>>(
+            """{"error":false,"data":{"track_id":900,"is_liked":false}}""",
+        ).data!!
+        val stats = json.decodeFromString<ApiEnvelope<MusicStats>>(
+            """{"error":false,"data":{"total_albums":12,"total_tracks":150,"total_musicians":9}}""",
+        ).data!!
+
+        assertEquals(listOf(3L, 5L, 900L), liked.likedTrackIds)
+        assertEquals(900L, toggle.trackId)
+        assertFalse(toggle.isLiked)
+        assertEquals(12L, stats.totalAlbums)
+        assertEquals(150L, stats.totalTracks)
+        assertEquals(9L, stats.totalMusicians)
+    }
+
     // The models below were generated from an older openapi.json and kept fields the contract has
     // since dropped or moved. Each payload carries exactly the current schema's required keys and
     // nothing else, so a future spec sync that drops a field fails here instead of shipping.
