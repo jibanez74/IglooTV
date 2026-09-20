@@ -2,7 +2,6 @@ package com.igloo.blindpenguincoder.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class MoviePlaylist(
@@ -31,9 +30,9 @@ data class MoviePlaylistSummary(
     @SerialName("content_type") val contentType: String,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,
-    @SerialName("movie_count") val movieCount: Long? = null,
-    @SerialName("is_owner") val isOwner: Boolean? = null,
-    @SerialName("can_edit") val canEdit: Boolean? = null,
+    @SerialName("movie_count") val movieCount: Long,
+    @SerialName("is_owner") val isOwner: Boolean,
+    @SerialName("can_edit") val canEdit: Boolean,
 )
 
 @Serializable
@@ -64,14 +63,14 @@ data class MoviePlaylistsData(
     val playlists: List<MoviePlaylistSummary>,
 )
 
-/** Payload of `MoviePlaylistDetailEnvelope.data`. Collaborator items are untyped in the spec. */
+/** Payload of `MoviePlaylistDetailEnvelope.data`. */
 @Serializable
 data class MoviePlaylistDetailData(
     val playlist: MoviePlaylist,
     @SerialName("movie_count") val movieCount: Long,
     @SerialName("is_owner") val isOwner: Boolean,
     @SerialName("can_edit") val canEdit: Boolean,
-    val collaborators: List<JsonElement>?,
+    val collaborators: List<PlaylistCollaborator>?,
 )
 
 /** Payload of `MoviePlaylistMutationEnvelope.data`. */

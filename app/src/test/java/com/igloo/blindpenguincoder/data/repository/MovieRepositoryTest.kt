@@ -420,7 +420,7 @@ class MovieRepositoryTest {
         val http = TestHttp {
             request = it
             jsonResponse(
-                continueWatchingMoviesJson(
+                continueWatchingJson(
                     continueWatchingMovieJson(
                         id = 5,
                         title = "Heat",
@@ -435,7 +435,7 @@ class MovieRepositoryTest {
         val result = http.movieRepository.continueWatchingMovies()
 
         val captured = requireNotNull(request)
-        assertEquals("/api/movies/continue-watching", captured.url.encodedPath)
+        assertEquals("/api/continue-watching", captured.url.encodedPath)
         assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
         val movie = (result as ApiResult.Success).value.single()
         assertEquals(5L, movie.id)
@@ -447,8 +447,27 @@ class MovieRepositoryTest {
     }
 
     @Test
+    fun `continue watching keeps the server order and drops episode entries`() = runTest {
+        val http = TestHttp {
+            jsonResponse(
+                continueWatchingJson(
+                    continueWatchingEpisodeJson(id = 900),
+                    continueWatchingMovieJson(id = 5, title = "Heat"),
+                    continueWatchingMovieJson(id = 2, title = "Arrival"),
+                ),
+            )
+        }
+
+        val result = http.movieRepository.continueWatchingMovies()
+
+        val items = (result as ApiResult.Success).value
+        assertEquals(listOf("Heat", "Arrival"), items.map { it.title })
+        assertTrue(items.all { it.isMovie })
+    }
+
+    @Test
     fun `nothing in progress is a success with no movies`() = runTest {
-        val http = TestHttp { jsonResponse(continueWatchingMoviesJson()) }
+        val http = TestHttp { jsonResponse(continueWatchingJson()) }
 
         val result = http.movieRepository.continueWatchingMovies()
 

@@ -236,8 +236,6 @@ private fun testAudioStream(
     language = SqlNullString(language, valid = true),
     title = null,
     isDefault = isDefault,
-    createdAt = "2026-01-01 00:00:00",
-    updatedAt = "2026-01-01 00:00:00",
 )
 
 private fun testSubtitle(
@@ -253,8 +251,6 @@ private fun testSubtitle(
     title = null,
     isForced = false,
     isDefault = false,
-    createdAt = "2026-01-01 00:00:00",
-    updatedAt = "2026-01-01 00:00:00",
 )
 
 /** Image-less again: every artwork path falls back to a glyph, so nothing hits the network. */

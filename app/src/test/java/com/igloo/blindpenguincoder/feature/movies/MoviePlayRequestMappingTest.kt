@@ -4,6 +4,7 @@ import com.igloo.blindpenguincoder.data.model.AudioStream
 import com.igloo.blindpenguincoder.data.model.Chapter
 import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
+import com.igloo.blindpenguincoder.data.model.MovieTechnicalFile
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
@@ -12,7 +13,6 @@ import com.igloo.blindpenguincoder.data.model.Subtitle
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
-import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -22,9 +22,9 @@ class MoviePlayRequestMappingTest {
     @Test
     fun `carries the movie identity and the selected mode`() {
         val request = buildMoviePlayRequest(
-            movie = movie(id = 7, title = "Heat", mimeType = "video/x-matroska"),
+            movie = movie(id = 7, title = "Heat"),
             posterUrl = "https://server/api/tmdb/images/w500/heat.jpg",
-            technical = technical(),
+            technical = technical(mimeType = "video/x-matroska"),
             progress = null,
             selection = PlaybackSelection(mode = PlaybackMode.Direct),
         )
@@ -133,11 +133,11 @@ class MoviePlayRequestMappingTest {
     }
 
     @Test
-    fun `missing technical details start with container defaults and no codec claims`() {
+    fun `a file with no probed streams starts with container defaults and no codec claims`() {
         val request = buildMoviePlayRequest(
             movie = movie(),
             posterUrl = null,
-            technical = null,
+            technical = technical(audio = emptyList()),
             progress = null,
             selection = PlaybackSelection(),
         )
@@ -241,24 +241,15 @@ class MoviePlayRequestMappingTest {
     }
 
     @Test
-    fun `no technical details or no chapters means an empty chapter list`() {
-        val withoutTechnical = buildMoviePlayRequest(
+    fun `no chapters means an empty chapter list`() {
+        val request = buildMoviePlayRequest(
             movie = movie(),
             posterUrl = null,
-            technical = null,
+            technical = technical(chapters = emptyList()),
             progress = null,
             selection = PlaybackSelection(),
         )
-        assertEquals(emptyList<PlaybackChapter>(), withoutTechnical.chapters)
-
-        val withoutChapters = buildMoviePlayRequest(
-            movie = movie(),
-            posterUrl = null,
-            technical = technical(),
-            progress = null,
-            selection = PlaybackSelection(),
-        )
-        assertEquals(emptyList<PlaybackChapter>(), withoutChapters.chapters)
+        assertEquals(emptyList<PlaybackChapter>(), request.chapters)
     }
 
     @Test
@@ -331,28 +322,21 @@ class MoviePlayRequestMappingTest {
     private fun movie(
         id: Long = 1,
         title: String = "Heat",
-        mimeType: String = "video/x-matroska",
         durationSec: Double? = null,
     ) = Movie(
         id = id,
         title = title,
-        filePath = "/media/heat.mkv",
-        fileName = "heat.mkv",
-        size = 4_000_000_000,
-        container = "mkv",
-        mimeType = mimeType,
         adult = false,
         duration = durationSec?.let { SqlNullFloat64(it, valid = true) },
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
     )
 
     private fun technical(
+        mimeType: String = "video/x-matroska",
         audio: List<AudioStream> = listOf(audioStream(id = 1, streamIndex = 1, isDefault = true)),
         subtitles: List<Subtitle> = emptyList(),
         chapters: List<Chapter> = emptyList(),
     ) = MovieTechnicalDetailsData(
-        movie = JsonObject(emptyMap()),
+        movie = MovieTechnicalFile(mimeType = mimeType),
         videoStreams = emptyList(),
         audioStreams = audio,
         subtitles = subtitles,
@@ -385,8 +369,6 @@ class MoviePlayRequestMappingTest {
         channelLayout = channelLayout?.let { SqlNullString(it, valid = true) },
         language = language?.let { SqlNullString(it, valid = true) },
         isDefault = isDefault,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
     )
 
     private fun subtitle(
@@ -401,8 +383,6 @@ class MoviePlayRequestMappingTest {
         language = SqlNullString("eng", valid = true),
         isForced = false,
         isDefault = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
     )
 
     private fun progress(progressSec: Double?, durationSec: Double?) = MovieWatchProgress(

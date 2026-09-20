@@ -32,11 +32,21 @@ copies of both are non-nullable. Worth noting because it is the first instance t
 decode at all rather than being absorbed by `ignoreUnknownKeys`.
 
 Most of these models have no call sites, so drift stays invisible until someone wires up the
-endpoint and it fails at runtime. Of 143 declared types, **29** are referenced in production, 17
-only by the serialization test, and **97 nowhere at all** — so roughly two thirds of the wire
-surface is unexercised. The doc used to name `MoviePlaylist*`, `Notification*` and the settings
-models; the dead set also covers every admin-user, watch-room, search, Spotify/TMDB and
-user-stats model.
+endpoint and it fails at runtime. Roughly two thirds of the wire surface is unexercised: every
+playlist, notification, admin-user, watch-room, search, settings, Spotify/TMDB and user-stats
+model exists only in `data/model/` and the serialization test. They were brought back in line
+with the spec on 2026-09-20, but nothing keeps them there.
+
+Spec schemas with **no model at all**, as of that sweep: every `Show*` schema and
+`/api/shows/*` route, `ShowSearchSection` (so `SearchAllData` leaves `shows` to
+`ignoreUnknownKeys`), `ContinueWatchingEpisodeItem`'s episode keys (`show_id`, `season_number`,
+`episode_number`, `episode_name`; the Home rail drops `kind: episode` entries until an episode
+has a screen to open), the scan-status routes (`MovieScanStatusData`, `MusicScanStatusData`,
+`ShowScanStatusData`, `ScanIssue`), the devices list (`Device`, `DevicesListData`,
+`RenameDeviceRequest`, `QuickConnectLookupData`, `QuickConnectApproveRequest`), the user
+profile updates (`UpdateUserPinRequest`, `UpdateUserNameRequest`, `UpdateUserEmailRequest`,
+`UpdateUserPasswordRequest`, `UpdateUserAvatarRequest`), `LoginRequest` and
+`WatchRoomClientEvent`.
 
 ### What the fix looks like
 
@@ -52,9 +62,9 @@ by hand:
   `sourceSets` or `testOptions` block and `app/src/test/` has no `resources/` directory, so the
   check needs a `sourceSets["test"].resources.srcDir(...)` entry pointing at `docs/` (or a copy
   task). Reading it via a relative `File(...)` path would depend on Gradle's working directory.
-- **`allOf` has to be flattened.** Every `*Envelope`, plus `MoviePlaylistSummary`,
-  `MovieLibraryItem`, `ContinueWatchingMovie` and `AdminUser`, composes with `allOf` and has an
-  empty top-level `properties`. A naive walk reports every one of their fields as missing.
+- **`allOf` has to be flattened.** Every `*Envelope` and `AdminUser` compose with `allOf` and
+  have an empty top-level `properties`; `ContinueWatchingItem` is a discriminated `oneOf`. A
+  naive walk reports every one of their fields as missing.
 - **OpenAPI 3.1 type unions have to be understood.** `"type": ["string", "null"]` is exactly the
   shape the `AuthUser.avatar` bug hid in, so a checker that reads `type` as a string misses the
   whole class of bug it exists to catch.
@@ -74,26 +84,36 @@ by hand:
   `GetMusiciansAlphabeticalRow` in the main repository) rather than a populated live response,
   because the local dev library is empty and the tailnet server needs its own credentials; the
   same sync also typed `MusicianDetailsData`'s three `JsonObject` fields, now modelled.
+- **The same sync broke the two movie screens a day later.** Instances eleven to fourteen,
+  found 2026-09-19/20 on Home and movie details, all from `b8dc4c2` as well: `Movie` lost its
+  seven file columns (`file_path`, `file_name`, `size`, `container`, `mime_type`, `created_at`,
+  `updated_at`), so `GET /movies/details/{id}` failed to decode and playback lost its mime type
+  (now read from the typed `MovieTechnicalFile` on the technical-details route);
+  `VideoStream`/`AudioStream`/`Subtitle` lost `created_at`/`updated_at`;
+  `GET /movies/continue-watching` moved to `GET /continue-watching` with a `kind`-discriminated
+  movie/episode item under `data.items`; and the uncalled `PlaybackSettings` kept a required
+  `is_admin` the schema dropped. The five `MovieDetailsData` lists are typed in the spec since
+  this sync too. Every model in `data/model/`, called or not, was re-checked against the spec
+  on 2026-09-20; the ones below are the only deliberate gaps.
 
 ### Related, smaller
 
-- `MoviePlaylistSummary` duplicates **ten** fields from `MoviePlaylist` instead of composing it,
-  which is why both copies carried the stale `folder_id` and drifted identically. The same
-  flatten-instead-of-compose shape appears in three more models the spec composes with `allOf`:
-  `MovieLibraryItem` and `ContinueWatchingMovie` both restate `LatestMovie`, and `AdminUser`
-  restates `AuthUser` where the schema is literally `allOf: [$ref AuthUser]`. Worth collapsing —
-  and note this is the *cause* of two of the three omissions below, not a separate problem.
-- `TheaterMovie` (7 fields), `AdminUser` (`has_pin`), and `DeviceTokenData` (`device`) each omit
-  response fields their schema marks required. Harmless under `ignoreUnknownKeys = true` and left
-  alone deliberately — recorded so the next sweep does not re-flag them as new. Confirmed still
-  the case on 2026-08-14, with nothing new in that category.
-- `UpdatePlaybackSettingsData.settings` is typed `UpdatedPlaybackSettings` where the schema says
-  `UpdatePlaybackSettings`. The fields match exactly; only the Kotlin class name differs. Not a
-  bug, but it will trip any check that matches models to schemas by name.
-- The five `MovieDetailsData` lists (`cast`, `crew`, `genres`, `production_companies`,
-  `extra_videos`) are `additionalProperties: true` in the spec — genuinely untyped, not drifted.
-  They were typed on 2026-08-15 against live responses instead; a spec-driven check has nothing
-  to compare them to and should skip rather than flag them.
+- `MoviePlaylistSummary` and `PlaylistSummary` each duplicate **ten** fields from their playlist
+  row instead of composing it, which is why both movie copies carried the stale `folder_id` and
+  drifted identically. Since the spec now spells all four out as flat objects this is a Kotlin
+  choice rather than drift; `AdminUser` was the one true `allOf: [$ref AuthUser]` and now reuses
+  `AuthUser` directly.
+- `TheaterMovie` (7 fields), `TmdbMovie` and its nested genre/company/crew/video items,
+  `MovieTechnicalFile` (5 fields), `MovieLibraryItem` (`certification`), `MoviesLibraryData`
+  (`page`, `per_page`, `sort`), `AlbumTrack` (`mime_type`), `DeviceTokenData` and
+  `QuickConnectRedeemData` (`device`) each omit response fields their schema marks required.
+  Harmless under `ignoreUnknownKeys = true` and left alone deliberately — recorded so the next
+  sweep does not re-flag them as new. Confirmed still the case on 2026-09-20.
+- Some Kotlin class names lag the spec's: `MovieWatchProgress`/`UpdateMovieWatchProgressRequest`/
+  `SetMovieWatchedRequest` for `WatchProgress`/`UpdateWatchProgressRequest`/`SetWatchedRequest`,
+  `MovieCastMember`/`MovieCrewMember`/`MovieExtraVideo` for `MovieCastCredit`/`MovieCrewCredit`/
+  `ExtraVideo`, `TrackGenre` for `AlbumTrackGenre`. The fields match exactly; only the names
+  differ. Not a bug, but it will trip any check that matches models to schemas by name.
 
 ---
 

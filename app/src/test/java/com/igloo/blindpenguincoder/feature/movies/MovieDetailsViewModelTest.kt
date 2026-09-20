@@ -400,7 +400,6 @@ class MovieDetailsViewModelTest {
                         cast = (12 downTo 1).map {
                             castMemberJson(
                                 id = it.toLong(),
-                                artistId = it.toLong(),
                                 castOrder = it.toLong(),
                                 artistName = "Actor $it",
                             )
@@ -1509,7 +1508,6 @@ class MovieDetailsViewModelTest {
                 // Wire order is not cast order: the mapper must sort.
                 castMemberJson(
                     id = 2,
-                    artistId = 2,
                     castOrder = 1,
                     artistName = "Robert De Niro",
                     character = "Neil McCauley",
@@ -1517,7 +1515,6 @@ class MovieDetailsViewModelTest {
                 ),
                 castMemberJson(
                     id = 1,
-                    artistId = 1,
                     castOrder = 0,
                     artistName = "Al Pacino",
                     character = "Vincent Hanna",

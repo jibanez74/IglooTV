@@ -84,46 +84,22 @@ data class PlaybackProfile(
     @SerialName("video_mbps") val videoMbps: Int,
 )
 
+/** Server-wide playback settings; both admin-only, which is why they are not on the general routes. */
 @Serializable
 data class PlaybackSettings(
     val profiles: List<PlaybackProfile>,
-    @SerialName("preferred_profile") val preferredProfile: String?,
-    @SerialName("download_mbps") val downloadMbps: Double?,
     @SerialName("server_upload_mbps") val serverUploadMbps: Double?,
     @SerialName("hardware_acceleration_device") val hardwareAccelerationDevice: HardwareAccelerationDevice,
-    @SerialName("is_admin") val isAdmin: Boolean,
-    @SerialName("preferred_audio_language") val preferredAudioLanguage: String?,
-    @SerialName("preferred_subtitle_language") val preferredSubtitleLanguage: String?,
 )
 
 @Serializable
 data class UpdatePlaybackSettingsRequest(
-    @SerialName("preferred_profile") val preferredProfile: String? = null,
-    @SerialName("download_mbps") val downloadMbps: Double? = null,
-    @SerialName("preferred_audio_language") val preferredAudioLanguage: String? = null,
-    @SerialName("preferred_subtitle_language") val preferredSubtitleLanguage: String? = null,
     @SerialName("server_upload_mbps") val serverUploadMbps: Double? = null,
-    // Admin-only. Lives here rather than on the general settings routes, as does server_upload_mbps.
     @SerialName("hardware_acceleration_device") val hardwareAccelerationDevice: HardwareAccelerationDevice? = null,
 )
 
-/** Playback settings as returned after an update. */
-@Serializable
-data class UpdatedPlaybackSettings(
-    @SerialName("preferred_profile") val preferredProfile: String?,
-    @SerialName("download_mbps") val downloadMbps: Double?,
-    @SerialName("preferred_audio_language") val preferredAudioLanguage: String?,
-    @SerialName("preferred_subtitle_language") val preferredSubtitleLanguage: String?,
-)
-
-/** Payload of `PlaybackSettingsEnvelope.data`. */
+/** Payload of `PlaybackSettingsEnvelope.data`, returned by both the read and the update. */
 @Serializable
 data class PlaybackSettingsData(
     val settings: PlaybackSettings,
-)
-
-/** Payload of `UpdatePlaybackSettingsEnvelope.data`. */
-@Serializable
-data class UpdatePlaybackSettingsData(
-    val settings: UpdatedPlaybackSettings,
 )

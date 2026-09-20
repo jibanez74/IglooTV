@@ -2,8 +2,9 @@ package com.igloo.blindpenguincoder.feature.home
 
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.repository.TestHttp
+import com.igloo.blindpenguincoder.data.repository.continueWatchingEpisodeJson
 import com.igloo.blindpenguincoder.data.repository.continueWatchingMovieJson
-import com.igloo.blindpenguincoder.data.repository.continueWatchingMoviesJson
+import com.igloo.blindpenguincoder.data.repository.continueWatchingJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.latestAlbumsJson
 import com.igloo.blindpenguincoder.data.repository.latestMovieJson
@@ -55,7 +56,7 @@ class HomeViewModelTest {
     private fun routedHttp(
         engineDispatcher: CoroutineDispatcher? = null,
         continueWatching: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(continueWatchingMoviesJson()) },
+            { jsonResponse(continueWatchingJson()) },
         latest: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(latestMoviesJson()) },
         details: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
@@ -67,7 +68,7 @@ class HomeViewModelTest {
     ) = TestHttp(engineDispatcher) { request ->
         val path = request.url.encodedPath
         when {
-            path == "/api/movies/continue-watching" -> continueWatching(request)
+            path == "/api/continue-watching" -> continueWatching(request)
             path == "/api/music/albums/latest" -> albums(request)
             path == "/api/tmdb/movies/in-theaters" -> theaters(request)
             // Before the catch-all: the details call must never silently get a latest-shaped body.
@@ -119,7 +120,7 @@ class HomeViewModelTest {
     fun `nothing loads until the host asks for it`() = runTest {
         var requests = 0
         val http = routedHttp(
-            continueWatching = { requests++; jsonResponse(continueWatchingMoviesJson()) },
+            continueWatching = { requests++; jsonResponse(continueWatchingJson()) },
             latest = { requests++; jsonResponse(latestMoviesJson()) },
             albums = { requests++; jsonResponse(latestAlbumsJson()) },
             theaters = { requests++; jsonResponse(theaterMoviesJson()) },
@@ -299,7 +300,7 @@ class HomeViewModelTest {
                     releaseRefresh.await()
                 }
                 jsonResponse(
-                    continueWatchingMoviesJson(
+                    continueWatchingJson(
                         continueWatchingMovieJson(
                             id = if (continueRequests == 1) 1 else 2,
                             title = if (continueRequests == 1) "Heat" else "Arrival",
@@ -378,7 +379,7 @@ class HomeViewModelTest {
         val http = routedHttp(
             continueWatching = {
                 jsonResponse(
-                    continueWatchingMoviesJson(
+                    continueWatchingJson(
                         continueWatchingMovieJson(
                             id = 1,
                             title = "Heat",
@@ -416,7 +417,7 @@ class HomeViewModelTest {
         val http = routedHttp(
             continueWatching = {
                 jsonResponse(
-                    continueWatchingMoviesJson(
+                    continueWatchingJson(
                         continueWatchingMovieJson(id = 1, progressSec = 7300.0, durationSec = 7200.0),
                         continueWatchingMovieJson(id = 2, progressSec = 60.0, durationSec = 0.0),
                     ),
@@ -431,6 +432,24 @@ class HomeViewModelTest {
         assertEquals("Less than 1 minute remaining", overshot.progressDescription)
         assertEquals(0f, zeroDuration.progressFraction, 0f)
         assertEquals("In progress", zeroDuration.progressDescription)
+    }
+
+    @Test
+    fun `an in-progress episode never becomes a card`() = runTest {
+        val http = routedHttp(
+            continueWatching = {
+                jsonResponse(
+                    continueWatchingJson(
+                        continueWatchingEpisodeJson(id = 900, showTitle = "Severance"),
+                        continueWatchingMovieJson(id = 1, title = "Heat"),
+                    ),
+                )
+            },
+        )
+
+        val state = viewModel(http).awaitContinue()
+
+        assertEquals(listOf("Heat"), state.items.map { it.movie.title })
     }
 
     @Test
@@ -682,7 +701,7 @@ class HomeViewModelTest {
                     jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
                 } else {
                     gate.await()
-                    jsonResponse(continueWatchingMoviesJson(continueWatchingMovieJson(id = 3, title = "Ran")))
+                    jsonResponse(continueWatchingJson(continueWatchingMovieJson(id = 3, title = "Ran")))
                 }
             },
             latest = {

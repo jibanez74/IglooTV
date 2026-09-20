@@ -6,8 +6,8 @@ import com.igloo.blindpenguincoder.core.network.safeApiCall
 import com.igloo.blindpenguincoder.core.network.toTransportError
 import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.model.ApiEnvelope
-import com.igloo.blindpenguincoder.data.model.ContinueWatchingMovie
-import com.igloo.blindpenguincoder.data.model.ContinueWatchingMoviesData
+import com.igloo.blindpenguincoder.data.model.ContinueWatchingData
+import com.igloo.blindpenguincoder.data.model.ContinueWatchingItem
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.LatestMoviesData
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
@@ -100,11 +100,17 @@ class MovieRepository(
         },
     )
 
-    suspend fun continueWatchingMovies(): ApiResult<List<ContinueWatchingMovie>> = safeApiCall(
-        request = { api.continueWatchingMovies() },
+    /**
+     * The movies in progress, in the server's order. The row also carries TV episodes; the
+     * client has no shows screens yet, so those are dropped rather than rendered as dead-end
+     * cards.
+     */
+    suspend fun continueWatchingMovies(): ApiResult<List<ContinueWatchingItem>> = safeApiCall(
+        request = { api.continueWatching() },
         decode = { response ->
-            response.body<ApiEnvelope<ContinueWatchingMoviesData>>().data?.movies
-                ?: error("Missing movies in continue watching response")
+            val items = response.body<ApiEnvelope<ContinueWatchingData>>().data?.items
+                ?: error("Missing items in continue watching response")
+            items.filter { it.isMovie }
         },
     )
 

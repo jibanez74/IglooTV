@@ -2,7 +2,6 @@ package com.igloo.blindpenguincoder.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class SimpleAlbum(
@@ -204,10 +203,39 @@ data class ShuffleTracksData(
     val tracks: List<TrackListItem>,
 )
 
-/** Payload of `TrackDetailsEnvelope.data`. The full track shape is untyped in the spec. */
+/** The full stored track row (`Track`); `channels` is a string on the wire. */
+@Serializable
+data class Track(
+    val id: Long,
+    val title: String,
+    @SerialName("sort_title") val sortTitle: String,
+    @SerialName("file_name") val fileName: String,
+    val container: String,
+    @SerialName("mime_type") val mimeType: String,
+    val codec: String,
+    val size: Long,
+    @SerialName("track_index") val trackIndex: Long,
+    val duration: Long,
+    val disc: Long,
+    val channels: String,
+    @SerialName("channel_layout") val channelLayout: String,
+    @SerialName("bit_rate") val bitRate: Long,
+    val profile: String,
+    @SerialName("release_date") val releaseDate: SqlNullString,
+    val year: SqlNullInt64,
+    val composer: SqlNullString,
+    val copyright: SqlNullString,
+    val language: SqlNullString,
+    @SerialName("album_id") val albumId: SqlNullInt64,
+    @SerialName("musician_id") val musicianId: SqlNullInt64,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+)
+
+/** Payload of `TrackDetailsEnvelope.data`. */
 @Serializable
 data class TrackDetailsData(
-    val track: JsonObject,
+    val track: Track,
 )
 
 /** Payload of `TrackLikeToggleEnvelope.data`. */

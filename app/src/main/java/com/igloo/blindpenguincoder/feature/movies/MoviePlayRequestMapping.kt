@@ -16,32 +16,32 @@ import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 internal fun buildMoviePlayRequest(
     movie: Movie,
     posterUrl: String?,
-    technical: MovieTechnicalDetailsData?,
+    technical: MovieTechnicalDetailsData,
     progress: MovieWatchProgress?,
     selection: PlaybackSelection,
 ): MoviePlayRequest {
     val settings = playbackSettingsUi(
-        audioStreams = technical?.audioStreams,
-        subtitles = technical?.subtitles,
+        audioStreams = technical.audioStreams,
+        subtitles = technical.subtitles,
         selection = selection,
     )
 
-    val audioStreams = technical?.audioStreams.orEmpty()
+    val audioStreams = technical.audioStreams
     // Sorted here for the same reason the type indexes are: `stream_index` order is the one
     // ordering every consumer shares, and the wire lists are not trusted to arrive sorted.
     val orderedAudio = audioStreams.sortedBy { it.streamIndex }
-    val orderedSubtitles = technical?.subtitles.orEmpty().sortedBy { it.streamIndex }
+    val orderedSubtitles = technical.subtitles.sortedBy { it.streamIndex }
 
     return MoviePlayRequest(
         movieId = movie.id,
         title = movie.title,
         posterUrl = posterUrl,
-        mimeType = movie.mimeType,
+        mimeType = technical.movie.mimeType,
         mode = settings.selectedMode,
         audioTypeIndex = typeIndexOf(settings.selectedAudioId, audioStreams.map { it.id to it.streamIndex }),
         subtitleTypeIndex = typeIndexOf(
             settings.selectedSubtitleId,
-            technical?.subtitles.orEmpty().map { it.id to it.streamIndex },
+            technical.subtitles.map { it.id to it.streamIndex },
         ),
         audioTracks = orderedAudio.mapIndexed { index, stream ->
             PlayableAudioTrack(
@@ -62,7 +62,7 @@ internal fun buildMoviePlayRequest(
         durationSec = progress?.durationSec ?: movie.duration?.orNull(),
         // Sorted here: the player's active-chapter scan and "Chapter N" numbering assume
         // ascending start times, and the wire list is not trusted to arrive sorted.
-        chapters = technical?.chapters.orEmpty()
+        chapters = technical.chapters
             .sortedBy { it.startTime }
             .map { PlaybackChapter(title = it.title, startTimeSec = it.startTime.toDouble()) },
     )

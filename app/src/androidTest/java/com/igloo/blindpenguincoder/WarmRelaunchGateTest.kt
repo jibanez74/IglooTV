@@ -153,7 +153,7 @@ class WarmRelaunchGateTest {
 
 /** The four home rails, whose loads are the visible symptom of a shell composing too early. */
 private val RAILS = listOf(
-    "/movies/continue-watching",
+    "/continue-watching",
     "/movies/latest",
     "/music/albums/latest",
     "/tmdb/movies/in-theaters",

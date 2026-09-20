@@ -2,7 +2,6 @@ package com.igloo.blindpenguincoder.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class LatestMovie(
@@ -41,21 +40,35 @@ data class LatestMoviesData(
     val movies: List<LatestMovie>,
 )
 
-/** LatestMovie plus watch progress; items of `GET /movies/continue-watching`. */
+/**
+ * One entry of `GET /continue-watching`, a movie or a TV episode told apart by [kind]. The spec
+ * models it as a discriminated `oneOf`; it is decoded flat here because only the fields both
+ * kinds share are rendered, and a polymorphic decoder would need an experimental serializer
+ * for no gain. An episode's extra keys (`show_id`, `season_number`, `episode_number`,
+ * `episode_name`) are left to `ignoreUnknownKeys`.
+ */
 @Serializable
-data class ContinueWatchingMovie(
+data class ContinueWatchingItem(
+    val kind: String,
     val id: Long,
     val title: String,
     @SerialName("poster_path") val posterPath: SqlNullString,
     val year: SqlNullInt64,
     @SerialName("progress_sec") val progressSec: Double,
     @SerialName("duration_sec") val durationSec: Double,
-)
+) {
+    val isMovie: Boolean get() = kind == KIND_MOVIE
 
-/** Payload of `ContinueWatchingMoviesEnvelope.data`. */
+    companion object {
+        const val KIND_MOVIE = "movie"
+        const val KIND_EPISODE = "episode"
+    }
+}
+
+/** Payload of `ContinueWatchingEnvelope.data`. */
 @Serializable
-data class ContinueWatchingMoviesData(
-    val movies: List<ContinueWatchingMovie>,
+data class ContinueWatchingData(
+    val items: List<ContinueWatchingItem>,
 )
 
 /** Payload of `MoviesStatsEnvelope.data`. */
@@ -94,11 +107,6 @@ data class MovieGenresData(
 data class Movie(
     val id: Long,
     val title: String,
-    @SerialName("file_path") val filePath: String,
-    @SerialName("file_name") val fileName: String,
-    val size: Long,
-    val container: String,
-    @SerialName("mime_type") val mimeType: String,
     val adult: Boolean,
     @SerialName("tmdb_id") val tmdbId: SqlNullInt64? = null,
     @SerialName("imdb_id") val imdbId: SqlNullString? = null,
@@ -116,15 +124,9 @@ data class Movie(
     val budget: SqlNullFloat64? = null,
     @SerialName("run_time") val runTime: SqlNullInt64? = null,
     val duration: SqlNullFloat64? = null,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("updated_at") val updatedAt: String,
 )
 
-/**
- * Payload of `MovieDetailsEnvelope.data`. The spec leaves the five list item shapes untyped
- * (`additionalProperties: true`), so these models were pinned against live server responses;
- * `ignoreUnknownKeys` absorbs any fields the backend grows later.
- */
+/** Payload of `MovieDetailsEnvelope.data`. */
 @Serializable
 data class MovieDetailsData(
     val movie: Movie,
@@ -138,8 +140,6 @@ data class MovieDetailsData(
 @Serializable
 data class MovieCastMember(
     val id: Long,
-    @SerialName("movie_id") val movieId: Long,
-    @SerialName("artist_id") val artistId: Long,
     val character: String,
     @SerialName("cast_order") val castOrder: Long,
     @SerialName("artist_name") val artistName: String,
@@ -149,12 +149,9 @@ data class MovieCastMember(
 @Serializable
 data class MovieCrewMember(
     val id: Long,
-    @SerialName("movie_id") val movieId: Long,
-    @SerialName("artist_id") val artistId: Long,
     val job: String,
     val department: String,
     @SerialName("artist_name") val artistName: String,
-    @SerialName("artist_profile") val artistProfile: SqlNullString? = null,
 )
 
 @Serializable
@@ -167,35 +164,35 @@ data class MovieGenre(
 data class MovieProductionCompany(
     val id: Long,
     val name: String,
-    @SerialName("tmdb_id") val tmdbId: Long,
-    val logo: SqlNullString? = null,
-    val country: SqlNullString? = null,
 )
 
 @Serializable
 data class MovieExtraVideo(
     val id: Long,
     val title: String,
-    @SerialName("external_id") val externalId: SqlNullString? = null,
     val key: String,
     val type: String,
     val site: String,
-    val official: Boolean,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("updated_at") val updatedAt: String,
 )
 
-/**
- * Payload of `MovieTechnicalDetailsEnvelope.data`. The stream and chapter schemas are typed in
- * the spec (`VideoStream`, `AudioStream`, `Subtitle`, `Chapter`); only `movie` is left untyped.
- */
+/** Payload of `MovieTechnicalDetailsEnvelope.data`. */
 @Serializable
 data class MovieTechnicalDetailsData(
-    val movie: JsonObject,
+    val movie: MovieTechnicalFile,
     @SerialName("video_streams") val videoStreams: List<VideoStream>,
     @SerialName("audio_streams") val audioStreams: List<AudioStream>,
     val subtitles: List<Subtitle>,
     val chapters: List<Chapter>,
+)
+
+/**
+ * The playback-relevant subset of the movie file (`MovieTechnicalFile`). Only the container media
+ * type is read — the direct-play `MediaItem` hint; `file_name`, `size`, `container`, `run_time`
+ * and `duration` are left to `ignoreUnknownKeys` because nothing renders them.
+ */
+@Serializable
+data class MovieTechnicalFile(
+    @SerialName("mime_type") val mimeType: String,
 )
 
 @Serializable
@@ -224,8 +221,6 @@ data class VideoStream(
     val rotation: SqlNullInt64? = null,
     val language: SqlNullString? = null,
     val title: SqlNullString? = null,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("updated_at") val updatedAt: String,
 )
 
 @Serializable
@@ -242,8 +237,6 @@ data class AudioStream(
     val language: SqlNullString? = null,
     val title: SqlNullString? = null,
     @SerialName("is_default") val isDefault: Boolean,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("updated_at") val updatedAt: String,
 )
 
 @Serializable
@@ -256,15 +249,11 @@ data class Subtitle(
     val title: SqlNullString? = null,
     @SerialName("is_forced") val isForced: Boolean,
     @SerialName("is_default") val isDefault: Boolean,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("updated_at") val updatedAt: String,
 )
 
 /**
- * `movie_id` is deliberately not modelled: the spec declares it a `SqlNullInt64` object but the
- * server sends a plain number, and decoding the whole technical-details payload fails on that
- * mismatch. Nothing needs it — the caller already knows which movie it asked about — so the
- * field is left to `ignoreUnknownKeys`, which also makes this tolerant of either shape.
+ * `movie_id` is left to `ignoreUnknownKeys`: the caller already knows which movie it asked
+ * about, so nothing needs it.
  */
 @Serializable
 data class Chapter(
@@ -290,7 +279,7 @@ data class SetMovieWatchedRequest(
     val watched: Boolean,
 )
 
-/** Payload of `MovieWatchProgressEnvelope.data`. */
+/** Payload of `WatchProgressEnvelope.data`. */
 @Serializable
 data class MovieWatchProgress(
     @SerialName("progress_sec") val progressSec: Double?,
@@ -299,7 +288,7 @@ data class MovieWatchProgress(
     @SerialName("updated_at") val updatedAt: String?,
 )
 
-/** Payload of `MovieWatchProgressUpdateEnvelope.data`. */
+/** Payload of `WatchProgressUpdateEnvelope.data`. */
 @Serializable
 data class MovieWatchProgressUpdateData(
     val watched: Boolean,

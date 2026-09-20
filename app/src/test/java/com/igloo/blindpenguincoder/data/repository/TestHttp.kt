@@ -191,7 +191,7 @@ fun movieGenreWithCountJson(
 fun moviesGenresJson(vararg genres: String): String =
     """{"error":false,"message":"movie genres","data":{"genres":[${genres.joinToString(",")}]}}"""
 
-/** One `GET /movies/continue-watching` list entry: the latest-movie shape plus progress. */
+/** One `GET /continue-watching` movie entry: the latest-movie shape plus a kind and progress. */
 fun continueWatchingMovieJson(
     id: Long = 1,
     title: String = "Heat",
@@ -201,11 +201,27 @@ fun continueWatchingMovieJson(
     durationSec: Double = 10200.0,
 ): String {
     val movie = latestMovieJson(id, title, posterPath, year)
-    return movie.dropLast(1) + ""","progress_sec":$progressSec,"duration_sec":$durationSec}"""
+    return """{"kind":"movie",""" + movie.drop(1).dropLast(1) +
+        ""","progress_sec":$progressSec,"duration_sec":$durationSec}"""
 }
 
-fun continueWatchingMoviesJson(vararg movies: String): String =
-    """{"error":false,"message":"continue watching","data":{"movies":[${movies.joinToString(",")}]}}"""
+/** One `GET /continue-watching` episode entry; title, poster and year describe the show. */
+fun continueWatchingEpisodeJson(
+    id: Long = 900,
+    showTitle: String = "Severance",
+    showId: Long = 40,
+    seasonNumber: Long = 1,
+    episodeNumber: Long = 3,
+    episodeName: String = "In Perpetuity",
+    progressSec: Double = 600.0,
+    durationSec: Double = 3300.0,
+): String = """{"kind":"episode","id":$id,"title":"$showTitle",""" +
+    """"poster_path":${sqlNullStringJson("/severance.jpg")},"year":${sqlNullInt64Json(2022)},""" +
+    """"progress_sec":$progressSec,"duration_sec":$durationSec,"show_id":$showId,""" +
+    """"season_number":$seasonNumber,"episode_number":$episodeNumber,"episode_name":"$episodeName"}"""
+
+fun continueWatchingJson(vararg items: String): String =
+    """{"error":false,"message":"continue watching","data":{"items":[${items.joinToString(",")}]}}"""
 
 /** One `GET /music/albums/latest` list entry; covers arrive as absolute Spotify URLs. */
 fun simpleAlbumJson(
@@ -513,9 +529,8 @@ private fun jsonArrayOrNull(values: List<String>?): String =
     values?.joinToString(",", prefix = "[", postfix = "]") ?: "null"
 
 /**
- * `GET /movies/details/{id}` payload: the full movie plus its related lists, whose shapes the
- * spec leaves untyped but live responses pin (see the typed models in Movies.kt). The lists
- * default empty; details-screen tests pass populated entries from the builders below.
+ * `GET /movies/details/{id}` payload: the movie plus its related lists. The lists default empty;
+ * details-screen tests pass populated entries from the builders below.
  */
 fun movieDetailsJson(
     id: Long = 1,
@@ -540,8 +555,7 @@ fun movieDetailsJson(
 ): String = """
     {"error":false,"message":"movie details","data":{
       "movie":{
-        "id":$id,"title":"$title","file_path":"/media/heat.mkv","file_name":"heat.mkv",
-        "size":4000000000,"container":"mkv","mime_type":"video/x-matroska","adult":false,
+        "id":$id,"title":"$title","adult":false,
         "poster_path":${sqlNullStringJson(posterPath)},
         "backdrop_path":${sqlNullStringJson(backdropPath)},
         "overview":${sqlNullStringJson(overview)},
@@ -553,8 +567,7 @@ fun movieDetailsJson(
         "run_time":${sqlNullInt64Json(runTimeMinutes)},
         "critic_rating":${sqlNullFloat64Json(criticRating)},
         "budget":${sqlNullFloat64Json(budget)},
-        "revenue":${sqlNullFloat64Json(revenue)},
-        "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
+        "revenue":${sqlNullFloat64Json(revenue)}
       },
       "cast":[${cast.joinToString(",")}],
       "crew":[${crew.joinToString(",")}],
@@ -566,38 +579,26 @@ fun movieDetailsJson(
 
 fun castMemberJson(
     id: Long = 1,
-    movieId: Long = 1,
-    artistId: Long = 100,
     character: String = "Neil McCauley",
     castOrder: Long = 0,
     artistName: String = "Robert De Niro",
     artistProfile: String? = "/deniro.jpg",
-): String = """{"id":$id,"movie_id":$movieId,"artist_id":$artistId,"character":"$character",""" +
-    """"cast_order":$castOrder,"artist_name":"$artistName",""" +
-    """"artist_profile":${sqlNullStringJson(artistProfile)}}"""
+): String = """{"id":$id,"character":"$character","cast_order":$castOrder,""" +
+    """"artist_name":"$artistName","artist_profile":${sqlNullStringJson(artistProfile)}}"""
 
 fun crewMemberJson(
     id: Long = 1,
-    movieId: Long = 1,
-    artistId: Long = 200,
     job: String = "Director",
     department: String = "Directing",
     artistName: String = "Michael Mann",
-    artistProfile: String? = "/mann.jpg",
-): String = """{"id":$id,"movie_id":$movieId,"artist_id":$artistId,"job":"$job",""" +
-    """"department":"$department","artist_name":"$artistName",""" +
-    """"artist_profile":${sqlNullStringJson(artistProfile)}}"""
+): String = """{"id":$id,"job":"$job","department":"$department","artist_name":"$artistName"}"""
 
 fun movieGenreJson(id: Long = 1, tag: String = "Crime"): String = """{"id":$id,"tag":"$tag"}"""
 
 fun productionCompanyJson(
     id: Long = 1,
     name: String = "Regency Enterprises",
-    tmdbId: Long = 508,
-    logo: String? = "/regency.png",
-    country: String? = "US",
-): String = """{"id":$id,"name":"$name","tmdb_id":$tmdbId,"logo":${sqlNullStringJson(logo)},""" +
-    """"country":${sqlNullStringJson(country)}}"""
+): String = """{"id":$id,"name":"$name"}"""
 
 fun extraVideoJson(
     id: Long = 1,
@@ -605,10 +606,7 @@ fun extraVideoJson(
     key: String = "0xbkYZbdIVw",
     type: String = "trailer",
     site: String = "youtube",
-    official: Boolean = true,
-): String = """{"id":$id,"title":"$title","external_id":${sqlNullStringJson("ext-$id")},""" +
-    """"key":"$key","type":"$type","site":"$site","official":$official,""" +
-    """"created_at":"2026-01-01 00:00:00","updated_at":"2026-01-01 00:00:00"}"""
+): String = """{"id":$id,"title":"$title","key":"$key","type":"$type","site":"$site"}"""
 
 fun videoStreamJson(
     id: Long = 1,
@@ -629,8 +627,7 @@ fun videoStreamJson(
     """"color_primaries":${sqlNullStringJson("bt2020")},""" +
     """"color_transfer":${sqlNullStringJson(colorTransfer)},""" +
     """"field_order":${sqlNullStringJson(null)},"rotation":${sqlNullInt64Json(null)},""" +
-    """"language":${sqlNullStringJson(null)},"title":${sqlNullStringJson(null)},""" +
-    """"created_at":"2026-01-01 00:00:00","updated_at":"2026-01-01 00:00:00"}"""
+    """"language":${sqlNullStringJson(null)},"title":${sqlNullStringJson(null)}}"""
 
 fun audioStreamJson(
     id: Long = 1,
@@ -645,8 +642,7 @@ fun audioStreamJson(
     """"sample_rate":${sqlNullInt64Json(48000)},"channels":$channels,""" +
     """"channel_layout":${sqlNullStringJson(channelLayout)},""" +
     """"language":${sqlNullStringJson(language)},"title":${sqlNullStringJson(null)},""" +
-    """"is_default":$isDefault,""" +
-    """"created_at":"2026-01-01 00:00:00","updated_at":"2026-01-01 00:00:00"}"""
+    """"is_default":$isDefault}"""
 
 fun subtitleJson(
     id: Long = 1,
@@ -657,10 +653,8 @@ fun subtitleJson(
     isDefault: Boolean = false,
 ): String = """{"id":$id,"movie_id":$movieId,"stream_index":2,"codec":"$codec",""" +
     """"language":${sqlNullStringJson(language)},"title":${sqlNullStringJson(null)},""" +
-    """"is_forced":$isForced,"is_default":$isDefault,""" +
-    """"created_at":"2026-01-01 00:00:00","updated_at":"2026-01-01 00:00:00"}"""
+    """"is_forced":$isForced,"is_default":$isDefault}"""
 
-/** `movie_id` is a plain number here, as the server really sends it (not the spec's object). */
 fun chapterJson(
     id: Long = 1,
     title: String = "00:03:13.026",
@@ -670,15 +664,17 @@ fun chapterJson(
 ): String = """{"id":$id,"title":"$title","start_time":$startTimeSec,""" +
     """"thumb":${sqlNullStringJson(thumb)},"movie_id":$movieId}"""
 
-/** `GET /movies/{id}/technical-details` payload; `movie` is untyped in the spec and unused. */
+/** `GET /movies/{id}/technical-details` payload; `movie` is the file's playback subset. */
 fun technicalDetailsJson(
+    mimeType: String = "video/x-matroska",
     videoStreams: List<String> = listOf(videoStreamJson()),
     audioStreams: List<String> = listOf(audioStreamJson()),
     subtitles: List<String> = listOf(subtitleJson()),
     chapters: List<String> = emptyList(),
 ): String = """
     {"error":false,"message":"technical details","data":{
-      "movie":{"id":1},
+      "movie":{"file_name":"heat.mkv","size":4000000000,"container":"mkv","mime_type":"$mimeType",
+        "run_time":${sqlNullInt64Json(170)},"duration":${sqlNullFloat64Json(10200.0)}},
       "video_streams":[${videoStreams.joinToString(",")}],
       "audio_streams":[${audioStreams.joinToString(",")}],
       "subtitles":[${subtitles.joinToString(",")}],

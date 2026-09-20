@@ -11,29 +11,13 @@ enum class NotificationTitle {
     @SerialName("other") Other,
 }
 
+/** Body of `POST /notifications`; the reply is a bare [MessageResponse] with no payload. */
 @Serializable
 data class CreateNotificationRequest(
     val title: NotificationTitle,
     val message: String,
     // The backend expects camelCase for this one field.
     @SerialName("isAdmin") val isAdmin: Boolean? = null,
-)
-
-@Serializable
-data class Notification(
-    val id: Long,
-    @SerialName("created_by_user_id") val createdByUserId: Long,
-    val title: NotificationTitle,
-    val message: String,
-    @SerialName("is_admin") val isAdmin: Boolean,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("updated_at") val updatedAt: String,
-)
-
-/** Payload of `CreateNotificationEnvelope.data`. */
-@Serializable
-data class CreateNotificationData(
-    val notification: Notification,
 )
 
 @Serializable

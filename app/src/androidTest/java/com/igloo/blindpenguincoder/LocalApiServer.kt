@@ -107,7 +107,7 @@ class LocalApiServer(private val hasPin: Boolean = true) {
             // The home rails load behind every authenticated gate; an empty library is the
             // cleanest true state for tests that only assert on the shell.
             path.endsWith("/movies/latest") -> """{"error":false,"data":{"movies":[]}}"""
-            path.endsWith("/movies/continue-watching") -> """{"error":false,"data":{"movies":[]}}"""
+            path.endsWith("/continue-watching") -> """{"error":false,"data":{"items":[]}}"""
             path.endsWith("/tmdb/movies/in-theaters") -> """{"error":false,"data":{"movies":[]}}"""
             path.endsWith("/music/albums/latest") -> """{"error":false,"data":{"albums":[]}}"""
             else -> null

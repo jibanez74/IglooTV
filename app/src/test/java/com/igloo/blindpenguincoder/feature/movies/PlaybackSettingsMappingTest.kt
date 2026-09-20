@@ -33,8 +33,6 @@ class PlaybackSettingsMappingTest {
         language = sqlString(language),
         title = sqlString(title),
         isDefault = isDefault,
-        createdAt = "2026-01-01 00:00:00",
-        updatedAt = "2026-01-01 00:00:00",
     )
 
     private fun subtitle(
@@ -54,8 +52,6 @@ class PlaybackSettingsMappingTest {
         title = sqlString(title),
         isForced = isForced,
         isDefault = isDefault,
-        createdAt = "2026-01-01 00:00:00",
-        updatedAt = "2026-01-01 00:00:00",
     )
 
     private fun sqlString(value: String?) =

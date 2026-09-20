@@ -1315,7 +1315,7 @@ rails fail, retry, and refresh independently (§12's polite live regions depend 
 
 | Rail | Endpoint | Card | Empty copy |
 |---|---|---|---|
-| Continue Watching | `GET /api/movies/continue-watching` | poster + progress bar; fully spoken remaining time in card semantics only | "Nothing in progress yet. Movies you start watching appear here." |
+| Continue Watching | `GET /api/continue-watching` (movies and TV episodes; the client keeps only `kind: movie` until an episode has somewhere to open) | poster + progress bar; fully spoken remaining time in card semantics only | "Nothing in progress yet. Movies you start watching appear here." |
 | Recently Added Movies | `GET /api/movies/latest` | poster, year below | "No movies in your library yet. Add a movies folder on the server and run a scan." |
 | Recently Added Albums | `GET /api/music/albums/latest` | `albumAspect` cover, musician below, `Music` glyph fallback | "No albums in your library yet. Add a music folder on the server and run a scan." |
 | Now Playing in Theaters | `GET /api/tmdb/movies/in-theaters` | 2:3 poster, title + year over a bottom scrim, rating badge top-right (§3.2) | "No movies are playing in theaters right now. Check back later." |
