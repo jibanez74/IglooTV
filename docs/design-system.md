@@ -676,7 +676,8 @@ no drawer, no hamburger, and no fully-hidden mode.
 | `gridColumns` | 6 / 5 / 4 ⚑ | Compact / Standard / Large — *unscaled, and inverse* |
 
 Album art is square and musician thumbnails are circular. Both use `posterWidth` as their base
-width, so an album card is a movie poster's width and a movie poster's width tall.
+width, so an album card is a movie poster's width and a movie poster's width tall; the circle is
+`IglooPosterCard` at `artworkRadius = radius.pill`, which `focusRing` clamps to a circle.
 
 `IglooPosterCard` takes the aspect and width as parameters (`posterAspect` / `posterWidth` by
 default; `albumAspect` for album art, `wideAspect` with `wideCardWidth` for video cards) rather
@@ -750,7 +751,8 @@ until 2026-08-19.
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
 | `IglooNotice` | One announced line — `bodyMedium` / `mutedForeground`, `liveRegion = Polite`. For a message the user did not ask for and cannot act on: what a gate says after an action that already happened (§10, §11.1.1). Not an error card; no Retry. |
-| `IglooIconButton` | The square icon-only control for row ends (the detail hero's More trigger): `controlHeight` both ways, radius `lg`, focus per §6.1, glyph at `icons.md`. `semanticLabel` is mandatory — the glyph alone says nothing to TalkBack. With a null `onClick` it stays a focus target but announces no action, the inert-poster-card contract. Carries `restingFill` / `contentColor` for the §3.2 over-media ground like `IglooButton`. |
+| `IglooIconButton` | The square icon-only control for row ends (the detail hero's More trigger, a track row's three actions): `controlHeight` both ways, radius `lg`, focus per §6.1, glyph at `icons.md`. `semanticLabel` is mandatory — the glyph alone says nothing to TalkBack. With a null `onClick` it stays a focus target but announces no action, the inert-poster-card contract. Carries `restingFill` / `contentColor` for the §3.2 over-media ground like `IglooButton`, and `IglooButton`'s toggle semantics — `stateDescription`, `actionLabel` — plus `iconTint` for a glyph that changes weight while the ground stays. |
+| `TrackRow` | §11.5's three-action row (`feature/shared`): Play, Like, More as `IglooIconButton`s, all focusable, none hidden until focus, the row itself never a target and painting `muted @ 0.50` at `radius.lg` while a child holds focus. Play is the entry column and speaks the row's one sentence with "Liked" as its state; Like carries the like state and an action naming the track; More names the track, or says "None available." while inert. `TrackRowFocus` answers up/down **per column** so vertical moves keep their column, a null answer leaving the direction to the spatial search (a lazy list wires only its edges); `riders` park a host's requesters on one control of one row. `TrackRowSkeleton` is the row-shaped placeholder; `TrackRowMenu` the row's `IglooMenu` ("Go to album" / "Go to artist"). |
 | `IglooScrim` | The paint-only dim: `background @ 0.60` by default (§3.1), no `clickable`/`focusable`/`semantics`, so it can never intercept the d-pad and TalkBack does not know it exists. Used by the rail (§8.1) and the modal (§9.3) — **never both at once**. |
 | `IglooConfirmDialog` | The confirmation modal (§9.3) |
 | `IglooMenu` | The anchored menu: a `card` surface of focusable rows placed against the trigger's root-coordinate bounds — right-aligned, below it, flipping above when the bottom safe area would be breached. In-tree for §9.3's four reasons and hosted as the last child of the screen that owns the trigger; **unscrimmed**, unlike the modal — an anchored menu is local chrome, not a page-blocking decision, and §9.1 gives the scrim to the rail and the modal only. One `standard` alpha reveal, no exit animation. Focus is trapped (up/down walk the rows, everything else `Cancel`), the first row takes focus on reveal, the caller restores focus in `onDismiss` and gates its own Back (§9.3). `paneTitle` + one cleared Button node per row; a `destructive` row wears the destructive token pair, and `separatorBefore` draws a silent hairline. The covered screen leaves the semantics tree via an empty `clearAndSetSemantics { }` — the partial-overlay rule (§9.3), since an anchored card occludes nothing and a merely-hidden node keeps TalkBack's focus. |
@@ -758,7 +760,7 @@ until 2026-08-19.
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
-| `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg`, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose fully spoken remaining-time description joins the cleared node ("Title, Year, 2 hours and 20 minutes remaining", §12) so the bar can never render unannounced. The description is semantic only; no numeric percentage or remaining-time caption renders on the card. |
+| `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg` by default and `artworkRadius = radius.pill` for a musician's circle — §8.2's circle is a radius the focus ring clamps, not a second component — with `centerText` for the text under it and `semanticLabel` when "Title, Year" is not the sentence to read, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose fully spoken remaining-time description joins the cleared node ("Title, Year, 2 hours and 20 minutes remaining", §12) so the bar can never render unannounced. The description is semantic only; no numeric percentage or remaining-time caption renders on the card. |
 | `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), minimal `IglooEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). Takes the pane's `contentInset` and splits it by node per §8.3 — heading and non-scrolling states pad, the `LazyRow` carries it as `contentPadding` so cards bleed off the panel edge. |
 | `IglooEmpty` | §10 empty state, minimal variant only: faded icon + one announced line. The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
 
@@ -1755,32 +1757,100 @@ rail's `returnRequester` like any other rail (§6.3).
 
 ### 11.5 Music
 
-Four tabs: **Musicians** (circular cards), **Albums** (square cards), **Tracks** (flat list with
-letter headers, plus Play all / Shuffle all), **Playlists**. Album and musician detail follow the
-backdrop + hero + list pattern.
+**Index, as built (2026-09-19).** The §11.4 shape with music's three sections: a heading with
+the selected section's count and a Refresh action (no Sort — no music endpoint takes one), a
+three-tab `IglooTabRow` — **Musicians · Albums · Tracks** — and one infinite-scrolling surface per
+section. **Playlists is deferred** to its own pass: the web page's fourth tab is twelve endpoints
+including collaborators and reordering, and when it lands the Liked-tracks view moves inside it,
+as on the web; until then the like toggle has no list of its own, only the heart on every row.
 
-Track rows carry a play action, a like toggle, and an overflow menu — **all three focusable**,
-none hidden until focus. (The album detail below ships ahead of playback with one-stop rows;
-§11.5.1 records the deferral.)
+**Each tab keeps its own pages.** Unlike §11.4 — three filters of one item type in one grid,
+where replacement is the only option and a failed switch must revert — these are three item
+types with three geometries, so each holds its own `PagedState` (content, tail, total,
+generations), its own scroll state and its own focus memory, all hoisted in the pane and
+retained for the session. A switch therefore **can never fail**: a tab with nothing yet shows
+its skeleton, one whose page one failed shows its error card with Retry, and only a Refresh
+replaces what a tab shows. The 300 ms tab debounce (§11.4) keeps its one purpose — a tab
+merely crossed by the d-pad puts no request on the wire — and gates only the first load of an
+empty tab; a press loads at once. Refresh re-reads the stats and page one of the selected tab
+with its content staying on screen; the host's START effect re-reads the stats and fills only
+the selected tab if it is empty.
+
+**Paging.** Musicians and albums page by `page`/`per_page` at the contract's 48; the track list
+by `limit`/`offset` at 50 with `has_more` as the cursor, an empty page stopping the walk
+regardless (a library shrinking between requests). Prefetch fires two grid rows or six list rows
+from the end; the tail is skeleton geometry matching the real cells (circles, squares, rows) on
+Idle and Loading, a full-width Retry on failure, nothing at the end.
+
+**Musicians** are `IglooPosterCard`s with `artworkRadius = radius.pill` — §8.2's circle is a
+radius, not a component — the Person glyph as fallback, text centred beneath, and one sentence:
+"The Beatles. 3 albums, 40 tracks." **Albums** are the §11.3 rail's square cards on the grid.
+Both grids are the §11.4 grid verbatim: `gridColumns`, `Dp.Unspecified` cells, left column to
+the spine, right edge and last row pinned, the entry cell carrying the pane's anchor and the
+return requester.
+
+**Tracks** is a `LazyColumn`: **letter headers** (A–Z, `#` for everything else, the server's
+own first-character bucket with no trimming so the headers can never disagree with the sort)
+as plain text the d-pad never lands on, and the **three-action row** below. Each bucket's first
+row folds "Tracks starting with A." into its Play control's sentence — §11.5.1's disc rule at
+row scale — computed at append time over the whole loaded list, so an append across a bucket
+boundary keeps exactly one fold. Above a populated list sit **Play all** (Primary) and
+**Shuffle all** (Ghost, label swapping to "Shuffling…" with a `Loading` state while its first
+batch is out; never disabled, so the focused node survives the request; a second press cancels
+the first). The first row's up returns to the **last-focused action button**; the buttons' down
+lands on the entry row's Play.
+
+**The row.** `TrackRow` (§9.1): Play, Like, More — all focusable, none hidden until focus, the
+row itself never a target. Play is the entry column and carries the row's whole sentence with
+"Liked" as its state; Like carries the like state ("Liked" / "Not liked" / "…, saving" while
+pending / "Like status unavailable" and inert until the liked set is seeded) and an action that
+names the track; More names the track and says "None available." when it has nowhere to go —
+kept composed either way so the column geometry every row shares survives. Vertical moves
+**keep their column**: the three controls are `controlHeight` squares at fixed x, so a lazy
+list wires only its edges and lets the spatial search do the rows, while a plain column (the
+two detail pages) wires every row outright. While any control holds focus the row paints
+`muted @ 0.50` at `radius.lg` — the row's only visual role. Like state is one session-scoped set
+(`TrackLikesViewModel`) every surface reads, seeded from `/music/tracks/liked-ids`, flipped
+optimistically with per-track FIFO writes, and rolled back by one re-seed after a failure, whose
+notice renders on the surface the user is looking at (§10).
+
+**More** is an `IglooMenu` — "Go to album", "Go to artist", each present only when the row has
+that id and the host can open that page — hosted as the pane's last child with the body cleared
+while it is up; dismissal lands back on the More that opened it. On the Tracks tab the pane's
+return requester rides the entry row's **remembered column**, so Back from the player lands on
+Play and Back from an album opened through More lands on More.
+
+**Playback launches** go through the view model's play-request flow into the host's one music
+player (§11.8.2): a row's Play queues every track loaded so far starting at that row; Play all
+queues the loaded rows and keeps paging the library as it plays; Shuffle all fetches the
+server's first random batch and refills with exclusions. The host accepts a request only while
+the pane is what the user is looking at, so a batch landing after they left never puts a player
+over a surface that did not ask for one. Closing the player returns focus to the exact control
+that launched it.
+
+**Host.** `PaneBranch.Music`, `DetailsOrigin.Music` (restoring only while the destination is
+Music, the `MoviesGrid` rule), `openAlbum` gains the origin parameter `openMovie` always had,
+and the music player's launch site is recorded beside its request so the right overlay's close
+tears it down and the right requester gets focus back.
 
 #### 11.5.1 The album detail screen, as built
 
 **Shape.** The §11.4.1 overlay contract, third occupant of the host's **one details slot**: a
 full-screen in-tree overlay above the shell on the opaque `background` token, mutually exclusive
-with both movie detail pages because `IglooRoot`'s open callbacks close the other view models
-before opening this one — which is what keeps Back, the accessibility fence, and focus
-restoration single-path. The host owns Back and focus restore through the same `DetailsOrigin`
-machinery; no new case was needed — the LatestAlbums rail finally passes the `returnRequester`
-it never had, and `DetailsOrigin.Rail(HomeRail.LatestAlbums)` was already representable. Opening
-is the album rail's card, whose `onClick` this page finally gives a destination (the "no
-destination yet" carve-out is gone; the card's Open action and Button role came back with it).
-`AlbumDetailsViewModel` is the `TheaterMovieDetailsViewModel` shape — one read, nothing to
-write, its own `errorOrKeep` — over `GET /music/albums/details/{id}`.
+with both movie detail pages and the musician page (§11.5.2) because `IglooRoot`'s open callbacks
+close the other view models before opening this one — which is what keeps Back, the
+accessibility fence, and focus restoration single-path. The host owns Back and focus restore
+through the same `DetailsOrigin` machinery: the Home rail's `Rail(LatestAlbums)`, the Music
+pane's `Music`. A same-slot replacement — the album opening an artist, the artist opening an
+album — leaves the origin untouched, so Back from the second page lands where the first was
+opened from; the web's two-deep stack is a recorded backlog item, not this pass. `AlbumDetailsViewModel`
+is the `TheaterMovieDetailsViewModel` shape — one read, nothing to write, its own
+`errorOrKeep` — over `GET /music/albums/details/{id}`.
 
 **Units.** Every duration on this wire is **milliseconds** — `Track.duration` and
-`total_duration` both — unlike the tracks-list endpoint's seconds. The mapping divides once,
-at the edge; formatting is web parity (`"1h 2m"` / `"42m 10s"` for the album, `"m:ss"` for a
-track, blank for a missing duration).
+`total_duration` both, like every other music endpoint. The mapping divides once, at the edge;
+formatting is web parity (`"1h 2m"` / `"42m 10s"` for the album, `"m:ss"` for a track, blank
+for a missing duration).
 
 **Hero.** The web page's treatment: there is no separate music backdrop asset, so the **album
 cover itself** is the full-bleed backdrop, cover-cropped, with §11.4.1's exact two scrims and
@@ -1798,32 +1868,36 @@ would claim it as ours. The meter is silent and unfocusable; its score rides the
 stop's sentence and the facts panel's row.
 
 **Actions.** Play Album (Primary, the entry anchor, held through the loading→loaded swap by the
-skeleton's geometry-matched stub) and Shuffle (Ghost, over-media resting fill per §3.2).
-**Play Album is live** — it maps the loaded details into the §11.8.2 music player
-synchronously (the tracks are already on screen; no deferred-play flow). Shuffle remains a
-**host-owned stub until its own pass lands** — the More-menu precedent: a real, focusable
-control with an honest label that claims no state, wired to a no-op in the host. An album with
-**no tracks composes no action row at all** (web parity, and the inert-control rule); the facts
-panel takes the entry anchor, requested safely. Row edges pinned; up reaches the hero reading
-stop only while a spoken reader runs.
+skeleton's geometry-matched stub) and Shuffle (Ghost, over-media resting fill per §3.2). Both
+are live: Play Album maps the loaded details into the §11.8.2 music player synchronously (the
+tracks are already on screen; no deferred-play flow), and **Shuffle** maps the same queue
+through a Fisher-Yates permutation of a copy (`docs/music-shuffle.md`'s finite-queue model),
+starting at the top. The player's return requester is **parked on whichever control launched
+it** — Play Album, Shuffle, or one row's Play — saved across recreation, so its close lands
+back there. An album with **no tracks composes no action row at all** (web parity, and the
+inert-control rule); the facts panel takes the entry anchor, requested safely. Row edges pinned;
+up reaches the hero reading stop only while a spoken reader runs.
 
-**Track list.** One-focus-stop rows — index, title, genre tags, duration — deliberately **not**
-§11.5's three-action row: this pass ships the page before playback, and a row announcing "Play"
-that does nothing would spend a press teaching the user it is empty. The three-action row
-supersedes this when playback lands. Rows wear the reading-stop treatment at the control radius
-(`radius.lg`, surface fill, no scale, **no click action and no role**), one cleared node per row
-speaking the mapping's sentence. Multi-disc albums get plain-text "Disc N" headers, and — since
-TV TalkBack never reaches plain text — each disc's **first row folds "Disc N." into its own
-sentence**, the §11.4.1 heading-folding rule at row scale. The vertical chain is hand-wired
-end to end (actions → every row in disc/index order → facts panel), horizontal edges pinned
-per row; up from the first row returns to the **last-focused action**, and up from the facts
-panel lands on the **last row** — nearest-edge re-entry, the deliberate list contract (a list,
-unlike a rail, keeps no `lastFocusedKey`; position is the memory).
+**Track list.** §11.5's **three-action row** (`TrackRow`), which superseded the one-stop rows
+the page shipped with before playback existed: index gutter, then Play — carrying the row's one
+sentence, "Disc 1. Track 1. Yesterday. Rock, Pop. 2 minutes and 5 seconds." — title and genre
+line, duration, Like, More. A row's Play starts the album queue **at that row**. More offers
+"Go to artist" only (the row already sits on its album). Multi-disc albums get plain-text
+"Disc N" headers, and — since TV TalkBack never reaches plain text — each disc's **first row
+folds "Disc N." into its own sentence**, the §11.4.1 heading-folding rule at row scale. The
+vertical chain is hand-wired end to end and **column-stable** (actions → artist chips → every
+row in disc/index order → facts panel, each control knowing the row above and below in its own
+column), horizontal edges pinned per row; up from the first row returns to the **last-focused
+chip or action**, and up from the facts panel lands on the **last row's Play** — nearest-edge
+re-entry, the deliberate list contract (a list, unlike a rail, keeps no `lastFocusedKey`;
+position is the memory).
 
-**Artists.** Display-only chips under the hero (web order, not web behavior): there is no
-musician screen, so the chips are prose wearing chip styling, zero focus stops, semantics
-cleared — the album-card rule again. The names reach a screen reader through the hero stop's
-sentence and the facts panel's Artist row.
+**Artists.** Under the hero, in web order. With a musician screen to open (§11.5.2) and a real
+id to open it on, each credited artist is a **Ghost button** ("Open The Beatles") chained left
+to right with the row's edges pinned, sitting between the actions and the rows in the vertical
+chain. Where there is nothing to open — an album whose only name is its own `musician` column,
+which carries no id — the chips stay display-only prose, semantics cleared, the names reaching a
+screen reader through the hero stop's sentence and the facts panel's Artist row.
 
 **Facts panel.** "Album Details", the §11.4.1 About treatment verbatim: heading outside the
 panel, `radius.xl` surface focus target, one cleared announcement folding the heading in. Rows —
@@ -1836,7 +1910,38 @@ dropped, no summary without a codec.
 **Shared with movies.** `SectionHeading` and `Modifier.readingStopTarget` moved from
 `feature/movies/MovieDetailsSections.kt` to `feature/shared/DetailsReadingStops.kt` (the stop
 grew a `radius` parameter for row-shaped targets); everything else — `AboutSection`,
-`DetailsRailSection` — stays movie-private until a second caller earns the move.
+`DetailsRailSection` — stays movie-private until a second caller earns the move. The track row
+never uses `readingStopTarget`: a cleared row would erase its three controls, so each control
+clears its own subtree and the row's text nodes are cleared into Play's sentence.
+
+#### 11.5.2 The musician detail screen, as built
+
+**Shape.** §11.5.1's overlay contract, the one details slot's **fourth occupant**, over
+`GET /music/musicians/{id}` through `MusicianDetailsViewModel` (the album view model's shape).
+Opened from a Musicians-tab card (`DetailsOrigin.Music`), a track row's "Go to artist", or an
+album page's artist chip — the last two replacing the overlay that was up, origin untouched.
+
+**Hero.** The artist's **thumbnail** blown up as the full-bleed backdrop (verbatim URL, no
+proxy) with §11.4.1's two scrims and decode-gated over-media licensing; beside a circular thumb
+(`posterWidth` at `radius.pill`, Person-glyph fallback, decorative): name at `titleLarge`,
+three chips cleared into one sentence (album count, track count, total duration), the genres
+line, the §11.5.1 Spotify popularity meter, and the action row — **Play all** (Primary, the
+entry anchor) and **Shuffle** (Ghost), both live over the musician queue, the return requester
+parked on whichever launched the player. With no tracks the action row is not composed and the
+entry anchor moves to the discography rail, or to the facts panel with no albums either. The
+hero reading stop exists only under a spoken reader.
+
+**Discography.** An `IglooMediaRail` of the artist's albums as square cards ("Help!, 1965"),
+newest release first, each opening the album (a same-slot replacement). The rail keeps its own
+last-focused card, so up from the first row re-enters it there.
+
+**All Tracks.** Every track across the discography as §11.5's rows — the album title as the
+subtitle and More's one destination ("Go to album"), inert where the wire has none — with a
+row's Play starting the musician queue at that row. Chain: actions → rail → rows (column-stable)
+→ facts panel; edges pinned.
+
+**Facts panel.** "Artist Details", the §11.4.1 About treatment: Albums, Tracks, Total duration,
+Genres, Spotify popularity, Spotify followers, About (the summary) — each dropped when absent.
 
 ### 11.6 Search
 
@@ -1979,15 +2084,46 @@ guard on the IFrame API script, which names the narrower cause, inside a **12s**
 player-ready that catches everything else that stalls. Activity recreation restarts the trailer
 at 0:00 — a WebView cannot be parceled, an accepted trade for trailers.
 
-#### 11.8.2 Music player (Play Album), as built
+#### 11.8.2 Music player, as built
 
-The album overlay's one player layer — the movie player's sibling in every host contract
-(existence, Back gating, focus restore all live in the host) — and a §11.8 reduction the way
-the trailer player is: no resume prompt, no track/quality menus, no progress saves, no
-chapters. What it keeps and what it changes:
+The one music player layer — the movie player's sibling in every host contract (existence, Back
+gating, focus restore all live in the host) — and a §11.8 reduction the way the trailer player
+is: no resume prompt, no track/quality menus, no progress saves, no chapters. What it keeps and
+what it changes:
 
-**One playlist, not one item.** The whole album is a single ExoPlayer playlist in
-disc-then-track order, so auto-advance and skip semantics live **below the engine seam**;
+**A queue with a source.** `MusicPlayRequest` is `(source, startIndex, tracks)`. Three sources
+are finite and fully known at launch — **Album** (Play Album, Shuffle, or a row's Play, §11.5.1),
+**Musician** (§11.5.2), **TrackList** (a Tracks-tab row: every track loaded so far, starting at
+that row) — and two are **endless**: **LibraryInOrder** (Play all: the loaded rows, then pages
+of `GET /music/tracks` appended in order until the library's total) and **LibraryShuffle**
+(Shuffle all: `GET /music/tracks/shuffle` batches). Display metadata rides **per track**
+(artist, album, cover), because a library queue crosses albums; an album queue repeats its own
+on every entry. The source names the top bar, the session id (`music-album-<id>-<n>`,
+`music-musician-<id>-<n>`, `music-tracks-<n>`, `music-library-<n>`, `music-shuffle-<n>`) and
+the position line: "Track N of M" for a finite queue, "Track N of <library total>" for Play all,
+"Track N" for a shuffle with no end to count to, then `· artist`, then `· album` unless the
+source is the album.
+
+**Refill.** An endless source refills through a pure-Kotlin `MusicQueueController` the screen
+owns, on `docs/music-shuffle.md`'s rules: within ten tracks of the end one batch of fifty is
+fetched, deduplicated within itself and against the whole queue, and appended to the engine
+(`appendTracks`, `addMediaItems`; nothing already in the playlist moves). Exactly one fetch is
+ever in flight — the loop is sequential — and leaving the screen cancels it, which is the
+generation guard. Shuffle excludes the newest 200 queued ids. An empty shuffle response latches
+exhaustion with one notice ("That's every track in the library."); the in-order queue latches
+silently at `has_more = false`; a batch of only known tracks appends nothing and does not latch,
+the next track change retrying. A failed refill keeps the queue and shows "Couldn't load more
+tracks. The queue will play out." — an `IglooNotice` in the bottom block, polite, never a focus
+stop, cleared by the next success (§10). **Nothing is trimmed from the queue's head** — a
+deliberate deviation from the spec's 50-track history cap: trimming shifts ExoPlayer indices
+under queued `TrackChanged` events, the queue lives only while the overlay is up, and stable
+indices are what keep the reducer and the player agreeing. `MAX_QUEUE_TRACKS = 500` bounds it
+instead (refills stop there), which also keeps the saved request bounded: the host keeps the
+request current as the queue grows, so a recreation restores every appended track, and a queue
+past the ceiling is not saved at all rather than truncated under its saved position.
+
+**One playlist, not one item.** The whole queue is a single ExoPlayer playlist in queue order,
+so auto-advance and skip semantics live **below the engine seam**;
 the chrome only learns "the queue moved" through a `TrackChanged` event, the one licensed
 reset of the duration-never-shrinks rule (each track's timeline is genuinely new; the wire
 duration bridges the gap until the container is parsed). The licence is **an index that
@@ -1998,17 +2134,18 @@ to repair it when the track never reaches READY. A report naming the current ind
 refreshes the duration. Previous is the platform's standard: restart past ~3s, cross to the
 prior track under it.
 
-**No surface on the seam.** The screen draws the album art itself (`AsyncImage`, cover-fill
-over the over-media control fill, Music-glyph fallback, decorative); the engine interface is
-pure Kotlin. The cover is the album page's verbatim absolute Spotify URL — the session's
-bitmap loader is deliberately **not** the movie's bearer-authed one, while the track streams
-do use the bearer data-source factory.
+**No surface on the seam.** The screen draws the current track's cover itself (`AsyncImage`,
+cover-fill over the over-media control fill, Music-glyph fallback, decorative); the engine
+interface is pure Kotlin. Covers are verbatim absolute Spotify URLs — the session's bitmap
+loader is deliberately **not** the movie's bearer-authed one, while the track streams do use
+the bearer data-source factory.
 
 **Chrome never hides.** §11.8 licenses resting chrome only over a moving picture, and a
 static cover is not one — so there is no auto-hide clock, no reveal step, and **Back always
 means leave** (one press, unlike the movie's dismiss-then-close). Layout: top bar (Back +
-album title), centered cover, bottom block — track title over "Track N of M · artist" (one
-cleared semantics node), seek bar, and a five-button transport: previous, rewind 10s,
+the source's title), centered cover, bottom block — the refill notice when there is one, track
+title over the position line (one cleared semantics node), seek bar, and a five-button
+transport: previous, rewind 10s,
 play/pause (the entry anchor), forward 10s, next. Row edges are pinned. Without a spoken
 accessibility service, Up and Down connect the transport directly to Back. While a spoken
 service runs, the metadata pair becomes an actionless **reading stop** in that route:
@@ -2023,9 +2160,9 @@ extra press never enters the sighted path.
 the play/pause icon follows `playWhenReady`, and on the error surface every media key is
 swallowed without acting.
 
-**Session and lifecycle.** A per-album MediaSession (`music-album-<id>-<instance>`) carries
-per-track `MediaMetadata` (title/artist/album/artwork, `MEDIA_TYPE_MUSIC`), so the system's
-now-playing surface tracks auto-advance for free. For the overlay's complete mounted lifetime —
+**Session and lifecycle.** A per-queue MediaSession (id per source, above) carries per-track
+`MediaMetadata` (title/artist/album/artwork, `MEDIA_TYPE_MUSIC`), so the system's now-playing
+surface tracks auto-advance — and a library queue crossing albums — for free. For the overlay's complete mounted lifetime —
 playing, paused, loading, buffering, or error — the Compose host view keeps the display awake,
 preventing inactivity-driven Ambient Mode from interrupting the visit. Disposal restores the
 view's exact prior keep-awake value. This does not authorize background playback: the §11.8
@@ -2036,8 +2173,9 @@ rebuilds a fresh engine **paused** at the saved track index and position. A poli
 region narrates play state with the track title riding in the sentence, so an auto-advance —
 same phase, new track — still announces.
 
-**Ends and errors.** The album finishing closes the player through the host (focus restores
-to Play Album, like every overlay). Errors are the movie recipe minus HLS recovery: sticky
+**Ends and errors.** The queue finishing closes the player through the host (focus restores
+to the control that launched it, like every overlay: Play Album, Shuffle or a row's Play on
+either detail page, Play all, Shuffle all or a row's Play on the Music pane). Errors are the movie recipe minus HLS recovery: sticky
 first error, pinned Retry that rebuilds the engine at this visit's own playhead with a fresh
 play intent, Close instead when the session is revoked. Entering the terminal boundary detaches
 the ExoPlayer listener before `stop()` or playlist clearing and emits the intentional paused
@@ -2046,7 +2184,8 @@ transport state plus the error directly; teardown therefore cannot publish a fal
 duplicated from the movie engine: HLS controller/preflight/recovery,
 quality/audio/subtitle selection, timeline offsets, progress saves. Play-stats reporting
 (`POST /api/music/user-stats/play`) is a named follow-up — and without it there is no ViewModel
-at all: screen + engine + reducer.
+at all: screen + engine + reducer + the queue controller, which is pure Kotlin and would move
+into that ViewModel unchanged.
 
 ### 11.9 Notifications
 
@@ -2158,6 +2297,35 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-09-19 — The Music screen: three tabs, the three-action row, the musician page, and a
+queue-shaped player (§11.5, §11.5.1, §11.5.2, §11.8.2, §9.1, §8.2).**
+
+- **§11.5 is as built.** Musicians · Albums · Tracks on the §11.4 shape, each tab retaining its
+  own pages, scroll and focus memory, so a switch can never fail and only Refresh replaces —
+  a deliberate departure from §11.4's replace-and-revert, which three item types with three
+  geometries do not need. **Playlists is deferred** with Liked inside it, as on the web.
+- **§11.5's three-action row exists** (`TrackRow`, §9.1) and the album page adopts it, closing
+  the deferral §11.5.1 recorded on 2026-08-31: Play speaks the row once, Like carries the state,
+  More is an `IglooMenu`, vertical moves keep their column. Like state is one session-scoped set
+  (`TrackLikesViewModel`) with optimistic FIFO writes and a re-seed as rollback.
+- **§11.5.1:** Shuffle is live (client Fisher-Yates on a copy), a row's Play starts the album at
+  that row, the player's return requester parks on whichever control launched it, and the
+  artist chips become buttons that open the artist. The one details slot stays single: a page
+  opening the other **replaces** it with the Back origin untouched (backlog: the web's two-deep
+  stack).
+- **§11.5.2** records the musician page: thumb-as-backdrop hero, Play all / Shuffle over the
+  musician queue, a discography rail, every track as a row, a facts panel.
+- **§11.8.2:** the player takes a queue with a source — Album, Musician, TrackList finite;
+  LibraryInOrder and LibraryShuffle endless, refilled by a pure-Kotlin `MusicQueueController` on
+  `docs/music-shuffle.md`'s rules — with per-track metadata, per-source session ids and position
+  lines, a polite refill notice, and **no head trimming** (a recorded deviation; a 500-track
+  ceiling bounds the queue and the saved request instead).
+- **§9.1 / §8.2:** `IglooPosterCard` gains `artworkRadius`, `centerText`, `semanticLabel` — the
+  musician circle is a radius, not a component; `IglooIconButton` gains `stateDescription`,
+  `actionLabel`, `iconTint`. The Movies append state moves to `feature/shared/AppendState`.
+- **Wire:** `TrackListItem` and `SimpleMusician` had drifted past decoding after the `b8dc4c2`
+  sync (`docs/known-issues.md`, instances nine and ten); `MusicianDetailsData` is typed.
 
 **2026-09-02 — Movies tab review: the debounce, the genres wait, and one pill body (§11.4,
 §9.1, §3.1).**

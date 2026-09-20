@@ -50,12 +50,10 @@ changelog entry, including the recorded deferral of §11.5's three-action track 
 
 ## What remains
 
-- **Playback wiring** — ~~Play Album~~ done (2026-09-01, the music player pass —
-  `music-player-status.md`). Still open: Shuffle, per-track play, and the like toggle and
-  overflow menu §11.5 promises on each row.
-- **A Music destination screen** — the spine's Music tab is still a placeholder; the albums
-  rail on Home is currently the only way into an album.
-- **Musician details** — the artist chips stay inert until a musician screen exists.
+- ~~Playback wiring~~ — Play Album (2026-09-01), then Shuffle, per-track play and the
+  like/overflow row actions (2026-09-19, the Music screen pass — `music-screen-status.md`).
+- ~~A Music destination screen~~ — built 2026-09-19 (`music-screen-status.md`).
+- ~~Musician details~~ — the artist chips open the musician page since 2026-09-19.
 - **Not visually exercised on real data**: the popularity meter and multi-disc headers — no
   album on either server has a Spotify score or a second disc. Both are pinned by the
   on-device tests with fixtures, so they'll light up when the library has such an album.

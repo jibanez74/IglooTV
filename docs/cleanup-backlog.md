@@ -206,3 +206,47 @@ That commit contains **only** a 227-line music-shuffle API spec — unrelated to
 referenced by nothing, and under a message that describes something else entirely. It belongs on
 the music branch, or at minimum in a commit whose message says what it is. Left alone because
 moving it means rewriting history.
+
+---
+
+## 7. Recorded by the Music screen pass (2026-09-19)
+
+### 7.1 The details slot is single: musician ↔ album replaces rather than stacks
+
+**Files:** `feature/home/IglooApp.kt`, `IglooRoot.kt`
+
+Opening an album from the musician page (or an artist from the album page) closes the page that
+was up and opens the other; Back then lands on the Music pane node that opened the *first* page.
+The web goes musician → album → back → musician. A two-deep stack touches every host gate that
+reads the open flags and the `DetailsOrigin` machinery; deferred, and recorded in §11.5.1.
+
+### 7.2 Two focus coordinators with one body
+
+**Files:** `feature/movies/MoviesFocus.kt`, `feature/music/MusicFocus.kt`
+
+`MusicFocusOwnership` / `MusicFocusHandoffCoordinator` are the Movies pair minus the silent
+Liked reconcile and keyed per tab. Not generalised in the pass that added them (no broad
+refactors); if a third pane copies them, the shared version belongs in `feature/shared`.
+
+### 7.3 §1.1's trigger has fired
+
+The Music pane's tab strip and the album page's artist buttons reuse existing controls, so no
+sixth copy of the selectable recipe was added — but the count of controls sharing that modifier
+chain is now high enough that `Modifier.iglooSelectable(...)` is worth doing.
+
+### 7.4 The Liked-tracks view waits for Playlists
+
+Every track row has a heart, but there is no list of liked tracks: on the web it lives inside
+the Playlists tab, which is deferred. `GET /music/tracks/liked` is not wired for that reason.
+
+### 7.5 The `MusicActions` wiring is untested, like `MoviesActions` (§4)
+
+`IglooRoot.kt` binds ten lambdas to `MusicViewModel`; a lambda bound to the wrong method would
+pass every suite. One composed-over-real-view-model test would close both holes at once.
+
+### 7.6 Lint's `ModifierParameter` on the skeleton anchors
+
+`MusicGridSkeleton` / `TracksListSkeleton` take `anchorModifier: Modifier`, as `MoviesGridSkeleton`
+does; lint wants the parameter named `modifier`. It is not the composable's own modifier — it is
+the anchor cell's — so the name is right and the warning is noise. Suppress or rename together
+with the Movies one.

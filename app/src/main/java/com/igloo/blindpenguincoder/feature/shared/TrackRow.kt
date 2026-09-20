@@ -103,8 +103,8 @@ fun TrackRow(
     onPlay: () -> Unit,
     onToggleLike: () -> Unit,
     onOpenMore: ((Rect) -> Unit)?,
-    onColumnFocused: (TrackRowColumn) -> Unit = {},
     modifier: Modifier = Modifier,
+    onColumnFocused: (TrackRowColumn) -> Unit = {},
 ) {
     val colors = IglooTheme.colors
     var rowHasFocus by remember { mutableStateOf(false) }

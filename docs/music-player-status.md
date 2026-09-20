@@ -134,12 +134,13 @@ the app's data cleared, `stayon` off, and its 30-minute display timeout unchange
 
 ## What remains
 
-- **Shuffle** — still a host-owned stub; its own branch.
+- ~~Shuffle~~ — both halves landed 2026-09-19 (`music-screen-status.md`): the album and
+  musician pages shuffle their own queue client-side, Shuffle all on the Tracks tab is the
+  server-fed endless queue.
 - **Play-stats reporting** (`POST /api/music/user-stats/play`) — scoped out; needs the
-  accumulator/completion/retry machinery, and will likely bring the ViewModel with it.
-- **Per-track play** (plus the like toggle and overflow menu §11.5 promises on each row) —
-  the track rows are still single focus stops.
+  accumulator/completion/retry machinery, and will likely bring the ViewModel with it (the
+  queue controller is pure Kotlin and moves in unchanged).
+- ~~Per-track play~~ and the row actions — landed 2026-09-19 with the shared three-action row.
 - **Background playback / MediaSessionService** — deliberately not built; Back and Home both
   stop the audio. If continue-listening-while-browsing is ever wanted, it's a separate pass.
-- **A Music destination screen** — the spine's Music tab is still a placeholder; the Home
-  albums rail remains the only way into an album.
+- ~~A Music destination screen~~ — built 2026-09-19 (`music-screen-status.md`).
