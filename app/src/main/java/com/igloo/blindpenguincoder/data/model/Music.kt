@@ -195,57 +195,11 @@ data class ShuffleTracksData(
     val tracks: List<TrackListItem>,
 )
 
-/** The full stored track row (`Track`); `channels` is a string on the wire. */
-@Serializable
-data class Track(
-    val id: Long,
-    val title: String,
-    @SerialName("sort_title") val sortTitle: String,
-    @SerialName("file_name") val fileName: String,
-    val container: String,
-    @SerialName("mime_type") val mimeType: String,
-    val codec: String,
-    val size: Long,
-    @SerialName("track_index") val trackIndex: Long,
-    val duration: Long,
-    val disc: Long,
-    val channels: String,
-    @SerialName("channel_layout") val channelLayout: String,
-    @SerialName("bit_rate") val bitRate: Long,
-    val profile: String,
-    @SerialName("release_date") val releaseDate: SqlNullString,
-    val year: SqlNullInt64,
-    val composer: SqlNullString,
-    val copyright: SqlNullString,
-    val language: SqlNullString,
-    @SerialName("album_id") val albumId: SqlNullInt64,
-    @SerialName("musician_id") val musicianId: SqlNullInt64,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("updated_at") val updatedAt: String,
-)
-
-/** Payload of `TrackDetailsEnvelope.data`. */
-@Serializable
-data class TrackDetailsData(
-    val track: Track,
-)
-
 /** Payload of `TrackLikeToggleEnvelope.data`. */
 @Serializable
 data class TrackLikeToggleData(
     @SerialName("track_id") val trackId: Long,
     @SerialName("is_liked") val isLiked: Boolean,
-)
-
-/** Payload of `LikedTracksEnvelope.data`. */
-@Serializable
-data class LikedTracksData(
-    val tracks: List<TrackListItem>,
-    val total: Long,
-    val page: Long,
-    @SerialName("per_page") val perPage: Long,
-    @SerialName("total_pages") val totalPages: Long,
-    @SerialName("has_more") val hasMore: Boolean,
 )
 
 /** Payload of `LikedTrackIDsEnvelope.data`. */

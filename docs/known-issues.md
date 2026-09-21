@@ -31,22 +31,23 @@ and only the schema it referenced was wrong. `PlaylistCollaboratorMutationEnvelo
 copies of both are non-nullable. Worth noting because it is the first instance that *cannot*
 decode at all rather than being absorbed by `ignoreUnknownKeys`.
 
-Most of these models have no call sites, so drift stays invisible until someone wires up the
-endpoint and it fails at runtime. Roughly two thirds of the wire surface is unexercised: every
-playlist, notification, admin-user, watch-room, search, settings, Spotify/TMDB and user-stats
-model exists only in `data/model/` and the serialization test. They were brought back in line
-with the spec on 2026-09-20, but nothing keeps them there.
+A model with no call site is drift waiting to happen: nothing exercises it until a screen wires
+the endpoint and it fails at runtime. Until 2026-09-20 roughly two thirds of the wire surface
+sat in that state, kept in sync by hand. **Since 2026-09-21 the rule is the other way round: a
+model exists only once production calls its route.** The Music review pass deleted every
+uncalled model in the files it had touched — the playlist, search, user-stats, settings,
+notification and admin-user files whole, plus `Track`, `TrackDetailsData`, `LikedTracksData`,
+`ClearedData`, `IdentifyMovieRequest`, `UpdateMovieMetadataRequest` and `DeleteMovieRequest` —
+and their serialization cases with them. Files that pass did not touch (`WatchRooms.kt`,
+`Devices.kt`, `Metadata.kt`, `Profile.kt`, `UserPin.kt`) still hold uncalled models and fall
+under the same rule the next time they are opened.
 
-Spec schemas with **no model at all**, as of that sweep: every `Show*` schema and
-`/api/shows/*` route, `ShowSearchSection` (so `SearchAllData` leaves `shows` to
-`ignoreUnknownKeys`), `ContinueWatchingEpisodeItem`'s episode keys (`show_id`, `season_number`,
-`episode_number`, `episode_name`; the Home rail drops `kind: episode` entries until an episode
-has a screen to open), the scan-status routes (`MovieScanStatusData`, `MusicScanStatusData`,
-`ShowScanStatusData`, `ScanIssue`), the devices list (`Device`, `DevicesListData`,
-`RenameDeviceRequest`, `QuickConnectLookupData`, `QuickConnectApproveRequest`), the user
-profile updates (`UpdateUserPinRequest`, `UpdateUserNameRequest`, `UpdateUserEmailRequest`,
-`UpdateUserPasswordRequest`, `UpdateUserAvatarRequest`), `LoginRequest` and
-`WatchRoomClientEvent`.
+The consequence is that most spec schemas have **no model at all** — every `Show*` schema and
+`/api/shows/*` route, the playlist, search, stats, settings, notification and admin routes, the
+scan-status routes, the devices list, the profile updates, `LoginRequest`,
+`WatchRoomClientEvent` — and that is expected. `ContinueWatchingEpisodeItem`'s episode keys
+(`show_id`, `season_number`, `episode_number`, `episode_name`) are the one partial case: the
+Home rail drops `kind: episode` entries until an episode has a screen to open.
 
 ### What the fix looks like
 
@@ -93,22 +94,21 @@ by hand:
   `GET /movies/continue-watching` moved to `GET /continue-watching` with a `kind`-discriminated
   movie/episode item under `data.items`; and the uncalled `PlaybackSettings` kept a required
   `is_admin` the schema dropped. The five `MovieDetailsData` lists are typed in the spec since
-  this sync too. Every model in `data/model/`, called or not, was re-checked against the spec
-  on 2026-09-20; the ones below are the only deliberate gaps.
+  this sync too. Every model in `data/model/` was re-checked against the spec on 2026-09-20; the
+  uncalled ones were deleted the next day (above), and the ones below are the only deliberate
+  gaps among those that remain.
 
 ### Related, smaller
 
-- `MoviePlaylistSummary` and `PlaylistSummary` each duplicate **ten** fields from their playlist
-  row instead of composing it, which is why both movie copies carried the stale `folder_id` and
-  drifted identically. Since the spec now spells all four out as flat objects this is a Kotlin
-  choice rather than drift; `AdminUser` was the one true `allOf: [$ref AuthUser]` and now reuses
-  `AuthUser` directly.
 - `TheaterMovie` (7 fields), `TmdbMovie` and its nested genre/company/crew/video items,
   `MovieTechnicalFile` (5 fields), `MovieLibraryItem` (`certification`), `MoviesLibraryData`
-  (`page`, `per_page`, `sort`), `AlbumTrack` (`mime_type`), `DeviceTokenData` and
-  `QuickConnectRedeemData` (`device`) each omit response fields their schema marks required.
-  Harmless under `ignoreUnknownKeys = true` and left alone deliberately — recorded so the next
-  sweep does not re-flag them as new. Confirmed still the case on 2026-09-20.
+  (`page`, `per_page`, `sort`), `AlbumTrack` (`mime_type`), `TrackListItem` (`codec`,
+  `bit_rate`), `Musician` (`sort_name`, `spotify_id`, `created_at`, `updated_at`),
+  `MusicianAlbum` (`release_date`, `track_count`), `MusicianTrack` (`codec`, `bit_rate`,
+  `album_cover`), `DeviceTokenData` and `QuickConnectRedeemData` (`device`) each omit response
+  fields their schema marks required. Harmless under `ignoreUnknownKeys = true` and left alone
+  deliberately — recorded so the next sweep does not re-flag them as new. Confirmed still the
+  case on 2026-09-21.
 - Some Kotlin class names lag the spec's: `MovieWatchProgress`/`UpdateMovieWatchProgressRequest`/
   `SetMovieWatchedRequest` for `WatchProgress`/`UpdateWatchProgressRequest`/`SetWatchedRequest`,
   `MovieCastMember`/`MovieCrewMember`/`MovieExtraVideo` for `MovieCastCredit`/`MovieCrewCredit`/

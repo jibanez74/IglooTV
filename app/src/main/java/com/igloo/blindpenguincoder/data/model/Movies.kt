@@ -293,12 +293,6 @@ data class MovieWatchProgressUpdateData(
     val watched: Boolean,
 )
 
-/** Payload of `ClearedEnvelope.data`. */
-@Serializable
-data class ClearedData(
-    val cleared: Boolean,
-)
-
 /** Payload of `MovieWatchedEnvelope.data`. */
 @Serializable
 data class MovieWatchedData(
@@ -306,25 +300,3 @@ data class MovieWatchedData(
     val watched: Boolean,
 )
 
-@Serializable
-data class IdentifyMovieRequest(
-    @SerialName("tmdb_id") val tmdbId: Int,
-)
-
-@Serializable
-data class UpdateMovieMetadataRequest(
-    val title: String? = null,
-    val year: Long? = null,
-    @SerialName("release_date") val releaseDate: String? = null,
-    val overview: String? = null,
-    @SerialName("tag_line") val tagLine: String? = null,
-    val certification: String? = null,
-    @SerialName("poster_path") val posterPath: String? = null,
-    @SerialName("backdrop_path") val backdropPath: String? = null,
-    val language: String? = null,
-)
-
-@Serializable
-data class DeleteMovieRequest(
-    @SerialName("delete_file") val deleteFile: Boolean = false,
-)
