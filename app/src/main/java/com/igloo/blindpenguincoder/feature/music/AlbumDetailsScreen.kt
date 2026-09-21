@@ -238,7 +238,7 @@ private fun AlbumDetailsContent(
     val shuffleRequester = remember { FocusRequester() }
     val factsStop = remember { FocusRequester() }
     // Chips are focus targets only with a musician screen to open and a real id to open it on.
-    val actionableArtists = onOpenMusician != null && album.artists.all { it.id > 0 }
+    val actionableArtists = onOpenMusician != null && album.artists.all { it.id != null }
     val artistRequesters = remember(album.artists.size, actionableArtists) {
         if (actionableArtists) List(album.artists.size) { FocusRequester() } else emptyList()
     }

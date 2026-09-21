@@ -1,6 +1,8 @@
 package com.igloo.blindpenguincoder.playback.queue
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.data.api.MusicApi
+import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.playback.model.MAX_QUEUE_TRACKS
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
@@ -102,7 +104,7 @@ class MusicQueueController(
     }
 
     private suspend fun refillShuffle() {
-        val exclude = _state.value.request.tracks.map { it.id }.takeLast(MAX_EXCLUSIONS)
+        val exclude = _state.value.request.tracks.map { it.id }.takeLast(MusicApi.SHUFFLE_MAX_EXCLUDE)
         when (val result = fetcher.shuffleTracks(BATCH_SIZE.toLong(), exclude)) {
             is ApiResult.Success -> {
                 val batch = result.value.tracks
@@ -137,7 +139,6 @@ class MusicQueueController(
     companion object {
         const val BATCH_SIZE = 50
         const val REFILL_WHEN_REMAINING_BELOW = 10
-        const val MAX_EXCLUSIONS = 200
         const val FAILURE_NOTICE = "Couldn't load more tracks. The queue will play out."
         const val EXHAUSTED_NOTICE = "That's every track in the library."
     }

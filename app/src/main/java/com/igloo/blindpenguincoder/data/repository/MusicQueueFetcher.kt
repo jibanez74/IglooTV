@@ -1,4 +1,4 @@
-package com.igloo.blindpenguincoder.playback.queue
+package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.data.model.ShuffleTracksData

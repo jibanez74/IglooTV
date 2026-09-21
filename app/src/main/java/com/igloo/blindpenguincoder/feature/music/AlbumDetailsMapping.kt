@@ -2,7 +2,6 @@ package com.igloo.blindpenguincoder.feature.music
 
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
-import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.data.model.AlbumDetailsData
 import com.igloo.blindpenguincoder.data.model.AlbumTrack
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
@@ -48,9 +47,9 @@ data class AlbumDetailsUi(
     val heroInfoDescription: String,
 )
 
-/** A credited artist; the id is what the chip opens once a musician screen exists. */
+/** A credited artist; [id] is what the chip opens, null when the name has no musician row. */
 data class AlbumArtistUi(
-    val id: Long,
+    val id: Long?,
     val name: String,
 )
 
@@ -72,7 +71,7 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
     val artistName = album.musician.orNullIfBlank()
     val releaseDateText = album.releaseDate.orNullIfBlank()?.let(::formatReleaseDate)
         ?: album.year.orNull()?.toString()
-    val trackCountText = "${data.tracks.size} " + if (data.tracks.size == 1) "track" else "tracks"
+    val trackCountText = countLine(data.tracks.size.toLong(), "track")
     val totalDurationText = formatAlbumDuration(data.totalDuration.toLong())
     val popularity = album.spotifyPopularity.orNull()?.roundToInt()?.coerceIn(0, 100)
     val artists = data.artists.filter { it.name.isNotBlank() }.map { AlbumArtistUi(it.id, it.name) }
@@ -104,12 +103,11 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
         totalDurationText = totalDurationText,
         genresLine = joinedLine(data.albumGenres, " · "),
         popularity = popularity,
-        artists = artists.ifEmpty { listOfNotNull(artistName?.let { AlbumArtistUi(id = 0, name = it) }) },
+        artists = artists.ifEmpty { listOfNotNull(artistName?.let { AlbumArtistUi(id = null, name = it) }) },
         discs = discs,
         hasMultipleDiscs = discs.size > 1,
         facts = facts,
-        factsDescription = "Album details. " +
-            facts.joinToString(". ") { "${it.label}: ${it.value}" } + ".",
+        factsDescription = factsDescription("Album details", facts),
         heroInfoDescription = heroInfoDescription(
             title = title,
             artistName = artistName,
@@ -185,7 +183,7 @@ private fun discNumber(track: AlbumTrack): Long = if (track.disc > 0) track.disc
 
 private fun toTrackUi(track: AlbumTrack, genres: List<String>, discSpoken: Long?): TrackRowUi {
     val genresLine = joinedLine(genres, ", ")
-    val durationSec = if (track.duration > 0) track.duration / 1000.0 else 0.0
+    val durationSec = millisToSeconds(track.duration)
     return TrackRowUi(
         id = track.id,
         title = track.title,
@@ -205,19 +203,6 @@ private fun toTrackUi(track: AlbumTrack, genres: List<String>, discSpoken: Long?
         ),
     )
 }
-
-/** Web `formatDuration` parity: `"1h 2m"` past an hour, `"42m 10s"` under one. */
-internal fun formatAlbumDuration(ms: Long): String {
-    val totalSeconds = (ms / 1000).coerceAtLeast(0)
-    val hours = totalSeconds / 3600
-    val minutes = (totalSeconds % 3600) / 60
-    val seconds = totalSeconds % 60
-    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m ${seconds}s"
-}
-
-/** Web `formatTrackDuration` parity: `"3:34"`, empty for a missing or invalid duration. */
-internal fun formatTrackDuration(ms: Long): String =
-    if (ms > 0) formatTimecode(ms / 1000.0) else ""
 
 /**
  * The audio-quality summary, ported from the web page: the dominant codec by track count
@@ -268,9 +253,3 @@ private fun heroInfoDescription(
         popularity?.let { "Spotify popularity $it out of 100" },
     ).joinToString(". ") + "."
 }
-
-/** A line built from values: blanks dropped, null rather than an empty line. */
-private fun joinedLine(values: List<String>, separator: String): String? = values
-    .filter { it.isNotBlank() }
-    .takeIf { it.isNotEmpty() }
-    ?.joinToString(separator)

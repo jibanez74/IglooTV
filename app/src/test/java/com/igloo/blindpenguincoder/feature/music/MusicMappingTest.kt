@@ -88,7 +88,7 @@ class MusicMappingTest {
         ).toCardUi()
 
         assertEquals("Untitled album", card.title)
-        assertNull(card.musician)
+        assertNull(card.subtitle)
         assertNull(card.coverUrl)
     }
 

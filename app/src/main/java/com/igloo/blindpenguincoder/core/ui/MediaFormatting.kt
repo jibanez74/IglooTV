@@ -10,8 +10,12 @@ import kotlin.math.ceil
 /** Grouped integer format for on-screen counts: `1234` → `"1,234"`. */
 val integerCountFormat: NumberFormat = NumberFormat.getIntegerInstance()
 
+/** The noun beside a count: the [singular] for exactly one, otherwise [plural]. */
+fun countNoun(count: Long, singular: String, plural: String = singular + "s"): String =
+    if (count == 1L) singular else plural
+
 /** The noun beside a movie count — one "movie", otherwise "movies". */
-fun movieNoun(count: Long): String = if (count == 1L) "movie" else "movies"
+fun movieNoun(count: Long): String = countNoun(count, "movie")
 
 /** `170` → `"2h 50m"`; whole hours and sub-hour runtimes drop the empty part. */
 fun formatRuntime(minutes: Long): String {

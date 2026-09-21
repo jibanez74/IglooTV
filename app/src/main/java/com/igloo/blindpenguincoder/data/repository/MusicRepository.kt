@@ -16,7 +16,6 @@ import com.igloo.blindpenguincoder.data.model.ShuffleTracksData
 import com.igloo.blindpenguincoder.data.model.SimpleAlbum
 import com.igloo.blindpenguincoder.data.model.TrackLikeToggleData
 import com.igloo.blindpenguincoder.data.model.TracksData
-import com.igloo.blindpenguincoder.playback.queue.MusicQueueFetcher
 import io.ktor.client.call.body
 import io.ktor.client.statement.HttpResponse
 

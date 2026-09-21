@@ -326,7 +326,9 @@ fun TrackRowSkeleton(
  * The row's More menu — "Go to album", "Go to artist" — anchored to the More control's bounds
  * and hosted as the last child of the screen that owns the row (the [IglooMenu] contract). An
  * item first hands the destination to the host, then dismisses; a row offers More at all only
- * when [hasMoreActions] says one of the two can be opened from where it sits.
+ * when [hasMoreActions] says one of the two can be opened from where it sits. The host's own
+ * Back handlers are not gated on this menu: it is composed after them, so its handler is the
+ * one the dispatcher reaches first for exactly as long as it is up.
  */
 @Composable
 fun TrackRowMenu(

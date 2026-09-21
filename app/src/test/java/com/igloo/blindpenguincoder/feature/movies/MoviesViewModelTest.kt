@@ -10,6 +10,7 @@ import com.igloo.blindpenguincoder.data.repository.moviesGenresJson
 import com.igloo.blindpenguincoder.data.repository.moviesLibraryJson
 import com.igloo.blindpenguincoder.data.repository.moviesStatsJson
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData

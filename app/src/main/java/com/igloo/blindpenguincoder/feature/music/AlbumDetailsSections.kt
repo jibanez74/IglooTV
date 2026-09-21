@@ -146,7 +146,7 @@ private fun ArtistsSection(
                 if (actionable && onOpenMusician != null) {
                     IglooButton(
                         text = artist.name,
-                        onClick = { onOpenMusician(artist.id) },
+                        onClick = { artist.id?.let(onOpenMusician) },
                         variant = IglooButtonVariant.Ghost,
                         semanticLabel = artist.name,
                         actionLabel = "Open ${artist.name}",

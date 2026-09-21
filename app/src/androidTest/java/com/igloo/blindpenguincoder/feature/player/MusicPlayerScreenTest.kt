@@ -42,7 +42,7 @@ import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.playback.queue.InertMusicQueueFetcher
-import com.igloo.blindpenguincoder.playback.queue.MusicQueueFetcher
+import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.ShuffleTracksData

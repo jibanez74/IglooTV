@@ -123,7 +123,7 @@ class MusicianDetailsMappingTest {
         val ui = toMusicianDetailsUi(data(albums = listOf(album(11, "Help!", 1965), album(12, "", null))))
 
         assertEquals(listOf("Help!", "Untitled album"), ui.albums.map { it.title })
-        assertEquals(listOf("1965", null), ui.albums.map { it.musician })
+        assertEquals(listOf("1965", null), ui.albums.map { it.subtitle })
     }
 
     @Test

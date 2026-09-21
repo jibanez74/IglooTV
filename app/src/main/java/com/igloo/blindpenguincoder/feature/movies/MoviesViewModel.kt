@@ -14,6 +14,11 @@ import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.DUPLICATE_PAGE_BACKOFF_MS
+import com.igloo.blindpenguincoder.feature.shared.FIRST_PAGE
+import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
+import com.igloo.blindpenguincoder.feature.shared.pageAppendState
+import com.igloo.blindpenguincoder.feature.shared.resetIfLoading
 import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
 import com.igloo.blindpenguincoder.feature.shared.moviePosterItem
 import kotlinx.coroutines.Job
@@ -23,14 +28,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-/**
- * How long a tab taking focus waits before it fetches. Tabs select on focus, so a slide across
- * the strip lands on every tab in between; without this each pass-over puts a request on the
- * wire and flips the header's label on its way past. Visible to the tests so they can wait out
- * exactly this rather than a number that has to be kept in step by hand.
- */
-internal const val TAB_SWITCH_DEBOUNCE_MS = 300L
 
 /**
  * Which list the grid shows. The three are the same paged, title-ordered shape server-side;
@@ -573,20 +570,8 @@ class MoviesViewModel(
      */
     private fun apiBaseUrlOrNull(): String? = serverUrl.current.value?.apiBaseUrl
 
-    /** A superseded request's Loading tail must not outlive the request it belonged to. */
-    private fun AppendState.resetIfLoading(): AppendState =
-        if (this == AppendState.Loading) AppendState.Idle else this
-
-    /**
-     * `total_pages` is authoritative, but an empty page stops the grid regardless: a library
-     * shrinking between requests can return nothing for page N while still claiming more exist.
-     */
     private fun MoviesLibraryData.appendStateFor(page: Long): AppendState =
-        if (page >= totalPages || movies.isEmpty()) {
-            AppendState.End
-        } else {
-            AppendState.Idle
-        }
+        pageAppendState(page, totalPages, movies.isEmpty())
 
     private fun MoviesLibraryData.toPosterItems(apiBaseUrl: String): List<MoviePosterItem> =
         movies.map { it.toPosterItem(apiBaseUrl) }
@@ -601,10 +586,6 @@ class MoviesViewModel(
         )
 
     private companion object {
-        const val FIRST_PAGE = 1L
         const val PAGE_SIZE = MovieApi.MAX_LIBRARY_PER_PAGE
-
-        /** How long an all-duplicates page holds the walk back before the cursor advances. */
-        const val DUPLICATE_PAGE_BACKOFF_MS = 250L
     }
 }

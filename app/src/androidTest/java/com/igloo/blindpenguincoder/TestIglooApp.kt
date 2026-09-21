@@ -22,7 +22,7 @@ import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.queue.InertMusicQueueFetcher
-import com.igloo.blindpenguincoder.playback.queue.MusicQueueFetcher
+import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
 import kotlinx.coroutines.flow.Flow

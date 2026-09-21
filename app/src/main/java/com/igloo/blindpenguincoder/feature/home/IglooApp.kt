@@ -93,7 +93,7 @@ import com.igloo.blindpenguincoder.feature.music.TrackFocusMemory
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.music.toMusicPlayRequest
 import com.igloo.blindpenguincoder.feature.music.toShuffledMusicPlayRequest
-import com.igloo.blindpenguincoder.playback.queue.MusicQueueFetcher
+import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerScreen
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.feature.player.MusicPlayerScreen

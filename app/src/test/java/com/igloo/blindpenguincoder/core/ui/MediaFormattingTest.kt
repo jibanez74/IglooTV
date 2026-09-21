@@ -7,6 +7,15 @@ import org.junit.Test
 class MediaFormattingTest {
 
     @Test
+    fun `chooses the noun by count, with an irregular plural when given`() {
+        assertEquals("album", countNoun(1, "album"))
+        assertEquals("albums", countNoun(0, "album"))
+        assertEquals("albums", countNoun(2, "album"))
+        assertEquals("movies", movieNoun(3))
+        assertEquals("people", countNoun(2, "person", "people"))
+    }
+
+    @Test
     fun `formats runtimes, dropping the empty part`() {
         assertEquals("2h 50m", formatRuntime(170))
         assertEquals("2h", formatRuntime(120))

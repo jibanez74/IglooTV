@@ -40,7 +40,7 @@ import com.igloo.blindpenguincoder.playback.model.MusicPlayerState
 import com.igloo.blindpenguincoder.playback.model.musicPlayerAnnouncement
 import com.igloo.blindpenguincoder.playback.model.onEvent
 import com.igloo.blindpenguincoder.playback.queue.MusicQueueController
-import com.igloo.blindpenguincoder.playback.queue.MusicQueueFetcher
+import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**

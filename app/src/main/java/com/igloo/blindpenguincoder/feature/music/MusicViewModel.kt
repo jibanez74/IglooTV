@@ -11,8 +11,12 @@ import com.igloo.blindpenguincoder.data.model.MusicStats
 import com.igloo.blindpenguincoder.data.model.TrackListItem
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
-import com.igloo.blindpenguincoder.feature.movies.TAB_SWITCH_DEBOUNCE_MS
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.DUPLICATE_PAGE_BACKOFF_MS
+import com.igloo.blindpenguincoder.feature.shared.FIRST_PAGE
+import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
+import com.igloo.blindpenguincoder.feature.shared.pageAppendState
+import com.igloo.blindpenguincoder.feature.shared.resetIfLoading
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.queue.MusicQueueController
 import kotlinx.coroutines.Job
@@ -423,13 +427,6 @@ class MusicViewModel(
         }
     }
 
-    private fun pageAppendState(page: Long, totalPages: Long, empty: Boolean): AppendState =
-        if (page >= totalPages || empty) AppendState.End else AppendState.Idle
-
-    /** A superseded request's Loading tail must not outlive the request it belonged to. */
-    private fun AppendState.resetIfLoading(): AppendState =
-        if (this == AppendState.Loading) AppendState.Idle else this
-
     @Suppress("UNCHECKED_CAST")
     private fun MusicUiState.paged(tab: MusicTab): PagedState<Any> = when (tab) {
         MusicTab.Musicians -> musicians
@@ -448,11 +445,7 @@ class MusicViewModel(
     }
 
     private companion object {
-        const val FIRST_PAGE = 1L
         const val PAGE_SIZE = MusicApi.MAX_PER_PAGE
         const val TRACKS_PAGE_SIZE = 50L
-
-        /** How long an all-duplicates page holds the walk back before the cursor advances. */
-        const val DUPLICATE_PAGE_BACKOFF_MS = 250L
     }
 }

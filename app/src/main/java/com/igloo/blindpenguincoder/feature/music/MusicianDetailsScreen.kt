@@ -376,7 +376,7 @@ private fun MusicianDetailsContent(
                 ) { album, itemModifier, aspect ->
                     IglooPosterCard(
                         title = album.title,
-                        subtitle = album.musician,
+                        subtitle = album.subtitle,
                         imageUrl = album.coverUrl,
                         onClick = { onOpenAlbum(album.id) },
                         aspect = aspect,

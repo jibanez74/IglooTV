@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.playback.queue
 
 import com.igloo.blindpenguincoder.data.model.TrackListItem
+import com.igloo.blindpenguincoder.feature.music.millisToSeconds
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import kotlin.random.Random
 
@@ -8,7 +9,7 @@ import kotlin.random.Random
 fun TrackListItem.toMusicPlayTrack(): MusicPlayTrack = MusicPlayTrack(
     id = id,
     title = title,
-    durationSec = if (duration > 0) duration / 1000.0 else 0.0,
+    durationSec = millisToSeconds(duration),
     artistName = musicianName.orNullIfBlank(),
     albumTitle = albumTitle.orNullIfBlank(),
     coverUrl = albumCover.orNullIfBlank(),

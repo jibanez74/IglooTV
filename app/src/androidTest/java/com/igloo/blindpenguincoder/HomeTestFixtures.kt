@@ -468,7 +468,7 @@ internal val testMusicians = (1L..30L).map { id ->
 
 /** Cover-less albums for the Albums tab; ids offset so they never collide with the rail's. */
 internal val testMusicAlbums = (1L..30L).map { id ->
-    AlbumCardUi(id = 100 + id, title = "Album $id", musician = "Musician $id", coverUrl = null)
+    AlbumCardUi(id = 100 + id, title = "Album $id", subtitle = "Musician $id", coverUrl = null)
 }
 
 /**
@@ -552,8 +552,8 @@ internal fun testMusicianDetails(
     genresLine = "Rock · Pop",
     popularity = 88,
     albums = listOf(
-        AlbumCardUi(id = 11, title = "Help!", musician = "1965", coverUrl = null),
-        AlbumCardUi(id = 12, title = "Revolver", musician = "1966", coverUrl = null),
+        AlbumCardUi(id = 11, title = "Help!", subtitle = "1965", coverUrl = null),
+        AlbumCardUi(id = 12, title = "Revolver", subtitle = "1966", coverUrl = null),
     ),
     tracks = listOf(
         TrackRowUi(

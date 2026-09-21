@@ -1,6 +1,8 @@
 package com.igloo.blindpenguincoder.playback.queue
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.data.api.MusicApi
+import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.ShuffleTracksData
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
@@ -14,7 +16,6 @@ import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.playback.queue.MusicQueueController.Companion.BATCH_SIZE
 import com.igloo.blindpenguincoder.playback.queue.MusicQueueController.Companion.EXHAUSTED_NOTICE
 import com.igloo.blindpenguincoder.playback.queue.MusicQueueController.Companion.FAILURE_NOTICE
-import com.igloo.blindpenguincoder.playback.queue.MusicQueueController.Companion.MAX_EXCLUSIONS
 import com.igloo.blindpenguincoder.playback.queue.MusicQueueController.Companion.REFILL_WHEN_REMAINING_BELOW
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -188,7 +189,7 @@ class MusicQueueControllerTest {
         index.value = 295
 
         assertEquals((101L..300L).toList(), fetcher.excludes.single())
-        assertEquals(MAX_EXCLUSIONS, fetcher.excludes.single().size)
+        assertEquals(MusicApi.SHUFFLE_MAX_EXCLUDE, fetcher.excludes.single().size)
         job.cancel()
     }
 

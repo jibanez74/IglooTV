@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.playback.queue
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.ShuffleTracksData
 import com.igloo.blindpenguincoder.data.model.TracksData

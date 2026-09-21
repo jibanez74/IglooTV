@@ -53,12 +53,12 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
-import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooSkeletonAnchorCell
 import com.igloo.blindpenguincoder.core.ui.IglooSkeletonTextureCell
 import com.igloo.blindpenguincoder.core.ui.IglooTab
 import com.igloo.blindpenguincoder.core.ui.IglooTabRow
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.countNoun
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.feature.shared.AppendState
@@ -164,7 +164,7 @@ fun MusicScreen(
     val contentUp = if (trackActionsShown) lastFocusedTrackAction else tabRowRequester
     // The row whose More menu is open; the menu is the pane's last child, over everything.
     var trackMenu by remember(tab) { mutableStateOf<Pair<TrackRowUi, Rect>?>(null) }
-    val menuNotice = state.notice ?: likes.notice
+    val headerNotice = state.notice ?: likes.notice
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -182,7 +182,7 @@ fun MusicScreen(
                 loadedCount = state.selectedLoadedCount,
                 append = paged.append,
                 refreshing = state.refreshing,
-                notice = menuNotice,
+                notice = headerNotice,
                 contentInset = contentInset,
                 navigationRequester = navigationRequester,
                 refreshRequester = refreshRequester,
@@ -306,6 +306,7 @@ fun MusicScreen(
                         onLoadMore = actions.onLoadMore,
                         onRetryAppend = actions.onRetryAppend,
                         retryLabel = "Retry loading more musicians",
+                        artworkRadius = IglooTheme.radius.pill,
                     ) { musician, modifier ->
                         IglooPosterCard(
                             title = musician.name,
@@ -343,10 +344,11 @@ fun MusicScreen(
                         onLoadMore = actions.onLoadMore,
                         onRetryAppend = actions.onRetryAppend,
                         retryLabel = "Retry loading more albums",
+                        artworkRadius = IglooTheme.radius.lg,
                     ) { album, modifier ->
                         IglooPosterCard(
                             title = album.title,
-                            subtitle = album.musician,
+                            subtitle = album.subtitle,
                             imageUrl = album.coverUrl,
                             onClick = onAlbumSelected?.let { open -> { open(album.id) } },
                             aspect = IglooTheme.layout.albumAspect,
@@ -527,13 +529,15 @@ internal data class MusicTabPresentation(
     val semanticLabel: String,
     /** Doubles as the focus-ownership key ([MusicFocusOwnership]) and the test tag. */
     val key: String,
+    /** The count line's noun for one item. */
+    val singular: String,
 )
 
 internal val MusicTab.presentation: MusicTabPresentation
     get() = when (this) {
-        MusicTab.Musicians -> MusicTabPresentation("Musicians", "Musicians", "music_tab_musicians")
-        MusicTab.Albums -> MusicTabPresentation("Albums", "Albums", "music_tab_albums")
-        MusicTab.Tracks -> MusicTabPresentation("Tracks", "Tracks", "music_tab_tracks")
+        MusicTab.Musicians -> MusicTabPresentation("Musicians", "Musicians", "music_tab_musicians", "musician")
+        MusicTab.Albums -> MusicTabPresentation("Albums", "Albums", "music_tab_albums", "album")
+        MusicTab.Tracks -> MusicTabPresentation("Tracks", "Tracks", "music_tab_tracks", "track")
     }
 
 /**
@@ -635,6 +639,7 @@ private fun <T> MusicGrid(
     onLoadMore: () -> Unit,
     onRetryAppend: () -> Unit,
     retryLabel: String,
+    artworkRadius: Dp,
     card: @Composable (T, Modifier) -> Unit,
 ) {
     val entryId = remember(items, lastFocusedId) {
@@ -710,7 +715,7 @@ private fun <T> MusicGrid(
                 IglooSkeletonTextureCell(
                     cardAspect = IglooTheme.layout.albumAspect,
                     cardWidth = Dp.Unspecified,
-                    artworkRadius = if (testTag == "musicians_grid") IglooTheme.radius.pill else IglooTheme.radius.lg,
+                    artworkRadius = artworkRadius,
                     modifier = Modifier.testTag("tail_skeleton_$index"),
                 )
             }
@@ -829,7 +834,10 @@ private fun TracksList(
                     val track = entry.track
                     val isEntry = track.id == entryId
                     val requesters = remember { TrackRowRequesters() }
-                    val focus = remember(requesters, index, isEntry, entryColumn, menuOpenFor, upRequester, append) {
+                    val focus = remember(
+                        requesters, index, isEntry, entryColumn, menuOpenFor, upRequester, append,
+                        firstTrackIndex, lastTrackIndex,
+                    ) {
                         TrackRowFocus(
                             requesters = requesters,
                             up = { if (index == firstTrackIndex) upRequester else null },
@@ -977,11 +985,7 @@ private fun MusicTab.artworkRadius(): Dp = when (this) {
     else -> IglooTheme.radius.lg
 }
 
-private fun MusicTab.noun(count: Long): String = when (this) {
-    MusicTab.Musicians -> if (count == 1L) "musician" else "musicians"
-    MusicTab.Albums -> if (count == 1L) "album" else "albums"
-    MusicTab.Tracks -> if (count == 1L) "track" else "tracks"
-}
+private fun MusicTab.noun(count: Long): String = countNoun(count, presentation.singular)
 
 private fun MusicTab.emptyIcon(): ImageVector = when (this) {
     MusicTab.Musicians -> IglooIcons.Person

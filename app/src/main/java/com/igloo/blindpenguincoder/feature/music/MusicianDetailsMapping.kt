@@ -9,8 +9,6 @@ import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.playback.queue.shuffledQueue
-import java.text.NumberFormat
-import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -41,20 +39,19 @@ data class MusicianDetailsUi(
 internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
     val musician = data.musician
     val name = musician.name.ifBlank { "Unknown artist" }
-    val albumCountText = "${data.albums.size} " + if (data.albums.size == 1) "album" else "albums"
-    val trackCountText = "${data.tracks.size} " + if (data.tracks.size == 1) "track" else "tracks"
+    val albumCountText = countLine(data.albums.size.toLong(), "album")
+    val trackCountText = countLine(data.tracks.size.toLong(), "track")
     val totalDurationText = formatAlbumDuration(data.totalDuration.toLong())
     val popularity = musician.spotifyPopularity.orNull()?.roundToInt()?.coerceIn(0, 100)
     val followers = musician.spotifyFollowers.orNull()?.takeIf { it > 0 }
-    val genresLine = data.genres.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+    val genresSpoken = joinedLine(data.genres, ", ")
     val facts = buildList {
         add(AlbumFactUi("Albums", "${data.albums.size}"))
         add(AlbumFactUi("Tracks", "${data.tracks.size}"))
         add(AlbumFactUi("Total duration", totalDurationText))
-        data.genres.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }
-            ?.let { add(AlbumFactUi("Genres", it.joinToString(", "))) }
+        genresSpoken?.let { add(AlbumFactUi("Genres", it)) }
         popularity?.let { add(AlbumFactUi("Spotify popularity", "$it / 100")) }
-        followers?.let { add(AlbumFactUi("Spotify followers", integerFormat.format(it))) }
+        followers?.let { add(AlbumFactUi("Spotify followers", formatCount(it))) }
         musician.summary.orNullIfBlank()?.let { add(AlbumFactUi("About", it)) }
     }
     return MusicianDetailsUi(
@@ -64,24 +61,24 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
         albumCountText = albumCountText,
         trackCountText = trackCountText,
         totalDurationText = totalDurationText,
-        genresLine = genresLine,
+        genresLine = joinedLine(data.genres, " · "),
         popularity = popularity,
         albums = data.albums.map {
             AlbumCardUi(
                 id = it.id,
                 title = it.title.ifBlank { "Untitled album" },
-                musician = it.year.orNull()?.toString(),
+                subtitle = it.year.orNull()?.toString(),
                 coverUrl = it.cover.orNullIfBlank(),
             )
         },
         tracks = data.tracks.map { it.toRowUi() },
         facts = facts,
-        factsDescription = "Artist details. " + facts.joinToString(". ") { "${it.label}: ${it.value}" } + ".",
+        factsDescription = factsDescription("Artist details", facts),
         heroInfoDescription = listOfNotNull(
             name,
             "$albumCountText, $trackCountText",
             "Total duration: ${formatSpokenTime(data.totalDuration / 1000.0)}",
-            data.genres.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.let { "Genres: ${it.joinToString(", ")}" },
+            genresSpoken?.let { "Genres: $it" },
             popularity?.let { "Spotify popularity $it out of 100" },
         ).joinToString(". ") + ".",
     )
@@ -89,7 +86,7 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
 
 /** A musician's track: its album is the subtitle and More's one destination. */
 private fun MusicianTrack.toRowUi(): TrackRowUi {
-    val durationSec = if (duration > 0) duration / 1000.0 else 0.0
+    val durationSec = millisToSeconds(duration)
     val album = albumTitle.orNullIfBlank()
     return TrackRowUi(
         id = id,
@@ -127,5 +124,3 @@ internal fun toShuffledMusicPlayRequest(
     musician: MusicianDetailsUi,
     random: Random = Random.Default,
 ): MusicPlayRequest = toMusicPlayRequest(musician).let { it.copy(tracks = it.tracks.shuffledQueue(random)) }
-
-private val integerFormat: NumberFormat = NumberFormat.getIntegerInstance(Locale.US)

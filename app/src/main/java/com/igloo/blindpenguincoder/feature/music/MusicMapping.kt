@@ -11,8 +11,6 @@ import com.igloo.blindpenguincoder.feature.shared.trackSubtitle
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.playback.queue.toMusicPlayTrack
-import java.text.NumberFormat
-import java.util.Locale
 
 /**
  * Wire-to-render rules for the Music pane (docs/design-system.md section 11.5), pure so every
@@ -35,7 +33,8 @@ data class MusicianCardUi(
 data class AlbumCardUi(
     val id: Long,
     val title: String,
-    val musician: String?,
+    /** The artist on the Albums tab; the year on a musician's discography rail. */
+    val subtitle: String?,
     val coverUrl: String?,
 )
 
@@ -46,8 +45,8 @@ sealed interface TracksEntry {
 }
 
 internal fun SimpleMusician.toCardUi(): MusicianCardUi {
-    val albums = "$albumCount " + if (albumCount == 1L) "album" else "albums"
-    val tracks = "$trackCount " + if (trackCount == 1L) "track" else "tracks"
+    val albums = countLine(albumCount, "album")
+    val tracks = countLine(trackCount, "track")
     val cardName = name.ifBlank { "Unknown artist" }
     return MusicianCardUi(
         id = id,
@@ -61,7 +60,7 @@ internal fun SimpleMusician.toCardUi(): MusicianCardUi {
 internal fun SimpleAlbum.toCardUi(): AlbumCardUi = AlbumCardUi(
     id = id,
     title = title.ifBlank { "Untitled album" },
-    musician = musician.orNullIfBlank(),
+    subtitle = musician.orNullIfBlank(),
     coverUrl = cover.orNullIfBlank(),
 )
 
@@ -132,7 +131,3 @@ internal fun shuffleAllRequest(batch: List<TrackListItem>): MusicPlayRequest? {
         tracks = batch.map { it.toMusicPlayTrack() }.distinctBy { it.id },
     )
 }
-
-private val integerCountFormat: NumberFormat = NumberFormat.getIntegerInstance(Locale.US)
-
-internal fun formatCount(count: Long): String = integerCountFormat.format(count)
