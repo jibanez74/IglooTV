@@ -1,7 +1,6 @@
 package com.igloo.blindpenguincoder.core.ui
 
 import android.graphics.Bitmap
-import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
@@ -26,6 +25,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.core.design.IglooDarkColors
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
+import com.igloo.blindpenguincoder.spokenFeedbackEnabled
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeFalse
 import org.junit.Before
@@ -58,6 +58,13 @@ class FocusTreatmentTest {
      * Skipped rather than failed: the Shield keeps TalkBack on for the a11y validation
      * `AGENTS.md` requires, and a pixel test must not turn that into a red build.
      *
+     * The predicate is [spokenFeedbackEnabled], not `AccessibilityManager.isEnabled`.
+     * `UiAutomation` registers itself as an accessibility service for the life of the
+     * instrumentation process, so `isEnabled` is true in any full run as soon as another suite
+     * touches `AnimationScaleRule`. That skipped all ten of these — the only pixel proof the
+     * focus treatment renders at all — in every full run, while they passed whenever the class
+     * was run on its own.
+     *
      * Kept at class level rather than narrowed to the focused captures. The rest-state tests
      * genuinely do not need it — nothing draws an accessibility rectangle over an unfocused
      * control — but narrowing it was tried and reverted: on the Shield, the one device where the
@@ -66,11 +73,10 @@ class FocusTreatmentTest {
      */
     @Before
     fun skipWhileAnAccessibilityServiceIsDrawingItsOwnFocusIndicator() {
-        val manager = context.getSystemService(AccessibilityManager::class.java)
         assumeFalse(
-            "an accessibility service is active and draws its own focus indicator over the " +
+            "a screen reader is active and draws its own focus indicator over the " +
                 "treatment under test; disable TalkBack to run these",
-            manager != null && manager.isEnabled,
+            spokenFeedbackEnabled(),
         )
     }
 
