@@ -36,6 +36,14 @@ Shuffle, a rail of their albums, every one of their tracks as rows, and a facts 
 album from there replaces the page (there is one details layer), and Back returns to the Music
 pane.
 
+**A review pass (2026-09-21).** The branch was read end to end for duplication, dead code and
+organisation. The album and musician pages now share one set of overlay pieces
+(`MusicDetailsShared.kt`), the Music and Movies panes share their focus coordinator and chrome
+helpers, the music formatting rules live in one file, the pane's pager is typed per tab, the
+queue-fetcher seam sits in the data layer, and every API model nothing calls was deleted along
+with a handful of unread fields and parameters. No behaviour changed; every test tag the
+instrumented suites assert on is unchanged.
+
 **Behind it.** The music list models had drifted from the server and could not decode a current
 response; they were retyped from the server's own row structs and every Music endpoint the
 screen needs was wired and tested. The player's request became a queue with a source, and a

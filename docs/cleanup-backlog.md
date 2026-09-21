@@ -220,13 +220,19 @@ was up and opens the other; Back then lands on the Music pane node that opened t
 The web goes musician → album → back → musician. A two-deep stack touches every host gate that
 reads the open flags and the `DetailsOrigin` machinery; deferred, and recorded in §11.5.1.
 
-### 7.2 Two focus coordinators with one body
+### 7.2 The Music and Movies panes still draw their own grid, header, tab row and skeleton
 
-**Files:** `feature/movies/MoviesFocus.kt`, `feature/music/MusicFocus.kt`
+**Files:** `feature/movies/MoviesScreen.kt`, `feature/music/MusicScreen.kt`
 
-`MusicFocusOwnership` / `MusicFocusHandoffCoordinator` are the Movies pair minus the silent
-Liked reconcile and keyed per tab. Not generalised in the pass that added them (no broad
-refactors); if a third pane copies them, the shared version belongs in `feature/shared`.
+The review pass of 2026-09-21 shared what had one body — the focus coordinator and ownership
+(`feature/shared/PaneFocus.kt`), the scroll padding, tab presentation, Refresh labels and row
+counts (`feature/shared/PaneChrome.kt`), the paging helpers (`Paging.kt`). What it left are the
+composables that look alike but diverge: `MoviesGrid`/`MusicGrid` (the Movies grid carries the
+silent Liked reconcile and a `Populated(items)` model, the Music grid is generic over its card),
+`MoviesHeader`/`MusicHeader` (the Movies header has the sort control and the genre count line),
+`MoviesTabRow`/`MusicTabRow` (identical modulo the enum — the easiest of the four), and the two
+grid skeletons. Merging them is a Movies-side change that needs the Movies instrumented suites
+re-run; `MoviesUiState`'s loose paging fields could move onto `PagedState` in the same pass.
 
 ### 7.3 §1.1's trigger has fired
 
@@ -243,6 +249,17 @@ the Playlists tab, which is deferred. `GET /music/tracks/liked` is not wired for
 
 `IglooRoot.kt` binds ten lambdas to `MusicViewModel`; a lambda bound to the wrong method would
 pass every suite. One composed-over-real-view-model test would close both holes at once.
+
+### 7.7 Three single-read details view models with one shape
+
+**Files:** `feature/music/AlbumDetailsViewModel.kt`, `feature/music/MusicianDetailsViewModel.kt`,
+`feature/movies/TheaterMovieDetailsViewModel.kt`
+
+`open(id)` / `close()` / `retry()` / `refresh()` / `load(id, userInitiated)` with the same
+stale-id guard and the same keep-on-background-failure rule, each over its own
+`Loading/Loaded/Error` triple. About 60 lines apiece; a generic base or a shared
+`DetailsLoad<T>` state would touch `IglooApp`, the fixtures and every details test for less
+than it saves, which is why the 2026-09-21 review left them. Worth doing if a fourth appears.
 
 ### 7.6 Lint's `ModifierParameter` on the skeleton anchors
 
