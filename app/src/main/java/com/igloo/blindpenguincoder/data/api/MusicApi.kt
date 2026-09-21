@@ -34,7 +34,7 @@ class MusicApi(
 
     /**
      * The library track list, ordered by letter bucket then title. Unlike the album and musician
-     * lists this route pages by `limit`/`offset`; `limit` is clamped to [MAX_TRACKS_LIMIT].
+     * lists this route pages by `limit`/`offset`; `limit` is clamped to 100 server-side.
      */
     suspend fun tracks(limit: Long, offset: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/music/tracks") {
@@ -82,11 +82,7 @@ class MusicApi(
         /** The album and musician lists clamp a larger `per_page` to this. */
         const val MAX_PER_PAGE = 48L
 
-        /** The track list clamps a larger `limit` to this; 50 is the server default. */
-        const val MAX_TRACKS_LIMIT = 100L
-
-        /** Shuffle clamps `limit` to this and ignores `exclude` ids past the same count. */
-        const val SHUFFLE_MAX_LIMIT = 200L
+        /** Shuffle clamps `limit` to 200 and ignores `exclude` ids past this count. */
         const val SHUFFLE_MAX_EXCLUDE = 200
     }
 }

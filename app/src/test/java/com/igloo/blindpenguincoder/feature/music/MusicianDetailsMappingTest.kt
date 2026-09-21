@@ -25,14 +25,10 @@ class MusicianDetailsMappingTest {
     ) = Musician(
         id = 4,
         name = name,
-        sortName = name.lowercase(),
         summary = SqlNullString(summary.orEmpty(), valid = summary != null),
-        spotifyId = SqlNullString("artist-4", valid = true),
         spotifyPopularity = SqlNullFloat64(popularity ?: 0.0, valid = popularity != null),
         spotifyFollowers = SqlNullInt64(followers ?: 0, valid = followers != null),
         thumb = SqlNullString(thumb.orEmpty(), valid = thumb != null),
-        createdAt = "",
-        updatedAt = "",
     )
 
     private fun album(id: Long, title: String, year: Long?, cover: String? = null) = MusicianAlbum(
@@ -40,19 +36,14 @@ class MusicianDetailsMappingTest {
         title = title,
         cover = SqlNullString(cover.orEmpty(), valid = cover != null),
         year = SqlNullInt64(year ?: 0, valid = year != null),
-        releaseDate = SqlNullString("", valid = false),
-        trackCount = 12,
     )
 
     private fun track(id: Long, title: String, durationMs: Long, albumId: Long?, albumTitle: String?) = MusicianTrack(
         id = id,
         title = title,
         duration = durationMs,
-        codec = "flac",
-        bitRate = 900_000,
         albumId = SqlNullInt64(albumId ?: 0, valid = albumId != null),
         albumTitle = SqlNullString(albumTitle.orEmpty(), valid = albumTitle != null),
-        albumCover = SqlNullString("", valid = false),
     )
 
     private fun data(
@@ -78,7 +69,6 @@ class MusicianDetailsMappingTest {
         assertEquals("2m 5s", ui.totalDurationText)
         assertEquals("Rock · Pop", ui.genresLine)
         assertEquals(88, ui.popularity)
-        assertEquals("25,000,000 Spotify followers", ui.followersText)
         assertEquals(
             "The Beatles. 1 album, 1 track. Total duration: 2 minutes and 5 seconds. " +
                 "Genres: Rock, Pop. Spotify popularity 88 out of 100.",
@@ -104,10 +94,8 @@ class MusicianDetailsMappingTest {
 
         assertEquals("Unknown artist", ui.name)
         assertNull(ui.thumbUrl)
-        assertNull(ui.summary)
         assertNull(ui.genresLine)
         assertNull(ui.popularity)
-        assertNull(ui.followersText)
         assertEquals("0 albums", ui.albumCountText)
         assertEquals(listOf("Albums", "Tracks", "Total duration"), ui.facts.map { it.label })
         assertEquals("Unknown artist. 0 albums, 0 tracks. Total duration: 0 seconds.", ui.heroInfoDescription)

@@ -18,8 +18,6 @@ class MusicMappingTest {
             id = id,
             title = title,
             duration = 125_000,
-            codec = "flac",
-            bitRate = 900_000,
             albumId = SqlNullInt64(11, valid = album != null),
             albumTitle = SqlNullString(album.orEmpty(), valid = album != null),
             albumCover = SqlNullString("https://i.scdn.co/image/help.jpg", valid = album != null),

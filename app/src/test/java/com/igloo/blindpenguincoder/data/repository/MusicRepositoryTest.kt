@@ -288,7 +288,6 @@ class MusicRepositoryTest {
         assertEquals("The Beatles", data.musician.name)
         assertEquals(88.0, data.musician.spotifyPopularity.orNull())
         assertEquals(25_000_000L, data.musician.spotifyFollowers.orNull())
-        assertEquals(14L, data.albums.single().trackCount)
         assertEquals(listOf(125_000L, 125_000L), data.tracks.map { it.duration })
         assertEquals(1L, data.tracks[0].albumId.orNull())
         assertNull(data.tracks[1].albumId.orNull())

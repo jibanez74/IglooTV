@@ -10,14 +10,14 @@ internal sealed interface MusicContent {
     data object Loading : MusicContent
     data class Error(val message: String) : MusicContent
     data object Empty : MusicContent
-    data class Populated(val count: Int) : MusicContent
+    data object Populated : MusicContent
 }
 
 internal fun PagedState<*>.toMusicContent(): MusicContent = when (val shown = content) {
     IglooRailState.Loading -> MusicContent.Loading
     is IglooRailState.Error -> MusicContent.Error(shown.message)
     is IglooRailState.Loaded ->
-        if (shown.items.isEmpty()) MusicContent.Empty else MusicContent.Populated(shown.items.size)
+        if (shown.items.isEmpty()) MusicContent.Empty else MusicContent.Populated
 }
 
 /** A surface with no cards, whose single anchored node is the pane's only focus target. */

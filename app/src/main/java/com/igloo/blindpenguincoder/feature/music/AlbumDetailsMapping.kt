@@ -46,9 +46,7 @@ data class AlbumDetailsUi(
     val factsDescription: String,
     /** The hero reading stop's one sentence (web `pageAnnouncement` parity, plus popularity). */
     val heroInfoDescription: String,
-) {
-    val artistNames: List<String> get() = artists.map { it.name }
-}
+)
 
 /** A credited artist; the id is what the chip opens once a musician screen exists. */
 data class AlbumArtistUi(

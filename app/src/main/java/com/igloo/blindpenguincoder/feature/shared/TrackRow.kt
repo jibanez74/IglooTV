@@ -256,7 +256,6 @@ private fun Modifier.trackColumn(
 @Composable
 fun TrackRowSkeleton(
     modifier: Modifier = Modifier,
-    showIndex: Boolean = false,
     anchorModifier: Modifier? = null,
     loadingLabel: String = "Loading tracks",
 ) {
@@ -272,14 +271,6 @@ fun TrackRowSkeleton(
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (showIndex) {
-            Box(
-                modifier = Modifier
-                    .width(TRACK_INDEX_MIN_WIDTH.scaled())
-                    .height(10.dp.scaled())
-                    .background(colors.muted, stubShape),
-            )
-        }
         Box(
             modifier = Modifier
                 .size(IglooTheme.sizes.controlHeight)

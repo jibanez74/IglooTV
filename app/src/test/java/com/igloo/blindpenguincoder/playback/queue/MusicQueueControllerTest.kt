@@ -64,8 +64,6 @@ class MusicQueueControllerTest {
         id = id,
         title = "Track $id",
         duration = 200_000,
-        codec = "flac",
-        bitRate = 900_000,
         albumId = SqlNullInt64(0, valid = false),
         albumTitle = SqlNullString("", valid = false),
         albumCover = SqlNullString("", valid = false),

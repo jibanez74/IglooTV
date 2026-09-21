@@ -144,7 +144,7 @@ class AlbumDetailsViewModelTest {
         assertEquals("6m 52s", album.totalDurationText)
         assertEquals("Ambient · Electronic", album.genresLine)
         assertEquals(73, album.popularity)
-        assertEquals(listOf("Aurora Pines"), album.artistNames)
+        assertEquals(listOf("Aurora Pines"), album.artists.map { it.name })
         assertEquals(false, album.hasMultipleDiscs)
 
         val tracks = album.discs.single().tracks
@@ -216,7 +216,7 @@ class AlbumDetailsViewModelTest {
         assertNull(album.releaseDateText)
         assertNull(album.genresLine)
         assertNull(album.popularity)
-        assertEquals(emptyList<String>(), album.artistNames)
+        assertEquals(emptyList<AlbumArtistUi>(), album.artists)
         val track = album.discs.single().tracks.single()
         // Web parity: a missing duration renders nothing, and the sentence skips it too.
         assertEquals("", track.durationText)
@@ -322,7 +322,7 @@ class AlbumDetailsViewModelTest {
         testScheduler.advanceUntilIdle()
 
         val album = viewModel.loaded()
-        assertEquals(listOf("Various Artists"), album.artistNames)
+        assertEquals(listOf("Various Artists"), album.artists.map { it.name })
         assertEquals(
             "Help! by Various Artists. 1 track. Total duration: 2 minutes and 5 seconds. " +
                 "Genres: Rock. Spotify popularity 73 out of 100.",
@@ -349,7 +349,7 @@ class AlbumDetailsViewModelTest {
         testScheduler.advanceUntilIdle()
         val album = viewModel.loaded()
 
-        assertEquals(listOf("Aurora Pines", "North Harbor Choir"), album.artistNames)
+        assertEquals(listOf("Aurora Pines", "North Harbor Choir"), album.artists.map { it.name })
         assertEquals(
             "Aurora Pines, North Harbor Choir",
             album.facts.single { it.label == "Artist" }.value,

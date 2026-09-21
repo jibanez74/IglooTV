@@ -61,7 +61,6 @@ data class ContinueWatchingItem(
 
     companion object {
         const val KIND_MOVIE = "movie"
-        const val KIND_EPISODE = "episode"
     }
 }
 

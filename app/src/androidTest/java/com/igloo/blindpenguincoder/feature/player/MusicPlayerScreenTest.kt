@@ -682,8 +682,6 @@ class MusicPlayerScreenTest {
         id = id,
         title = title,
         duration = 200_000,
-        codec = "flac",
-        bitRate = 900_000,
         albumId = SqlNullInt64(11, valid = true),
         albumTitle = SqlNullString("Help!", valid = true),
         albumCover = SqlNullString("", valid = false),

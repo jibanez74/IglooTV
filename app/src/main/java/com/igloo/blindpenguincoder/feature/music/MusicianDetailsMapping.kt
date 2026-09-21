@@ -24,14 +24,12 @@ data class MusicianDetailsUi(
     val name: String,
     /** Verbatim: an absolute URL or nothing; there is no music image proxy. */
     val thumbUrl: String?,
-    val summary: String?,
     val albumCountText: String,
     val trackCountText: String,
     val totalDurationText: String,
     val genresLine: String?,
     /** Spotify popularity, rounded to 0..100; null when the scanner has none. */
     val popularity: Int?,
-    val followersText: String?,
     val albums: List<AlbumCardUi>,
     /** Every track across the discography; each row carries its album for More to open. */
     val tracks: List<TrackRowUi>,
@@ -48,8 +46,6 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
     val totalDurationText = formatAlbumDuration(data.totalDuration.toLong())
     val popularity = musician.spotifyPopularity.orNull()?.roundToInt()?.coerceIn(0, 100)
     val followers = musician.spotifyFollowers.orNull()?.takeIf { it > 0 }
-    val followersText = followers?.let { "${integerFormat.format(it)} Spotify followers" }
-    val summary = musician.summary.orNullIfBlank()
     val genresLine = data.genres.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
     val facts = buildList {
         add(AlbumFactUi("Albums", "${data.albums.size}"))
@@ -58,20 +54,18 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
         data.genres.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }
             ?.let { add(AlbumFactUi("Genres", it.joinToString(", "))) }
         popularity?.let { add(AlbumFactUi("Spotify popularity", "$it / 100")) }
-        followersText?.let { add(AlbumFactUi("Spotify followers", integerFormat.format(followers))) }
-        summary?.let { add(AlbumFactUi("About", it)) }
+        followers?.let { add(AlbumFactUi("Spotify followers", integerFormat.format(it))) }
+        musician.summary.orNullIfBlank()?.let { add(AlbumFactUi("About", it)) }
     }
     return MusicianDetailsUi(
         id = musician.id,
         name = name,
         thumbUrl = musician.thumb.orNullIfBlank(),
-        summary = summary,
         albumCountText = albumCountText,
         trackCountText = trackCountText,
         totalDurationText = totalDurationText,
         genresLine = genresLine,
         popularity = popularity,
-        followersText = followersText,
         albums = data.albums.map {
             AlbumCardUi(
                 id = it.id,

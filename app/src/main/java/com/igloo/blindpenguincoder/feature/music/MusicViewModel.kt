@@ -75,9 +75,10 @@ data class MusicUiState(
             MusicTab.Albums -> albums.loadedItems()?.size
             MusicTab.Tracks -> tracks.loadedItems()?.count { it is TracksEntry.Track }
         }
-
-    private fun <T> PagedState<T>.loadedItems(): List<T>? = (content as? IglooRailState.Loaded)?.items
 }
+
+/** The tab's rows, or null while it still shows a skeleton or an error card. */
+internal fun <T> PagedState<T>.loadedItems(): List<T>? = (content as? IglooRailState.Loaded)?.items
 
 /**
  * The Music pane's paging machine: one cursor, one job and one generation per tab, all three

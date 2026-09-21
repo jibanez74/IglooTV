@@ -286,7 +286,7 @@ fun MusicScreen(
 
                 is MusicContent.Populated -> when (tab) {
                     MusicTab.Musicians -> MusicGrid(
-                        items = state.musicians.loadedItems(),
+                        items = state.musicians.loadedItems().orEmpty(),
                         itemId = { it.id },
                         testTag = "musicians_grid",
                         cardTag = { "musician_card_${it.id}" },
@@ -323,7 +323,7 @@ fun MusicScreen(
                     }
 
                     MusicTab.Albums -> MusicGrid(
-                        items = state.albums.loadedItems(),
+                        items = state.albums.loadedItems().orEmpty(),
                         itemId = { it.id },
                         testTag = "albums_grid",
                         cardTag = { "album_card_${it.id}" },
@@ -357,7 +357,7 @@ fun MusicScreen(
                     }
 
                     MusicTab.Tracks -> TracksList(
-                        entries = state.tracks.loadedItems(),
+                        entries = state.tracks.loadedItems().orEmpty(),
                         likes = likes,
                         paged = state.tracks,
                         refreshing = state.refreshing,
@@ -401,9 +401,6 @@ fun MusicScreen(
         }
     }
 }
-
-private fun <T> PagedState<T>.loadedItems(): List<T> =
-    (content as? IglooRailState.Loaded)?.items.orEmpty()
 
 @Composable
 private fun MusicHeader(

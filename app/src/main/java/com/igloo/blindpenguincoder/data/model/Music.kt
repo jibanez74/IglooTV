@@ -22,8 +22,6 @@ data class TrackListItem(
     val id: Long,
     val title: String,
     val duration: Long,
-    val codec: String,
-    @SerialName("bit_rate") val bitRate: Long,
     @SerialName("album_id") val albumId: SqlNullInt64,
     @SerialName("album_title") val albumTitle: SqlNullString,
     @SerialName("album_cover") val albumCover: SqlNullString,
@@ -135,30 +133,27 @@ data class MusiciansData(
     @SerialName("total_pages") val totalPages: Long,
 )
 
-/** The full musician row, as `GET /music/musicians/{id}` returns it under `musician`. */
+/**
+ * The musician row under `GET /music/musicians/{id}`'s `musician`; only what the detail page
+ * reads is typed (`sort_name`, `spotify_id` and the timestamps are left to `ignoreUnknownKeys`).
+ */
 @Serializable
 data class Musician(
     val id: Long,
     val name: String,
-    @SerialName("sort_name") val sortName: String,
     val summary: SqlNullString,
-    @SerialName("spotify_id") val spotifyId: SqlNullString,
     @SerialName("spotify_popularity") val spotifyPopularity: SqlNullFloat64,
     @SerialName("spotify_followers") val spotifyFollowers: SqlNullInt64,
     val thumb: SqlNullString,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("updated_at") val updatedAt: String,
 )
 
-/** One album of a musician's discography, newest release first. */
+/** One album of a musician's discography, newest release first; the card's fields only. */
 @Serializable
 data class MusicianAlbum(
     val id: Long,
     val title: String,
     val cover: SqlNullString,
     val year: SqlNullInt64,
-    @SerialName("release_date") val releaseDate: SqlNullString,
-    @SerialName("track_count") val trackCount: Long,
 )
 
 /**
@@ -170,11 +165,8 @@ data class MusicianTrack(
     val id: Long,
     val title: String,
     val duration: Long,
-    val codec: String,
-    @SerialName("bit_rate") val bitRate: Long,
     @SerialName("album_id") val albumId: SqlNullInt64,
     @SerialName("album_title") val albumTitle: SqlNullString,
-    @SerialName("album_cover") val albumCover: SqlNullString,
 )
 
 /** Payload of `MusicianDetailsEnvelope.data`. [totalDuration] is in milliseconds. */

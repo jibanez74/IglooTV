@@ -22,8 +22,6 @@ class MusicQueueMappingTest {
         id = id,
         title = "Yesterday",
         duration = durationMs,
-        codec = "flac",
-        bitRate = 900_000,
         albumId = SqlNullInt64(1, valid = albumTitle != null),
         albumTitle = SqlNullString(albumTitle.orEmpty(), valid = albumTitle != null),
         albumCover = SqlNullString(cover.orEmpty(), valid = cover != null),
