@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.music
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
@@ -104,22 +105,23 @@ class AlbumDetailsLayoutTest {
                         val trackRequesters = remember(album.discs) {
                             List(album.discs.sumOf { it.tracks.size }) { TrackRowRequesters() }
                         }
-                        AlbumDetailsSections(
-                            album = album,
-                            likes = TrackLikesUiState(likedIds = emptySet()),
-                            artistRequesters = emptyList(),
-                            trackRequesters = trackRequesters,
-                            factsRequester = factsRequester,
-                            upFromBelow = null,
-                            playReturnRow = null,
-                            playReturnRequester = playReturnRequester,
-                            onOpenMusician = null,
-                            onPlayTrack = {},
-                            onToggleLike = {},
-                            onOpenMore = { _, _ -> },
-                            contentInset = PaddingValues(horizontal = safeAreaHorizontal),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        Column(Modifier.fillMaxWidth()) {
+                            AlbumDetailsSections(
+                                album = album,
+                                likes = TrackLikesUiState(likedIds = emptySet()),
+                                artistRequesters = emptyList(),
+                                trackRequesters = trackRequesters,
+                                factsRequester = factsRequester,
+                                upFromBelow = null,
+                                playReturnRow = null,
+                                playReturnRequester = playReturnRequester,
+                                onOpenMusician = null,
+                                onPlayTrack = {},
+                                onToggleLike = {},
+                                onOpenMore = { _, _ -> },
+                                contentInset = PaddingValues(horizontal = safeAreaHorizontal),
+                            )
+                        }
                     }
                 }
             }

@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -28,11 +27,9 @@ import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.feature.shared.SectionHeading
 import com.igloo.blindpenguincoder.feature.shared.TrackRow
-import com.igloo.blindpenguincoder.feature.shared.TrackRowColumn
-import com.igloo.blindpenguincoder.feature.shared.TrackRowFocus
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.hasMoreActions
-import com.igloo.blindpenguincoder.feature.shared.readingStopTarget
+import com.igloo.blindpenguincoder.feature.shared.rememberPlainColumnTrackRowFocus
 
 /**
  * Everything below the album hero: the artists row, the disc-grouped track list, and the facts
@@ -44,6 +41,7 @@ import com.igloo.blindpenguincoder.feature.shared.readingStopTarget
  * three controls know the row above and below in their own column, the first row's up is the
  * artist chips when they are actionable or the hero's last-focused action, and the last row's
  * down is the facts panel. [artistRequesters] is empty while the chips are display-only.
+ * Emits its sections as siblings into the caller's column ([MusicDetailsBody]'s).
  */
 @Composable
 internal fun AlbumDetailsSections(
@@ -65,47 +63,45 @@ internal fun AlbumDetailsSections(
      * can bleed past it while the prose stays inside it.
      */
     contentInset: PaddingValues,
-    modifier: Modifier = Modifier,
 ) {
     // Up from the rows re-enters the chips on the one last focused, else the hero action.
     var lastFocusedArtist by remember(artistRequesters) { mutableStateOf(artistRequesters.firstOrNull()) }
     val upFromRows = lastFocusedArtist ?: upFromBelow
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-    ) {
-        if (album.artists.isNotEmpty()) {
-            ArtistsSection(
-                artists = album.artists,
-                requesters = artistRequesters,
-                upRequester = upFromBelow,
-                downRequester = trackRequesters.firstOrNull()?.play ?: factsRequester,
-                onArtistFocused = { lastFocusedArtist = it },
-                onOpenMusician = onOpenMusician,
-                modifier = Modifier.padding(contentInset),
-            )
-        }
-        TrackListSection(
-            album = album,
-            likes = likes,
-            trackRequesters = trackRequesters,
-            upRequester = upFromRows,
-            downRequester = factsRequester,
-            playReturnRow = playReturnRow,
-            playReturnRequester = playReturnRequester,
-            canOpenArtist = onOpenMusician != null,
-            onPlayTrack = onPlayTrack,
-            onToggleLike = onToggleLike,
-            onOpenMore = onOpenMore,
-            modifier = Modifier.padding(contentInset),
-        )
-        AlbumFactsSection(
-            album = album,
-            requester = factsRequester,
-            upRequester = trackRequesters.lastOrNull()?.play ?: upFromRows,
+    if (album.artists.isNotEmpty()) {
+        ArtistsSection(
+            artists = album.artists,
+            requesters = artistRequesters,
+            upRequester = upFromBelow,
+            downRequester = trackRequesters.firstOrNull()?.play ?: factsRequester,
+            onArtistFocused = { lastFocusedArtist = it },
+            onOpenMusician = onOpenMusician,
             modifier = Modifier.padding(contentInset),
         )
     }
+    TrackListSection(
+        album = album,
+        likes = likes,
+        trackRequesters = trackRequesters,
+        upRequester = upFromRows,
+        downRequester = factsRequester,
+        playReturnRow = playReturnRow,
+        playReturnRequester = playReturnRequester,
+        canOpenArtist = onOpenMusician != null,
+        onPlayTrack = onPlayTrack,
+        onToggleLike = onToggleLike,
+        onOpenMore = onOpenMore,
+        modifier = Modifier.padding(contentInset),
+    )
+    MusicFactsSection(
+        heading = "Album Details",
+        tag = "album_details_facts",
+        facts = album.facts,
+        description = album.factsDescription,
+        requester = factsRequester,
+        upRequester = trackRequesters.lastOrNull()?.play ?: upFromRows,
+        valueMaxLines = 2,
+        modifier = Modifier.padding(contentInset),
+    )
 }
 
 /**
@@ -216,21 +212,14 @@ private fun TrackListSection(
             }
             disc.tracks.forEach { track ->
                 val index = rowIndex++
-                val focus = remember(trackRequesters, index, upRequester, downRequester, playReturnRow) {
-                    TrackRowFocus(
-                        requesters = trackRequesters[index],
-                        // A plain column composes every row, so each edge is wired outright
-                        // rather than left to a spatial search that could reach the shell.
-                        up = { column -> trackRequesters.getOrNull(index - 1)?.get(column) ?: upRequester ?: Cancel },
-                        down = { column -> trackRequesters.getOrNull(index + 1)?.get(column) ?: downRequester },
-                        left = Cancel,
-                        riders = { column ->
-                            listOfNotNull(
-                                playReturnRequester.takeIf { column == TrackRowColumn.Play && playReturnRow == index },
-                            )
-                        },
-                    )
-                }
+                val focus = rememberPlainColumnTrackRowFocus(
+                    requesters = trackRequesters,
+                    index = index,
+                    upRequester = upRequester,
+                    downRequester = downRequester,
+                    playReturnRow = playReturnRow,
+                    playReturnRequester = playReturnRequester,
+                )
                 TrackRow(
                     track = track,
                     liked = likes.isLiked(track.id),
@@ -244,57 +233,6 @@ private fun TrackListSection(
                         null
                     },
                 )
-            }
-        }
-    }
-}
-
-/**
- * The fine print, on the movie About panel's exact treatment: heading outside the focusable
- * panel, one focus stop, one cleared announcement with the heading folded in. Reachable but not
- * actionable — content a d-pad can never scroll to may as well not be on the page.
- */
-@Composable
-private fun AlbumFactsSection(
-    album: AlbumDetailsUi,
-    requester: FocusRequester,
-    upRequester: FocusRequester?,
-    modifier: Modifier = Modifier,
-) {
-    val colors = IglooTheme.colors
-    var focused by remember { mutableStateOf(false) }
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
-        SectionHeading("Album Details")
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .readingStopTarget(
-                    tag = "album_details_facts",
-                    focused = focused,
-                    requester = requester,
-                    upRequester = upRequester,
-                    downRequester = null,
-                    onFocusChanged = { focused = it },
-                    description = album.factsDescription,
-                )
-                .padding(IglooTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
-        ) {
-            album.facts.forEach { fact ->
-                Row(horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
-                    IglooText(
-                        text = "${fact.label}:",
-                        style = IglooTheme.typography.label,
-                        color = colors.mutedForeground,
-                        maxLines = 1,
-                    )
-                    IglooText(
-                        text = fact.value,
-                        style = IglooTheme.typography.bodyMedium,
-                        color = colors.foreground,
-                        maxLines = 2,
-                    )
-                }
             }
         }
     }

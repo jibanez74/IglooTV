@@ -81,6 +81,33 @@ class TrackRowFocus(
 )
 
 /**
+ * A row's [TrackRowFocus] in a plain column, where every row is composed and each edge is wired
+ * outright rather than left to a spatial search that could reach the shell underneath: up and
+ * down keep the column into the neighbouring row, or leave to [upRequester] / [downRequester]
+ * past the ends; left is pinned; the Play control of [playReturnRow] carries the player's
+ * return requester.
+ */
+@Composable
+fun rememberPlainColumnTrackRowFocus(
+    requesters: List<TrackRowRequesters>,
+    index: Int,
+    upRequester: FocusRequester?,
+    downRequester: FocusRequester,
+    playReturnRow: Int?,
+    playReturnRequester: FocusRequester,
+): TrackRowFocus = remember(requesters, index, upRequester, downRequester, playReturnRow) {
+    TrackRowFocus(
+        requesters = requesters[index],
+        up = { column -> requesters.getOrNull(index - 1)?.get(column) ?: upRequester ?: FocusRequester.Cancel },
+        down = { column -> requesters.getOrNull(index + 1)?.get(column) ?: downRequester },
+        left = FocusRequester.Cancel,
+        riders = { column ->
+            listOfNotNull(playReturnRequester.takeIf { column == TrackRowColumn.Play && playReturnRow == index })
+        },
+    )
+}
+
+/**
  * One track with its three actions — play, like, more — all focusable and none hidden until
  * focus (docs/design-system.md section 11.5). The row itself is never a focus target: while
  * any control holds focus the row paints a `muted @ 0.50` ground at the control radius, which
