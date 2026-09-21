@@ -271,6 +271,14 @@ fun IglooRoot(container: IglooAppContainer) {
                     ) {
                         TrackLikesViewModel(container.musicRepository)
                     }
+                    // The one details slot is single-path: opening any page closes the other
+                    // three first, and each close is idempotent on an already-closed page.
+                    val closeAllDetails: () -> Unit = {
+                        detailsViewModel.close()
+                        theaterDetailsViewModel.close()
+                        albumDetailsViewModel.close()
+                        musicianDetailsViewModel.close()
+                    }
                     // Device tokens are revoked server-side after long disuse, so a session
                     // resumed from the background is re-checked before it is trusted — and the
                     // library is re-read, because a TV can sit on this screen for days. The
@@ -406,39 +414,26 @@ fun IglooRoot(container: IglooAppContainer) {
                         musicianDetails = musicianDetails,
                         onRetryMusicianDetails = musicianDetailsViewModel::retry,
                         onMusicianSelected = { musicianId ->
-                            detailsViewModel.close()
-                            theaterDetailsViewModel.close()
-                            albumDetailsViewModel.close()
+                            closeAllDetails()
                             musicianDetailsViewModel.open(musicianId)
                         },
                         trackLikes = trackLikes,
                         onToggleTrackLike = trackLikesViewModel::toggle,
                         onRetryRail = homeViewModel::retry,
                         onMovieSelected = { movieId ->
-                            theaterDetailsViewModel.close()
-                            albumDetailsViewModel.close()
-                            musicianDetailsViewModel.close()
+                            closeAllDetails()
                             detailsViewModel.open(movieId)
                         },
                         onTheaterMovieSelected = { tmdbId ->
-                            detailsViewModel.close()
-                            albumDetailsViewModel.close()
-                            musicianDetailsViewModel.close()
+                            closeAllDetails()
                             theaterDetailsViewModel.open(tmdbId)
                         },
                         onAlbumSelected = { albumId ->
-                            detailsViewModel.close()
-                            theaterDetailsViewModel.close()
-                            musicianDetailsViewModel.close()
+                            closeAllDetails()
                             albumDetailsViewModel.open(albumId)
                         },
                         // Back does not ask which one was up: closing a closed page is a no-op.
-                        onCloseDetails = {
-                            detailsViewModel.close()
-                            theaterDetailsViewModel.close()
-                            albumDetailsViewModel.close()
-                            musicianDetailsViewModel.close()
-                        },
+                        onCloseDetails = closeAllDetails,
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },
                         onSignOut = signOutViewModel::request,
                         onSignOutConfirm = signOutViewModel::confirm,

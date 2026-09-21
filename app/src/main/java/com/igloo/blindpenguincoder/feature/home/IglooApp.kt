@@ -387,6 +387,16 @@ fun IglooApp(
             }
         }
     }
+    // A details page's Play, Shuffle or row Play: the request is built from the page already
+    // on screen, and the origin decides whose closing takes the player with it.
+    val launchMusic: (MusicPlayOrigin, () -> MusicPlayRequest?) -> Unit = { origin, build ->
+        build()?.let { request ->
+            musicPlayRequest = request
+            musicPlayOrigin = origin
+        }
+    }
+    val loadedAlbum = (albumDetails.details as? AlbumDetailsState.Loaded)?.album
+    val loadedMusician = (musicianDetails.details as? MusicianDetailsState.Loaded)?.musician
     val closeMusicPlayer: () -> Unit = {
         val origin = musicPlayOrigin
         musicPlayRequest = null
@@ -574,23 +584,10 @@ fun IglooApp(
                 MusicianDetailsScreen(
                     state = musicianDetails.details,
                     onRetry = onRetryMusicianDetails,
-                    onPlayAll = {
-                        (musicianDetails.details as? MusicianDetailsState.Loaded)?.let { loaded ->
-                            musicPlayRequest = toMusicPlayRequest(loaded.musician)
-                            musicPlayOrigin = MusicPlayOrigin.MusicianDetails
-                        }
-                    },
-                    onShuffle = {
-                        (musicianDetails.details as? MusicianDetailsState.Loaded)?.let { loaded ->
-                            musicPlayRequest = toShuffledMusicPlayRequest(loaded.musician)
-                            musicPlayOrigin = MusicPlayOrigin.MusicianDetails
-                        }
-                    },
+                    onPlayAll = { launchMusic(MusicPlayOrigin.MusicianDetails) { loadedMusician?.let(::toMusicPlayRequest) } },
+                    onShuffle = { launchMusic(MusicPlayOrigin.MusicianDetails) { loadedMusician?.let(::toShuffledMusicPlayRequest) } },
                     onPlayTrack = { index ->
-                        (musicianDetails.details as? MusicianDetailsState.Loaded)?.let { loaded ->
-                            musicPlayRequest = toMusicPlayRequest(loaded.musician, startIndex = index)
-                            musicPlayOrigin = MusicPlayOrigin.MusicianDetails
-                        }
+                        launchMusic(MusicPlayOrigin.MusicianDetails) { loadedMusician?.let { toMusicPlayRequest(it, startIndex = index) } }
                     },
                     likes = trackLikes,
                     onToggleLike = onToggleTrackLike,
@@ -622,23 +619,10 @@ fun IglooApp(
                     // The album page only composes the action row with a loaded, non-empty
                     // track list, so the press maps the details already on screen — no
                     // deferred-play flow, unlike the movie's async technical details.
-                    onPlayAlbum = {
-                        (albumDetails.details as? AlbumDetailsState.Loaded)?.let { loaded ->
-                            musicPlayRequest = toMusicPlayRequest(loaded.album)
-                            musicPlayOrigin = MusicPlayOrigin.AlbumDetails
-                        }
-                    },
-                    onShuffle = {
-                        (albumDetails.details as? AlbumDetailsState.Loaded)?.let { loaded ->
-                            musicPlayRequest = toShuffledMusicPlayRequest(loaded.album)
-                            musicPlayOrigin = MusicPlayOrigin.AlbumDetails
-                        }
-                    },
+                    onPlayAlbum = { launchMusic(MusicPlayOrigin.AlbumDetails) { loadedAlbum?.let(::toMusicPlayRequest) } },
+                    onShuffle = { launchMusic(MusicPlayOrigin.AlbumDetails) { loadedAlbum?.let(::toShuffledMusicPlayRequest) } },
                     onPlayTrack = { index ->
-                        (albumDetails.details as? AlbumDetailsState.Loaded)?.let { loaded ->
-                            musicPlayRequest = toMusicPlayRequest(loaded.album, startIndex = index)
-                            musicPlayOrigin = MusicPlayOrigin.AlbumDetails
-                        }
+                        launchMusic(MusicPlayOrigin.AlbumDetails) { loadedAlbum?.let { toMusicPlayRequest(it, startIndex = index) } }
                     },
                     likes = trackLikes,
                     onToggleLike = onToggleTrackLike,
