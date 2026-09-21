@@ -47,9 +47,10 @@ internal const val TEST_SERVER_ORIGIN = "http://igloo.test:8080"
  * suite spells only the states and spies it asserts. Callers own the [IglooTheme] wrapper —
  * several read theme values or vary the scale, and a theme inside this function would hide that.
  *
- * [spokenAccessibilityEnabled] is pinned off: the Shield test device runs TalkBack, and the
- * suites assert focus chains without the reading stops. A suite that asserts the reading stops
- * turns it back on explicitly.
+ * [spokenAccessibilityEnabled] is pinned off so the suites assert focus chains without the
+ * reading stops; a suite that asserts the reading stops turns it back on explicitly. It is a
+ * parameter rather than a device read because an instrumented run never observes a screen
+ * reader — `UiAutomation` suppresses TalkBack for as long as it is connected.
  */
 @Composable
 internal fun TestIglooApp(

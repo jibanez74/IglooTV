@@ -304,10 +304,10 @@ Instrumented tests use the **v2 Compose test API**:
 ### Commands
 
 ```bash
-# Tier 1 — no device needed (~800 @Test across 61 files)
+# Tier 1 — no device needed (875 @Test across 61 files)
 ./gradlew :app:testDebugUnitTest
 
-# Tier 2 — needs a booted TV emulator or device (~460 @Test across 46 suites)
+# Tier 2 — needs a booted TV emulator or device (515 @Test across 51 suites)
 ./gradlew :app:connectedDebugAndroidTest
 
 # Static + assembly
@@ -414,8 +414,31 @@ tests hang.
 **`GateWaits.kt` waits, rather than `waitForIdle`.** `awaitScreen(title)`,
 `awaitContentDescription(desc)` and `awaitTestTag(tag)` each require a non-empty
 `boundsInWindow`, so they cannot latch onto a previous activity's still-placed nodes. The timeout
-is 5s. `spokenFeedbackEnabled()` reads `AccessibilityManager` exactly as the app does — the Shield
-test device has TalkBack on, and tests must branch the same way the app branches.
+is 5s. `spokenFeedbackEnabled()` reads `AccessibilityManager` exactly as the app does, so tests
+branch the same way the app branches.
+
+**An instrumented run cannot see TalkBack.** `UiAutomation` suppresses every other accessibility
+service while it is connected, and `AnimationScaleRule` connects it in 29 suites, so
+`spokenFeedbackEnabled()` is **false throughout any full run** no matter what the device's
+TalkBack setting is. Measured on the Shield: TalkBack bound before the run, `Bound services:{}`
+during it. Two consequences:
+
+- Running the whole suite with TalkBack switched on proves nothing extra — it takes exactly the
+  same branches as with it off.
+- The screen-reader branches (`QuickConnectGateTest`'s spoken pairing-code assertions,
+  `FocusTreatmentTest`'s skip) only fire when those classes are run **alone** on a TalkBack
+  device, because then nothing connects `UiAutomation`:
+
+  ```bash
+  ./gradlew :app:connectedDebugAndroidTest \
+    -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
+    -Pandroid.testInstrumentationRunnerArguments.class=com.igloo.blindpenguincoder.QuickConnectGateTest
+  ```
+
+This is why `FocusTreatmentTest` guards on `spokenFeedbackEnabled()` and not on
+`AccessibilityManager.isEnabled`: `UiAutomation` is itself an accessibility service, so `isEnabled`
+is true in every full run, and guarding on it silently skipped all ten pixel tests — the only ones
+that prove the focus treatment renders — while they passed whenever the class ran on its own.
 
 **`TestIglooApp.kt`** wraps the real `IglooApp` with every dependency defaulted to an inert
 fixture (`TEST_SERVER_ORIGIN`, `testAuthUser`, `spokenAccessibilityEnabled = false` by default).

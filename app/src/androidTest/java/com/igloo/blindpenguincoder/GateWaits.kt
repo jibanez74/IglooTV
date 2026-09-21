@@ -53,7 +53,12 @@ fun ComposeTestRule.awaitTestTag(tag: String) {
 /**
  * Whether a screen reader is listening on this device, read exactly as the app reads it. The
  * gate screens render different trees either way, so tests that launch the real activity have
- * to assert the contract the device is actually under — the Shield runs with TalkBack on.
+ * to assert the contract the device is actually under.
+ *
+ * This is false throughout any full run regardless of the device's setting: `UiAutomation`
+ * suppresses every other accessibility service while it is connected, and [AnimationScaleRule]
+ * connects it in 29 suites. The spoken branches only fire when a class is run on its own on a
+ * TalkBack device.
  */
 fun spokenFeedbackEnabled(): Boolean {
     val manager = InstrumentationRegistry.getInstrumentation()
