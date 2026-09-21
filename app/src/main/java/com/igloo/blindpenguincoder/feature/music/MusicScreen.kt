@@ -62,6 +62,14 @@ import com.igloo.blindpenguincoder.core.ui.countNoun
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.GRID_PREFETCH_ROWS
+import com.igloo.blindpenguincoder.feature.shared.PaneFocusHandoffCoordinator
+import com.igloo.blindpenguincoder.feature.shared.PaneFocusOwnership
+import com.igloo.blindpenguincoder.feature.shared.REFRESHING_LABEL
+import com.igloo.blindpenguincoder.feature.shared.REFRESH_LABEL
+import com.igloo.blindpenguincoder.feature.shared.SKELETON_ROWS
+import com.igloo.blindpenguincoder.feature.shared.TabPresentation
+import com.igloo.blindpenguincoder.feature.shared.asScrollPadding
 import com.igloo.blindpenguincoder.feature.shared.TrackRow
 import com.igloo.blindpenguincoder.feature.shared.TrackRowColumn
 import com.igloo.blindpenguincoder.feature.shared.TrackRowFocus
@@ -156,7 +164,7 @@ fun MusicScreen(
     val firstItemRequester = remember { FocusRequester() }
     val cardlessHandoffRequester = remember { FocusRequester() }
     val menuReturnRequester = remember { FocusRequester() }
-    val focusOwnership = remember { MusicFocusOwnership() }
+    val focusOwnership = remember { PaneFocusOwnership(MUSIC_TAB_FOCUS_KEYS) }
     // The Tracks tab's action row exists only over a populated list; the strip's way down and
     // the first row's way up follow whether it is composed.
     val trackActionsShown = tab == MusicTab.Tracks && content is MusicContent.Populated
@@ -232,8 +240,8 @@ fun MusicScreen(
                 }
                 .onFocusChanged { focusOwnership.onCardlessFocusChanged(it.isFocused) }
 
-            MusicFocusHandoffCoordinator(
-                tab = tab,
+            PaneFocusHandoffCoordinator(
+                resetKey = tab,
                 content = content,
                 contentGeneration = paged.contentGeneration,
                 scrollToTop = {
@@ -523,22 +531,16 @@ private fun MusicTabRow(
     }
 }
 
-/** What the strip draws, speaks and is addressed by for one section — one lookup, not three. */
-internal data class MusicTabPresentation(
-    val label: String,
-    val semanticLabel: String,
-    /** Doubles as the focus-ownership key ([MusicFocusOwnership]) and the test tag. */
-    val key: String,
-    /** The count line's noun for one item. */
-    val singular: String,
-)
-
-internal val MusicTab.presentation: MusicTabPresentation
+internal val MusicTab.presentation: TabPresentation
     get() = when (this) {
-        MusicTab.Musicians -> MusicTabPresentation("Musicians", "Musicians", "music_tab_musicians", "musician")
-        MusicTab.Albums -> MusicTabPresentation("Albums", "Albums", "music_tab_albums", "album")
-        MusicTab.Tracks -> MusicTabPresentation("Tracks", "Tracks", "music_tab_tracks", "track")
+        MusicTab.Musicians -> TabPresentation("Musicians", "Musicians", "music_tab_musicians")
+        MusicTab.Albums -> TabPresentation("Albums", "Albums", "music_tab_albums")
+        MusicTab.Tracks -> TabPresentation("Tracks", "Tracks", "music_tab_tracks")
     }
+
+/** The chrome keys the tab strip reports under; see [PaneFocusOwnership.tabFocused]. */
+private val MUSIC_TAB_FOCUS_KEYS: Set<String> =
+    MusicTab.entries.mapTo(mutableSetOf()) { it.presentation.key }
 
 /**
  * Play all and Shuffle all over a populated track list. Play all steps back while Shuffle all
@@ -635,7 +637,7 @@ private fun <T> MusicGrid(
     upRequester: FocusRequester,
     lastFocusedId: Long?,
     onItemFocused: (Long) -> Unit,
-    focusOwnership: MusicFocusOwnership,
+    focusOwnership: PaneFocusOwnership,
     onLoadMore: () -> Unit,
     onRetryAppend: () -> Unit,
     retryLabel: String,
@@ -767,7 +769,7 @@ private fun TracksList(
     upRequester: FocusRequester,
     lastFocusedTrack: TrackFocusMemory?,
     onTrackFocused: (TrackFocusMemory) -> Unit,
-    focusOwnership: MusicFocusOwnership,
+    focusOwnership: PaneFocusOwnership,
     canOpenAlbum: Boolean,
     canOpenArtist: Boolean,
     onLoadMore: () -> Unit,
@@ -963,29 +965,20 @@ private fun TracksListSkeleton(
     }
 }
 
-/**
- * The pane's horizontal gutter belongs inside the scroll surface (section 8.3), but its
- * vertical values do not: the surface needs room of its own so the focus glow is not cross-axis
- * clipped at the first row, and the safe area below so the last row clears overscan.
- */
-@Composable
-private fun PaddingValues.asScrollPadding(): PaddingValues {
-    val direction = LocalLayoutDirection.current
-    return PaddingValues(
-        start = calculateStartPadding(direction),
-        end = calculateEndPadding(direction),
-        top = IglooTheme.spacing.md,
-        bottom = IglooTheme.layout.safeAreaVertical,
-    )
-}
-
 @Composable
 private fun MusicTab.artworkRadius(): Dp = when (this) {
     MusicTab.Musicians -> IglooTheme.radius.pill
     else -> IglooTheme.radius.lg
 }
 
-private fun MusicTab.noun(count: Long): String = countNoun(count, presentation.singular)
+private fun MusicTab.noun(count: Long): String = countNoun(
+    count,
+    when (this) {
+        MusicTab.Musicians -> "musician"
+        MusicTab.Albums -> "album"
+        MusicTab.Tracks -> "track"
+    },
+)
 
 private fun MusicTab.emptyIcon(): ImageVector = when (this) {
     MusicTab.Musicians -> IglooIcons.Person
@@ -1011,8 +1004,6 @@ private fun spokenCount(tab: MusicTab, total: Long?, loadedCount: Int?, append: 
         }
     }
 
-private const val REFRESH_LABEL = "Refresh"
-private const val REFRESHING_LABEL = "Refreshing…"
 private const val SHUFFLE_ALL_LABEL = "Shuffle all"
 private const val SHUFFLING_LABEL = "Shuffling…"
 
@@ -1020,8 +1011,6 @@ private const val REFRESH_FOCUS_KEY = "music_refresh"
 private const val PLAY_ALL_FOCUS_KEY = "music_play_all"
 private const val SHUFFLE_ALL_FOCUS_KEY = "music_shuffle_all"
 
-/** How close to the end a surface gets before it asks for the next page. */
-private const val GRID_PREFETCH_ROWS = 2
+/** How close to the end the track list gets before it asks for the next page, in rows. */
 private const val LIST_PREFETCH_ROWS = 6
-private const val SKELETON_ROWS = 3
 private const val LIST_SKELETON_ROWS = 8

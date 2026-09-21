@@ -2,13 +2,23 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
+import com.igloo.blindpenguincoder.feature.shared.PaneContent
 
 /**
  * The six surfaces the Movies pane can draw — [IglooRailState] with the empty case made explicit
  * and the Genres tab's two "nothing to pick" cases added, so the screen and the focus
  * coordinator branch on one model.
  */
-internal sealed interface MoviesContent {
+internal sealed interface MoviesContent : PaneContent {
+    override val isPopulated: Boolean get() = this is Populated
+
+    /** The two skeleton waits differ only in what they are waiting for. */
+    override val isSkeleton: Boolean get() = this is Loading || this is GenresLoading
+
+    override val isCardless: Boolean get() = this is Error || this is Empty || this is NoGenres
+
+    override val isEmpty: Boolean get() = this is Empty
+
     data object Loading : MoviesContent
 
     /** The Genres tab before the genre list has settled; whatever pages exist stay hidden. */
@@ -40,19 +50,6 @@ internal fun MoviesUiState.toMoviesContent(): MoviesContent {
         }
     }
 }
-
-/**
- * A skeleton surface: card geometry with one focusable anchor, and nothing yet to hand focus to.
- * The two differ only in what they are waiting for.
- */
-internal val MoviesContent.isSkeleton: Boolean
-    get() = this is MoviesContent.Loading || this is MoviesContent.GenresLoading
-
-/** A surface with no cards, whose single anchored node is the pane's only focus target. */
-internal val MoviesContent.isCardless: Boolean
-    get() = this is MoviesContent.Error ||
-        this is MoviesContent.Empty ||
-        this is MoviesContent.NoGenres
 
 internal fun MoviesContent.containsMovie(movieId: Long): Boolean =
     this is MoviesContent.Populated && items.any { it.id == movieId }

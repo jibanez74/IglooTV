@@ -55,6 +55,14 @@ import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.GRID_PREFETCH_ROWS
+import com.igloo.blindpenguincoder.feature.shared.PaneFocusHandoffCoordinator
+import com.igloo.blindpenguincoder.feature.shared.PaneFocusOwnership
+import com.igloo.blindpenguincoder.feature.shared.REFRESHING_LABEL
+import com.igloo.blindpenguincoder.feature.shared.REFRESH_LABEL
+import com.igloo.blindpenguincoder.feature.shared.SKELETON_ROWS
+import com.igloo.blindpenguincoder.feature.shared.TabPresentation
+import com.igloo.blindpenguincoder.feature.shared.asScrollPadding
 import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
 
 /** What the Movies pane needs from its view model, bundled rather than threaded as six lambdas. */
@@ -77,7 +85,7 @@ data class MoviesActions(
  * tab's chip picker, and an infinite-scrolling poster grid.
  *
  * The grid pages itself. Unlike the web client's numbered pagination a d-pad user never sees a
- * page control — scrolling within [PREFETCH_ROWS] rows of the end asks for the next page, and
+ * page control — scrolling within [GRID_PREFETCH_ROWS] rows of the end asks for the next page, and
  * the only paging the screen renders is the tail below the last loaded row.
  *
  * [contentStartRequester] lands on the grid's entry cell — the remembered card if there is one,
@@ -109,7 +117,7 @@ fun MoviesScreen(
     val genreRowRequester = remember { FocusRequester() }
     val firstCardRequester = remember { FocusRequester() }
     val cardlessHandoffRequester = remember { FocusRequester() }
-    val focusOwnership = remember { MoviesFocusOwnership() }
+    val focusOwnership = remember { PaneFocusOwnership(MOVIES_TAB_FOCUS_KEYS) }
     // The picker only exists with a list to pick from; without it the content's way up is the
     // tab strip, so the wired edge follows whichever row is actually composed.
     val genreRowShown = state.tab == MoviesTab.Genres && state.genres.isNotEmpty()
@@ -183,14 +191,16 @@ fun MoviesScreen(
             }
             .onFocusChanged { focusOwnership.onCardlessFocusChanged(it.isFocused) }
 
-        MoviesFocusHandoffCoordinator(
+        PaneFocusHandoffCoordinator(
+            resetKey = Unit,
             content = content,
             contentGeneration = state.contentGeneration,
-            silentReconcileGeneration = state.silentReconcileGeneration,
-            gridState = gridState,
-            firstCardRequester = firstCardRequester,
+            scrollToTop = { gridState.scrollToItem(0) },
+            firstItemRequester = firstCardRequester,
             cardlessHandoffRequester = cardlessHandoffRequester,
             focusOwnership = focusOwnership,
+            silentReconcileGeneration = state.silentReconcileGeneration,
+            containsItem = MoviesContent::containsMovie,
         )
 
         when (content) {
@@ -418,20 +428,16 @@ private fun MoviesTabRow(
     }
 }
 
-/** What the strip draws, speaks and is addressed by for one section — one lookup, not three. */
-internal data class MoviesTabPresentation(
-    val label: String,
-    val semanticLabel: String,
-    /** Doubles as the focus-ownership key ([MoviesFocusOwnership]) and the test tag. */
-    val key: String,
-)
-
-internal val MoviesTab.presentation: MoviesTabPresentation
+internal val MoviesTab.presentation: TabPresentation
     get() = when (this) {
-        MoviesTab.All -> MoviesTabPresentation("All Movies", "All movies", "movies_tab_all")
-        MoviesTab.Genres -> MoviesTabPresentation("Genres", "Genres", "movies_tab_genres")
-        MoviesTab.Liked -> MoviesTabPresentation("Liked", "Liked movies", "movies_tab_liked")
+        MoviesTab.All -> TabPresentation("All Movies", "All movies", "movies_tab_all")
+        MoviesTab.Genres -> TabPresentation("Genres", "Genres", "movies_tab_genres")
+        MoviesTab.Liked -> TabPresentation("Liked", "Liked movies", "movies_tab_liked")
     }
+
+/** The chrome keys the tab strip reports under; see [PaneFocusOwnership.tabFocused]. */
+private val MOVIES_TAB_FOCUS_KEYS: Set<String> =
+    MoviesTab.entries.mapTo(mutableSetOf()) { it.presentation.key }
 
 @Composable
 private fun MoviesGrid(
@@ -450,7 +456,7 @@ private fun MoviesGrid(
     upRequester: FocusRequester,
     lastFocusedMovieId: Long?,
     onMovieFocused: (Long) -> Unit,
-    focusOwnership: MoviesFocusOwnership,
+    focusOwnership: PaneFocusOwnership,
     onLoadMore: () -> Unit,
     onRetryAppend: () -> Unit,
     onMovieSelected: ((Long) -> Unit)?,
@@ -477,7 +483,7 @@ private fun MoviesGrid(
         derivedStateOf {
             val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
                 ?: return@derivedStateOf false
-            last >= loadedCount - columns * PREFETCH_ROWS
+            last >= loadedCount - columns * GRID_PREFETCH_ROWS
         }
     }
     // A successful append rearms this effect even if every returned id overlapped the loaded
@@ -511,7 +517,7 @@ private fun MoviesGrid(
         state = gridState,
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-        contentPadding = contentInset.asGridPadding(),
+        contentPadding = contentInset.asScrollPadding(),
         // A lazy grid sizes to its content up to the incoming constraint, so the surface — not
         // the cards — is what has to span the panel for the end inset to be scrolled through.
         modifier = Modifier
@@ -562,7 +568,7 @@ private fun MoviesGrid(
                         }
                     }
                     .onFocusChanged {
-                        focusOwnership.onMovieFocusChanged(item.id, it.isFocused)
+                        focusOwnership.onItemFocusChanged(item.id, it.isFocused)
                         if (it.isFocused) onMovieFocused(item.id)
                     }
                     .testTag("poster_card_${item.id}"),
@@ -576,7 +582,7 @@ private fun MoviesGrid(
             // node that vanishes when its page lands would drop focus on the floor (section 10)
             // — so d-pad down at the true end is a stable no-op until real cells replace them.
             AppendState.Idle, AppendState.Loading -> items(
-                count = columns * PREFETCH_ROWS,
+                count = columns * GRID_PREFETCH_ROWS,
                 key = { "tail_skeleton_$it" },
             ) { index ->
                 IglooSkeletonTextureCell(
@@ -629,7 +635,7 @@ private fun MoviesGridSkeleton(
         columns = GridCells.Fixed(columns),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-        contentPadding = contentInset.asGridPadding(),
+        contentPadding = contentInset.asScrollPadding(),
         userScrollEnabled = false,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -649,22 +655,6 @@ private fun MoviesGridSkeleton(
             )
         }
     }
-}
-
-/**
- * The pane's horizontal gutter belongs inside the scroll surface (section 8.3), but its vertical
- * values do not: the grid needs room of its own so the focus scale and glow are not cross-axis
- * clipped at the first row, and the safe area below so the last row clears overscan.
- */
-@Composable
-private fun PaddingValues.asGridPadding(): PaddingValues {
-    val direction = LocalLayoutDirection.current
-    return PaddingValues(
-        start = calculateStartPadding(direction),
-        end = calculateEndPadding(direction),
-        top = IglooTheme.spacing.md,
-        bottom = IglooTheme.layout.safeAreaVertical,
-    )
 }
 
 private fun countLine(totalMovies: Long?): String =
@@ -715,16 +705,10 @@ private fun emptyMessage(filter: MoviesFilter): String = when (filter) {
 }
 
 private const val NO_GENRES_MESSAGE = "Genres aren't available right now. Refresh to try again."
-private const val REFRESH_LABEL = "Refresh"
-private const val REFRESHING_LABEL = "Refreshing…"
 private const val SORT_ASCENDING_LABEL = "A–Z"
 private const val SORT_DESCENDING_LABEL = "Z–A"
 
-/** Focus-ownership keys for the header's controls (see [MoviesFocusOwnership]). */
+/** Focus-ownership keys for the header's controls (see [PaneFocusOwnership]). */
 private const val SORT_FOCUS_KEY = "movies_sort"
 private const val REFRESH_FOCUS_KEY = "movies_refresh"
 
-/** How close to the end the grid gets before it asks for the next page, in rows. */
-private const val PREFETCH_ROWS = 2
-
-private const val SKELETON_ROWS = 3
