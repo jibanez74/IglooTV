@@ -161,8 +161,54 @@ class HlsSessionPolicyTest {
         )
         assertFalse(shouldRecoverLostHlsSession(404, "/api/watch-rooms/7/hls/playlist.m3u8", 0))
         assertFalse(shouldRecoverLostHlsSession(503, MOVIE_SEGMENT_PATH, recoveries = 0))
-        assertFalse(shouldRecoverLostHlsSession(500, MOVIE_SEGMENT_PATH, recoveries = 0))
         assertFalse(shouldRecoverLostHlsSession(null, MOVIE_SEGMENT_PATH, recoveries = 0))
+    }
+
+    @Test
+    fun `a segment 500 recovers because the server replaces a failed session`() {
+        assertTrue(shouldRecoverLostHlsSession(500, MOVIE_SEGMENT_PATH, recoveries = 0))
+        assertFalse(shouldRecoverLostHlsSession(500, "/api/movies/7/hls/remux/playlist.m3u8", 0))
+        assertFalse(shouldRecoverLostHlsSession(500, "/api/movies/7/hls/remux/init.mp4", 0))
+        assertFalse(
+            shouldRecoverLostHlsSession(500, MOVIE_SEGMENT_PATH, HLS_SESSION_LOST_MAX_ATTEMPTS),
+        )
+    }
+
+    @Test
+    fun `the recovery budget starts over only after a quiet incident window`() {
+        val last = 1_000_000L
+        assertEquals(2, sessionLostRecoveriesAt(2, last, last + HLS_SESSION_LOST_INCIDENT_WINDOW_MS - 1))
+        assertEquals(0, sessionLostRecoveriesAt(2, last, last + HLS_SESSION_LOST_INCIDENT_WINDOW_MS))
+        // Never recovered yet: the elapsed-realtime clock is far past the zero default.
+        assertEquals(0, sessionLostRecoveriesAt(0, 0L, last))
+    }
+
+    // --- end-of-media 404 ---
+
+    @Test
+    fun `a segment 404 marked past-end is the end of the media`() {
+        val pastEnd = mapOf<String?, List<String>>(
+            null to listOf("HTTP/1.1 404 Not Found"),
+            "x-igloo-segment" to listOf("past-end"),
+        )
+        assertTrue(isPastEndHlsSegment(404, MOVIE_SEGMENT_PATH, pastEnd))
+    }
+
+    @Test
+    fun `an unmarked 404 or a marker anywhere else is not the end`() {
+        val pastEnd = mapOf<String?, List<String>>("X-Igloo-Segment" to listOf("past-end"))
+        assertFalse(isPastEndHlsSegment(404, MOVIE_SEGMENT_PATH, emptyMap()))
+        assertFalse(isPastEndHlsSegment(404, MOVIE_SEGMENT_PATH, null))
+        assertFalse(
+            isPastEndHlsSegment(
+                404,
+                MOVIE_SEGMENT_PATH,
+                mapOf<String?, List<String>>("X-Igloo-Segment" to listOf("other")),
+            ),
+        )
+        assertFalse(isPastEndHlsSegment(500, MOVIE_SEGMENT_PATH, pastEnd))
+        assertFalse(isPastEndHlsSegment(404, "/api/movies/7/hls/remux/playlist.m3u8", pastEnd))
+        assertFalse(isPastEndHlsSegment(404, null, pastEnd))
     }
 
     @Test

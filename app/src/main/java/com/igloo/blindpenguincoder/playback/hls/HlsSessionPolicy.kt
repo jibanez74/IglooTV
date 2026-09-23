@@ -39,9 +39,27 @@ const val HLS_START_TOTAL_BUDGET_MS = 90_000L
 const val HLS_SESSION_LOST_MAX_ATTEMPTS = 3
 private const val HLS_SESSION_LOST_MIN_DELAY_MS = 2_000L
 
+/**
+ * A lost session this long after the previous recovery starts a new incident with a full
+ * budget. Resetting on READY instead let a failure that repeats at the same point in the film
+ * recover forever, because every recreated session reaches READY before it fails again.
+ */
+const val HLS_SESSION_LOST_INCIDENT_WINDOW_MS = 60_000L
+
+/**
+ * The server marks the segment 404 it sends once FFmpeg has finished cleanly without writing
+ * the file. That is the end of the media, not a lost session: the synthesized transcode
+ * playlist can list one or two segments more than FFmpeg writes when a source's audio outlasts
+ * its video.
+ */
+private const val HLS_SEGMENT_STATUS_HEADER = "X-Igloo-Segment"
+private const val HLS_SEGMENT_STATUS_PAST_END = "past-end"
+
 private val MOVIE_HLS_REQUEST_PATH = Regex(
     "^/api/movies/[^/]+/hls/[^/]+/(?:playlist\\.m3u8|init\\.mp4|segment_[0-9]+\\.m4s)$",
 )
+
+private val MOVIE_HLS_SEGMENT_PATH = Regex("^/api/movies/[^/]+/hls/[^/]+/segment_[0-9]+\\.m4s$")
 
 /** True only for the movie HLS routes whose assets are owned by an ephemeral FFmpeg session. */
 fun isMovieHlsRequestPath(path: String?): Boolean =
@@ -78,17 +96,36 @@ fun sessionLostRetryDelayMs(attempt: Int): Long? {
 
 /**
  * Whether a mid-play load failure should recreate the session in place rather than surface as
- * a terminal error. Only a 404 from an ephemeral movie HLS playlist/init/segment means "the
- * server-side session evaporated" (idle eviction, restart). Sideloaded WebVTT and unrelated
- * endpoints retain ordinary HTTP handling. [recoveries] is how many recreations have already
- * run since the last healthy READY, so a genuinely missing movie cannot loop forever.
+ * a terminal error. A 404 from an ephemeral movie HLS playlist/init/segment means "the
+ * server-side session evaporated" (idle eviction, restart). A 500 on a segment means FFmpeg
+ * died partway through, and the server replaces a failed session on the next manifest
+ * request. Sideloaded WebVTT and unrelated endpoints retain ordinary HTTP handling.
+ * [recoveries] is how many recreations this incident has already run (see
+ * [sessionLostRecoveriesAt]), so a genuinely missing movie cannot loop forever.
  */
 fun shouldRecoverLostHlsSession(
     responseCode: Int?,
     requestPath: String?,
     recoveries: Int,
-): Boolean = responseCode == 404 && isMovieHlsRequestPath(requestPath) &&
-    recoveries < HLS_SESSION_LOST_MAX_ATTEMPTS
+): Boolean = recoveries < HLS_SESSION_LOST_MAX_ATTEMPTS &&
+    when (responseCode) {
+        404 -> isMovieHlsRequestPath(requestPath)
+        500 -> requestPath != null && MOVIE_HLS_SEGMENT_PATH.matches(requestPath)
+        else -> false
+    }
+
+/** The recoveries a lost session at [nowMs] counts against, given the last one at [lastRecoveryAtMs]. */
+fun sessionLostRecoveriesAt(recoveries: Int, lastRecoveryAtMs: Long, nowMs: Long): Int =
+    if (nowMs - lastRecoveryAtMs >= HLS_SESSION_LOST_INCIDENT_WINDOW_MS) 0 else recoveries
+
+/** Whether a load failure is the server's end-of-media 404 rather than a lost session. */
+fun isPastEndHlsSegment(
+    responseCode: Int?,
+    requestPath: String?,
+    headerFields: Map<out String?, List<String>>?,
+): Boolean = responseCode == 404 &&
+    requestPath != null && MOVIE_HLS_SEGMENT_PATH.matches(requestPath) &&
+    headerValueFrom(headerFields, HLS_SEGMENT_STATUS_HEADER) == HLS_SEGMENT_STATUS_PAST_END
 
 /**
  * `Retry-After` seconds out of an HTTP header map. HttpURLConnection's map is case-preserving
@@ -97,9 +134,12 @@ fun shouldRecoverLostHlsSession(
  * non-numeric header.
  */
 fun retryAfterSecondsFrom(headerFields: Map<out String?, List<String>>?): Int? =
+    headerValueFrom(headerFields, "Retry-After")?.toIntOrNull()
+
+private fun headerValueFrom(headerFields: Map<out String?, List<String>>?, name: String): String? =
     headerFields?.entries
-        ?.firstOrNull { it.key?.equals("Retry-After", ignoreCase = true) == true }
-        ?.value?.firstOrNull()?.toIntOrNull()
+        ?.firstOrNull { it.key?.equals(name, ignoreCase = true) == true }
+        ?.value?.firstOrNull()
 
 /**
  * Retry delay for a failed Media3 segment/playlist load, or null to fail the load. Only 503 gets

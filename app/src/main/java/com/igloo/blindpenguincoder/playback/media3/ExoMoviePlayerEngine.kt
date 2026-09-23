@@ -8,6 +8,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -38,6 +39,8 @@ import com.igloo.blindpenguincoder.playback.hls.HlsSessionStart
 import com.igloo.blindpenguincoder.playback.hls.HlsStartException
 import com.igloo.blindpenguincoder.playback.hls.effectivePlaybackMode
 import com.igloo.blindpenguincoder.playback.hls.hlsResumeStartSec
+import com.igloo.blindpenguincoder.playback.hls.isPastEndHlsSegment
+import com.igloo.blindpenguincoder.playback.hls.sessionLostRecoveriesAt
 import com.igloo.blindpenguincoder.playback.hls.shouldRebaseHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRecoverLostHlsSession
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
@@ -108,6 +111,7 @@ internal class ExoMoviePlayerEngine(
     private var restartJob: Job? = null
     private var restartGeneration = 0L
     private var sessionLostRecoveries = 0
+    private var lastSessionLostRecoveryAtMs = 0L
     private var initialSelectionApplied = false
     private val playbackIntent = PlaybackIntent()
 
@@ -134,10 +138,7 @@ internal class ExoMoviePlayerEngine(
     private val listener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
-                Player.STATE_READY -> {
-                    sessionLostRecoveries = 0
-                    emit(MoviePlayerEvent.Ready(durationSec()))
-                }
+                Player.STATE_READY -> emit(MoviePlayerEvent.Ready(durationSec()))
                 Player.STATE_BUFFERING -> emit(MoviePlayerEvent.Buffering)
                 Player.STATE_ENDED -> emit(MoviePlayerEvent.Ended)
                 else -> Unit
@@ -182,6 +183,7 @@ internal class ExoMoviePlayerEngine(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            if (isHls && endAtPastEndSegment(error)) return
             if (isHls && recoverFromLostHlsSession(error)) return
             transitionToTerminal(errorEvent(error))
         }
@@ -656,12 +658,29 @@ internal class ExoMoviePlayerEngine(
     }
 
     /**
+     * The server's end-of-media 404 ends playback like STATE_ENDED would. Media3 raises a load
+     * error only once the buffer before it has played out, so nothing the viewer could still
+     * watch is cut off.
+     */
+    private fun endAtPastEndSegment(error: PlaybackException): Boolean {
+        val http = httpErrorCause(error)
+        if (!isPastEndHlsSegment(http?.responseCode, http?.dataSpec?.uri?.path, http?.headerFields)) {
+            return false
+        }
+        emit(MoviePlayerEvent.Ended)
+        return true
+    }
+
+    /**
      * A recoverable load failure restarts the session in place at the current position via the
      * manifest preflight in [restartInPlace]; the decision itself lives in
-     * [shouldRecoverLostHlsSession]. A successful READY resets the budget.
+     * [shouldRecoverLostHlsSession], and the budget per incident in [sessionLostRecoveriesAt].
      */
     private fun recoverFromLostHlsSession(error: PlaybackException): Boolean {
         val http = httpErrorCause(error)
+        val nowMs = SystemClock.elapsedRealtime()
+        sessionLostRecoveries =
+            sessionLostRecoveriesAt(sessionLostRecoveries, lastSessionLostRecoveryAtMs, nowMs)
         if (
             !shouldRecoverLostHlsSession(
                 responseCode = http?.responseCode,
@@ -670,6 +689,7 @@ internal class ExoMoviePlayerEngine(
             )
         ) return false
         sessionLostRecoveries++
+        lastSessionLostRecoveryAtMs = nowMs
         controller.noteSessionLost()
         restartInPlace(committedRequestedMode, currentAudioTypeIndex, currentAbsoluteSec())
         return true
