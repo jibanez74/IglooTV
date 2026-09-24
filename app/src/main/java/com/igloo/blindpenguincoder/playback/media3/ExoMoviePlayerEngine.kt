@@ -34,6 +34,7 @@ import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.hlsProfileId
+import com.igloo.blindpenguincoder.playback.hls.HLS_SEEK_SETTLE_MS
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionController
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionStart
 import com.igloo.blindpenguincoder.playback.hls.HlsStartException
@@ -42,6 +43,7 @@ import com.igloo.blindpenguincoder.playback.hls.hlsResumeStartSec
 import com.igloo.blindpenguincoder.playback.hls.isPastEndHlsSegment
 import com.igloo.blindpenguincoder.playback.hls.sessionLostRecoveriesAt
 import com.igloo.blindpenguincoder.playback.hls.shouldRebaseHlsSeek
+import com.igloo.blindpenguincoder.playback.hls.shouldRebasePendingHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRecoverLostHlsSession
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
@@ -61,6 +63,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -110,6 +113,13 @@ internal class ExoMoviePlayerEngine(
     private var timelineOffsetSec = 0.0
     private var restartJob: Job? = null
     private var restartGeneration = 0L
+    /** The HLS session being established, if any; cleared once its source is prepared. */
+    private var pendingRestart: PendingRestart? = null
+    /** Absolute movie second where playback last came to rest; seeks are measured from here. */
+    private var settledAbsoluteSec = 0.0
+    /** A rebase waiting out [HLS_SEEK_SETTLE_MS]; the current source plays on meanwhile. */
+    private var heldRebaseTargetSec: Double? = null
+    private var heldRebaseJob: Job? = null
     private var sessionLostRecoveries = 0
     private var lastSessionLostRecoveryAtMs = 0L
     private var initialSelectionApplied = false
@@ -193,16 +203,20 @@ internal class ExoMoviePlayerEngine(
         if (!playbackIntent.acceptsCommands) {
             false
         } else {
-            // A pending switch leaves the outgoing source frozen at a position that is no longer
-            // where the viewer is going; reporting it snaps the seek bar back and feeds the
-            // progress cadence a stale second.
-            if (pendingMode == null &&
-                (
+            // A pending switch leaves the outgoing source frozen, and a held rebase leaves it
+            // playing, at a position that is no longer where the viewer is going; reporting it
+            // snaps the seek bar back and feeds the progress cadence a stale second.
+            if (pendingMode == null && heldRebaseTargetSec == null) {
+                // A seek turns the player BUFFERING at once, so READY means it has come to rest.
+                if (player.playbackState == Player.STATE_READY) {
+                    settledAbsoluteSec = currentAbsoluteSec()
+                }
+                if (
                     player.playbackState == Player.STATE_READY ||
-                        player.playbackState == Player.STATE_BUFFERING
-                    )
-            ) {
-                emit(MoviePlayerEvent.Time(currentAbsoluteSec(), durationSec()))
+                    player.playbackState == Player.STATE_BUFFERING
+                ) {
+                    emit(MoviePlayerEvent.Time(currentAbsoluteSec(), durationSec()))
+                }
             }
             true
         }
@@ -271,15 +285,45 @@ internal class ExoMoviePlayerEngine(
 
     override fun seekTo(seconds: Double) {
         if (!playbackIntent.acceptsCommands) return
-        if (!isHls) {
-            player.seekTo((seconds * 1000).toLong())
-            return
+        val pending = pendingRestart
+        when {
+            // The frozen source is about to be replaced, so it is no measure: a seek the new
+            // session covers only moves where its source will be prepared.
+            pending != null -> if (shouldRebasePendingHlsSeek(seconds, pending.startSec)) {
+                holdRebase(seconds)
+            } else {
+                dropHeldRebase()
+                pendingRestart = pending.copy(targetSec = seconds)
+            }
+            !isHls -> player.seekTo((seconds * 1000).toLong())
+            shouldRebaseHlsSeek(seconds, timelineOffsetSec, settledAbsoluteSec) -> holdRebase(seconds)
+            else -> {
+                // Back in range: a far target the same run passed through is dropped.
+                dropHeldRebase()
+                player.seekTo(((seconds - timelineOffsetSec) * 1000).toLong())
+            }
         }
-        if (shouldRebaseHlsSeek(seconds, timelineOffsetSec, currentAbsoluteSec())) {
-            restartInPlace(committedRequestedMode, currentAudioTypeIndex, seconds)
-        } else {
-            player.seekTo(((seconds - timelineOffsetSec) * 1000).toLong())
+    }
+
+    /**
+     * Rebases to [targetSec] once seeking has been quiet for [HLS_SEEK_SETTLE_MS]; a later seek
+     * re-arms it. A switch still pending when it fires keeps its mode.
+     */
+    private fun holdRebase(targetSec: Double) {
+        heldRebaseTargetSec = targetSec
+        heldRebaseJob?.cancel()
+        heldRebaseJob = scope.launch {
+            delay(HLS_SEEK_SETTLE_MS)
+            heldRebaseJob = null
+            heldRebaseTargetSec = null
+            restartInPlace(pendingMode ?: committedRequestedMode, currentAudioTypeIndex, targetSec)
         }
+    }
+
+    private fun dropHeldRebase() {
+        heldRebaseJob?.cancel()
+        heldRebaseJob = null
+        heldRebaseTargetSec = null
     }
 
     override fun selectAudioTrack(optionId: String) {
@@ -288,7 +332,7 @@ internal class ExoMoviePlayerEngine(
         if (hlsOrdinal != null) {
             // Only one audio track exists in an HLS mux; another track is another session.
             if (hlsOrdinal == effectiveAudioOrdinal()) return
-            restartInPlace(committedRequestedMode, hlsOrdinal, currentAbsoluteSec())
+            restartInPlace(committedRequestedMode, hlsOrdinal, intendedAbsoluteSec())
             return
         }
         val override = overrideFor(optionId) ?: return
@@ -298,7 +342,7 @@ internal class ExoMoviePlayerEngine(
         // A track that needs the audio conversion cannot stay under Direct — the restart
         // resolves to Remux with the converted soundtrack instead of an in-place override.
         if (typeIndex != null && conversionFor(typeIndex) != null) {
-            restartInPlace(committedRequestedMode, typeIndex, currentAbsoluteSec())
+            restartInPlace(committedRequestedMode, typeIndex, intendedAbsoluteSec())
             return
         }
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
@@ -341,7 +385,7 @@ internal class ExoMoviePlayerEngine(
             emit(MoviePlayerEvent.ModeRefused(message))
             return
         }
-        restartInPlace(mode, currentAudioTypeIndex, currentAbsoluteSec())
+        restartInPlace(mode, currentAudioTypeIndex, intendedAbsoluteSec())
     }
 
     /**
@@ -405,6 +449,9 @@ internal class ExoMoviePlayerEngine(
         val mode = resolveModeForAudio(requestedModeArg, audioTypeIndex)
         restartJob?.cancel()
         restartJob = null
+        pendingRestart = null
+        // Every caller passes where the viewer is headed, so a held rebase is answered here.
+        dropHeldRebase()
         val generation = ++restartGeneration
         pendingMode = mode
         currentAudioTypeIndex = audioTypeIndex
@@ -428,6 +475,8 @@ internal class ExoMoviePlayerEngine(
             return
         }
         val profileId = requireNotNull(mode.hlsProfileId)
+        val startSec = floor(targetAbsoluteSec).toInt().coerceAtLeast(0)
+        pendingRestart = PendingRestart(startSec, targetAbsoluteSec)
         // Reserve synchronously so selecting Direct again can rotate even before launch runs.
         controller.reserveGeneration()
         restartJob = scope.launch {
@@ -436,7 +485,7 @@ internal class ExoMoviePlayerEngine(
                     profileId = profileId,
                     audioTypeIndex = audioTypeIndex ?: request.effectiveAudioTypeIndex,
                     audioProfile = conversionFor(audioTypeIndex),
-                    startSec = floor(targetAbsoluteSec).toInt().coerceAtLeast(0),
+                    startSec = startSec,
                 ) { message ->
                     if (isRestartCurrent(generation)) {
                         emit(MoviePlayerEvent.StatusMessage(message))
@@ -445,7 +494,9 @@ internal class ExoMoviePlayerEngine(
                 if (!isRestartCurrent(generation)) return@launch
                 effectiveMode = effectivePlaybackMode(mode, start.effectiveProfileId)
                 timelineOffsetSec = start.actualStartSec
-                val relativeMs = ((targetAbsoluteSec - start.actualStartSec).coerceAtLeast(0.0) * 1000).toLong()
+                // Seeks made during the preflight may have moved the target within the session.
+                val targetSec = pendingRestart?.targetSec ?: targetAbsoluteSec
+                val relativeMs = ((targetSec - start.actualStartSec).coerceAtLeast(0.0) * 1000).toLong()
                 prepareSource(hlsMediaSource(start), relativeMs)
                 committedRequestedMode = mode
                 pendingMode = null
@@ -478,6 +529,7 @@ internal class ExoMoviePlayerEngine(
             } finally {
                 if (restartGeneration == generation) {
                     pendingMode = null
+                    pendingRestart = null
                     restartJob = null
                 }
             }
@@ -498,12 +550,16 @@ internal class ExoMoviePlayerEngine(
         player.setMediaSource(source, positionMs)
         player.playWhenReady = playbackIntent.shouldPlay
         player.prepare()
+        settledAbsoluteSec = timelineOffsetSec + positionMs / 1000.0
     }
 
     /** Selecting the active row is an explicit cancellation of a different pending switch. */
     private fun cancelPendingModeSwitch() {
         restartJob?.cancel()
         restartJob = null
+        // Seeks made during the switch went with it; playback stays where the old source is.
+        pendingRestart = null
+        dropHeldRebase()
         restartGeneration++
         val canceledWhileDirect = effectiveMode == PlaybackMode.Direct
         pendingMode = null
@@ -654,7 +710,7 @@ internal class ExoMoviePlayerEngine(
     private fun onKeepaliveSessionLost() {
         if (!playbackIntent.acceptsCommands) return
         controller.noteSessionLost()
-        restartInPlace(committedRequestedMode, currentAudioTypeIndex, currentAbsoluteSec())
+        restartInPlace(committedRequestedMode, currentAudioTypeIndex, intendedAbsoluteSec())
     }
 
     /**
@@ -691,7 +747,7 @@ internal class ExoMoviePlayerEngine(
         sessionLostRecoveries++
         lastSessionLostRecoveryAtMs = nowMs
         controller.noteSessionLost()
-        restartInPlace(committedRequestedMode, currentAudioTypeIndex, currentAbsoluteSec())
+        restartInPlace(pendingMode ?: committedRequestedMode, currentAudioTypeIndex, intendedAbsoluteSec())
         return true
     }
 
@@ -707,6 +763,14 @@ internal class ExoMoviePlayerEngine(
 
     private fun currentAbsoluteSec(): Double =
         player.currentPosition / 1000.0 + timelineOffsetSec
+
+    /**
+     * Where the viewer is headed: a held rebase's target, then a pending session's, then the
+     * playhead. A switch or recovery made mid-seek, or a relative seek built on one, starts there
+     * rather than from a source that is about to be replaced.
+     */
+    private fun intendedAbsoluteSec(): Double =
+        heldRebaseTargetSec ?: pendingRestart?.targetSec ?: currentAbsoluteSec()
 
     /**
      * Under HLS the player only ever sees one session's window, so the movie's real duration
@@ -751,9 +815,11 @@ internal class ExoMoviePlayerEngine(
         if (!playbackIntent.failTerminal()) return
         restartGeneration++
         pendingMode = null
+        pendingRestart = null
         ticker.stop()
         restartJob?.cancel()
         restartJob = null
+        dropHeldRebase()
         controller.releaseAndStop()
         player.stop()
         player.clearMediaItems()
@@ -793,16 +859,19 @@ internal class ExoMoviePlayerEngine(
         }
 
         override fun seekBack() {
-            this@ExoMoviePlayerEngine.seekTo(currentAbsoluteSec() - seekBackIncrement / 1000.0)
+            this@ExoMoviePlayerEngine.seekTo(intendedAbsoluteSec() - seekBackIncrement / 1000.0)
         }
 
         override fun seekForward() {
-            this@ExoMoviePlayerEngine.seekTo(currentAbsoluteSec() + seekForwardIncrement / 1000.0)
+            this@ExoMoviePlayerEngine.seekTo(intendedAbsoluteSec() + seekForwardIncrement / 1000.0)
         }
     }
 
     /** Instrumentation seam: the deterministic subtitle off/on contract is asserted on these. */
     internal val currentTrackSelectionParameters get() = player.trackSelectionParameters
+
+    /** A session being established from [startSec] whose source will be prepared at [targetSec]. */
+    private data class PendingRestart(val startSec: Int, val targetSec: Double)
 }
 
 fun exoMoviePlayerEngine(

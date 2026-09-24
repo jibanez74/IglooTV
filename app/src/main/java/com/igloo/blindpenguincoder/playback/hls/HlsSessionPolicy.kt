@@ -13,8 +13,14 @@ import kotlin.math.max
 /** Resuming over HLS rewinds a little so the viewer re-enters on context, not mid-sentence. */
 const val HLS_RESUME_REWIND_BUFFER_SEC = 10.0
 
-/** Seeks this far past the current position leave the produced window — rebase instead. */
+/** Seeks this far past the settled position leave the produced window — rebase instead. */
 const val HLS_FORWARD_REBASE_THRESHOLD_SEC = 120.0
+
+/**
+ * A rebase waits until seeking has been quiet this long, so a held D-pad key or a run of presses
+ * costs one new session at its final target rather than one per step that crossed the window.
+ */
+const val HLS_SEEK_SETTLE_MS = 250L
 
 /**
  * Keepalive cadence for the whole session. A paused or fully buffered player stops fetching,
@@ -74,9 +80,22 @@ fun hlsResumeStartSec(requestedSec: Double): Int =
  * does not exist in this session; far ahead of the playhead the segments may not be produced
  * yet (remux) or would force a long transcode catch-up. Near-forward seeks ride the player and
  * the server's segment long-poll.
+ *
+ * [settledSec] is where playback last came to rest, not the player's position: ExoPlayer reports
+ * a pending seek's target as its position, so measuring from it let a run of 10-second steps
+ * walk minutes past the encoder without ever crossing the window.
  */
-fun shouldRebaseHlsSeek(targetSec: Double, actualStartSec: Double, currentSec: Double): Boolean =
-    targetSec < actualStartSec || targetSec > currentSec + HLS_FORWARD_REBASE_THRESHOLD_SEC
+fun shouldRebaseHlsSeek(targetSec: Double, actualStartSec: Double, settledSec: Double): Boolean =
+    targetSec < actualStartSec || targetSec > settledSec + HLS_FORWARD_REBASE_THRESHOLD_SEC
+
+/**
+ * Whether a seek made while a session starting at [pendingStartSec] is still being established
+ * needs a session of its own; otherwise the seek only moves where that session's source is
+ * prepared. The window is measured from the session's start rather than the moving target, so a
+ * run of such seeks cannot walk it past the encoder either.
+ */
+fun shouldRebasePendingHlsSeek(targetSec: Double, pendingStartSec: Int): Boolean =
+    shouldRebaseHlsSeek(targetSec, pendingStartSec.toDouble(), pendingStartSec.toDouble())
 
 /**
  * Delay before capacity-retry number [attempt] (1-based), honoring the server's `Retry-After`;

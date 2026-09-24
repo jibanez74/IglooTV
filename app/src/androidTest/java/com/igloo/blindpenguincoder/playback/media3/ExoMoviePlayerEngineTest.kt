@@ -10,6 +10,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.playback.hls.HLS_SEEK_SETTLE_MS
 import com.igloo.blindpenguincoder.playback.hls.HlsManifestResult
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionApi
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
@@ -218,6 +219,83 @@ class ExoMoviePlayerEngineTest {
         onMain { engine.seekTo(1_000.0) }
         waitFor("the forward rebase") { api.fetched.size == 3 }
         assertEquals(1_000, api.fetched[2].startSec)
+    }
+
+    @Test
+    fun aRunOfStepsPastTheWindowRebasesOnceAtItsFinalTarget() {
+        val api = FakeHlsApi()
+        val engine = engine(playRequest(mode = PlaybackMode.Remux), api)
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = false) }
+        waitFor("the first manifest") { api.fetched.size == 1 }
+
+        // A held D-pad key. ExoPlayer reports each step's target as its position, so measuring
+        // from there never crossed the window and left the player minutes past the encoder.
+        onMain { (1..30).forEach { engine.seekTo(it * 10.0) } }
+        waitFor("the settled rebase") { api.fetched.size == 2 }
+        assertEquals(300, api.fetched[1].startSec)
+
+        SystemClock.sleep(HLS_SEEK_SETTLE_MS * 2)
+        instrumentation.waitForIdleSync()
+        assertEquals(2, api.fetched.size)
+    }
+
+    @Test
+    fun aStepBackIntoRangeDropsTheHeldRebase() {
+        val api = FakeHlsApi()
+        val engine = engine(playRequest(mode = PlaybackMode.Remux), api)
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = false) }
+        waitFor("the first manifest") { api.fetched.size == 1 }
+
+        onMain {
+            engine.seekTo(1_000.0)
+            engine.seekTo(60.0)
+        }
+        SystemClock.sleep(HLS_SEEK_SETTLE_MS * 2)
+        instrumentation.waitForIdleSync()
+        assertEquals(1, api.fetched.size)
+    }
+
+    @Test
+    fun aSeekThePendingSessionCoversMovesWhereItsSourceIsPrepared() {
+        val api = FakeHlsApi()
+        val engine = engine(playRequest(mode = PlaybackMode.Remux), api)
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = false) }
+        waitFor("the first manifest") { api.fetched.size == 1 }
+
+        val preflight = CompletableDeferred<HlsManifestResult>()
+        api.suspendedResult = preflight
+        onMain { engine.seekTo(1_000.0) }
+        waitFor("the pending rebase") { api.fetched.size == 2 }
+
+        // Against the frozen source this was another far seek, and a near one was lost when
+        // the pending source replaced it.
+        onMain { engine.seekTo(1_030.0) }
+        preflight.complete(HlsManifestResult.Ready("remux", 1_000.0))
+        waitFor("the source prepared at the moved target") {
+            engine.events.replayCache
+                .filterIsInstance<MoviePlayerEvent.Time>()
+                .lastOrNull()
+                ?.currentSec == 1_030.0
+        }
+        assertEquals(2, api.fetched.size)
+    }
+
+    @Test
+    fun aFarSeekDuringAPendingSwitchKeepsTheSwitch() {
+        val api = FakeHlsApi()
+        val engine = engine(playRequest(mode = PlaybackMode.Remux), api)
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = false) }
+        waitFor("the first manifest") { api.fetched.size == 1 }
+
+        api.suspendedResult = CompletableDeferred()
+        onMain { engine.selectPlaybackMode(PlaybackMode.P1080Mbps8.name) }
+        waitFor("the pending switch") { api.fetched.size == 2 }
+
+        api.suspendedResult = null
+        onMain { engine.seekTo(3_000.0) }
+        waitFor("the rebase") { api.fetched.size == 3 }
+        assertEquals(3_000, api.fetched[2].startSec)
+        assertEquals("1080p_8mbps", api.fetched[2].profileId)
     }
 
     @Test

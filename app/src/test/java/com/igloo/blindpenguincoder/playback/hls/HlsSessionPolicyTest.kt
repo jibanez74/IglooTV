@@ -23,23 +23,37 @@ class HlsSessionPolicyTest {
 
     @Test
     fun `seeking before the actual start rebases`() {
-        assertTrue(shouldRebaseHlsSeek(targetSec = 99.0, actualStartSec = 100.0, currentSec = 200.0))
+        assertTrue(shouldRebaseHlsSeek(targetSec = 99.0, actualStartSec = 100.0, settledSec = 200.0))
     }
 
     @Test
     fun `the actual start itself is inside the session`() {
-        assertFalse(shouldRebaseHlsSeek(targetSec = 100.0, actualStartSec = 100.0, currentSec = 200.0))
+        assertFalse(shouldRebaseHlsSeek(targetSec = 100.0, actualStartSec = 100.0, settledSec = 200.0))
     }
 
     @Test
     fun `a seek within two minutes ahead rides the session`() {
-        assertFalse(shouldRebaseHlsSeek(targetSec = 320.0, actualStartSec = 100.0, currentSec = 200.0))
+        assertFalse(shouldRebaseHlsSeek(targetSec = 320.0, actualStartSec = 100.0, settledSec = 200.0))
     }
 
     @Test
     fun `the forward threshold is exclusive at exactly two minutes`() {
-        assertFalse(shouldRebaseHlsSeek(targetSec = 200.0 + 120.0, actualStartSec = 0.0, currentSec = 200.0))
-        assertTrue(shouldRebaseHlsSeek(targetSec = 200.0 + 120.1, actualStartSec = 0.0, currentSec = 200.0))
+        assertFalse(shouldRebaseHlsSeek(targetSec = 200.0 + 120.0, actualStartSec = 0.0, settledSec = 200.0))
+        assertTrue(shouldRebaseHlsSeek(targetSec = 200.0 + 120.1, actualStartSec = 0.0, settledSec = 200.0))
+    }
+
+    @Test
+    fun `a seek the pending session covers only moves its target`() {
+        assertFalse(shouldRebasePendingHlsSeek(targetSec = 1_000.0, pendingStartSec = 1_000))
+        assertFalse(shouldRebasePendingHlsSeek(targetSec = 1_030.0, pendingStartSec = 1_000))
+        assertFalse(shouldRebasePendingHlsSeek(targetSec = 1_120.0, pendingStartSec = 1_000))
+    }
+
+    @Test
+    fun `the pending window is measured from the session's start, not the moving target`() {
+        // A run of retargets each within two minutes of the last must still stop at the window.
+        assertTrue(shouldRebasePendingHlsSeek(targetSec = 1_120.1, pendingStartSec = 1_000))
+        assertTrue(shouldRebasePendingHlsSeek(targetSec = 999.0, pendingStartSec = 1_000))
     }
 
     // --- capacity retries ---
