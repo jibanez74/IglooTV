@@ -703,4 +703,10 @@ devices. Use a browser-style login.
 
 ## License
 
-None declared. This project is pre-production and no `LICENSE` file is present.
+Copyright (C) 2026 Jose Ibañez
+
+Igloo TV is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+Igloo TV is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the [GNU General Public License](LICENSE) for more details.
+
+Third-party libraries bundled in the app and their licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
