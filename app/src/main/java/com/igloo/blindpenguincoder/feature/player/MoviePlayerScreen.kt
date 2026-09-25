@@ -165,7 +165,7 @@ fun MoviePlayerScreen(
 
     // The progress session: one per screen visit, and the exit save fires on *any* unmount —
     // Back, Ended, error Close, or the host tearing the overlay down — because the ViewModel
-    // outlives this composable and gives the bounded final write somewhere to land.
+    // outlives this composable and gives the final write somewhere to land.
     LaunchedEffect(Unit) { viewModel.startSession(request.movieId) }
     DisposableEffect(Unit) {
         onDispose { viewModel.endSession(lastPositionSec, lastDurationSec) }
@@ -177,7 +177,8 @@ fun MoviePlayerScreen(
         playerMenu = null
         if (resumeDecided) playPauseRequester.requestFocusSafely()
         engine.events.collect { event ->
-            val next = state.onEvent(event)
+            val previous = state
+            val next = previous.onEvent(event)
             state = next
             when (event) {
                 is MoviePlayerEvent.Error -> if (event.unauthorized) unauthorized = true
@@ -190,9 +191,20 @@ fun MoviePlayerScreen(
                         latestOnPlaybackModeRequested(event.requestedMode)
                     }
                 is MoviePlayerEvent.TracksChanged -> persistTrackSelection(engine)
-                is MoviePlayerEvent.PlayWhenReadyChanged ->
+                is MoviePlayerEvent.PlayWhenReadyChanged -> {
                     host.onEnginePlayWhenReady(event.playWhenReady)
-                is MoviePlayerEvent.Time -> {
+                    // A real pause — chrome, media key, media session or the host's ON_PAUSE —
+                    // writes progress at once, like the web. A rebuilt engine's paused start
+                    // arrives with the intent already false and writes nothing.
+                    if (
+                        !event.playWhenReady && previous.playWhenReady &&
+                        previous.phase in PROGRESS_FLUSH_PHASES
+                    ) {
+                        viewModel.flushProgress(lastPositionSec, lastDurationSec)
+                    }
+                }
+                // A tick that outruns Ended must not pull the final snapshot back below the end.
+                is MoviePlayerEvent.Time -> if (next.phase != MoviePlayerPhase.Ended) {
                     lastPositionSec = event.currentSec
                     if (event.durationSec > 0.0) lastDurationSec = event.durationSec
                     viewModel.onTick(
@@ -300,6 +312,8 @@ fun MoviePlayerScreen(
         onHostPaused = { engine.onHostPaused() },
         onHostResumed = { engine.onHostResumed() },
         onBackgroundRelease = {
+            // The trip away is the web's page hide: progress goes out before the engine does.
+            viewModel.flushProgress(lastPositionSec, lastDurationSec)
             persistTrackSelection(engine)
             engine.release()
         },
@@ -1037,3 +1051,10 @@ private fun ChapterMenuDialog(
         }
     }
 }
+
+/** Phases in which a dropped play intent is a pause of something the viewer was watching. */
+private val PROGRESS_FLUSH_PHASES = setOf(
+    MoviePlayerPhase.Playing,
+    MoviePlayerPhase.Paused,
+    MoviePlayerPhase.Buffering,
+)

@@ -90,7 +90,8 @@ internal fun rememberPlayerHostLifecycle(initialPlayWhenReady: Boolean): PlayerH
 /**
  * Installs [host]'s observer for the current [engine]. [onHostPaused] and [onHostResumed] are
  * the engine's own notifications; [onBackgroundRelease] is the full teardown a non-configuration
- * `ON_STOP` performs (the movie player persists its track selection there first).
+ * `ON_STOP` performs (the movie player flushes progress and persists its track selection
+ * there first).
  */
 @Composable
 internal fun PlayerHostLifecycleEffect(

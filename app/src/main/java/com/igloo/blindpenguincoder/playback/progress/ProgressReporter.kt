@@ -7,7 +7,7 @@ import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
 import java.util.UUID
 
 /**
- * The save-timing rule (AGENTS.md, web parity): a save needs at least [MIN_PLAYED_SEC] of
+ * The cadence rule (AGENTS.md, web parity): a periodic save needs at least [MIN_PLAYED_SEC] of
  * actual playback, a position past [MIN_POSITION_SEC] (the server's own continue-watching
  * floor), and [SAVE_INTERVAL_SEC] since the previous save. In practice the first save lands
  * around 30 seconds of real playback. Pure, for exhaustive table tests.
@@ -22,13 +22,17 @@ internal fun shouldSaveProgress(
     durationSec > 0.0 &&
     (secondsSinceLastSave == null || secondsSinceLastSave >= SAVE_INTERVAL_SEC)
 
-/** The exit write uses the same actual-playback floor as cadence writes. */
-internal fun shouldSaveFinalProgress(
-    playedSec: Double,
+/**
+ * Whether a snapshot is worth writing outside the cadence — on pause, on a trip to the
+ * background, and on exit or end. The web's rule: a known duration and a position past
+ * [MIN_POSITION_SEC], or one at [COMPLETION_RATIO] so a short film that finishes is still marked
+ * watched. There is no actual-playback floor: resuming near the end and leaving seconds later
+ * must still tell the server the movie was finished.
+ */
+internal fun shouldPersistProgress(
     positionSec: Double,
     durationSec: Double,
-): Boolean = playedSec >= MIN_PLAYED_SEC &&
-    positionSec.isFinite() &&
+): Boolean = positionSec.isFinite() &&
     durationSec.isFinite() &&
     durationSec > 0.0 &&
     positionSec >= 0.0 &&
@@ -72,10 +76,10 @@ internal const val MIN_PLAYED_SEC = 15.0
 internal const val MIN_POSITION_SEC = 30.0
 
 /** Past this ratio the server marks the movie watched instead of storing progress. */
-internal const val COMPLETION_RATIO = 0.98
+internal const val COMPLETION_RATIO = 0.95
 
 /** A tick-to-tick position jump larger than this is a seek, not playback. */
 internal const val MAX_TICK_DELTA_SEC = 2.0
 
-/** How long the exit save may hold the close before the player leaves anyway (web parity). */
-internal const val EXIT_SYNC_TIMEOUT_MS = 2_000L
+/** A pause or background write this close to the last dispatched position says nothing new. */
+internal const val FLUSH_DEDUPE_SEC = 1.0

@@ -1515,7 +1515,7 @@ with the abbreviations spelled out — eight two-character stops would be noise 
 **Resume.** The Play button is always labelled "Play"; the resume decision belongs to the
 player, not this screen. A partially watched movie shows a 4dp strip (`primary` on the §3.2
 `Black @ 0.40` track) and a compact remaining-time caption such as "2h 20m left", from 30
-seconds in until the position stops meaning anything — the server flips to watched at 98% — and
+seconds in until the position stops meaning anything — the server flips to watched at 95% — and
 never once the movie is watched. Whole hours drop the empty minute part, sub-hour values use
 minutes alone, partial minutes round up, and a sub-minute remainder reads "Less than 1m left".
 
@@ -2027,9 +2027,13 @@ each resolve to pending, successful (including empty tracks or nullable progress
 Play intent waits for both successful responses regardless of arrival order; failed reads are
 retried by Play, and the capability gate and resume prompt never consume missing or failed data.
 
-Progress saves to the backend every 15s, starting only after ~15s of real playback. The final
-exit write has the same 15 seconds-of-actual-playback minimum; a resume or seek does not make an
-early exit eligible. Save failures never pause playback. They hold the chrome open with a polite,
+Progress saves to the backend every 15s, starting only after ~15s of real playback. Like the web,
+a pause, a trip to the background, and the exit or end of the movie each write at once, with no
+played-time minimum: any position past 30s, or at 95% of the runtime, is eligible, so resuming
+near the end and leaving seconds later still marks the movie watched, and so does seeking to the
+end and leaving. A pause and the background stop that follows it write once, not twice. The exit
+write is never cancelled by the client, so backing out of the app right after the player cannot
+lose the end of a movie. Save failures never pause playback. They hold the chrome open with a polite,
 D-pad-reachable inline Retry and follow the user back to movie details if exit finishes first.
 Retry keeps the original save session id and takes a higher sequence. A retry or later cadence
 success clears the error, safely restores focus if Retry held it, and refreshes movie details and

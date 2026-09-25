@@ -253,7 +253,7 @@ class MoviePlayRequestMappingTest {
     }
 
     @Test
-    fun `resume position needs thirty seconds and a position under 98 percent`() {
+    fun `resume position needs thirty seconds and a position under 95 percent`() {
         assertNull(resumePositionSec(null))
         assertNull(resumePositionSec(progress(progressSec = null, durationSec = null)))
         assertNull(resumePositionSec(progress(progressSec = 29.0, durationSec = 7200.0)))
@@ -262,10 +262,10 @@ class MoviePlayRequestMappingTest {
             resumePositionSec(progress(progressSec = 30.0, durationSec = 7200.0)),
         )
         assertEquals(
-            7055.999,
-            resumePositionSec(progress(progressSec = 7055.999, durationSec = 7200.0)),
+            6839.999,
+            resumePositionSec(progress(progressSec = 6839.999, durationSec = 7200.0)),
         )
-        assertNull(resumePositionSec(progress(progressSec = 7056.0, durationSec = 7200.0)))
+        assertNull(resumePositionSec(progress(progressSec = 6840.0, durationSec = 7200.0)))
         assertNull(resumePositionSec(progress(progressSec = 100.0, durationSec = 0.0)))
         assertNull(resumePositionSec(progress(progressSec = 100.0, durationSec = -1.0)))
     }

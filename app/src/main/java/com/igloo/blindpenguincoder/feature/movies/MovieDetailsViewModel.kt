@@ -728,7 +728,7 @@ class MovieDetailsViewModel(
 
     /**
      * A strip is worth showing from 30 seconds in until the position stops meaning anything —
-     * the server itself flips to watched at 98% — and never once the movie is marked watched.
+     * the server itself flips to watched at 95% — and never once the movie is marked watched.
      */
     private fun progressUi(movieId: Long): ProgressUi? {
         if (mutationState(MutationType.Watched, movieId).displayed == true) return null

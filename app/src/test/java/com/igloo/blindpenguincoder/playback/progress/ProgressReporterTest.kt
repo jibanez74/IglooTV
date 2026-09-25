@@ -117,13 +117,23 @@ class ProgressReporterTest {
         assertEquals(listOf(0.0, 600.0), recorder.requests.map { it.progressSec })
     }
 
+    // --- shouldPersistProgress ---
+
     @Test
-    fun `final save requires actual playback and a valid snapshot`() {
-        assertFalse(shouldSaveFinalProgress(14.9, 300.0, 600.0))
-        assertFalse(shouldSaveFinalProgress(15.0, 300.0, 0.0))
-        assertFalse(shouldSaveFinalProgress(15.0, -1.0, 600.0))
-        assertFalse(shouldSaveFinalProgress(15.0, Double.NaN, 600.0))
-        assertFalse(shouldSaveFinalProgress(15.0, 300.0, Double.POSITIVE_INFINITY))
-        assertTrue(shouldSaveFinalProgress(15.0, 300.0, 600.0))
+    fun `pause, background and exit writes need the position floor or completion`() {
+        assertFalse(shouldPersistProgress(29.9, 600.0))
+        assertTrue(shouldPersistProgress(30.0, 600.0))
+        // A short film finishing under the floor still reaches the server's watched rule.
+        assertFalse(shouldPersistProgress(18.9, 20.0))
+        assertTrue(shouldPersistProgress(19.0, 20.0))
+    }
+
+    @Test
+    fun `an unusable snapshot is never written`() {
+        assertFalse(shouldPersistProgress(300.0, 0.0))
+        assertFalse(shouldPersistProgress(-1.0, 600.0))
+        assertFalse(shouldPersistProgress(Double.NaN, 600.0))
+        assertFalse(shouldPersistProgress(300.0, Double.POSITIVE_INFINITY))
+        assertFalse(shouldPersistProgress(Double.POSITIVE_INFINITY, 600.0))
     }
 }

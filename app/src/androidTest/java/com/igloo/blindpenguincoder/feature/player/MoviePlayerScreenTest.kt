@@ -344,7 +344,7 @@ class MoviePlayerScreenTest {
         composeRule.waitUntil(timeoutMillis = 5_000) { savedRequests.size >= expected }
     }
 
-    /** Delivers realistic one-second ticks so final saves meet the actual-playback floor. */
+    /** Delivers realistic one-second ticks, the cadence a real engine accrues played time from. */
     private fun playThrough(fromSec: Int, toSec: Int, durationSec: Double = 7200.0) {
         (fromSec..toSec).forEach { position ->
             engine.emit(MoviePlayerEvent.Time(position.toDouble(), durationSec))
@@ -959,6 +959,63 @@ class MoviePlayerScreenTest {
         awaitSaveCount(2)
         assertEquals(600.0, savedRequests.last().progressSec, 0.001)
         assertEquals(listOf(1L, 2L), savedRequests.map { it.saveSequence })
+    }
+
+    @Test
+    fun pauseWritesTheCurrentPositionAtOnce() {
+        setContent()
+        startPlaying()
+        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("movie_play_pause")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("start:null:true", "pause"), engine.playbackCommands)
+        awaitSaveCount(1)
+        assertEquals(600.0, savedRequests.single().progressSec, 0.001)
+        assertEquals(7200.0, savedRequests.single().durationSec, 0.001)
+    }
+
+    @Test
+    fun aTripToTheBackgroundWritesOnceAndTheRebuiltEngineWritesNothing() {
+        setContent()
+        startPlaying()
+        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        composeRule.waitForIdle()
+
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.CREATED
+        }
+        composeRule.waitForIdle()
+        awaitSaveCount(1)
+
+        engine = FakeMoviePlayerEngine()
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("start:600.0:false"), engine.playbackCommands)
+        // ON_PAUSE and ON_STOP both flush the frozen position and collapse into one write; the
+        // rebuilt engine's paused start is not a pause of anything and writes nothing.
+        assertEquals(1, savedRequests.size)
+        assertEquals(600.0, savedRequests.single().progressSec, 0.001)
+    }
+
+    @Test
+    fun aTickAfterEndedDoesNotLowerTheExitSave() {
+        setContent()
+        startPlaying()
+        engine.emit(MoviePlayerEvent.Time(currentSec = 7000.0, durationSec = 7200.0))
+        engine.emit(MoviePlayerEvent.Ended)
+        engine.emit(MoviePlayerEvent.Time(currentSec = 7001.0, durationSec = 7200.0))
+        composeRule.waitForIdle()
+
+        assertEquals(1, closes)
+        awaitSaveCount(1)
+        assertEquals(7200.0, savedRequests.single().progressSec, 0.001)
     }
 
     @Test

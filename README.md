@@ -182,7 +182,10 @@ token into media requests (with a separate HLS variant using a 120s segment read
 `playback/hls/` owns HLS session start/stop/switch; `PlaybackMode` covers Direct plus the remux
 and resolution-capped HLS profiles. Progress reporting lives in
 `playback/progress/ProgressReporter.kt`: `MIN_PLAYED_SEC = 15.0`, `SAVE_INTERVAL_SEC = 15.0`, so
-the first save normally lands around 30 seconds of actual playback. The picture is Media3's
+the first save normally lands around 30 seconds of actual playback. Pause, background (`ON_STOP`)
+and exit/end writes go out at once under the web's rule (`shouldPersistProgress`: past 30 s or at
+95%), deduplicated within `FLUSH_DEDUPE_SEC`, and the exit write runs `NonCancellable` so backing
+out of the app cannot lose it. The picture is Media3's
 Compose `ContentFrame` over a `SurfaceView` with `ContentScale.Fit` — `SurfaceView` is required
 for TV-quality timing, power use, full-resolution output and HDR, so do not swap it for a texture
 surface.
@@ -304,10 +307,10 @@ Instrumented tests use the **v2 Compose test API**:
 ### Commands
 
 ```bash
-# Tier 1 — no device needed (875 @Test across 61 files)
+# Tier 1 — no device needed (890 @Test across 69 files)
 ./gradlew :app:testDebugUnitTest
 
-# Tier 2 — needs a booted TV emulator or device (515 @Test across 51 suites)
+# Tier 2 — needs a booted TV emulator or device (522 @Test across 51 suites)
 ./gradlew :app:connectedDebugAndroidTest
 
 # Static + assembly
@@ -354,7 +357,7 @@ Android Lint is stock AGP. There is no ktlint, detekt, spotless, `lint.xml` or l
 | Home | `feature/home/HomeViewModelTest.kt`, `PlayerRequestSaversTest.kt` | Rails failing independently, hero state, `Saver` round-trips |
 | Players | `playback/model/{Movie,Music}PlayerStateMachineTest.kt`, `feature/player/MoviePlayerViewModelTest.kt`, `ChaptersTest.kt` | Pure player state machines, chapter math, chrome state |
 | HLS | `playback/hls/HlsSession*Test.kt` | Session lifecycle, policy, timeouts, mode switching |
-| Progress | `playback/progress/ProgressReporterTest.kt` | The 15s / first-save-near-30s cadence |
+| Progress | `playback/progress/ProgressReporterTest.kt` | The 15s / first-save-near-30s cadence, the pause/background/exit eligibility rule |
 | Network core | `core/network/{SafeApiCall,DeviceTokenAuth,BearerTokenProvider}Test.kt` | Envelope handling, bearer injection, the 401 event bus |
 | Storage | `core/storage/DataStoreProfileStoreTest.kt`, `UiPreferencesStoreTest.kt` | Encrypted vault and preference persistence |
 | Design tokens | `core/design/{IglooDimens,IglooTypography,IglooMotion,UiScale}Test.kt` | The Standard values in `docs/design-system.md` §§4–5, pinned exactly |

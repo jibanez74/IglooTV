@@ -84,7 +84,7 @@ private fun typeIndexOf(selectedId: Long?, idsWithStreamIndex: List<Pair<Long, L
 
 /**
  * The saved position, when it is worth resuming from: at least [RESUME_MIN_SEC] in and short of
- * [RESUME_MAX_RATIO] of the runtime (the server itself flips to watched at 98%). Null means
+ * [RESUME_MAX_RATIO] of the runtime (the server itself flips to watched at 95%). Null means
  * "start from the beginning without asking". One definition serves both the details screen's
  * progress strip and the player's resume prompt.
  */
@@ -98,4 +98,4 @@ internal fun resumePositionSec(progress: MovieWatchProgress?): Double? {
 }
 
 internal const val RESUME_MIN_SEC = 30.0
-internal const val RESUME_MAX_RATIO = 0.98
+internal const val RESUME_MAX_RATIO = 0.95

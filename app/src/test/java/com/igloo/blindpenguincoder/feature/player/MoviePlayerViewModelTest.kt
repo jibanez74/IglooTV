@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.player
 
+import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
@@ -7,9 +8,11 @@ import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -111,7 +114,7 @@ class MoviePlayerViewModelTest {
     }
 
     @Test
-    fun `an early exit below the floor saves nothing`() = test { viewModel ->
+    fun `an early exit before the 30 second position floor saves nothing`() = test { viewModel ->
         viewModel.play(0.0, 10.0)
         viewModel.endSession(10.0, 600.0)
         advanceUntilIdle()
@@ -120,17 +123,18 @@ class MoviePlayerViewModelTest {
     }
 
     @Test
-    fun `resume and seek followed by exit before 15 played seconds sends no write`() =
+    fun `an exit after a seek saves the seek position without a played floor`() =
         test { viewModel ->
             viewModel.play(300.0, 310.0)
             viewModel.endSession(500.0, 600.0)
             advanceUntilIdle()
-            assertTrue(requests.isEmpty())
+            assertEquals(500.0, requests.single().progressSec, 0.0)
+            assertEquals(1, refreshes)
         }
 
     @Test
-    fun `a valid final save requires 15 seconds of actual playback`() = test { viewModel ->
-        viewModel.play(0.0, 16.0)
+    fun `a final save needs no actual playback`() = test { viewModel ->
+        viewModel.play(0.0, 5.0)
         viewModel.endSession(300.0, 600.0)
         advanceUntilIdle()
         assertEquals(1, requests.size)
@@ -138,14 +142,113 @@ class MoviePlayerViewModelTest {
     }
 
     @Test
-    fun `a hung exit save gives up after the timeout and still refreshes`() = test { viewModel ->
+    fun `finishing within seconds of resuming still records the end`() = test { viewModel ->
+        viewModel.play(590.0, 595.0)
+        viewModel.endSession(600.0, 600.0)
+        advanceUntilIdle()
+        assertEquals(600.0, requests.single().progressSec, 0.0)
+        assertEquals(1, refreshes)
+    }
+
+    @Test
+    fun `a slow exit save is not abandoned`() = test { viewModel ->
         viewModel.play(0.0, 16.0)
-        save = { _, _ -> awaitCancellation() }
+        val record = save
+        save = { id, request ->
+            delay(5_000)
+            record(id, request)
+        }
         viewModel.endSession(300.0, 600.0)
+        advanceTimeBy(2_001)
+        assertTrue(requests.isEmpty())
         assertEquals(0, refreshes)
         advanceUntilIdle()
+        assertEquals(300.0, requests.single().progressSec, 0.0)
+        assertEquals(1, refreshes)
+        assertTrue(viewModel.progressSyncUiState.value is ProgressSyncUiState.Synced)
+    }
+
+    @Test
+    fun `an exit save survives the owner being cleared`() = test { viewModel ->
+        viewModel.play(0.0, 16.0)
+        val record = save
+        save = { id, request ->
+            delay(1_000)
+            record(id, request)
+        }
+        viewModel.endSession(300.0, 600.0)
+        viewModel.viewModelScope.cancel()
+        advanceUntilIdle()
+        assertEquals(300.0, requests.single().progressSec, 0.0)
+        assertEquals(1, refreshes)
+    }
+
+    @Test
+    fun `a pause writes the current position at once`() = test { viewModel ->
+        viewModel.play(0.0, 5.0)
+        viewModel.flushProgress(100.0, 600.0)
+        advanceUntilIdle()
+        assertEquals(100.0, requests.single().progressSec, 0.0)
+        assertEquals(1L, requests.single().saveSequence)
         assertEquals(0, refreshes)
-        assertTrue(viewModel.progressSyncUiState.value is ProgressSyncUiState.Failed)
+    }
+
+    @Test
+    fun `a pause before the position floor writes nothing`() = test { viewModel ->
+        viewModel.play(0.0, 5.0)
+        viewModel.flushProgress(10.0, 600.0)
+        advanceUntilIdle()
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test
+    fun `a pause the server marks watched refreshes`() = test { viewModel ->
+        watchedResponse = true
+        viewModel.play(0.0, 5.0)
+        viewModel.flushProgress(590.0, 600.0)
+        advanceUntilIdle()
+        assertEquals(1, requests.size)
+        assertEquals(1, refreshes)
+    }
+
+    @Test
+    fun `a flush within a second of the last dispatched position is skipped`() = test { viewModel ->
+        viewModel.play(30.0, 45.0)
+        assertEquals(1, requests.size)
+        // ON_PAUSE and ON_STOP both flush the frozen position; only the first says anything.
+        viewModel.flushProgress(45.5, 600.0)
+        viewModel.flushProgress(45.5, 600.0)
+        advanceUntilIdle()
+        assertEquals(1, requests.size)
+        viewModel.flushProgress(46.5, 600.0)
+        viewModel.flushProgress(46.5, 600.0)
+        advanceUntilIdle()
+        assertEquals(2, requests.size)
+        assertEquals(46.5, requests.last().progressSec, 0.0)
+    }
+
+    @Test
+    fun `an exit right after a pause still writes and refreshes`() = test { viewModel ->
+        viewModel.play(0.0, 5.0)
+        viewModel.flushProgress(100.0, 600.0)
+        viewModel.endSession(100.0, 600.0)
+        advanceUntilIdle()
+        assertEquals(listOf(1L, 2L), requests.map { it.saveSequence })
+        assertEquals(1, refreshes)
+    }
+
+    @Test
+    fun `a flush restarts the cadence`() = test { viewModel ->
+        viewModel.play(30.0, 45.0)
+        viewModel.play(45.0, 50.0)
+        viewModel.flushProgress(50.0, 600.0)
+        advanceUntilIdle()
+        assertEquals(2, requests.size)
+        viewModel.play(50.0, 64.5)
+        assertEquals(2, requests.size)
+        viewModel.play(64.5, 65.0)
+        assertEquals(3, requests.size)
+        assertEquals(65.0, requests.last().progressSec, 0.0)
     }
 
     @Test

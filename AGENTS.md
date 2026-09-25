@@ -144,6 +144,7 @@ Compose UI -> ViewModel / screen state -> Repository -> API or local data source
 - Keep player lifecycle, audio focus, resource release, and error recovery correct.
 - Resume position, watched state, history, and progress come from and return to the backend.
 - Report progress every 15 seconds of actual playback, beginning only after the initial 15-second threshold; the first periodic report normally occurs around 30 seconds.
+- Also report progress on pause, when the app goes to the background, and when the player closes or the movie ends, exactly as the web client does: those writes need only a position past 30 seconds or at 95% of the runtime, never a played-time floor, and the client must not cancel them. The backend alone decides watched state, at 95%.
 - Read the API contract and design system before changing playback APIs or player UX.
 
 ## Images
