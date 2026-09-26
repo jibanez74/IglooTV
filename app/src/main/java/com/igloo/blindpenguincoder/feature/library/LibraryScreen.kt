@@ -661,7 +661,7 @@ private fun LibraryGridSkeleton(
 }
 
 /** The glyph a poster-less card and the empty box show for this library. */
-internal val LibraryKind.icon: ImageVector
+private val LibraryKind.icon: ImageVector
     get() = when (this) {
         LibraryKind.Movies -> IglooIcons.Movies
         LibraryKind.Shows -> IglooIcons.TvShows
@@ -702,11 +702,12 @@ private fun spokenCount(
         }
     }
 
-private fun filterNoun(kind: LibraryKind, filter: LibraryFilter, count: Long): String = when (filter) {
-    LibraryFilter.All -> kind.noun(count)
-    LibraryFilter.Liked -> "liked ${kind.noun(count)}"
-    is LibraryFilter.Genre -> "${filter.tag} ${kind.noun(count)}"
-}
+private fun filterNoun(kind: LibraryKind, filter: LibraryFilter, count: Long): String =
+    when (filter) {
+        LibraryFilter.All -> kind.noun(count)
+        LibraryFilter.Liked -> "liked ${kind.noun(count)}"
+        is LibraryFilter.Genre -> "${filter.tag} ${kind.noun(count)}"
+    }
 
 private const val NO_GENRES_MESSAGE = "Genres aren't available right now. Refresh to try again."
 private const val SORT_ASCENDING_LABEL = "A–Z"

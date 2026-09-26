@@ -119,7 +119,9 @@ class ApiModelsSerializationTest {
         assertNull(movie.year.orNull())
     }
 
-    /** `GET /shows/library`: the movie page's shape under `shows`, with `name` and `premiere_year`. */
+    /**
+     * `GET /shows/library`: the movie page's shape under `shows`, with `name` and `premiere_year`.
+     */
     @Test
     fun decodesShowsLibraryWithSqlNullFieldsAndUnmodelledEchoes() {
         val body = """
@@ -166,7 +168,10 @@ class ApiModelsSerializationTest {
             """{"error":false,"message":"show stats","data":{"total_shows":3}}""",
         ).data!!
 
-        assertEquals(listOf(ShowGenreWithCount(genreId = 7, genreTag = "Comedy", showCount = 2)), genres)
+        assertEquals(
+            listOf(ShowGenreWithCount(genreId = 7, genreTag = "Comedy", showCount = 2)),
+            genres,
+        )
         assertEquals(3L, stats.totalShows)
     }
 

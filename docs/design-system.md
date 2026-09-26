@@ -1350,11 +1350,12 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
 
 - **Index** — **one shared library pane serves Movies and TV Shows** (`feature/library`:
   `LibraryScreen` over `LibraryViewModel`, fed by a `LibrarySource` per kind), described once
-  here in Movies terms; the TV Shows differences close the bullet. A heading, the current view's count, **Sort (A–Z ⇄ Z–A)** and **Refresh**
-  actions, a **tab strip** (All Movies · Genres · Liked), the Genres tab's **genre picker** (one
-  chip per genre, with counts), and a poster grid at `gridColumns`, **paged by infinite
-  scroll**. The strip mirrors the web movies page's All Movies · Genres · Playlists, with Liked
-  standing in for Playlists until playlists have a screen of their own.
+  here in Movies terms; the TV Shows differences close the bullet. A heading, the current view's
+  count, **Sort (A–Z ⇄ Z–A)** and **Refresh** actions, a **tab strip** (All Movies · Genres ·
+  Liked), the Genres tab's **genre picker** (one chip per genre, with counts), and a poster grid
+  at `gridColumns`, **paged by infinite scroll**. The strip mirrors the web movies page's All
+  Movies · Genres · Playlists, with Liked standing in for Playlists until playlists have a
+  screen of their own.
 
   **This reverses the earlier "no sort control, no filters" rule** ("the grid is All Movies and
   nothing else") and the 2026-08-29 "still no tab control" rule that put All, Liked and every
@@ -1474,13 +1475,13 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   "Refresh the TV show library", "Loading shows", "Showing 2 of 2 Comedy shows", "No shows found
   in your library.", "Comedy, 2 shows". The host gives it `PaneBranch.TvShows`, its own hoisted
   grid state and focus memory, and the same START-time refresh as Movies and Music.
-- **Detail** *(movies; a show has no details screen yet)* — full-bleed backdrop with a `background` gradient scrim, content pulled up over
-  it. Poster left; title, tagline, metadata chips, genres, and hero actions right. Hero actions:
-  **Play**, **Watched** toggle, **Like**, and the icon-only **More** trigger, which opens the
-  anchored menu (§11.4.1): Playback Settings, Watch Together, Technical Details, and — admin
-  only, hidden rather than disabled — Identify Movie and a destructive Delete Movie behind a
-  separator. Below: cast, chapters, extra details. Play must be the first focused element on
-  entry.
+- **Detail** *(movies; a show has no details screen yet)* — full-bleed backdrop with a
+  `background` gradient scrim, content pulled up over it. Poster left; title, tagline, metadata
+  chips, genres, and hero actions right. Hero actions: **Play**, **Watched** toggle, **Like**,
+  and the icon-only **More** trigger, which opens the anchored menu (§11.4.1): Playback
+  Settings, Watch Together, Technical Details, and — admin only, hidden rather than disabled —
+  Identify Movie and a destructive Delete Movie behind a separator. Below: cast, chapters, extra
+  details. Play must be the first focused element on entry.
 
 #### 11.4.1 The detail screen, as built
 

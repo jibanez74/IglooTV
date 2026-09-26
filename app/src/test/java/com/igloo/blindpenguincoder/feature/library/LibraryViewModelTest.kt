@@ -2,7 +2,6 @@ package com.igloo.blindpenguincoder.feature.library
 
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.SortOrder
-import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.movieGenreWithCountJson
 import com.igloo.blindpenguincoder.data.repository.movieLibraryItemJson
@@ -12,9 +11,6 @@ import com.igloo.blindpenguincoder.data.repository.moviesStatsJson
 import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
-import io.ktor.client.engine.mock.MockRequestHandleScope
-import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -1562,24 +1558,7 @@ class LibraryViewModelTest {
         LibraryViewModel(movieLibrarySource(http.test.movieRepository), http.test.serverUrl)
             .also { it.refresh() }
 
-    /**
-     * A tab taking focus and being stayed on: the switch, plus the debounce it waits out. Tests
-     * about the debounce itself call `selectTab` and drive the clock themselves.
-     */
-    private fun TestScope.landOn(model: LibraryViewModel, tab: LibraryTab) {
-        model.selectTab(tab)
-        // Past the debounce and no further: `advanceUntilIdle` here would run the virtual clock
-        // into the client's request timeout in the tests that deliberately hold a response open.
-        advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS + 1)
-    }
-
-    private fun LibraryUiState.gridIds(): List<Long> =
-        (grid as IglooRailState.Loaded).items.map { it.id }
-
-    private fun HttpRequestData.page(): String = url.parameters["page"].orEmpty()
-
-    private fun failingAfterFirstPage():
-        suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData = {
+    private fun failingAfterFirstPage(): LibraryRoute = {
         if (it.page() == "1") {
             jsonResponse(page(number = 1, totalPages = 3, ids = 1L..48L))
         } else {
@@ -1599,69 +1578,22 @@ class LibraryViewModelTest {
         movies = ids.map { movieLibraryItemJson(id = it, title = "Movie $it") }.toTypedArray(),
     )
 
-    /** Records what the grid actually asked the backend for, so the paging can be asserted. */
-    private class RoutedHttp {
-        val libraryPages = mutableListOf<String>()
-        val likedPages = mutableListOf<String>()
-
-        /** `"genreId:page"` per request, so the path and the cursor assert together. */
-        val genrePages = mutableListOf<String>()
-        val perPages = mutableListOf<String>()
-        val sorts = mutableListOf<String>()
-        lateinit var test: TestHttp
-    }
-
-    /**
-     * The mock engine is put on the caller's test scheduler so a response and the view model
-     * share one clock; on its production default a real thread hop escapes `runTest` and every
-     * assertion would read state that has not been written yet.
-     */
     private fun TestScope.routedHttp(
-        stats: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(moviesStatsJson()) },
-        genres: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(moviesGenresJson()) },
-        library: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(moviesLibraryJson()) },
-        liked: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(moviesLibraryJson()) },
-        genreMovies: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(moviesLibraryJson()) },
-    ): RoutedHttp {
-        val routed = RoutedHttp()
-        fun recordListParams(request: HttpRequestData) {
-            routed.perPages += request.url.parameters["per_page"].orEmpty()
-            routed.sorts += request.url.parameters["sort"].orEmpty()
-        }
-        routed.test = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
-            val path = request.url.encodedPath
-            val genreId = GENRE_MOVIES_PATH.matchEntire(path)?.groupValues?.get(1)
-            when {
-                path == "/api/movies/stats" -> stats(request)
-                path == "/api/movies/genres" -> genres(request)
-                path == "/api/movies/library" -> {
-                    routed.libraryPages += request.page()
-                    recordListParams(request)
-                    library(request)
-                }
-                path == "/api/movies/liked" -> {
-                    routed.likedPages += request.page()
-                    recordListParams(request)
-                    liked(request)
-                }
-                genreId != null -> {
-                    routed.genrePages += "$genreId:${request.page()}"
-                    recordListParams(request)
-                    genreMovies(request)
-                }
-                else -> error("unexpected request to $path")
-            }
-        }
-        return routed
-    }
+        stats: LibraryRoute = { jsonResponse(moviesStatsJson()) },
+        genres: LibraryRoute = { jsonResponse(moviesGenresJson()) },
+        library: LibraryRoute = { jsonResponse(moviesLibraryJson()) },
+        liked: LibraryRoute = { jsonResponse(moviesLibraryJson()) },
+        genreMovies: LibraryRoute = { jsonResponse(moviesLibraryJson()) },
+    ): RoutedHttp = routedLibraryHttp(
+        resource = "movies",
+        stats = stats,
+        genres = genres,
+        library = library,
+        genreList = genreMovies,
+        liked = liked,
+    )
 
     private companion object {
-        const val ERROR_BODY = """{"error":true,"message":"nope"}"""
         val GENRE_MOVIES_PATH = Regex("/api/movies/genres/(\\d+)/movies")
     }
 }

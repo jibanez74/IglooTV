@@ -9,7 +9,10 @@ import com.igloo.blindpenguincoder.feature.library.LibraryPage
 import com.igloo.blindpenguincoder.feature.library.LibraryRow
 import com.igloo.blindpenguincoder.feature.library.LibrarySource
 
-/** The movie library's routes as a [LibrarySource]: library, genre and liked pages, the count, the genres. */
+/**
+ * The movie library's routes as a [LibrarySource]: library, genre and liked pages, the count,
+ * the genres.
+ */
 fun movieLibrarySource(movies: MovieRepository): LibrarySource = LibrarySource(
     kind = LibraryKind.Movies,
     all = { page, perPage, sort ->
@@ -30,7 +33,9 @@ fun movieLibrarySource(movies: MovieRepository): LibrarySource = LibrarySource(
 )
 
 private fun MoviesLibraryData.toLibraryPage(): LibraryPage = LibraryPage(
-    rows = movies.map { LibraryRow(id = it.id, title = it.title, posterPath = it.posterPath, year = it.year) },
+    rows = movies.map {
+        LibraryRow(id = it.id, title = it.title, posterPath = it.posterPath, year = it.year)
+    },
     total = total,
     totalPages = totalPages,
 )

@@ -54,7 +54,10 @@ internal fun LibraryUiState.toLibraryContent(): LibraryContent {
 internal fun LibraryContent.containsItem(id: Long): Boolean =
     this is LibraryContent.Populated && items.any { it.id == id }
 
-/** The skeleton anchor's announcement: the genre list is the wait on the Genres tab, the page otherwise. */
+/**
+ * The skeleton anchor's announcement: the genre list is the wait on the Genres tab, the page
+ * otherwise.
+ */
 internal fun LibraryContent.loadingLabel(kind: LibraryKind): String =
     if (this is LibraryContent.GenresLoading) "Loading genres" else kind.loadingLabel
 

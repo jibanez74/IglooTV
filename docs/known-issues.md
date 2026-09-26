@@ -104,13 +104,13 @@ by hand:
 
 - `TheaterMovie` (7 fields), `TmdbMovie` and its nested genre/company/crew/video items,
   `MovieTechnicalFile` (5 fields), `MovieLibraryItem` and `ShowLibraryItem` (`certification`),
-  `MoviesLibraryData` and `ShowsLibraryData` (`page`, `per_page`, `sort`), `AlbumTrack` (`mime_type`), `TrackListItem` (`codec`,
-  `bit_rate`), `Musician` (`sort_name`, `spotify_id`, `created_at`, `updated_at`),
-  `MusicianAlbum` (`release_date`, `track_count`), `MusicianTrack` (`codec`, `bit_rate`,
-  `album_cover`), `DeviceTokenData` and `QuickConnectRedeemData` (`device`) each omit response
-  fields their schema marks required. Harmless under `ignoreUnknownKeys = true` and left alone
-  deliberately — recorded so the next sweep does not re-flag them as new. Confirmed still the
-  case on 2026-09-21.
+  `MoviesLibraryData` and `ShowsLibraryData` (`page`, `per_page`, `sort`), `AlbumTrack`
+  (`mime_type`), `TrackListItem` (`codec`, `bit_rate`), `Musician` (`sort_name`, `spotify_id`,
+  `created_at`, `updated_at`), `MusicianAlbum` (`release_date`, `track_count`), `MusicianTrack`
+  (`codec`, `bit_rate`, `album_cover`), `DeviceTokenData` and `QuickConnectRedeemData`
+  (`device`) each omit response fields their schema marks required. Harmless under
+  `ignoreUnknownKeys = true` and left alone deliberately — recorded so the next sweep does not
+  re-flag them as new. Confirmed still the case on 2026-09-21.
 - Some Kotlin class names lag the spec's: `MovieWatchProgress`/`UpdateMovieWatchProgressRequest`/
   `SetMovieWatchedRequest` for `WatchProgress`/`UpdateWatchProgressRequest`/`SetWatchedRequest`,
   `MovieCastMember`/`MovieCrewMember`/`MovieExtraVideo` for `MovieCastCredit`/`MovieCrewCredit`/

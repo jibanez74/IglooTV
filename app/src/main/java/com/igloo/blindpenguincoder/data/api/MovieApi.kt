@@ -36,7 +36,12 @@ class MovieApi(
         client.get("${serverUrl.require().apiBaseUrl}/movies/genres")
 
     /** One page of one genre's movies; same paging contract as [moviesLibrary]. */
-    suspend fun genreMovies(genreId: Long, page: Long, perPage: Long, sort: SortOrder): HttpResponse =
+    suspend fun genreMovies(
+        genreId: Long,
+        page: Long,
+        perPage: Long,
+        sort: SortOrder,
+    ): HttpResponse =
         client.pagedList(
             "${serverUrl.require().apiBaseUrl}/movies/genres/$genreId/movies",
             page,

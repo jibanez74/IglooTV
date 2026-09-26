@@ -21,6 +21,16 @@ data class LibraryPage(
 )
 
 /**
+ * One chip of the genre picker, wire-agnostic: the source maps its own count column onto
+ * [count].
+ */
+data class LibraryGenre(
+    val id: Long,
+    val tag: String,
+    val count: Long,
+)
+
+/**
  * The endpoints one library index pages, bound to a repository by a factory per kind
  * (`movieLibrarySource`, `showLibrarySource`) so the view model never sees a wire type. The
  * three list fetchers take the same page-numbered, direction-sorted query.
@@ -28,7 +38,12 @@ data class LibraryPage(
 class LibrarySource(
     val kind: LibraryKind,
     val all: suspend (page: Long, perPage: Long, sort: SortOrder) -> ApiResult<LibraryPage>,
-    val genre: suspend (genreId: Long, page: Long, perPage: Long, sort: SortOrder) -> ApiResult<LibraryPage>,
+    val genre: suspend (
+        genreId: Long,
+        page: Long,
+        perPage: Long,
+        sort: SortOrder,
+    ) -> ApiResult<LibraryPage>,
     /** Null for a library the backend keeps no likes for; the Liked tab is then never offered. */
     val liked: (suspend (page: Long, perPage: Long, sort: SortOrder) -> ApiResult<LibraryPage>)?,
     /** The library-wide count behind the All view's header. */

@@ -23,7 +23,12 @@ class ShowApi(
         client.get("${serverUrl.require().apiBaseUrl}/shows/genres")
 
     /** One page of one genre's shows; same paging contract as [showsLibrary]. */
-    suspend fun genreShows(genreId: Long, page: Long, perPage: Long, sort: SortOrder): HttpResponse =
+    suspend fun genreShows(
+        genreId: Long,
+        page: Long,
+        perPage: Long,
+        sort: SortOrder,
+    ): HttpResponse =
         client.pagedList(
             "${serverUrl.require().apiBaseUrl}/shows/genres/$genreId/shows",
             page,

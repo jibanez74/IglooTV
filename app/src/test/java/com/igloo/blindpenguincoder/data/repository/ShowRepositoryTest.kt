@@ -111,8 +111,9 @@ class ShowRepositoryTest {
             jsonResponse(showsLibraryJson(shows = arrayOf(showLibraryItemJson(id = 40))))
         }
 
-        val page = (http.showRepository.genreShows(7, page = 3, perPage = 48, sort = SortOrder.Ascending)
-            as ApiResult.Success).value
+        val result =
+            http.showRepository.genreShows(7, page = 3, perPage = 48, sort = SortOrder.Ascending)
+        val page = (result as ApiResult.Success).value
 
         val captured = requireNotNull(request)
         assertEquals("/api/shows/genres/7/shows", captured.url.encodedPath)

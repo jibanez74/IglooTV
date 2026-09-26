@@ -2,25 +2,26 @@ package com.igloo.blindpenguincoder.feature.shows
 
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
-import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.showGenreWithCountJson
 import com.igloo.blindpenguincoder.data.repository.showLibraryItemJson
 import com.igloo.blindpenguincoder.data.repository.showsGenresJson
 import com.igloo.blindpenguincoder.data.repository.showsLibraryJson
 import com.igloo.blindpenguincoder.data.repository.showsStatsJson
+import com.igloo.blindpenguincoder.feature.library.ERROR_BODY
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
 import com.igloo.blindpenguincoder.feature.library.LibraryGenre
 import com.igloo.blindpenguincoder.feature.library.LibraryKind
+import com.igloo.blindpenguincoder.feature.library.LibraryRoute
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
-import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.library.LibraryViewModel
+import com.igloo.blindpenguincoder.feature.library.RoutedHttp
 import com.igloo.blindpenguincoder.feature.library.actions
+import com.igloo.blindpenguincoder.feature.library.gridIds
+import com.igloo.blindpenguincoder.feature.library.landOn
+import com.igloo.blindpenguincoder.feature.library.routedLibraryHttp
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
-import io.ktor.client.engine.mock.MockRequestHandleScope
-import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -54,7 +55,7 @@ class ShowLibraryViewModelTest {
     }
 
     @Test
-    fun `the first load pages the show library at the contract's size and reads the show count`() = runTest {
+    fun `the first load pages the show library and reads the show count`() = runTest {
         val http = routedHttp(
             stats = { jsonResponse(showsStatsJson(totalShows = 3)) },
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L, total = 3)) },
@@ -65,7 +66,10 @@ class ShowLibraryViewModelTest {
         assertEquals(LibraryKind.Shows, state.kind)
         assertEquals(listOf(1L, 2L, 3L), state.gridIds())
         assertEquals(3L, state.total)
-        assertEquals(listOf("/api/shows/stats", "/api/shows/genres", "/api/shows/library"), http.paths)
+        assertEquals(
+            listOf("/api/shows/stats", "/api/shows/genres", "/api/shows/library"),
+            http.paths,
+        )
         assertEquals(listOf("48"), http.perPages)
         assertEquals(listOf("asc"), http.sorts)
     }
@@ -170,7 +174,7 @@ class ShowLibraryViewModelTest {
         assertEquals(3L, loaded(http).uiState.value.total)
     }
 
-    /** The like reconcile is wired for the movie library; here it has no Liked grid to reconcile. */
+    /** The like reconcile is wired for the movie library; here there is no Liked grid. */
     @Test
     fun `a like commit issues no request`() = runTest {
         val http = routedHttp()
@@ -182,7 +186,10 @@ class ShowLibraryViewModelTest {
         assertEquals(requestsBefore, http.paths.size)
     }
 
-    /** The host wires the screen through `actions()`; a lambda bound to the wrong method would pass every other suite. */
+    /**
+     * The host wires the screen through `actions()`; a lambda bound to the wrong method would
+     * pass every other suite.
+     */
     @Test
     fun `the screen's actions are bound to the view model's methods`() = runTest {
         val http = routedHttp()
@@ -210,16 +217,6 @@ class ShowLibraryViewModelTest {
         LibraryViewModel(showLibrarySource(http.test.showRepository), http.test.serverUrl)
             .also { it.refresh() }
 
-    private fun TestScope.landOn(model: LibraryViewModel, tab: LibraryTab) {
-        model.selectTab(tab)
-        advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS + 1)
-    }
-
-    private fun LibraryUiState.gridIds(): List<Long> =
-        (grid as IglooRailState.Loaded).items.map { it.id }
-
-    private fun HttpRequestData.page(): String = url.parameters["page"].orEmpty()
-
     private fun page(
         number: Long,
         totalPages: Long,
@@ -232,58 +229,18 @@ class ShowLibraryViewModelTest {
         shows = ids.map { showLibraryItemJson(id = it, name = "Show $it") }.toTypedArray(),
     )
 
-    /** Records what the pane actually asked the backend for, so the routes can be asserted. */
-    private class RoutedHttp {
-        val paths = mutableListOf<String>()
-        val libraryPages = mutableListOf<String>()
-
-        /** `"genreId:page"` per request, so the path and the cursor assert together. */
-        val genrePages = mutableListOf<String>()
-        val perPages = mutableListOf<String>()
-        val sorts = mutableListOf<String>()
-        lateinit var test: TestHttp
-    }
-
+    /** No liked route: the backend keeps no show likes, so a request there fails the test. */
     private fun TestScope.routedHttp(
-        stats: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(showsStatsJson()) },
-        genres: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(showsGenresJson(showGenreWithCountJson())) },
-        library: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
-        genreShows: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..2L)) },
-    ): RoutedHttp {
-        val routed = RoutedHttp()
-        fun recordListParams(request: HttpRequestData) {
-            routed.perPages += request.url.parameters["per_page"].orEmpty()
-            routed.sorts += request.url.parameters["sort"].orEmpty()
-        }
-        routed.test = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
-            val path = request.url.encodedPath
-            routed.paths += path
-            val genreId = GENRE_SHOWS_PATH.matchEntire(path)?.groupValues?.get(1)
-            when {
-                path == "/api/shows/stats" -> stats(request)
-                path == "/api/shows/genres" -> genres(request)
-                path == "/api/shows/library" -> {
-                    routed.libraryPages += request.page()
-                    recordListParams(request)
-                    library(request)
-                }
-                genreId != null -> {
-                    routed.genrePages += "$genreId:${request.page()}"
-                    recordListParams(request)
-                    genreShows(request)
-                }
-                else -> error("unexpected request to $path")
-            }
-        }
-        return routed
-    }
-
-    private companion object {
-        const val ERROR_BODY = """{"error":true,"message":"nope"}"""
-        val GENRE_SHOWS_PATH = Regex("/api/shows/genres/(\\d+)/shows")
-    }
+        stats: LibraryRoute = { jsonResponse(showsStatsJson()) },
+        genres: LibraryRoute = { jsonResponse(showsGenresJson(showGenreWithCountJson())) },
+        library: LibraryRoute = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+        genreShows: LibraryRoute = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..2L)) },
+    ): RoutedHttp = routedLibraryHttp(
+        resource = "shows",
+        stats = stats,
+        genres = genres,
+        library = library,
+        genreList = genreShows,
+        liked = null,
+    )
 }

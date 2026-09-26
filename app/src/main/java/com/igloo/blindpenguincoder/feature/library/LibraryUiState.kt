@@ -23,13 +23,6 @@ sealed interface LibraryFilter {
  */
 enum class LibraryTab { All, Genres, Liked }
 
-/** One chip of the genre picker, wire-agnostic: the source maps its own count column onto [count]. */
-data class LibraryGenre(
-    val id: Long,
-    val tag: String,
-    val count: Long,
-)
-
 /**
  * The list a tab and genre pair names. Null is the Genres tab with nothing to choose from: there
  * is no endpoint for it, so nothing is fetched and the screen draws a placeholder instead. Read
@@ -46,7 +39,10 @@ internal fun filterFor(tab: LibraryTab, genre: LibraryFilter.Genre?): LibraryFil
 data class LibraryUiState(
     /** Which library this is; the screen derives its wording, tags and glyph from it. */
     val kind: LibraryKind,
-    /** The strip's sections, fixed per source: All · Genres, plus Liked where the backend keeps likes. */
+    /**
+     * The strip's sections, fixed per source: All · Genres, plus Liked where the backend keeps
+     * likes.
+     */
     val tabs: List<LibraryTab>,
     /** Count for the current [filter]: library-wide stats for All, the pages' `total` otherwise. */
     val total: Long? = null,

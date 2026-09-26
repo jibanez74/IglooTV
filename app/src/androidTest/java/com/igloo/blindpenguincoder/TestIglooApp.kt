@@ -7,10 +7,11 @@ import com.igloo.blindpenguincoder.feature.home.HomeRail
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
+import com.igloo.blindpenguincoder.feature.library.LibraryActions
+import com.igloo.blindpenguincoder.feature.library.LibraryKind
+import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
-import com.igloo.blindpenguincoder.feature.library.LibraryActions
-import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicUiState
@@ -58,9 +59,9 @@ internal fun TestIglooApp(
     serverOrigin: String = TEST_SERVER_ORIGIN,
     signOut: SignOutUiState = SignOutUiState(),
     home: HomeUiState = HomeUiState(),
-    movies: LibraryUiState = testMoviesState(),
+    movies: LibraryUiState = testLibraryState(),
     moviesActions: LibraryActions = inertLibraryActions,
-    shows: LibraryUiState = testShowsState(),
+    shows: LibraryUiState = testLibraryState(LibraryKind.Shows),
     showsActions: LibraryActions = inertLibraryActions,
     music: MusicUiState = testMusicState(),
     musicActions: MusicActions = inertMusicActions,

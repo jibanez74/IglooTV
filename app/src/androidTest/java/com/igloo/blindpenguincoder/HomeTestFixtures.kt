@@ -82,39 +82,6 @@ internal val testGenres = listOf(
     LibraryGenre(id = 9, tag = "Drama", count = 14),
 )
 
-/** A grid that has loaded its first page and has more to come. */
-internal fun testMoviesState(
-    grid: IglooRailState<PosterItem> = IglooRailState.Loaded(testMovieGridItems),
-    append: AppendState = AppendState.Idle,
-    totalMovies: Long? = 96,
-    tab: LibraryTab = LibraryTab.All,
-    genre: LibraryFilter.Genre? = null,
-    genresLoaded: Boolean = true,
-    sort: SortOrder = SortOrder.Ascending,
-    genres: List<LibraryGenre> = testGenres,
-    refreshing: Boolean = false,
-    notice: String? = null,
-    appendGeneration: Int = 0,
-    contentGeneration: Int = 0,
-    silentReconcileGeneration: Int = 0,
-) = LibraryUiState(
-    kind = LibraryKind.Movies,
-    tabs = LibraryTab.entries,
-    total = totalMovies,
-    tab = tab,
-    genre = genre,
-    genresLoaded = genresLoaded,
-    sort = sort,
-    genres = genres,
-    grid = grid,
-    append = append,
-    refreshing = refreshing,
-    notice = notice,
-    appendGeneration = appendGeneration,
-    contentGeneration = contentGeneration,
-    silentReconcileGeneration = silentReconcileGeneration,
-)
-
 /** No-op actions for either library pane. */
 internal val inertLibraryActions = LibraryActions(
     onRefresh = {},
@@ -138,26 +105,39 @@ internal val testShowGenres = listOf(
     LibraryGenre(id = 9, tag = "Drama", count = 1),
 )
 
-/** The TV Shows pane with its first page loaded and more to come; two tabs, never Liked. */
-internal fun testShowsState(
-    grid: IglooRailState<PosterItem> = IglooRailState.Loaded(testShowGridItems),
+/**
+ * A library pane that has loaded its first page and has more to come. [kind] picks the fixture
+ * items and genres, and the strip the pane's source offers: Movies has Liked, TV Shows does not.
+ */
+internal fun testLibraryState(
+    kind: LibraryKind = LibraryKind.Movies,
+    grid: IglooRailState<PosterItem> = IglooRailState.Loaded(
+        if (kind == LibraryKind.Shows) testShowGridItems else testMovieGridItems,
+    ),
     append: AppendState = AppendState.Idle,
     total: Long? = 96,
     tab: LibraryTab = LibraryTab.All,
     genre: LibraryFilter.Genre? = null,
     genresLoaded: Boolean = true,
-    genres: List<LibraryGenre> = testShowGenres,
+    sort: SortOrder = SortOrder.Ascending,
+    genres: List<LibraryGenre> = if (kind == LibraryKind.Shows) testShowGenres else testGenres,
     refreshing: Boolean = false,
     notice: String? = null,
     appendGeneration: Int = 0,
     contentGeneration: Int = 0,
+    silentReconcileGeneration: Int = 0,
 ) = LibraryUiState(
-    kind = LibraryKind.Shows,
-    tabs = listOf(LibraryTab.All, LibraryTab.Genres),
+    kind = kind,
+    tabs = if (kind == LibraryKind.Shows) {
+        listOf(LibraryTab.All, LibraryTab.Genres)
+    } else {
+        LibraryTab.entries
+    },
     total = total,
     tab = tab,
     genre = genre,
     genresLoaded = genresLoaded,
+    sort = sort,
     genres = genres,
     grid = grid,
     append = append,
@@ -165,6 +145,7 @@ internal fun testShowsState(
     notice = notice,
     appendGeneration = appendGeneration,
     contentGeneration = contentGeneration,
+    silentReconcileGeneration = silentReconcileGeneration,
 )
 
 internal val testContinueMovies = listOf(

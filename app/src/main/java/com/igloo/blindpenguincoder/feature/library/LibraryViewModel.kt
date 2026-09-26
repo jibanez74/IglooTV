@@ -395,8 +395,12 @@ class LibraryViewModel(
         page: Long,
     ): ApiResult<LibraryPage> = when (filter) {
         LibraryFilter.All -> source.all(page, PAGE_SIZE, sort)
-        // Only reachable through the Liked tab, which the strip draws only when the source has it.
-        LibraryFilter.Liked -> checkNotNull(source.liked) { "${source.kind} keeps no liked list" }(page, PAGE_SIZE, sort)
+        LibraryFilter.Liked -> {
+            // Only reachable through the Liked tab, and the strip draws that tab only for a
+            // source that has a liked list.
+            val liked = checkNotNull(source.liked) { "${source.kind} keeps no liked list" }
+            liked(page, PAGE_SIZE, sort)
+        }
         is LibraryFilter.Genre -> source.genre(filter.id, page, PAGE_SIZE, sort)
     }
 

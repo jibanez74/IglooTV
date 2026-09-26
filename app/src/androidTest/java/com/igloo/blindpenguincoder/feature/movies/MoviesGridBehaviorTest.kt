@@ -22,16 +22,16 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.data.model.SortOrder
+import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.library.LibraryActions
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
-import com.igloo.blindpenguincoder.data.model.SortOrder
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testMovieDetails
 import com.igloo.blindpenguincoder.testMovieGridItems
-import com.igloo.blindpenguincoder.testMoviesState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -54,7 +54,7 @@ class MoviesGridBehaviorTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private var moviesState by mutableStateOf(testMoviesState())
+    private var moviesState by mutableStateOf(testLibraryState())
     private var loadMoreCalls = 0
     private var refreshCalls = 0
     private var appendRetries = 0
@@ -70,7 +70,7 @@ class MoviesGridBehaviorTest {
     private var openDetailsOnSelect = false
     private var detailsState by mutableStateOf(MovieDetailsUiState())
 
-    private fun setContent(initial: LibraryUiState = testMoviesState()) {
+    private fun setContent(initial: LibraryUiState = testLibraryState()) {
         moviesState = initial
         loadMoreCalls = 0
         refreshCalls = 0
@@ -132,7 +132,7 @@ class MoviesGridBehaviorTest {
         refreshing: Boolean = false,
         notice: String? = null,
     ) {
-        moviesState = testMoviesState(
+        moviesState = testLibraryState(
             grid = IglooRailState.Loaded(testMovieGridItems.take(columns * rows)),
             append = append,
             appendGeneration = appendGeneration,
@@ -153,7 +153,7 @@ class MoviesGridBehaviorTest {
     private fun genresTabState(
         genre: LibraryFilter.Genre = LibraryFilter.Genre(id = 9, tag = "Drama"),
         contentGeneration: Int = 0,
-    ) = testMoviesState(
+    ) = testLibraryState(
         tab = LibraryTab.Genres,
         genre = genre,
         contentGeneration = contentGeneration,
@@ -177,14 +177,14 @@ class MoviesGridBehaviorTest {
 
     @Test
     fun theLoadingSkeletonHoldsTheAnchorBeforeAnyPageArrives() {
-        setContent(testMoviesState(grid = IglooRailState.Loading, totalMovies = null))
+        setContent(testLibraryState(grid = IglooRailState.Loading, total = null))
 
         composeRule.onNodeWithContentDescription("Loading movies").assertIsFocused()
     }
 
     @Test
     fun anEmptyLibraryStillHoldsTheAnchor() {
-        setContent(testMoviesState(grid = IglooRailState.Loaded(emptyList())))
+        setContent(testLibraryState(grid = IglooRailState.Loaded(emptyList())))
 
         composeRule.onNodeWithContentDescription("No movies found in your library.")
             .assertIsFocused()
@@ -192,7 +192,7 @@ class MoviesGridBehaviorTest {
 
     @Test
     fun theFirstPageErrorPutsTheAnchorOnItsRetry() {
-        setContent(testMoviesState(grid = IglooRailState.Error("Something went wrong")))
+        setContent(testLibraryState(grid = IglooRailState.Error("Something went wrong")))
 
         composeRule.onNodeWithContentDescription("Retry loading the movie library")
             .assertIsFocused()
@@ -201,7 +201,7 @@ class MoviesGridBehaviorTest {
     /** A slow network must never trap the d-pad: the skeleton anchor still opens the spine. */
     @Test
     fun theLoadingSkeletonStillExitsToTheSpine() {
-        setContent(testMoviesState(grid = IglooRailState.Loading, totalMovies = null))
+        setContent(testLibraryState(grid = IglooRailState.Loading, total = null))
 
         composeRule.onNodeWithContentDescription("Loading movies")
             .performKeyInput { pressKey(Key.DirectionLeft) }
@@ -211,10 +211,10 @@ class MoviesGridBehaviorTest {
 
     @Test
     fun focusMovesToTheFirstCardWhenThePageArrives() {
-        setContent(testMoviesState(grid = IglooRailState.Loading, totalMovies = null))
+        setContent(testLibraryState(grid = IglooRailState.Loading, total = null))
         composeRule.onNodeWithContentDescription("Loading movies").assertIsFocused()
 
-        moviesState = testMoviesState(contentGeneration = 1)
+        moviesState = testLibraryState(contentGeneration = 1)
         composeRule.waitForIdle()
 
         card(1).assertIsFocused()
@@ -222,10 +222,10 @@ class MoviesGridBehaviorTest {
 
     @Test
     fun aFocusedSkeletonHandsFocusToTheFirstPageErrorRetry() {
-        setContent(testMoviesState(grid = IglooRailState.Loading, totalMovies = null))
+        setContent(testLibraryState(grid = IglooRailState.Loading, total = null))
         composeRule.onNodeWithContentDescription("Loading movies").assertIsFocused()
 
-        moviesState = testMoviesState(grid = IglooRailState.Error("Something went wrong"))
+        moviesState = testLibraryState(grid = IglooRailState.Error("Something went wrong"))
         composeRule.waitForIdle()
 
         composeRule.onNodeWithContentDescription("Retry loading the movie library")
@@ -234,12 +234,12 @@ class MoviesGridBehaviorTest {
 
     @Test
     fun aFocusedSkeletonHandsFocusToAnEmptyResult() {
-        setContent(testMoviesState(grid = IglooRailState.Loading, totalMovies = null))
+        setContent(testLibraryState(grid = IglooRailState.Loading, total = null))
         composeRule.onNodeWithContentDescription("Loading movies").assertIsFocused()
 
-        moviesState = testMoviesState(
+        moviesState = testLibraryState(
             grid = IglooRailState.Loaded(emptyList()),
-            totalMovies = 0,
+            total = 0,
             contentGeneration = 1,
         )
         composeRule.waitForIdle()
@@ -311,7 +311,7 @@ class MoviesGridBehaviorTest {
     @Test
     fun rightFromTheLastCardOfAPartialRowStaysPut() {
         setContent()
-        moviesState = testMoviesState(
+        moviesState = testLibraryState(
             grid = IglooRailState.Loaded(testMovieGridItems.take(columns + 1)),
         )
         composeRule.waitForIdle()
@@ -329,7 +329,7 @@ class MoviesGridBehaviorTest {
     @Test
     fun rightFromTheEmptyStateStaysPut() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Liked,
                 grid = IglooRailState.Loaded(emptyList()),
             ),
@@ -363,7 +363,7 @@ class MoviesGridBehaviorTest {
      */
     @Test
     fun downFromRefreshLandsOnTheSelectedTabWithoutSwitching() {
-        setContent(testMoviesState(tab = LibraryTab.Liked))
+        setContent(testLibraryState(tab = LibraryTab.Liked))
         card(1).performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.onNodeWithTag("movies_tab_liked")
             .performKeyInput { pressKey(Key.DirectionUp) }
@@ -379,7 +379,7 @@ class MoviesGridBehaviorTest {
     /** Sort sits over the strip too, so its `down` needs the same wiring Refresh's test pins. */
     @Test
     fun downFromSortLandsOnTheSelectedTabWithoutSwitching() {
-        setContent(testMoviesState(tab = LibraryTab.Liked))
+        setContent(testLibraryState(tab = LibraryTab.Liked))
         card(1).performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.onNodeWithTag("movies_tab_liked")
             .performKeyInput { pressKey(Key.DirectionUp) }
@@ -532,7 +532,7 @@ class MoviesGridBehaviorTest {
         composeRule.onNodeWithTag("movies_tab_genres").assertIsFocused()
 
         // The switch failed: the grid never moved, so the selection snapped back to All.
-        moviesState = testMoviesState(notice = "The server is unreachable.")
+        moviesState = testLibraryState(notice = "The server is unreachable.")
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("movies_tab_genres").assertIsFocused()
@@ -560,10 +560,10 @@ class MoviesGridBehaviorTest {
             .performKeyInput { pressKey(Key.DirectionRight) }
         composeRule.onNodeWithTag("movies_tab_liked").assertIsFocused()
 
-        moviesState = testMoviesState(
+        moviesState = testLibraryState(
             tab = LibraryTab.Liked,
             grid = IglooRailState.Loaded(testMovieGridItems.drop(10).take(6)),
-            totalMovies = 6,
+            total = 6,
             contentGeneration = 1,
         )
         composeRule.waitForIdle()
@@ -585,10 +585,10 @@ class MoviesGridBehaviorTest {
             .performKeyInput { pressKey(Key.DirectionRight) }
         composeRule.onNodeWithTag("movies_tab_liked").assertIsFocused()
 
-        moviesState = testMoviesState(
+        moviesState = testLibraryState(
             tab = LibraryTab.Liked,
             grid = IglooRailState.Loaded(emptyList()),
-            totalMovies = 0,
+            total = 0,
             contentGeneration = 1,
         )
         composeRule.waitForIdle()
@@ -628,11 +628,11 @@ class MoviesGridBehaviorTest {
     /** The genres fetch resolves after first composition; the list landing must not move focus. */
     @Test
     fun genresArrivingLaterDoNotMoveFocus() {
-        setContent(testMoviesState(genres = emptyList()))
+        setContent(testLibraryState(genres = emptyList()))
         card(1).performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.onNodeWithTag("movies_tab_all").assertIsFocused()
 
-        moviesState = testMoviesState()
+        moviesState = testLibraryState()
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("movies_tab_all").assertIsFocused()
@@ -641,7 +641,7 @@ class MoviesGridBehaviorTest {
 
     @Test
     fun theGenresTabWithoutGenresShowsAPlaceholderThatTakesFocus() {
-        setContent(testMoviesState(tab = LibraryTab.Genres, genre = null, genres = emptyList()))
+        setContent(testLibraryState(tab = LibraryTab.Genres, genre = null, genres = emptyList()))
 
         val placeholder = composeRule.onNodeWithContentDescription(NO_GENRES_MESSAGE)
         placeholder.assertIsFocused()
@@ -654,7 +654,7 @@ class MoviesGridBehaviorTest {
 
     @Test
     fun genresLandingOnThePlaceholderHandOffToTheFirstCard() {
-        setContent(testMoviesState(tab = LibraryTab.Genres, genre = null, genres = emptyList()))
+        setContent(testLibraryState(tab = LibraryTab.Genres, genre = null, genres = emptyList()))
         composeRule.onNodeWithContentDescription(NO_GENRES_MESSAGE).assertIsFocused()
 
         moviesState = genresTabState(contentGeneration = 1)
@@ -670,14 +670,14 @@ class MoviesGridBehaviorTest {
      */
     @Test
     fun theTabStripRendersInEveryGridState() {
-        setContent(testMoviesState(grid = IglooRailState.Loading))
+        setContent(testLibraryState(grid = IglooRailState.Loading))
         composeRule.onNodeWithTag("movies_tabs").assertIsDisplayed()
 
-        moviesState = testMoviesState(grid = IglooRailState.Error("The server is unreachable."))
+        moviesState = testLibraryState(grid = IglooRailState.Error("The server is unreachable."))
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("movies_tabs").assertIsDisplayed()
 
-        moviesState = testMoviesState(
+        moviesState = testLibraryState(
             tab = LibraryTab.Liked,
             grid = IglooRailState.Loaded(emptyList()),
         )
@@ -691,7 +691,7 @@ class MoviesGridBehaviorTest {
         setContent(genresTabState())
         composeRule.onNodeWithTag("movies_genre_9").assertIsDisplayed()
 
-        moviesState = testMoviesState(tab = LibraryTab.All, contentGeneration = 1)
+        moviesState = testLibraryState(tab = LibraryTab.All, contentGeneration = 1)
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("movies_genre_row").assertDoesNotExist()
 
@@ -719,7 +719,7 @@ class MoviesGridBehaviorTest {
     @Test
     fun theGenresTabWaitingOnItsListShowsTheSkeletonAnchor() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Genres,
                 genre = null,
                 genres = emptyList(),
@@ -739,7 +739,7 @@ class MoviesGridBehaviorTest {
     @Test
     fun genresLandingExposesTheRetainedGridAndKeepsFocusThereAfterPageFailure() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Genres,
                 genre = null,
                 genres = emptyList(),
@@ -753,7 +753,7 @@ class MoviesGridBehaviorTest {
 
         card(1).assertIsFocused()
 
-        moviesState = testMoviesState(notice = "The server is unreachable.")
+        moviesState = testLibraryState(notice = "The server is unreachable.")
         composeRule.waitForIdle()
 
         card(1).assertIsFocused()
@@ -762,7 +762,7 @@ class MoviesGridBehaviorTest {
     @Test
     fun anEmptyLikedViewStillReachesTheTabRow() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Liked,
                 grid = IglooRailState.Loaded(emptyList()),
             ),
@@ -791,7 +791,7 @@ class MoviesGridBehaviorTest {
         sort.performClick()
         assertEquals(1, sortToggles)
 
-        moviesState = testMoviesState(sort = SortOrder.Descending)
+        moviesState = testLibraryState(sort = SortOrder.Descending)
         composeRule.waitForIdle()
 
         composeRule.onNodeWithContentDescription("Sort order").assertIsFocused()
@@ -823,7 +823,7 @@ class MoviesGridBehaviorTest {
             .performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.onNodeWithContentDescription("Refresh the movie library").assertIsFocused()
 
-        moviesState = testMoviesState(contentGeneration = 1)
+        moviesState = testLibraryState(contentGeneration = 1)
         composeRule.waitForIdle()
 
         card(1).assertIsFocused()
@@ -850,7 +850,7 @@ class MoviesGridBehaviorTest {
         refresh.performClick()
         assertEquals(1, refreshCalls)
 
-        moviesState = testMoviesState(refreshing = true)
+        moviesState = testLibraryState(refreshing = true)
         composeRule.waitForIdle()
 
         composeRule.onNodeWithContentDescription("Refresh the movie library").assertIsFocused()
@@ -968,7 +968,7 @@ class MoviesGridBehaviorTest {
         card(2).assertIsFocused()
 
         // An append, not a replacement: the generation is unchanged.
-        moviesState = testMoviesState(grid = IglooRailState.Loaded(testMovieGridItems))
+        moviesState = testLibraryState(grid = IglooRailState.Loaded(testMovieGridItems))
         composeRule.waitForIdle()
 
         card(2).assertIsFocused()
@@ -1008,7 +1008,7 @@ class MoviesGridBehaviorTest {
 
         composeRule.onNodeWithContentDescription("Home").performClick()
         composeRule.waitForIdle()
-        moviesState = testMoviesState(contentGeneration = 1)
+        moviesState = testLibraryState(contentGeneration = 1)
         composeRule.waitForIdle()
         openMovies()
 
@@ -1019,19 +1019,19 @@ class MoviesGridBehaviorTest {
     fun reconcileUnderDetailsDoesNotStealOverlayFocus() {
         openDetailsOnSelect = true
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Liked,
                 grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
-                totalMovies = 3,
+                total = 3,
             ),
         )
         card(1).performClick()
         composeRule.onNodeWithTag("details_play").assertIsFocused()
 
-        moviesState = testMoviesState(
+        moviesState = testLibraryState(
             tab = LibraryTab.Liked,
             grid = IglooRailState.Loaded(testMovieGridItems.drop(1).take(2)),
-            totalMovies = 2,
+            total = 2,
             silentReconcileGeneration = 1,
         )
         composeRule.waitForIdle()
@@ -1043,10 +1043,10 @@ class MoviesGridBehaviorTest {
     fun reconcileAfterBackMovesFocusWhenTheRestoredCardDisappears() {
         openDetailsOnSelect = true
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Liked,
                 grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
-                totalMovies = 3,
+                total = 3,
             ),
         )
         card(1).performClick()
@@ -1054,10 +1054,10 @@ class MoviesGridBehaviorTest {
         pressBack()
         card(1).assertIsFocused()
 
-        moviesState = testMoviesState(
+        moviesState = testLibraryState(
             tab = LibraryTab.Liked,
             grid = IglooRailState.Loaded(testMovieGridItems.drop(1).take(2)),
-            totalMovies = 2,
+            total = 2,
             silentReconcileGeneration = 1,
         )
         composeRule.waitForIdle()
@@ -1068,18 +1068,18 @@ class MoviesGridBehaviorTest {
     @Test
     fun reconcileToAnEmptyGridHandsFocusToTheEmptyAnchor() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Liked,
                 grid = IglooRailState.Loaded(testMovieGridItems.take(1)),
-                totalMovies = 1,
+                total = 1,
             ),
         )
         card(1).assertIsFocused()
 
-        moviesState = testMoviesState(
+        moviesState = testLibraryState(
             tab = LibraryTab.Liked,
             grid = IglooRailState.Loaded(emptyList()),
-            totalMovies = 0,
+            total = 0,
             silentReconcileGeneration = 1,
         )
         composeRule.waitForIdle()
@@ -1098,19 +1098,19 @@ class MoviesGridBehaviorTest {
     fun backAfterTheGridEmptiedUnderTheOverlayLandsOnTheEmptyState() {
         openDetailsOnSelect = true
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Liked,
                 grid = IglooRailState.Loaded(testMovieGridItems.take(1)),
-                totalMovies = 1,
+                total = 1,
             ),
         )
         card(1).performClick()
         composeRule.onNodeWithTag("details_play").assertIsFocused()
 
-        moviesState = testMoviesState(
+        moviesState = testLibraryState(
             tab = LibraryTab.Liked,
             grid = IglooRailState.Loaded(emptyList()),
-            totalMovies = 0,
+            total = 0,
             silentReconcileGeneration = 1,
         )
         composeRule.waitForIdle()

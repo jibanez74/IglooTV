@@ -24,9 +24,10 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.library.LibraryActions
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
+import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
-import com.igloo.blindpenguincoder.testShowsState
+import com.igloo.blindpenguincoder.testLibraryState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -47,12 +48,12 @@ class ShowsGridBehaviorTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private var showsState by mutableStateOf(testShowsState())
+    private var showsState by mutableStateOf(testLibraryState(LibraryKind.Shows))
     private val selectedTabs = mutableListOf<LibraryTab>()
     private val selectedGenres = mutableListOf<LibraryFilter.Genre>()
     private var hostActivity: Activity? = null
 
-    private fun setContent(initial: LibraryUiState = testShowsState()) {
+    private fun setContent(initial: LibraryUiState = testLibraryState(LibraryKind.Shows)) {
         showsState = initial
         selectedTabs.clear()
         selectedGenres.clear()
@@ -86,7 +87,8 @@ class ShowsGridBehaviorTest {
 
     private fun card(id: Long) = composeRule.onNodeWithTag("show_card_$id")
 
-    private fun genresTabState() = testShowsState(
+    private fun genresTabState() = testLibraryState(
+        kind = LibraryKind.Shows,
         tab = LibraryTab.Genres,
         genre = LibraryFilter.Genre(id = 9, tag = "Drama"),
     )
@@ -109,7 +111,7 @@ class ShowsGridBehaviorTest {
 
     @Test
     fun theLoadingSkeletonHoldsTheAnchorAndStillExitsToTheSpine() {
-        setContent(testShowsState(grid = IglooRailState.Loading, total = null))
+        setContent(testLibraryState(LibraryKind.Shows, grid = IglooRailState.Loading, total = null))
 
         val anchor = composeRule.onNodeWithContentDescription("Loading shows")
         anchor.assertIsFocused()
@@ -121,7 +123,9 @@ class ShowsGridBehaviorTest {
 
     @Test
     fun anEmptyLibraryStillHoldsTheAnchor() {
-        setContent(testShowsState(grid = IglooRailState.Loaded(emptyList()), total = 0))
+        setContent(
+            testLibraryState(LibraryKind.Shows, grid = IglooRailState.Loaded(emptyList()), total = 0),
+        )
 
         composeRule.onNodeWithContentDescription("No shows found in your library.")
             .assertIsFocused()
@@ -129,7 +133,9 @@ class ShowsGridBehaviorTest {
 
     @Test
     fun theFirstPageErrorPutsTheAnchorOnItsRetry() {
-        setContent(testShowsState(grid = IglooRailState.Error("Something went wrong")))
+        setContent(
+            testLibraryState(LibraryKind.Shows, grid = IglooRailState.Error("Something went wrong")),
+        )
 
         composeRule.onNodeWithContentDescription("Retry loading the TV show library")
             .assertIsFocused()

@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.library
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.feature.shared.TabPresentation
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -70,7 +71,7 @@ class LibraryKindTest {
 
     @Test
     fun `a source offers the liked tab only when it can serve one`() {
-        val page: suspend (Long, Long, com.igloo.blindpenguincoder.data.model.SortOrder) -> ApiResult<LibraryPage> =
+        val page: suspend (Long, Long, SortOrder) -> ApiResult<LibraryPage> =
             { _, _, _ -> ApiResult.Success(LibraryPage(emptyList(), total = 0, totalPages = 0)) }
         fun source(liked: Boolean) = LibrarySource(
             kind = LibraryKind.Shows,

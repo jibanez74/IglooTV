@@ -40,12 +40,12 @@ import com.igloo.blindpenguincoder.feature.boot.SplashScreen
 import com.igloo.blindpenguincoder.feature.home.HomeViewModel
 import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutViewModel
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.library.LibraryViewModel
 import com.igloo.blindpenguincoder.feature.library.actions
-import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
+import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
+import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicViewModel

@@ -24,11 +24,12 @@ import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
+import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testShowGridItems
-import com.igloo.blindpenguincoder.testShowsState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,10 +48,10 @@ class ShowsGridAccessibilityTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private var showsState by mutableStateOf(testShowsState())
+    private var showsState by mutableStateOf(testLibraryState(LibraryKind.Shows))
     private var columns = 0
 
-    private fun setContent(initial: LibraryUiState = testShowsState()) {
+    private fun setContent(initial: LibraryUiState = testLibraryState(LibraryKind.Shows)) {
         showsState = initial
         composeRule.setContent {
             IglooTheme {
@@ -64,7 +65,8 @@ class ShowsGridAccessibilityTest {
     }
 
     private fun showOneRow(append: AppendState) {
-        showsState = testShowsState(
+        showsState = testLibraryState(
+            kind = LibraryKind.Shows,
             grid = IglooRailState.Loaded(testShowGridItems.take(columns)),
             append = append,
         )
@@ -94,7 +96,7 @@ class ShowsGridAccessibilityTest {
 
     @Test
     fun theCountSaysSoWhileTheLibrarySizeIsUnknown() {
-        setContent(testShowsState(grid = IglooRailState.Loading, total = null))
+        setContent(testLibraryState(LibraryKind.Shows, grid = IglooRailState.Loading, total = null))
 
         composeRule.onNodeWithTag("shows_count")
             .assertContentDescriptionEquals("Loading the TV show library")
@@ -122,7 +124,9 @@ class ShowsGridAccessibilityTest {
 
     @Test
     fun theFirstPageErrorNamesTheLibrary() {
-        setContent(testShowsState(grid = IglooRailState.Error("Something went wrong")))
+        setContent(
+            testLibraryState(LibraryKind.Shows, grid = IglooRailState.Error("Something went wrong")),
+        )
 
         composeRule.onNodeWithContentDescription("Retry loading the TV show library")
             .assertIsFocused()
@@ -131,7 +135,7 @@ class ShowsGridAccessibilityTest {
 
     @Test
     fun refreshAnnouncesItsPendingStateWithoutLosingItsLabel() {
-        setContent(testShowsState(refreshing = true))
+        setContent(testLibraryState(LibraryKind.Shows, refreshing = true))
 
         composeRule.onNodeWithContentDescription("Refresh the TV show library")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Refreshing"))
@@ -162,7 +166,8 @@ class ShowsGridAccessibilityTest {
     @Test
     fun eachGenreChipAnnouncesItsNameCountSelectionAndAction() {
         setContent(
-            testShowsState(
+            testLibraryState(
+                kind = LibraryKind.Shows,
                 tab = LibraryTab.Genres,
                 genre = LibraryFilter.Genre(id = 7, tag = "Comedy"),
             ),
@@ -185,7 +190,8 @@ class ShowsGridAccessibilityTest {
     @Test
     fun theCountSpeaksTheSelectedGenre() {
         setContent(
-            testShowsState(
+            testLibraryState(
+                kind = LibraryKind.Shows,
                 tab = LibraryTab.Genres,
                 genre = LibraryFilter.Genre(id = 7, tag = "Comedy"),
                 grid = IglooRailState.Loaded(testShowGridItems.take(2)),
@@ -200,7 +206,8 @@ class ShowsGridAccessibilityTest {
     @Test
     fun anEmptyGenreViewAnnouncesItself() {
         setContent(
-            testShowsState(
+            testLibraryState(
+                kind = LibraryKind.Shows,
                 tab = LibraryTab.Genres,
                 genre = LibraryFilter.Genre(id = 7, tag = "Comedy"),
                 grid = IglooRailState.Loaded(emptyList()),

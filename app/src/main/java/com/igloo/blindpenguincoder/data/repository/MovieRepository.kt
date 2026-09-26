@@ -2,10 +2,10 @@ package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.core.network.safeApiCall
 import com.igloo.blindpenguincoder.core.network.toTransportError
 import com.igloo.blindpenguincoder.data.api.MovieApi
-import com.igloo.blindpenguincoder.data.model.ApiEnvelope
 import com.igloo.blindpenguincoder.data.model.ContinueWatchingData
 import com.igloo.blindpenguincoder.data.model.ContinueWatchingItem
 import com.igloo.blindpenguincoder.data.model.LatestMovie
@@ -34,37 +34,26 @@ import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
 import com.igloo.blindpenguincoder.playback.hls.hlsQueryParams
 import com.igloo.blindpenguincoder.playback.hls.parseHlsManifestResponse
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_MESSAGE
-import io.ktor.client.call.body
 import io.ktor.client.network.sockets.ConnectTimeoutException
-import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.discard
 
 class MovieRepository(
     private val api: MovieApi,
 ) : HlsSessionApi {
-    suspend fun latestMovies(): ApiResult<List<LatestMovie>> = safeApiCall(
-        request = { api.latestMovies() },
-        decode = { response ->
-            response.body<ApiEnvelope<LatestMoviesData>>().data?.movies
-                ?: error("Missing movies in latest movies response")
-        },
-    )
+    suspend fun latestMovies(): ApiResult<List<LatestMovie>> =
+        envelopeData<LatestMoviesData>("latest movies") { api.latestMovies() }.map { it.movies }
 
     /** One page of the browsable library. The envelope's paging counts are part of the result. */
     suspend fun moviesLibrary(
         page: Long,
         perPage: Long,
         sort: SortOrder,
-    ): ApiResult<MoviesLibraryData> = moviesListPage { api.moviesLibrary(page, perPage, sort) }
+    ): ApiResult<MoviesLibraryData> =
+        envelopeData("movies list") { api.moviesLibrary(page, perPage, sort) }
 
-    suspend fun movieGenres(): ApiResult<List<MovieGenreWithCount>> = safeApiCall(
-        request = { api.movieGenres() },
-        decode = { response ->
-            response.body<ApiEnvelope<MovieGenresData>>().data?.genres
-                ?: error("Missing genres in movie genres response")
-        },
-    )
+    suspend fun movieGenres(): ApiResult<List<MovieGenreWithCount>> =
+        envelopeData<MovieGenresData>("movie genres") { api.movieGenres() }.map { it.genres }
 
     /** One page of one genre's movies; same result shape as [moviesLibrary]. */
     suspend fun genreMovies(
@@ -72,79 +61,40 @@ class MovieRepository(
         page: Long,
         perPage: Long,
         sort: SortOrder,
-    ): ApiResult<MoviesLibraryData> = moviesListPage { api.genreMovies(genreId, page, perPage, sort) }
+    ): ApiResult<MoviesLibraryData> =
+        envelopeData("movies list") { api.genreMovies(genreId, page, perPage, sort) }
 
     /** One page of the current user's liked movies; same result shape as [moviesLibrary]. */
     suspend fun likedMovies(
         page: Long,
         perPage: Long,
         sort: SortOrder,
-    ): ApiResult<MoviesLibraryData> = moviesListPage { api.likedMovies(page, perPage, sort) }
+    ): ApiResult<MoviesLibraryData> =
+        envelopeData("movies list") { api.likedMovies(page, perPage, sort) }
 
-    /** The library, genre, and liked lists all answer with the same paged envelope. */
-    private suspend fun moviesListPage(
-        request: suspend () -> HttpResponse,
-    ): ApiResult<MoviesLibraryData> = safeApiCall(
-        request = request,
-        decode = { response ->
-            response.body<ApiEnvelope<MoviesLibraryData>>().data
-                ?: error("Missing data in movies list response")
-        },
-    )
-
-    suspend fun movieStats(): ApiResult<MoviesStatsData> = safeApiCall(
-        request = { api.movieStats() },
-        decode = { response ->
-            response.body<ApiEnvelope<MoviesStatsData>>().data
-                ?: error("Missing data in movie stats response")
-        },
-    )
+    suspend fun movieStats(): ApiResult<MoviesStatsData> =
+        envelopeData("movie stats") { api.movieStats() }
 
     /**
      * The movies in progress, in the server's order. The row also carries TV episodes; the
      * client has no episode screen yet, so those are dropped rather than rendered as dead-end
      * cards.
      */
-    suspend fun continueWatchingMovies(): ApiResult<List<ContinueWatchingItem>> = safeApiCall(
-        request = { api.continueWatching() },
-        decode = { response ->
-            val items = response.body<ApiEnvelope<ContinueWatchingData>>().data?.items
-                ?: error("Missing items in continue watching response")
-            items.filter { it.isMovie }
-        },
-    )
+    suspend fun continueWatchingMovies(): ApiResult<List<ContinueWatchingItem>> =
+        envelopeData<ContinueWatchingData>("continue watching") { api.continueWatching() }
+            .map { data -> data.items.filter { it.isMovie } }
 
-    suspend fun moviesInTheaters(): ApiResult<List<TheaterMovie>> = safeApiCall(
-        request = { api.moviesInTheaters() },
-        decode = { response ->
-            response.body<ApiEnvelope<TheaterMoviesData>>().data?.movies
-                ?: error("Missing movies in in-theaters response")
-        },
-    )
+    suspend fun moviesInTheaters(): ApiResult<List<TheaterMovie>> =
+        envelopeData<TheaterMoviesData>("in-theaters") { api.moviesInTheaters() }.map { it.movies }
 
-    suspend fun tmdbMovie(tmdbId: Long): ApiResult<TmdbMovie> = safeApiCall(
-        request = { api.tmdbMovie(tmdbId) },
-        decode = { response ->
-            response.body<ApiEnvelope<TmdbMovieData>>().data?.movie
-                ?: error("Missing movie in TMDB movie response")
-        },
-    )
+    suspend fun tmdbMovie(tmdbId: Long): ApiResult<TmdbMovie> =
+        envelopeData<TmdbMovieData>("TMDB movie") { api.tmdbMovie(tmdbId) }.map { it.movie }
 
-    suspend fun movieDetails(id: Long): ApiResult<MovieDetailsData> = safeApiCall(
-        request = { api.movieDetails(id) },
-        decode = { response ->
-            response.body<ApiEnvelope<MovieDetailsData>>().data
-                ?: error("Missing data in movie details response")
-        },
-    )
+    suspend fun movieDetails(id: Long): ApiResult<MovieDetailsData> =
+        envelopeData("movie details") { api.movieDetails(id) }
 
-    suspend fun movieTechnicalDetails(id: Long): ApiResult<MovieTechnicalDetailsData> = safeApiCall(
-        request = { api.movieTechnicalDetails(id) },
-        decode = { response ->
-            response.body<ApiEnvelope<MovieTechnicalDetailsData>>().data
-                ?: error("Missing data in technical details response")
-        },
-    )
+    suspend fun movieTechnicalDetails(id: Long): ApiResult<MovieTechnicalDetailsData> =
+        envelopeData("technical details") { api.movieTechnicalDetails(id) }
 
     /** Absolute direct-stream URL for Media3; not an API call, so no [ApiResult]. */
     fun movieStreamUrl(id: Long): String = api.movieStreamUrl(id)
@@ -194,48 +144,23 @@ class MovieRepository(
     override fun movieSubtitleUrl(movieId: Long, trackIndex: Int, startSec: Double): String =
         api.movieSubtitleUrl(movieId, trackIndex, startSec)
 
-    suspend fun movieWatchProgress(id: Long): ApiResult<MovieWatchProgress> = safeApiCall(
-        request = { api.movieWatchProgress(id) },
-        decode = { response ->
-            response.body<ApiEnvelope<MovieWatchProgress>>().data
-                ?: error("Missing data in watch progress response")
-        },
-    )
+    suspend fun movieWatchProgress(id: Long): ApiResult<MovieWatchProgress> =
+        envelopeData("watch progress") { api.movieWatchProgress(id) }
 
     suspend fun updateWatchProgress(
         id: Long,
         body: UpdateMovieWatchProgressRequest,
-    ): ApiResult<MovieWatchProgressUpdateData> = safeApiCall(
-        request = { api.updateMovieWatchProgress(id, body) },
-        decode = { response ->
-            response.body<ApiEnvelope<MovieWatchProgressUpdateData>>().data
-                ?: error("Missing data in watch progress update response")
-        },
-    )
+    ): ApiResult<MovieWatchProgressUpdateData> =
+        envelopeData("watch progress update") { api.updateMovieWatchProgress(id, body) }
 
-    suspend fun setMovieWatched(id: Long, watched: Boolean): ApiResult<MovieWatchedData> = safeApiCall(
-        request = { api.setMovieWatched(id, SetMovieWatchedRequest(watched)) },
-        decode = { response ->
-            response.body<ApiEnvelope<MovieWatchedData>>().data
-                ?: error("Missing data in set watched response")
-        },
-    )
+    suspend fun setMovieWatched(id: Long, watched: Boolean): ApiResult<MovieWatchedData> =
+        envelopeData("set watched") { api.setMovieWatched(id, SetMovieWatchedRequest(watched)) }
 
-    suspend fun movieLikeStatus(id: Long): ApiResult<MovieLikeStatusData> = safeApiCall(
-        request = { api.movieLikeStatus(id) },
-        decode = { response ->
-            response.body<ApiEnvelope<MovieLikeStatusData>>().data
-                ?: error("Missing data in like status response")
-        },
-    )
+    suspend fun movieLikeStatus(id: Long): ApiResult<MovieLikeStatusData> =
+        envelopeData("like status") { api.movieLikeStatus(id) }
 
-    suspend fun toggleMovieLike(id: Long): ApiResult<MovieLikeToggleData> = safeApiCall(
-        request = { api.toggleMovieLike(id) },
-        decode = { response ->
-            response.body<ApiEnvelope<MovieLikeToggleData>>().data
-                ?: error("Missing data in like toggle response")
-        },
-    )
+    suspend fun toggleMovieLike(id: Long): ApiResult<MovieLikeToggleData> =
+        envelopeData("like toggle") { api.toggleMovieLike(id) }
 
     private companion object {
         const val HLS_CAUSE_CHAIN_LIMIT = 8

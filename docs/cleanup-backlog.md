@@ -55,6 +55,22 @@ should go.
 
 ---
 
+## 2. Organisation
+
+### 2.2 The library state model is `public`, its projection is `internal`
+
+**Files:** `feature/library/LibraryUiState.kt`, `LibrarySource.kt`, `LibraryKind.kt` vs
+`LibraryContent.kt`
+
+`LibraryFilter`, `LibraryTab`, `LibraryGenre` and the rest of the library pane's model are
+`public`, while `LibraryContent` is `internal`, and nothing outside the `:app` module consumes
+any of them. Tightening means the whole chain goes `internal` together — `LibraryUiState`,
+`LibrarySource`, `LibraryKind`, `LibraryViewModel`, `LibraryActions`, `LibraryScreen` — because
+a public view model cannot expose an internal state type. Both test source sets see internals,
+so it costs nothing at run time; do it with the Music pane's model so the two stay alike.
+
+---
+
 ## 3. Small correctness edges
 
 ### 3.1 The tab's height arithmetic drifts at non-1.0 UI scale

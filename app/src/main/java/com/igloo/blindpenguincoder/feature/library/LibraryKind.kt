@@ -5,9 +5,9 @@ import com.igloo.blindpenguincoder.feature.shared.TabPresentation
 
 /**
  * Which library the pane is showing. Movies and TV Shows share one screen and one paging
- * machine (docs/design-system.md section 11.4); the kind carries everything that differs on the
- * surface — the wording, the test tags and, in the screen, the glyph — so each string is spelled
- * once per kind rather than once per call site.
+ * machine (docs/design-system.md section 11.4); the kind carries everything that differs on
+ * the surface — the wording, the test tags and, in the screen, the glyph — so each string is
+ * spelled once per kind rather than once per call site.
  */
 enum class LibraryKind(
     /** The pane's heading. */
@@ -39,7 +39,7 @@ enum class LibraryKind(
     val plural: String get() = singular + "s"
 
     /** The noun beside a count — one "movie", otherwise "movies". */
-    fun noun(count: Long): String = countNoun(count, singular)
+    fun noun(count: Long): String = countNoun(count, singular, plural)
 
     fun cardTag(id: Long): String = "${cardTagPrefix}_$id"
 

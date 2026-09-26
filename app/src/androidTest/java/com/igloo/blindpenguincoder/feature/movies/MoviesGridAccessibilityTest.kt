@@ -30,8 +30,8 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
+import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testMovieGridItems
-import com.igloo.blindpenguincoder.testMoviesState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -50,10 +50,10 @@ class MoviesGridAccessibilityTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private var moviesState by mutableStateOf(testMoviesState())
+    private var moviesState by mutableStateOf(testLibraryState())
     private var columns = 0
 
-    private fun setContent(initial: LibraryUiState = testMoviesState()) {
+    private fun setContent(initial: LibraryUiState = testLibraryState()) {
         moviesState = initial
         composeRule.setContent {
             IglooTheme {
@@ -74,7 +74,7 @@ class MoviesGridAccessibilityTest {
      * once something has composed — a state built before `setContent` cannot size itself in rows.
      */
     private fun showOneRow(append: AppendState) {
-        moviesState = testMoviesState(
+        moviesState = testLibraryState(
             grid = IglooRailState.Loaded(testMovieGridItems.take(columns)),
             append = append,
         )
@@ -94,9 +94,9 @@ class MoviesGridAccessibilityTest {
     @Test
     fun theCountReportsScaleWithoutReadingTheGridBack() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 grid = IglooRailState.Loaded(testMovieGridItems.take(10)),
-                totalMovies = 96,
+                total = 96,
             ),
         )
 
@@ -106,7 +106,7 @@ class MoviesGridAccessibilityTest {
 
     @Test
     fun theCountSaysSoWhileTheLibrarySizeIsUnknown() {
-        setContent(testMoviesState(grid = IglooRailState.Loading, totalMovies = null))
+        setContent(testLibraryState(grid = IglooRailState.Loading, total = null))
 
         composeRule.onNodeWithTag("movies_count")
             .assertContentDescriptionEquals("Loading the movie library")
@@ -169,7 +169,7 @@ class MoviesGridAccessibilityTest {
 
     @Test
     fun refreshAnnouncesItsPendingStateWithoutLosingItsLabel() {
-        setContent(testMoviesState(refreshing = true))
+        setContent(testLibraryState(refreshing = true))
 
         composeRule.onNodeWithContentDescription("Refresh the movie library")
             .assert(
@@ -182,7 +182,7 @@ class MoviesGridAccessibilityTest {
 
     @Test
     fun anEmptyLibraryAnnouncesItself() {
-        setContent(testMoviesState(grid = IglooRailState.Loaded(emptyList())))
+        setContent(testLibraryState(grid = IglooRailState.Loaded(emptyList())))
 
         // Focusable so the pane keeps an anchor, but deliberately not a button: pressing it
         // would do nothing, and announcing an action that does nothing is worse than none.
@@ -233,7 +233,7 @@ class MoviesGridAccessibilityTest {
     @Test
     fun eachGenreChipAnnouncesItsNameCountAndSelection() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Genres,
                 genre = LibraryFilter.Genre(id = 7, tag = "Action"),
             ),
@@ -254,7 +254,7 @@ class MoviesGridAccessibilityTest {
 
     @Test
     fun theGenresTabWithoutGenresAnnouncesThePlaceholder() {
-        setContent(testMoviesState(tab = LibraryTab.Genres, genre = null, genres = emptyList()))
+        setContent(testLibraryState(tab = LibraryTab.Genres, genre = null, genres = emptyList()))
 
         composeRule.onNodeWithContentDescription(
             "Genres aren't available right now. Refresh to try again.",
@@ -267,7 +267,7 @@ class MoviesGridAccessibilityTest {
     @Test
     fun theGenresTabWaitingOnItsListAnnouncesTheWait() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Genres,
                 genre = null,
                 genres = emptyList(),
@@ -284,11 +284,11 @@ class MoviesGridAccessibilityTest {
     @Test
     fun theCountSpeaksTheSelectedGenre() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Genres,
                 genre = LibraryFilter.Genre(id = 7, tag = "Action"),
                 grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
-                totalMovies = 26,
+                total = 26,
             ),
         )
 
@@ -302,7 +302,7 @@ class MoviesGridAccessibilityTest {
      */
     @Test
     fun aRefreshNoticeReportsPolitely() {
-        setContent(testMoviesState(notice = "The server is unreachable."))
+        setContent(testLibraryState(notice = "The server is unreachable."))
 
         composeRule.onNodeWithText("The server is unreachable.").assert(
             SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite),
@@ -324,10 +324,10 @@ class MoviesGridAccessibilityTest {
     @Test
     fun theCountSpeaksTheActiveFilter() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Liked,
                 grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
-                totalMovies = 3,
+                total = 3,
             ),
         )
 
@@ -338,7 +338,7 @@ class MoviesGridAccessibilityTest {
     @Test
     fun anEmptyLikedViewAnnouncesItself() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Liked,
                 grid = IglooRailState.Loaded(emptyList()),
             ),
@@ -352,7 +352,7 @@ class MoviesGridAccessibilityTest {
     @Test
     fun anEmptyGenreViewAnnouncesItself() {
         setContent(
-            testMoviesState(
+            testLibraryState(
                 tab = LibraryTab.Genres,
                 genre = LibraryFilter.Genre(id = 7, tag = "Action"),
                 grid = IglooRailState.Loaded(emptyList()),
