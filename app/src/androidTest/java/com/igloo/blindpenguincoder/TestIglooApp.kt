@@ -9,8 +9,8 @@ import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
-import com.igloo.blindpenguincoder.feature.movies.MoviesActions
-import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
+import com.igloo.blindpenguincoder.feature.library.LibraryActions
+import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicUiState
@@ -58,8 +58,10 @@ internal fun TestIglooApp(
     serverOrigin: String = TEST_SERVER_ORIGIN,
     signOut: SignOutUiState = SignOutUiState(),
     home: HomeUiState = HomeUiState(),
-    movies: MoviesUiState = testMoviesState(),
-    moviesActions: MoviesActions = inertMoviesActions,
+    movies: LibraryUiState = testMoviesState(),
+    moviesActions: LibraryActions = inertLibraryActions,
+    shows: LibraryUiState = testShowsState(),
+    showsActions: LibraryActions = inertLibraryActions,
     music: MusicUiState = testMusicState(),
     musicActions: MusicActions = inertMusicActions,
     details: MovieDetailsUiState = MovieDetailsUiState(),
@@ -103,6 +105,8 @@ internal fun TestIglooApp(
         home = home,
         movies = movies,
         moviesActions = moviesActions,
+        shows = shows,
+        showsActions = showsActions,
         music = music,
         musicActions = musicActions,
         details = details,

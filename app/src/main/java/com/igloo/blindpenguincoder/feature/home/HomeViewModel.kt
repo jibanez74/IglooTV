@@ -14,8 +14,8 @@ import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
-import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
-import com.igloo.blindpenguincoder.feature.shared.moviePosterItem
+import com.igloo.blindpenguincoder.feature.shared.PosterItem
+import com.igloo.blindpenguincoder.feature.shared.posterItem
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import java.util.Locale
@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 
 /** A movie in progress: the render-ready movie plus its progress, ready for the card. */
 data class HomeContinueMovie(
-    val movie: MoviePosterItem,
+    val movie: PosterItem,
     val progressFraction: Float,
     val progressDescription: String,
 )
@@ -76,7 +76,7 @@ sealed interface HomeHeroState {
 data class HomeUiState(
     val hero: HomeHeroState = HomeHeroState.Loading,
     val continueWatching: IglooRailState<HomeContinueMovie> = IglooRailState.Loading,
-    val latestMovies: IglooRailState<MoviePosterItem> = IglooRailState.Loading,
+    val latestMovies: IglooRailState<PosterItem> = IglooRailState.Loading,
     val latestAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loading,
     val inTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loading,
 )
@@ -128,7 +128,7 @@ class HomeViewModel(
                 val apiBaseUrl = serverUrl.require().apiBaseUrl
                 inProgress.map { movie ->
                     HomeContinueMovie(
-                        movie = moviePosterItem(
+                        movie = posterItem(
                             id = movie.id,
                             title = movie.title,
                             posterPath = movie.posterPath,
@@ -165,7 +165,7 @@ class HomeViewModel(
             val next = result.toRailState { latest ->
                 val apiBaseUrl = serverUrl.require().apiBaseUrl
                 latest.map { movie ->
-                    moviePosterItem(
+                    posterItem(
                         id = movie.id,
                         title = movie.title,
                         posterPath = movie.posterPath,

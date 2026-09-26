@@ -10,9 +10,8 @@ not a Plex or Jellyfin client, and not a responsive web view in a wrapper. The m
 
 **Status: pre-production.** Version `0.1.0`, `versionCode 1`. There is no backward compatibility
 to preserve, no migrations to write, and no compatibility layers to maintain. Of the seven
-navigation destinations, **Home** and **Movies** render real content; Search, TV Shows, Music
-(top-level browse), Photos and Settings are placeholder panes driven by
-`IglooDestination.supportingText`.
+navigation destinations, **Home**, **Movies**, **TV Shows** and **Music** render real content;
+Search, Photos and Settings are placeholder panes driven by `IglooDestination.supportingText`.
 
 ---
 
@@ -43,7 +42,7 @@ All paths below are relative to `app/src/main/java/com/igloo/blindpenguincoder/`
 | PIN | PIN entry gate for a profile that has one (verify only; setting a PIN is backend/web for now) | `feature/auth/PinEntryScreen.kt` |
 | Navigation shell | Nav spine with seven destinations, brand block, profile footer, overlay host, Back handling | `feature/home/IglooApp.kt`, `NavigationRail.kt` |
 | Home | Cinematic hero plus rails: continue watching, latest movies, latest albums, in theaters | `feature/home/HomeViewModel.kt`, `HomeHero.kt` |
-| Movies | Library grid with an `All Movies · Genres · Liked` tab strip, focus-driven tab switching with a 300 ms debounce, infinite paging, sort toggle, genre picker with memory | `feature/movies/MoviesScreen.kt`, `MoviesViewModel.kt`, `MoviesContent.kt` |
+| Movies and TV Shows | One shared library pane per kind: a poster grid with an `All · Genres (· Liked)` tab strip, focus-driven tab switching with a 300 ms debounce, infinite paging, sort toggle, genre picker with memory. Movies has the Liked tab and opens details; TV Shows has two tabs and inert cards until a show details screen exists | `feature/library/LibraryScreen.kt`, `LibraryViewModel.kt`, `LibraryKind.kt`, `feature/movies/MovieLibrarySource.kt`, `feature/shows/ShowLibrarySource.kt` |
 | Movie details | Backdrop hero, metadata, watched/like toggles, playback-mode + audio + subtitle pickers, trailer launch | `feature/movies/MovieDetailsScreen.kt`, `PlaybackSettingsDialog.kt` |
 | In theaters | A separate TMDB-backed details page sharing the one overlay slot | `feature/movies/TheaterMovieDetailsViewModel.kt` |
 | Album details + music player | Album page with track list and facts panel; Play Album opens a full-screen player with one ExoPlayer playlist, auto-advance and a MediaSession | `feature/music/AlbumDetailsScreen.kt`, `feature/player/MusicPlayerScreen.kt` |
@@ -325,7 +324,7 @@ One class or one method:
 
 ```bash
 ./gradlew :app:testDebugUnitTest \
-  --tests 'com.igloo.blindpenguincoder.feature.movies.MoviesViewModelTest'
+  --tests 'com.igloo.blindpenguincoder.feature.library.LibraryViewModelTest'
 
 ./gradlew :app:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=com.igloo.blindpenguincoder.feature.movies.MoviesGridBehaviorTest
@@ -348,11 +347,11 @@ Android Lint is stock AGP. There is no ktlint, detekt, spotless, `lint.xml` or l
 
 | Area | Representative files | What is asserted |
 | --- | --- | --- |
-| Repositories | `data/repository/{Auth,Movie,Music,Profile,Server}RepositoryTest.kt` | Request shape, decode, error mapping, caching, profile ordering — over the **real** HTTP client on a `MockEngine` |
+| Repositories | `data/repository/{Auth,Movie,Music,Profile,Server,Show}RepositoryTest.kt` | Request shape, decode, error mapping, caching, profile ordering — over the **real** HTTP client on a `MockEngine` |
 | Wire models | `data/model/ApiModelsSerializationTest.kt` | Serialization round-trips against `docs/openapi.json` |
 | Auth gate | `feature/auth/SessionManagerTest.kt` | The six-state gate: Loading, NeedsServer, ChooseProfile, NeedsPin, NeedsLogin, Authenticated |
 | Pairing | `feature/auth/QuickConnectViewModelTest.kt`, `QuickConnectApprovalTest.kt` | Code initiation, polling, redeem, failure paths |
-| Movies | `feature/movies/MoviesViewModelTest.kt` (the largest suite) | Tab strip, the 300 ms switch debounce, pagination and append states, sort, genre memory, liked view |
+| Library pane | `feature/library/LibraryViewModelTest.kt` (the largest suite, over the movie routes), `LibraryKindTest.kt`, `feature/shows/ShowLibraryViewModelTest.kt` | Tab strip, the 300 ms switch debounce, pagination and append states, sort, genre memory, liked view; the per-kind wording and tags; the show routes and the two-tab strip |
 | Details | `feature/movies/MovieDetailsViewModelTest.kt`, `PlaybackSettingsMappingTest.kt` | Details state, playback-mode/audio/subtitle option mapping |
 | Home | `feature/home/HomeViewModelTest.kt`, `PlayerRequestSaversTest.kt` | Rails failing independently, hero state, `Saver` round-trips |
 | Players | `playback/model/{Movie,Music}PlayerStateMachineTest.kt`, `feature/player/MoviePlayerViewModelTest.kt`, `ChaptersTest.kt` | Pure player state machines, chapter math, chrome state |

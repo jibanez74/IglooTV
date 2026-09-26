@@ -119,6 +119,57 @@ class ApiModelsSerializationTest {
         assertNull(movie.year.orNull())
     }
 
+    /** `GET /shows/library`: the movie page's shape under `shows`, with `name` and `premiere_year`. */
+    @Test
+    fun decodesShowsLibraryWithSqlNullFieldsAndUnmodelledEchoes() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "shows": [
+                  {
+                    "id": 40,
+                    "name": "Severance",
+                    "poster_path": {"String": "/severance.jpg", "Valid": true},
+                    "premiere_year": {"Int64": 0, "Valid": false},
+                    "certification": {"String": "TV-MA", "Valid": true}
+                  }
+                ],
+                "total": 1,
+                "page": 1,
+                "per_page": 24,
+                "total_pages": 1,
+                "sort": "asc"
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<ShowsLibraryData>>(body).data!!
+
+        // `certification`, `page`, `per_page`, and `sort` ride along unmodelled, as on movies.
+        assertEquals(1L, data.total)
+        assertEquals(1L, data.totalPages)
+        val show = data.shows.single()
+        assertEquals(40L, show.id)
+        assertEquals("Severance", show.name)
+        assertEquals("/severance.jpg", show.posterPath.orNull())
+        assertNull(show.premiereYear.orNull())
+    }
+
+    @Test
+    fun decodesShowGenresAndStatsEnvelopes() {
+        val genres = json.decodeFromString<ApiEnvelope<ShowGenresData>>(
+            """{"error":false,"message":"show genres","data":{"genres":[""" +
+                """{"genre_id":7,"genre_tag":"Comedy","show_count":2}]}}""",
+        ).data!!.genres
+        val stats = json.decodeFromString<ApiEnvelope<ShowsStatsData>>(
+            """{"error":false,"message":"show stats","data":{"total_shows":3}}""",
+        ).data!!
+
+        assertEquals(listOf(ShowGenreWithCount(genreId = 7, genreTag = "Comedy", showCount = 2)), genres)
+        assertEquals(3L, stats.totalShows)
+    }
+
     /**
      * `SortOrder.wireName` is spelled a second time so a query parameter can be built by hand.
      * This is the guard that keeps it from drifting away from the `@SerialName`.

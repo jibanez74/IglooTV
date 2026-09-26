@@ -14,9 +14,6 @@ val integerCountFormat: NumberFormat = NumberFormat.getIntegerInstance()
 fun countNoun(count: Long, singular: String, plural: String = singular + "s"): String =
     if (count == 1L) singular else plural
 
-/** The noun beside a movie count — one "movie", otherwise "movies". */
-fun movieNoun(count: Long): String = countNoun(count, "movie")
-
 /** `170` → `"2h 50m"`; whole hours and sub-hour runtimes drop the empty part. */
 fun formatRuntime(minutes: Long): String {
     val hours = minutes / 60

@@ -102,7 +102,7 @@ class MovieRepository(
 
     /**
      * The movies in progress, in the server's order. The row also carries TV episodes; the
-     * client has no shows screens yet, so those are dropped rather than rendered as dead-end
+     * client has no episode screen yet, so those are dropped rather than rendered as dead-end
      * cards.
      */
     suspend fun continueWatchingMovies(): ApiResult<List<ContinueWatchingItem>> = safeApiCall(

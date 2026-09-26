@@ -7,7 +7,6 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.AudioStream
-import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
 import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.model.SqlNullString
@@ -16,16 +15,18 @@ import com.igloo.blindpenguincoder.feature.home.HomeAlbum
 import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeHero
 import com.igloo.blindpenguincoder.feature.home.HomeTheaterMovie
+import com.igloo.blindpenguincoder.feature.library.LibraryActions
+import com.igloo.blindpenguincoder.feature.library.LibraryFilter
+import com.igloo.blindpenguincoder.feature.library.LibraryGenre
+import com.igloo.blindpenguincoder.feature.library.LibraryKind
+import com.igloo.blindpenguincoder.feature.library.LibraryTab
+import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.movies.AboutUi
 import com.igloo.blindpenguincoder.feature.movies.CastMemberUi
 import com.igloo.blindpenguincoder.feature.movies.CrewEntry
 import com.igloo.blindpenguincoder.feature.movies.ExtraVideoUi
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
-import com.igloo.blindpenguincoder.feature.movies.MoviesActions
-import com.igloo.blindpenguincoder.feature.movies.MoviesFilter
-import com.igloo.blindpenguincoder.feature.movies.MoviesTab
-import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSettingsUi
 import com.igloo.blindpenguincoder.feature.movies.ProgressUi
@@ -48,7 +49,7 @@ import com.igloo.blindpenguincoder.feature.music.AlbumDiscUi
 import com.igloo.blindpenguincoder.feature.music.AlbumFactUi
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.feature.shared.AppendState
-import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
+import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
@@ -62,9 +63,9 @@ import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
  * with no network or image decoding involved.
  */
 internal val testHomeMovies = listOf(
-    MoviePosterItem(id = 1, title = "Heat", year = 1995, posterUrl = null),
-    MoviePosterItem(id = 2, title = "Arrival", year = 2016, posterUrl = null),
-    MoviePosterItem(id = 3, title = "Ran", year = 1985, posterUrl = null),
+    PosterItem(id = 1, title = "Heat", year = 1995, posterUrl = null),
+    PosterItem(id = 2, title = "Arrival", year = 2016, posterUrl = null),
+    PosterItem(id = 3, title = "Ran", year = 1985, posterUrl = null),
 )
 
 /**
@@ -72,32 +73,34 @@ internal val testHomeMovies = listOf(
  * `gridColumns` value so the grid's paging and focus contracts have somewhere to travel.
  */
 internal val testMovieGridItems = (1L..40L).map { id ->
-    MoviePosterItem(id = id, title = "Movie $id", year = 1980 + id, posterUrl = null)
+    PosterItem(id = id, title = "Movie $id", year = 1980 + id, posterUrl = null)
 }
 
 /** Two genres cover selected-vs-not and give the chip row a d-pad path to travel. */
 internal val testGenres = listOf(
-    MovieGenreWithCount(genreId = 7, genreTag = "Action", movieCount = 26),
-    MovieGenreWithCount(genreId = 9, genreTag = "Drama", movieCount = 14),
+    LibraryGenre(id = 7, tag = "Action", count = 26),
+    LibraryGenre(id = 9, tag = "Drama", count = 14),
 )
 
 /** A grid that has loaded its first page and has more to come. */
 internal fun testMoviesState(
-    grid: IglooRailState<MoviePosterItem> = IglooRailState.Loaded(testMovieGridItems),
+    grid: IglooRailState<PosterItem> = IglooRailState.Loaded(testMovieGridItems),
     append: AppendState = AppendState.Idle,
     totalMovies: Long? = 96,
-    tab: MoviesTab = MoviesTab.All,
-    genre: MoviesFilter.Genre? = null,
+    tab: LibraryTab = LibraryTab.All,
+    genre: LibraryFilter.Genre? = null,
     genresLoaded: Boolean = true,
     sort: SortOrder = SortOrder.Ascending,
-    genres: List<MovieGenreWithCount> = testGenres,
+    genres: List<LibraryGenre> = testGenres,
     refreshing: Boolean = false,
     notice: String? = null,
     appendGeneration: Int = 0,
     contentGeneration: Int = 0,
     silentReconcileGeneration: Int = 0,
-) = MoviesUiState(
-    totalMovies = totalMovies,
+) = LibraryUiState(
+    kind = LibraryKind.Movies,
+    tabs = LibraryTab.entries,
+    total = totalMovies,
     tab = tab,
     genre = genre,
     genresLoaded = genresLoaded,
@@ -112,7 +115,8 @@ internal fun testMoviesState(
     silentReconcileGeneration = silentReconcileGeneration,
 )
 
-internal val inertMoviesActions = MoviesActions(
+/** No-op actions for either library pane. */
+internal val inertLibraryActions = LibraryActions(
     onRefresh = {},
     onRetryFirstPage = {},
     onRetryAppend = {},
@@ -121,6 +125,46 @@ internal val inertMoviesActions = MoviesActions(
     onPressTab = {},
     onSelectGenre = {},
     onToggleSort = {},
+)
+
+/** Poster-less shows, long enough to fill several rows at every `gridColumns` value. */
+internal val testShowGridItems = (1L..40L).map { id ->
+    PosterItem(id = id, title = "Show $id", year = 2000 + id, posterUrl = null)
+}
+
+/** A count of one exercises the singular noun the chip speaks. */
+internal val testShowGenres = listOf(
+    LibraryGenre(id = 7, tag = "Comedy", count = 2),
+    LibraryGenre(id = 9, tag = "Drama", count = 1),
+)
+
+/** The TV Shows pane with its first page loaded and more to come; two tabs, never Liked. */
+internal fun testShowsState(
+    grid: IglooRailState<PosterItem> = IglooRailState.Loaded(testShowGridItems),
+    append: AppendState = AppendState.Idle,
+    total: Long? = 96,
+    tab: LibraryTab = LibraryTab.All,
+    genre: LibraryFilter.Genre? = null,
+    genresLoaded: Boolean = true,
+    genres: List<LibraryGenre> = testShowGenres,
+    refreshing: Boolean = false,
+    notice: String? = null,
+    appendGeneration: Int = 0,
+    contentGeneration: Int = 0,
+) = LibraryUiState(
+    kind = LibraryKind.Shows,
+    tabs = listOf(LibraryTab.All, LibraryTab.Genres),
+    total = total,
+    tab = tab,
+    genre = genre,
+    genresLoaded = genresLoaded,
+    genres = genres,
+    grid = grid,
+    append = append,
+    refreshing = refreshing,
+    notice = notice,
+    appendGeneration = appendGeneration,
+    contentGeneration = contentGeneration,
 )
 
 internal val testContinueMovies = listOf(

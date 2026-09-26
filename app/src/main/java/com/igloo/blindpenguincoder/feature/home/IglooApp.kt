@@ -73,12 +73,12 @@ import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.feature.library.LibraryActions
+import com.igloo.blindpenguincoder.feature.library.LibraryScreen
+import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsScreen
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
-import com.igloo.blindpenguincoder.feature.movies.MoviesActions
-import com.igloo.blindpenguincoder.feature.movies.MoviesScreen
-import com.igloo.blindpenguincoder.feature.movies.MoviesUiState
 import com.igloo.blindpenguincoder.feature.movies.VideoLaunchSite
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsScreen
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsState
@@ -205,8 +205,10 @@ fun IglooApp(
     serverOrigin: String,
     signOut: SignOutUiState,
     home: HomeUiState,
-    movies: MoviesUiState,
-    moviesActions: MoviesActions,
+    movies: LibraryUiState,
+    moviesActions: LibraryActions,
+    shows: LibraryUiState,
+    showsActions: LibraryActions,
     music: MusicUiState,
     musicActions: MusicActions,
     details: MovieDetailsUiState,
@@ -517,6 +519,8 @@ fun IglooApp(
             home = home,
             movies = movies,
             moviesActions = moviesActions,
+            shows = shows,
+            showsActions = showsActions,
             music = music,
             musicActions = musicActions,
             trackLikes = trackLikes,
@@ -785,8 +789,10 @@ private fun IglooShell(
     serverOrigin: String,
     currentDestination: IglooDestination,
     home: HomeUiState,
-    movies: MoviesUiState,
-    moviesActions: MoviesActions,
+    movies: LibraryUiState,
+    moviesActions: LibraryActions,
+    shows: LibraryUiState,
+    showsActions: LibraryActions,
     music: MusicUiState,
     musicActions: MusicActions,
     trackLikes: TrackLikesUiState,
@@ -859,6 +865,8 @@ private fun IglooShell(
                 home = home,
                 movies = movies,
                 moviesActions = moviesActions,
+                shows = shows,
+                showsActions = showsActions,
                 music = music,
                 musicActions = musicActions,
                 trackLikes = trackLikes,
@@ -938,8 +946,10 @@ private fun IglooShell(
 private fun ContentPane(
     currentDestination: IglooDestination,
     home: HomeUiState,
-    movies: MoviesUiState,
-    moviesActions: MoviesActions,
+    movies: LibraryUiState,
+    moviesActions: LibraryActions,
+    shows: LibraryUiState,
+    showsActions: LibraryActions,
     music: MusicUiState,
     musicActions: MusicActions,
     trackLikes: TrackLikesUiState,
@@ -981,6 +991,9 @@ private fun ContentPane(
     // subtree is discarded on a destination switch. Held here, the grid's scroll position
     // survives a trip to Home and back.
     val moviesGridState = rememberLazyGridState()
+    // The TV Shows grid keeps its own pair for the same reasons.
+    val showsGridState = rememberLazyGridState()
+    var lastFocusedShowId by rememberSaveable { mutableStateOf<Long?>(null) }
     // The Music pane's three surfaces keep their scroll and focus memory the same way; the
     // Tracks tab remembers the control as well as the row, so a return lands on the exact node.
     val musiciansGridState = rememberLazyGridState()
@@ -1031,7 +1044,7 @@ private fun ContentPane(
                 lastFocusedByRail = lastFocusedByRail,
             )
 
-            IglooDestination.Movies -> MoviesScreen(
+            IglooDestination.Movies -> LibraryScreen(
                 state = movies,
                 actions = moviesActions,
                 contentInset = contentInset,
@@ -1039,13 +1052,31 @@ private fun ContentPane(
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequesters.getValue(IglooDestination.Movies),
                 returnRequester = moviesReturnRequester,
-                lastFocusedMovieId = lastFocusedMovieId,
-                onMovieFocused = { lastFocusedMovieId = it },
+                lastFocusedId = lastFocusedMovieId,
+                onItemFocused = { lastFocusedMovieId = it },
                 // The pane's mutationNotice is the details overlay's write report; the grid has
                 // its own notice for a refresh that failed, and two in one header would confuse.
-                onMovieSelected = openMovie?.let { open ->
+                onItemSelected = openMovie?.let { open ->
                     { movieId -> open(DetailsOrigin.MoviesGrid, movieId) }
                 },
+            )
+
+            // Its own `when` arm rather than a kind parameter on the Movies call: each arm owns
+            // its remembered focus ownership and requesters, which must not survive a switch.
+            IglooDestination.TvShows -> LibraryScreen(
+                state = shows,
+                actions = showsActions,
+                contentInset = contentInset,
+                gridState = showsGridState,
+                contentStartRequester = contentStartRequester,
+                navigationRequester = navigationRequesters.getValue(IglooDestination.TvShows),
+                // Nothing opens from this pane yet, so nothing ever asks to return to it.
+                returnRequester = null,
+                lastFocusedId = lastFocusedShowId,
+                onItemFocused = { lastFocusedShowId = it },
+                // No show details screen yet: the cards are inert on press (section 10's
+                // actionless-anchor contract) rather than announcing an action that does nothing.
+                onItemSelected = null,
             )
 
             IglooDestination.Music -> MusicScreen(
@@ -1099,11 +1130,12 @@ private fun ContentPane(
 }
 
 /** Which of ContentPane's trees a destination renders; the focus anchor moves with the branch. */
-private enum class PaneBranch { Home, Movies, Music, Placeholder }
+private enum class PaneBranch { Home, Movies, TvShows, Music, Placeholder }
 
 private fun paneBranchOf(destination: IglooDestination): PaneBranch = when (destination) {
     IglooDestination.Home -> PaneBranch.Home
     IglooDestination.Movies -> PaneBranch.Movies
+    IglooDestination.TvShows -> PaneBranch.TvShows
     IglooDestination.Music -> PaneBranch.Music
     else -> PaneBranch.Placeholder
 }

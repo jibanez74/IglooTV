@@ -11,7 +11,6 @@ class MediaFormattingTest {
         assertEquals("album", countNoun(1, "album"))
         assertEquals("albums", countNoun(0, "album"))
         assertEquals("albums", countNoun(2, "album"))
-        assertEquals("movies", movieNoun(3))
         assertEquals("people", countNoun(2, "person", "people"))
     }
 

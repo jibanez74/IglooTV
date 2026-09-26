@@ -5,8 +5,8 @@ import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 
-/** A library movie ready to render: nullable wire fields resolved, poster path built into a URL. */
-data class MoviePosterItem(
+/** A library title ready to render: nullable wire fields resolved, poster path built into a URL. */
+data class PosterItem(
     val id: Long,
     val title: String,
     val year: Long?,
@@ -14,16 +14,16 @@ data class MoviePosterItem(
 )
 
 /**
- * The one mapping every library listing shares: Home's rails and the Movies grid render the same
- * poster card from the same wire fields.
+ * The one mapping every library listing shares: Home's rails and the Movies and TV Shows grids
+ * render the same poster card from the same wire fields.
  */
-fun moviePosterItem(
+fun posterItem(
     id: Long,
     title: String,
     posterPath: SqlNullString,
     year: SqlNullInt64,
     apiBaseUrl: String,
-): MoviePosterItem = MoviePosterItem(
+): PosterItem = PosterItem(
     id = id,
     title = title,
     year = year.orNull(),

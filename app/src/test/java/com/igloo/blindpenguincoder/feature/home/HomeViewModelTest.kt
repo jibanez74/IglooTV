@@ -13,7 +13,7 @@ import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
 import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
 import com.igloo.blindpenguincoder.data.repository.theaterMovieJson
 import com.igloo.blindpenguincoder.data.repository.theaterMoviesJson
-import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
+import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -77,7 +77,7 @@ class HomeViewModelTest {
         }
     }
 
-    private suspend fun HomeViewModel.awaitLatest(): IglooRailState.Loaded<MoviePosterItem> =
+    private suspend fun HomeViewModel.awaitLatest(): IglooRailState.Loaded<PosterItem> =
         uiState.first { it.latestMovies is IglooRailState.Loaded }
             .latestMovies as IglooRailState.Loaded
 
@@ -153,13 +153,13 @@ class HomeViewModelTest {
         // Both wire shapes — with and without the leading slash — build the same proxy URL form.
         assertEquals(
             listOf(
-                MoviePosterItem(
+                PosterItem(
                     1,
                     "Heat",
                     1995,
                     "http://igloo.test:8080/api/tmdb/images/w500/heat.jpg",
                 ),
-                MoviePosterItem(
+                PosterItem(
                     2,
                     "Arrival",
                     2016,
@@ -398,7 +398,7 @@ class HomeViewModelTest {
         assertEquals(
             listOf(
                 HomeContinueMovie(
-                    movie = MoviePosterItem(
+                    movie = PosterItem(
                         1,
                         "Heat",
                         1995,

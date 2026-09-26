@@ -1,4 +1,4 @@
-package com.igloo.blindpenguincoder.feature.movies
+package com.igloo.blindpenguincoder.feature.library
 
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.SortOrder
@@ -9,6 +9,7 @@ import com.igloo.blindpenguincoder.data.repository.movieLibraryItemJson
 import com.igloo.blindpenguincoder.data.repository.moviesGenresJson
 import com.igloo.blindpenguincoder.data.repository.moviesLibraryJson
 import com.igloo.blindpenguincoder.data.repository.moviesStatsJson
+import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -33,7 +34,7 @@ import org.junit.Before
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class MoviesViewModelTest {
+class LibraryViewModelTest {
 
     @Before
     fun setUp() {
@@ -57,7 +58,7 @@ class MoviesViewModelTest {
         val model = loaded(http)
 
         assertEquals((1L..48L).toList(), model.uiState.value.gridIds())
-        assertEquals(96L, model.uiState.value.totalMovies)
+        assertEquals(96L, model.uiState.value.total)
         assertEquals(AppendState.Idle, model.uiState.value.append)
         assertEquals(listOf("1"), http.libraryPages)
     }
@@ -143,7 +144,7 @@ class MoviesViewModelTest {
 
         model.loadMore()
 
-        assertEquals(97L, model.uiState.value.totalMovies)
+        assertEquals(97L, model.uiState.value.total)
     }
 
     @Test
@@ -487,7 +488,7 @@ class MoviesViewModelTest {
 
         val state = loaded(http).uiState.value
 
-        assertEquals(73L, state.totalMovies)
+        assertEquals(73L, state.total)
         assertEquals(listOf(1L, 2L, 3L), state.gridIds())
     }
 
@@ -514,7 +515,7 @@ class MoviesViewModelTest {
         model.refresh()
         gate.complete(Unit)
 
-        assertEquals(96L, model.uiState.value.totalMovies)
+        assertEquals(96L, model.uiState.value.total)
     }
 
     @Test
@@ -537,7 +538,7 @@ class MoviesViewModelTest {
         model.refresh()
         gate.complete(Unit)
 
-        assertEquals("Fresh", model.uiState.value.genres.single().genreTag)
+        assertEquals("Fresh", model.uiState.value.genres.single().tag)
     }
 
     @Test
@@ -555,7 +556,7 @@ class MoviesViewModelTest {
         fail = true
         model.refresh()
 
-        assertEquals(96L, model.uiState.value.totalMovies)
+        assertEquals(96L, model.uiState.value.total)
     }
 
     // --- filters and sort -------------------------------------------------------------------
@@ -567,12 +568,12 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
 
         assertEquals(listOf("1"), http.likedPages)
-        assertEquals(MoviesFilter.Liked, model.uiState.value.filter)
+        assertEquals(LibraryFilter.Liked, model.uiState.value.filter)
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
-        assertEquals(3L, model.uiState.value.totalMovies)
+        assertEquals(3L, model.uiState.value.total)
     }
 
     @Test
@@ -582,12 +583,12 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+        model.selectGenre(LibraryFilter.Genre(id = 7, tag = "Action"))
 
         assertEquals(listOf("7:1"), http.genrePages)
         assertEquals(listOf("48", "48"), http.perPages)
-        assertEquals(26L, model.uiState.value.totalMovies)
-        assertEquals(MoviesTab.Genres, model.uiState.value.tab)
+        assertEquals(26L, model.uiState.value.total)
+        assertEquals(LibraryTab.Genres, model.uiState.value.tab)
     }
 
     @Test
@@ -605,10 +606,10 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        landOn(model, MoviesTab.Genres)
+        landOn(model, LibraryTab.Genres)
 
         assertEquals(listOf("7:1"), http.genrePages)
-        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
+        assertEquals(LibraryFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
     }
 
     @Test
@@ -625,10 +626,10 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        model.selectGenre(MoviesFilter.Genre(id = 9, tag = "Drama"))
+        model.selectGenre(LibraryFilter.Genre(id = 9, tag = "Drama"))
 
-        landOn(model, MoviesTab.All)
-        landOn(model, MoviesTab.Genres)
+        landOn(model, LibraryTab.All)
+        landOn(model, LibraryTab.Genres)
 
         assertEquals(listOf("9:1", "9:1"), http.genrePages)
     }
@@ -644,12 +645,12 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Genres)
+        landOn(model, LibraryTab.Genres)
 
         renamed = true
         model.reload()
 
-        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action & Adventure"), model.uiState.value.genre)
+        assertEquals(LibraryFilter.Genre(id = 7, tag = "Action & Adventure"), model.uiState.value.genre)
         assertEquals(listOf("7:1", "7:1"), http.genrePages)
     }
 
@@ -694,14 +695,14 @@ class MoviesViewModelTest {
                 },
             )
             val model = loaded(http)
-            model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+            model.selectGenre(LibraryFilter.Genre(id = 7, tag = "Action"))
 
             refreshed = true
             model.refresh()
 
-            assertEquals(MoviesFilter.Genre(id = 9, tag = "Drama"), model.uiState.value.genre)
+            assertEquals(LibraryFilter.Genre(id = 9, tag = "Drama"), model.uiState.value.genre)
             assertEquals(listOf(10L, 11L, 12L), model.uiState.value.gridIds())
-            assertEquals(6L, model.uiState.value.totalMovies)
+            assertEquals(6L, model.uiState.value.total)
             assertEquals(listOf("7:1", "9:1"), http.genrePages)
             assertTrue(!model.uiState.value.refreshing)
 
@@ -733,7 +734,7 @@ class MoviesViewModelTest {
                 },
             )
             val model = loaded(http)
-            model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+            model.selectGenre(LibraryFilter.Genre(id = 7, tag = "Action"))
 
             empty = true
             model.refresh()
@@ -741,16 +742,16 @@ class MoviesViewModelTest {
             assertTrue(model.uiState.value.genres.isEmpty())
             assertNull(model.uiState.value.genre)
             assertNull(model.uiState.value.filter)
-            assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+            assertEquals(LibraryContent.NoGenres, model.uiState.value.toLibraryContent())
             assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
             assertEquals(listOf("7:1"), http.genrePages)
 
-            landOn(model, MoviesTab.All)
-            landOn(model, MoviesTab.Genres)
+            landOn(model, LibraryTab.All)
+            landOn(model, LibraryTab.Genres)
 
             assertNull(model.uiState.value.genre)
             assertNull(model.uiState.value.filter)
-            assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+            assertEquals(LibraryContent.NoGenres, model.uiState.value.toLibraryContent())
             assertEquals(listOf("7:1"), http.genrePages)
         }
 
@@ -763,10 +764,10 @@ class MoviesViewModelTest {
             )
             val model = loaded(http)
 
-            landOn(model, MoviesTab.Genres)
+            landOn(model, LibraryTab.Genres)
 
             assertEquals(emptyList<String>(), http.genrePages)
-            assertEquals(MoviesTab.Genres, model.uiState.value.tab)
+            assertEquals(LibraryTab.Genres, model.uiState.value.tab)
             assertNull(model.uiState.value.filter)
             assertTrue(!model.uiState.value.refreshing)
             // The committed list is untouched underneath the placeholder.
@@ -784,14 +785,14 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Genres)
+        landOn(model, LibraryTab.Genres)
         val generationBefore = model.uiState.value.contentGeneration
 
         fail = false
         model.reload()
 
         assertEquals(listOf("7:1"), http.genrePages)
-        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
+        assertEquals(LibraryFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
         assertEquals(generationBefore + 1, model.uiState.value.contentGeneration)
         assertTrue(!model.uiState.value.refreshing)
@@ -814,16 +815,16 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        landOn(model, MoviesTab.Genres)
+        landOn(model, LibraryTab.Genres)
 
         assertTrue(!model.uiState.value.genresLoaded)
-        assertEquals(MoviesContent.GenresLoading, model.uiState.value.toMoviesContent())
+        assertEquals(LibraryContent.GenresLoading, model.uiState.value.toLibraryContent())
         assertEquals(emptyList<String>(), http.genrePages)
 
         gate.complete(Unit)
         advanceUntilIdle()
 
-        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
+        assertEquals(LibraryFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
     }
 
     /** A failed read settles it too: the wait is over, whatever the answer turned out to be. */
@@ -835,10 +836,10 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        landOn(model, MoviesTab.Genres)
+        landOn(model, LibraryTab.Genres)
 
         assertTrue(model.uiState.value.genresLoaded)
-        assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+        assertEquals(LibraryContent.NoGenres, model.uiState.value.toLibraryContent())
     }
 
     /** The placeholder tells the user to refresh, so the press has to visibly do something. */
@@ -860,8 +861,8 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Genres)
-        assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+        landOn(model, LibraryTab.Genres)
+        assertEquals(LibraryContent.NoGenres, model.uiState.value.toLibraryContent())
 
         model.reload()
 
@@ -872,7 +873,7 @@ class MoviesViewModelTest {
         advanceUntilIdle()
 
         assertTrue(!model.uiState.value.refreshing)
-        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
+        assertEquals(LibraryFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
     }
 
     @Test
@@ -882,13 +883,13 @@ class MoviesViewModelTest {
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Genres)
+        landOn(model, LibraryTab.Genres)
 
         model.reload()
         advanceUntilIdle()
 
         assertTrue(!model.uiState.value.refreshing)
-        assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+        assertEquals(LibraryContent.NoGenres, model.uiState.value.toLibraryContent())
     }
 
     /** Flipping the label with no list to sort would leave the header claiming a hidden order. */
@@ -899,7 +900,7 @@ class MoviesViewModelTest {
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Genres)
+        landOn(model, LibraryTab.Genres)
         val requestsBefore = http.libraryPages.size
 
         model.toggleSort()
@@ -932,12 +933,12 @@ class MoviesViewModelTest {
         model.reload()
         val generationBefore = model.uiState.value.contentGeneration
 
-        landOn(model, MoviesTab.Genres)
+        landOn(model, LibraryTab.Genres)
         gate.complete(Unit)
         advanceUntilIdle()
 
-        assertEquals(MoviesTab.Genres, model.uiState.value.tab)
-        assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+        assertEquals(LibraryTab.Genres, model.uiState.value.tab)
+        assertEquals(LibraryContent.NoGenres, model.uiState.value.toLibraryContent())
         assertNull(model.uiState.value.notice)
         assertEquals(generationBefore, model.uiState.value.contentGeneration)
         assertTrue(!model.uiState.value.refreshing)
@@ -956,7 +957,7 @@ class MoviesViewModelTest {
         val model = loaded(http)
         val before = model.uiState.value
 
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
 
         assertEquals(before.contentGeneration, model.uiState.value.contentGeneration)
         assertEquals(
@@ -984,11 +985,11 @@ class MoviesViewModelTest {
         model.loadMore()
         assertEquals(listOf("1", "2"), http.libraryPages)
 
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
         model.loadMore()
 
         assertEquals(listOf("1", "2", "3"), http.libraryPages)
-        assertEquals(MoviesTab.All, model.uiState.value.tab)
+        assertEquals(LibraryTab.All, model.uiState.value.tab)
     }
 
     /** Every lifecycle START re-reads the genres; an unchanged list must not re-page the grid. */
@@ -1001,7 +1002,7 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Genres)
+        landOn(model, LibraryTab.Genres)
         assertEquals(listOf("7:1"), http.genrePages)
 
         model.refresh()
@@ -1037,8 +1038,8 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Genres)
-        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
+        landOn(model, LibraryTab.Genres)
+        assertEquals(LibraryFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
 
         // The refreshed list is authoritatively empty, and it lands first — the page request it
         // went out with fails afterwards.
@@ -1049,7 +1050,7 @@ class MoviesViewModelTest {
         advanceUntilIdle()
 
         assertNull(model.uiState.value.genre)
-        assertEquals(MoviesContent.NoGenres, model.uiState.value.toMoviesContent())
+        assertEquals(LibraryContent.NoGenres, model.uiState.value.toLibraryContent())
     }
 
     @Test
@@ -1060,15 +1061,15 @@ class MoviesViewModelTest {
             liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 20L..22L)) },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
 
         // D-pad from Liked back to All passes over Genres, which selects on focus. The highlight
         // moves through it; the request never does, because All arrives inside the debounce.
-        model.selectTab(MoviesTab.Genres)
-        model.selectTab(MoviesTab.All)
+        model.selectTab(LibraryTab.Genres)
+        model.selectTab(LibraryTab.All)
         advanceUntilIdle()
 
-        assertEquals(MoviesTab.All, model.uiState.value.tab)
+        assertEquals(LibraryTab.All, model.uiState.value.tab)
         assertEquals(emptyList<String>(), http.genrePages)
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
         assertTrue(!model.uiState.value.refreshing)
@@ -1083,9 +1084,9 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        model.selectTab(MoviesTab.Liked)
+        model.selectTab(LibraryTab.Liked)
 
-        assertEquals(MoviesTab.Liked, model.uiState.value.tab)
+        assertEquals(LibraryTab.Liked, model.uiState.value.tab)
         assertTrue(!model.uiState.value.refreshing)
         assertEquals(emptyList<String>(), http.likedPages)
     }
@@ -1097,7 +1098,7 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        model.selectTab(MoviesTab.Liked)
+        model.selectTab(LibraryTab.Liked)
         advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS - 1)
 
         assertEquals(emptyList<String>(), http.likedPages)
@@ -1114,8 +1115,8 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        model.selectTab(MoviesTab.Liked)
-        model.pressTab(MoviesTab.Liked)
+        model.selectTab(LibraryTab.Liked)
+        model.pressTab(LibraryTab.Liked)
 
         assertEquals(listOf("1"), http.likedPages)
 
@@ -1140,14 +1141,14 @@ class MoviesViewModelTest {
             liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 20L..22L)) },
         )
         val model = loaded(http)
-        model.pressTab(MoviesTab.Genres)
+        model.pressTab(LibraryTab.Genres)
         assertEquals(listOf("7:1"), http.genrePages)
 
-        model.pressTab(MoviesTab.Liked)
+        model.pressTab(LibraryTab.Liked)
         gate.complete(Unit)
         advanceUntilIdle()
 
-        assertEquals(MoviesTab.Liked, model.uiState.value.tab)
+        assertEquals(LibraryTab.Liked, model.uiState.value.tab)
         assertEquals(listOf(20L, 21L, 22L), model.uiState.value.gridIds())
         assertTrue(!model.uiState.value.refreshing)
     }
@@ -1158,7 +1159,7 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+        model.selectGenre(LibraryFilter.Genre(id = 7, tag = "Action"))
 
         model.toggleSort()
 
@@ -1177,11 +1178,11 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
 
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
-        assertEquals(MoviesTab.All, model.uiState.value.tab)
-        assertEquals(MoviesFilter.All, model.uiState.value.filter)
+        assertEquals(LibraryTab.All, model.uiState.value.tab)
+        assertEquals(LibraryFilter.All, model.uiState.value.filter)
         assertTrue(model.uiState.value.notice != null)
     }
 
@@ -1206,13 +1207,13 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+        model.selectGenre(LibraryFilter.Genre(id = 7, tag = "Action"))
 
         failingGenre = 9
-        model.selectGenre(MoviesFilter.Genre(id = 9, tag = "Drama"))
+        model.selectGenre(LibraryFilter.Genre(id = 9, tag = "Drama"))
 
-        assertEquals(MoviesFilter.Genre(id = 7, tag = "Action"), model.uiState.value.genre)
-        assertEquals(MoviesTab.Genres, model.uiState.value.tab)
+        assertEquals(LibraryFilter.Genre(id = 7, tag = "Action"), model.uiState.value.genre)
+        assertEquals(LibraryTab.Genres, model.uiState.value.tab)
     }
 
     @Test
@@ -1251,7 +1252,7 @@ class MoviesViewModelTest {
         val model = loaded(http)
         model.loadMore()
 
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
         gate.complete(Unit)
 
         assertEquals(listOf(10L, 11L, 12L), model.uiState.value.gridIds())
@@ -1268,7 +1269,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
 
         model.loadMore()
 
@@ -1284,12 +1285,12 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+        model.selectGenre(LibraryFilter.Genre(id = 7, tag = "Action"))
 
         // The start effect re-fires on every return to the foreground and re-reads stats.
         model.refresh()
 
-        assertEquals(26L, model.uiState.value.totalMovies)
+        assertEquals(26L, model.uiState.value.total)
     }
 
     @Test
@@ -1298,9 +1299,9 @@ class MoviesViewModelTest {
             liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
 
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
 
         assertEquals(listOf("1"), http.likedPages)
     }
@@ -1311,9 +1312,9 @@ class MoviesViewModelTest {
             liked = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
 
-        model.pressTab(MoviesTab.Liked)
+        model.pressTab(LibraryTab.Liked)
 
         assertEquals(listOf("1"), http.likedPages)
     }
@@ -1324,9 +1325,9 @@ class MoviesViewModelTest {
             genreMovies = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
-        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+        model.selectGenre(LibraryFilter.Genre(id = 7, tag = "Action"))
 
-        model.selectGenre(MoviesFilter.Genre(id = 7, tag = "Action"))
+        model.selectGenre(LibraryFilter.Genre(id = 7, tag = "Action"))
 
         assertEquals(listOf("7:1"), http.genrePages)
     }
@@ -1346,7 +1347,7 @@ class MoviesViewModelTest {
         fail = true
         model.reload()
 
-        assertEquals("Action", model.uiState.value.genres.single().genreTag)
+        assertEquals("Action", model.uiState.value.genres.single().tag)
     }
 
     // --- liked reconcile --------------------------------------------------------------------
@@ -1361,7 +1362,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
         val generationBefore = model.uiState.value.contentGeneration
         val silentGenerationBefore = model.uiState.value.silentReconcileGeneration
 
@@ -1394,7 +1395,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
         model.reload()
         val before = model.uiState.value
         assertTrue(before.notice != null)
@@ -1433,7 +1434,7 @@ class MoviesViewModelTest {
                 },
             )
             val model = loaded(http)
-            landOn(model, MoviesTab.Liked)
+            landOn(model, LibraryTab.Liked)
 
             model.reload()
             assertTrue(model.uiState.value.refreshing)
@@ -1469,7 +1470,7 @@ class MoviesViewModelTest {
                 },
             )
             val model = loaded(http)
-            landOn(model, MoviesTab.Liked)
+            landOn(model, LibraryTab.Liked)
             val silentGenerationBefore = model.uiState.value.silentReconcileGeneration
 
             model.reload()
@@ -1504,13 +1505,13 @@ class MoviesViewModelTest {
         )
         val model = loaded(http)
 
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
         assertTrue(model.uiState.value.refreshing)
         model.onLikeCommitted()
         assertTrue(!model.uiState.value.refreshing)
         reconcileGate.complete(Unit)
 
-        assertEquals(MoviesFilter.Liked, model.uiState.value.filter)
+        assertEquals(LibraryFilter.Liked, model.uiState.value.filter)
         assertEquals(listOf(20L, 21L), model.uiState.value.gridIds())
         assertTrue(!model.uiState.value.refreshing)
     }
@@ -1533,7 +1534,7 @@ class MoviesViewModelTest {
             },
         )
         val model = loaded(http)
-        landOn(model, MoviesTab.Liked)
+        landOn(model, LibraryTab.Liked)
         model.onLikeCommitted()
         assertTrue(!model.uiState.value.refreshing)
 
@@ -1558,20 +1559,21 @@ class MoviesViewModelTest {
 
     /** The host's start effect is what fires the first load; there is no fetch in `init`. */
     private fun loaded(http: RoutedHttp) =
-        MoviesViewModel(http.test.movieRepository, http.test.serverUrl).also { it.refresh() }
+        LibraryViewModel(movieLibrarySource(http.test.movieRepository), http.test.serverUrl)
+            .also { it.refresh() }
 
     /**
      * A tab taking focus and being stayed on: the switch, plus the debounce it waits out. Tests
      * about the debounce itself call `selectTab` and drive the clock themselves.
      */
-    private fun TestScope.landOn(model: MoviesViewModel, tab: MoviesTab) {
+    private fun TestScope.landOn(model: LibraryViewModel, tab: LibraryTab) {
         model.selectTab(tab)
         // Past the debounce and no further: `advanceUntilIdle` here would run the virtual clock
         // into the client's request timeout in the tests that deliberately hold a response open.
         advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS + 1)
     }
 
-    private fun MoviesUiState.gridIds(): List<Long> =
+    private fun LibraryUiState.gridIds(): List<Long> =
         (grid as IglooRailState.Loaded).items.map { it.id }
 
     private fun HttpRequestData.page(): String = url.parameters["page"].orEmpty()

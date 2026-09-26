@@ -34,25 +34,10 @@ fix is probably a `Modifier.iglooSelectable(focused, onFocusChanged, onClick, se
 than another composable. Worth doing only if a sixth control appears, or if the clickable
 configuration ever needs to change in one place.
 
-### 1.2 `committedFilter()` restates the derived `MoviesUiState.filter`
-
-**Files:** `feature/movies/MoviesViewModel.kt:468`, `:120`
-
-```kotlin
-private fun committedFilter(): MoviesFilter? = when (committedTab) { … }   // :468
-val filter: MoviesFilter? get() = when (tab) { … }                          // :120
-```
-
-The same three-branch mapping written twice, over the requested tab/genre in one and the
-committed pair in the other. A top-level `fun filterFor(tab: MoviesTab, genre:
-MoviesFilter.Genre?): MoviesFilter?` that both call would leave one copy. Small, and the two
-readings do mean different things, so the comment carrying that distinction has to survive the
-merge.
-
 ### 1.3 The no-genres copy is a literal in three places
 
-**Files:** `feature/movies/MoviesScreen.kt:716`,
-`androidTest/…/MoviesGridBehaviorTest.kt:37`, `androidTest/…/MoviesGridAccessibilityTest.kt:256`
+**Files:** `feature/library/LibraryScreen.kt`,
+`androidTest/…/MoviesGridBehaviorTest.kt:37`, `androidTest/…/MoviesGridAccessibilityTest.kt`
 
 `"Genres aren't available right now. Refresh to try again."` is a private const in the screen and
 retyped in both instrumented suites (once as a const, once inline). Test duplication of user copy
@@ -67,37 +52,6 @@ Now documented — `iglooSurface`'s `clip(shape)` would cut the focused tab's 16
 row's bounds — but it is still the one panel in the app that draws its own ground. If
 `iglooSurface` ever grows a `clip: Boolean = true`, the tab row should take it, and the comment
 should go.
-
----
-
-## 2. Organisation
-
-### 2.1 The Movies state model lives in the view model file
-
-**Files:** `feature/movies/MoviesViewModel.kt:26-131`
-
-`MoviesFilter`, `MoviesTab`, `MoviesAppendState`, `MoviesUiState` and the debounce constant are
-~95 lines of state model ahead of the class, while the sibling projection already has its own
-file (`MoviesContent.kt`). A `MoviesUiState.kt` would match. Held back because `AGENTS.md` rules
-out refactors that are not asked for — do it the next time this feature is opened for real work.
-
-### 2.2 The Movies state model is `public`, its projection is `internal`
-
-**Files:** `feature/movies/MoviesViewModel.kt:38,49,59,69` vs `MoviesContent.kt:11`
-
-`MoviesFilter` and `MoviesTab` are `public`; nothing outside `feature/movies` and its tests
-consumes either. Tightening to `internal` costs nothing (both test source sets see internals) and
-makes the module boundary honest. Check `IglooRoot.kt` and `HomeTestFixtures.kt` compile first.
-
-### 2.3 Two expressions that read worse than they compute
-
-**Files:** `feature/movies/MoviesScreen.kt:125-126`, `:199-205`
-
-`?: 0.takeIf { content is MoviesContent.Empty }` on an `Int` literal is a clever way to say
-"zero, but only in the empty state" and takes a second read. And the skeleton's `loadingLabel`
-is chosen with an `if (content is MoviesContent.GenresLoading)` at the call site, where the
-`when` branch it sits in already knows which case it is — a `MoviesContent.loadingLabel` property
-next to `isSkeleton` in `MoviesContent.kt` would put it with its siblings.
 
 ---
 
@@ -136,25 +90,26 @@ stops meaning anything.
 From the Movies coverage audit; the higher-value gaps were closed in the review pass, these were
 not.
 
-**View model** (`app/src/test/…/MoviesViewModelTest.kt`)
+**View model** (`app/src/test/…/feature/library/LibraryViewModelTest.kt`, over the movie routes)
 
-- `refresh()` re-fetching page one when `grid is Error` — the foreground-return branch at
-  `MoviesViewModel.kt:185`.
-- `onLikeCommitted()`'s early return when the Liked grid is not `Loaded` (`:269`).
-- `retryAppend()`'s active-job guard (`:295`).
+- `refresh()` re-fetching page one when `grid is Error` — the foreground-return branch in
+  `LibraryViewModel.refresh`.
+- `onLikeCommitted()`'s early return when the Liked grid is not `Loaded`.
+- `retryAppend()`'s active-job guard.
 - `loadStats()` writing the library-wide count while the *requested* tab is All but the committed
-  grid is still a filtered list (`:491`).
-- `notice` being cleared by the next successful switch — `:398` sets it, nothing pins the clear.
+  grid is still a filtered list.
+- `notice` being cleared by the next successful switch — the failure branch sets it, nothing pins
+  the clear.
 
 **Screen** (`app/src/androidTest/…/MoviesGridBehaviorTest.kt`)
 
 - Down from the tab row and the genre row when the content is card-less (`downRequester =
-  contentStartRequester`, `MoviesScreen.kt:149`) — e.g. the Genres tab with chips over an empty
+  contentStartRequester` in `LibraryScreen`) — e.g. the Genres tab with chips over an empty
   grid, or over a failed first page.
 - Up from the card-less anchors to the strip in the **Loading** and first-page-**Error** states;
   only the placeholder and the empty Liked view exercise that edge today.
 - The genre row scrolling horizontally with more chips than fit the panel — the fixture has two
-  genres, so `horizontalScroll` (`MoviesGenreRow.kt:80`) is never actually scrolled.
+  genres, so `horizontalScroll` (`LibraryGenreRow.kt`) is never actually scrolled.
 - The genre list going empty *while a chip holds focus* — the row is disposed under the focused
   node. Only the opposite direction (a list arriving) is covered.
 - A tab switch composed mid-flight (`refreshing = true` with a different `tab`).
@@ -165,11 +120,11 @@ not.
 
 **Wiring**
 
-- Nothing connects `MoviesActions` to `MoviesViewModel`. Every instrumented test hand-feeds a
-  `MoviesUiState` and every unit test drives the view model without composition, so a lambda wired
-  to the wrong method in `IglooRoot.kt:274-284` would pass the whole suite. One test that composes
-  the screen over a real view model against a mock engine would close the loop that the
-  focus-a-tab → debounce → request → revert → press-to-retry path depends on.
+- `LibraryViewModel.actions()` now binds the eight lambdas in one place and
+  `ShowLibraryViewModelTest` pins each binding, so a lambda wired to the wrong method no longer
+  passes the suite. Still open: every instrumented test hand-feeds a `LibraryUiState`, so one
+  test that composes the screen over a real view model against a mock engine would close the
+  loop that the focus-a-tab → debounce → request → revert → press-to-retry path depends on.
 
 ---
 
@@ -177,14 +132,14 @@ not.
 
 Each is its own small pass; none is a defect.
 
-1. **The visible count line never names the active view.** `MoviesScreen.kt:303` draws a generic
+1. **The visible count line never names the active view.** `LibraryScreen`'s header draws a generic
    "146 movies" while only the *spoken* form says "146 Action movies". At 10 feet, after a genre
    press, nothing on screen confirms which list you are looking at. Highest value of the five.
-2. **The selected genre chip is not scrolled into view.** `MoviesGenreRow`'s `horizontalScroll`
+2. **The selected genre chip is not scrolled into view.** `LibraryGenreRow`'s `horizontalScroll`
    state is independent of the selection, so re-entering Genres with a remembered genre far to the
    right shows the leftmost chips while the grid shows a genre you cannot see. `bringIntoView` on
    a selection change fixes it.
-3. **`totalMovies` is not cleared across a switch**, so the header shows the previous view's count
+3. **`total` is not cleared across a switch**, so the header shows the previous view's count
    until the new page lands, then snaps.
 4. **The strip has no motion.** The selected fill hard-swaps; a sliding indicator pill is the
    conventional premium treatment. Gate it on `IglooTheme.reducedMotion`.
@@ -220,19 +175,18 @@ was up and opens the other; Back then lands on the Music pane node that opened t
 The web goes musician → album → back → musician. A two-deep stack touches every host gate that
 reads the open flags and the `DetailsOrigin` machinery; deferred, and recorded in §11.5.1.
 
-### 7.2 The Music and Movies panes still draw their own grid, header, tab row and skeleton
+### 7.2 The Music pane still draws its own grid, header, tab row and skeleton
 
-**Files:** `feature/movies/MoviesScreen.kt`, `feature/music/MusicScreen.kt`
+**Files:** `feature/library/LibraryScreen.kt`, `feature/music/MusicScreen.kt`
 
-The review pass of 2026-09-21 shared what had one body — the focus coordinator and ownership
-(`feature/shared/PaneFocus.kt`), the scroll padding, tab presentation, Refresh labels and row
-counts (`feature/shared/PaneChrome.kt`), the paging helpers (`Paging.kt`). What it left are the
-composables that look alike but diverge: `MoviesGrid`/`MusicGrid` (the Movies grid carries the
-silent Liked reconcile and a `Populated(items)` model, the Music grid is generic over its card),
-`MoviesHeader`/`MusicHeader` (the Movies header has the sort control and the genre count line),
-`MoviesTabRow`/`MusicTabRow` (identical modulo the enum — the easiest of the four), and the two
-grid skeletons. Merging them is a Movies-side change that needs the Movies instrumented suites
-re-run; `MoviesUiState`'s loose paging fields could move onto `PagedState` in the same pass.
+The TV Shows pass (2026-09-26) merged the Movies pane into a kind-parameterised library pane that
+Movies and TV Shows both draw, so the duplication left is between that pane and Music:
+`LibraryGrid`/`MusicGrid` (the library grid carries the silent Liked reconcile and a
+`Populated(items)` model, the Music grid is generic over its card), `LibraryHeader`/`MusicHeader`
+(the library header has the sort control and the genre count line), `LibraryTabRow`/`MusicTabRow`
+(identical modulo the enum — a generic `PaneTabRow<T>` in `PaneChrome.kt` would take both), and
+the two grid skeletons. Merging them is a Music-side change that needs the Music instrumented
+suites re-run; `LibraryUiState`'s loose paging fields could move onto `PagedState` in the same pass.
 
 ### 7.3 §1.1's trigger has fired
 
@@ -245,10 +199,11 @@ chain is now high enough that `Modifier.iglooSelectable(...)` is worth doing.
 Every track row has a heart, but there is no list of liked tracks: on the web it lives inside
 the Playlists tab, which is deferred. `GET /music/tracks/liked` is not wired for that reason.
 
-### 7.5 The `MusicActions` wiring is untested, like `MoviesActions` (§4)
+### 7.5 The `MusicActions` wiring is untested
 
 `IglooRoot.kt` binds ten lambdas to `MusicViewModel`; a lambda bound to the wrong method would
-pass every suite. One composed-over-real-view-model test would close both holes at once.
+pass every suite. The library pane closed its half with `LibraryViewModel.actions()` and a unit
+test over it (§4); a `MusicViewModel.actions()` on the same pattern would close this one.
 
 ### 7.7 Three single-read details view models with one shape
 
@@ -263,7 +218,7 @@ than it saves, which is why the 2026-09-21 review left them. Worth doing if a fo
 
 ### 7.6 Lint's `ModifierParameter` on the skeleton anchors
 
-`MusicGridSkeleton` / `TracksListSkeleton` take `anchorModifier: Modifier`, as `MoviesGridSkeleton`
+`MusicGridSkeleton` / `TracksListSkeleton` take `anchorModifier: Modifier`, as `LibraryGridSkeleton`
 does; lint wants the parameter named `modifier`. It is not the composable's own modifier — it is
 the anchor cell's — so the name is right and the warning is noise. Suppress or rename together
-with the Movies one.
+with the library one.

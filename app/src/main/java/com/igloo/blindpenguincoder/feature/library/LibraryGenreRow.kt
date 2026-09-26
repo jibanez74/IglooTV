@@ -1,4 +1,4 @@
-package com.igloo.blindpenguincoder.feature.movies
+package com.igloo.blindpenguincoder.feature.library
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -20,9 +20,7 @@ import androidx.compose.ui.platform.testTag
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooFilterChip
 import com.igloo.blindpenguincoder.core.ui.integerCountFormat
-import com.igloo.blindpenguincoder.core.ui.movieNoun
 import com.igloo.blindpenguincoder.core.ui.withRequester
-import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
 
 /**
  * The Genres tab's picker: one chip per genre, with counts (docs/design-system.md section
@@ -42,27 +40,28 @@ import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
  * first chip so the grid's `up` edge always resolves.
  */
 @Composable
-internal fun MoviesGenreRow(
-    genres: List<MovieGenreWithCount>,
-    selected: MoviesFilter.Genre?,
+internal fun LibraryGenreRow(
+    kind: LibraryKind,
+    genres: List<LibraryGenre>,
+    selected: LibraryFilter.Genre?,
     contentInset: PaddingValues,
     genreRowRequester: FocusRequester,
     navigationRequester: FocusRequester,
     tabRowRequester: FocusRequester,
     contentStartRequester: FocusRequester,
-    onSelectGenre: (MoviesFilter.Genre) -> Unit,
+    onSelectGenre: (LibraryFilter.Genre) -> Unit,
     onFocusChanged: (String, Boolean) -> Unit,
 ) {
     val direction = LocalLayoutDirection.current
-    val chips = remember(genres) {
+    val chips = remember(kind, genres) {
         genres.map { genre ->
-            val count = integerCountFormat.format(genre.movieCount)
-            MoviesGenreChipSpec(
-                genre = MoviesFilter.Genre(genre.genreId, genre.genreTag),
-                text = "${genre.genreTag} · $count",
-                semanticLabel = "${genre.genreTag}, $count ${movieNoun(genre.movieCount)}",
-                actionLabel = "Show ${genre.genreTag} movies",
-                testTag = "movies_genre_${genre.genreId}",
+            val count = integerCountFormat.format(genre.count)
+            GenreChipSpec(
+                genre = LibraryFilter.Genre(genre.id, genre.tag),
+                text = "${genre.tag} · $count",
+                semanticLabel = "${genre.tag}, $count ${kind.noun(genre.count)}",
+                actionLabel = "Show ${genre.tag} ${kind.plural}",
+                testTag = "${kind.tagPrefix}_genre_${genre.id}",
             )
         }
     }
@@ -82,7 +81,7 @@ internal fun MoviesGenreRow(
                 start = contentInset.calculateStartPadding(direction),
                 end = contentInset.calculateEndPadding(direction),
             )
-            .testTag("movies_genre_row"),
+            .testTag("${kind.tagPrefix}_genre_row"),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
         chips.forEachIndexed { index, chip ->
@@ -109,8 +108,8 @@ internal fun MoviesGenreRow(
     }
 }
 
-private data class MoviesGenreChipSpec(
-    val genre: MoviesFilter.Genre,
+private data class GenreChipSpec(
+    val genre: LibraryFilter.Genre,
     val text: String,
     val semanticLabel: String,
     val actionLabel: String,

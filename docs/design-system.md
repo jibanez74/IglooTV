@@ -703,7 +703,7 @@ grid cell passes `width = Dp.Unspecified` so it fills the cell it was already gi
 fixed `posterWidth` would leave ragged gutters.
 
 **Paged grids append; they do not repaginate.** A `LazyVerticalGrid` backed by a paged endpoint
-keys its real cells and its tail cells in one disjoint string space (`movie_$id` versus
+keys its real cells and its tail cells in one disjoint string space (`item_$id` versus
 `tail_skeleton_$i`), and the tail keys index *within the tail* so an append never renumbers them
 — stable keys are the whole reason focus stays on a card while a page lands underneath it. The
 prefetch trigger reads `LazyGridState.layoutInfo` **through `derivedStateOf`** and compares the
@@ -1346,9 +1346,11 @@ Only the first section on the pane holds the entry anchor — the hero when it i
 Continue Watching otherwise — so every rail below passes `entryRequester = null`. Vertical d-pad
 between rails resolves spatially in the scrolling column; only the hero hand-wires its `down`.
 
-### 11.4 Movies
+### 11.4 Movies and TV Shows
 
-- **Index** — a heading, the current view's count, **Sort (A–Z ⇄ Z–A)** and **Refresh**
+- **Index** — **one shared library pane serves Movies and TV Shows** (`feature/library`:
+  `LibraryScreen` over `LibraryViewModel`, fed by a `LibrarySource` per kind), described once
+  here in Movies terms; the TV Shows differences close the bullet. A heading, the current view's count, **Sort (A–Z ⇄ Z–A)** and **Refresh**
   actions, a **tab strip** (All Movies · Genres · Liked), the Genres tab's **genre picker** (one
   chip per genre, with counts), and a poster grid at `gridColumns`, **paged by infinite
   scroll**. The strip mirrors the web movies page's All Movies · Genres · Playlists, with Liked
@@ -1458,7 +1460,21 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   through its `clickable` branch, so disabling it would remove the node the user is standing on
   from the focus tree. A refresh that fails leaves the grid alone and reports in an
   `IglooNotice`, because the failure is over and Refresh is one press away.
-- **Detail** — full-bleed backdrop with a `background` gradient scrim, content pulled up over
+
+  **TV Shows differences.** The same pane, `LibraryKind.Shows`, over `/api/shows/library`,
+  `/api/shows/genres`, `/api/shows/genres/{id}/shows` and `/api/shows/stats` — the movie routes
+  with `name` for `title`, `premiere_year` for `year`, `show_count` and `total_shows`. The strip
+  has **two tabs, All Shows · Genres**: the backend keeps no likes for shows, so the source
+  offers no liked fetcher, the Liked tab is never drawn, and the silent reconcile path never
+  runs. Cards are the show's name over its premiere year with the TV glyph as fallback, and they
+  are **inert on press** until a show details screen exists — a focus target with no action and
+  no "Open" announcement, §10's actionless-anchor contract — so the pane has no return requester
+  and no `DetailsOrigin`. Every tag and phrase is the Movies one with the noun swapped:
+  `shows_tabs`, `shows_tab_all`, `shows_genre_{id}`, `shows_grid`, `show_card_{id}`,
+  "Refresh the TV show library", "Loading shows", "Showing 2 of 2 Comedy shows", "No shows found
+  in your library.", "Comedy, 2 shows". The host gives it `PaneBranch.TvShows`, its own hoisted
+  grid state and focus memory, and the same START-time refresh as Movies and Music.
+- **Detail** *(movies; a show has no details screen yet)* — full-bleed backdrop with a `background` gradient scrim, content pulled up over
   it. Poster left; title, tagline, metadata chips, genres, and hero actions right. Hero actions:
   **Play**, **Watched** toggle, **Like**, and the icon-only **More** trigger, which opens the
   anchored menu (§11.4.1): Playback Settings, Watch Together, Technical Details, and — admin
@@ -2301,6 +2317,24 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-09-26 — TV Shows: the library pane shared between Movies and TV Shows (§11.4, §8.3).**
+
+- **§11.4 is retitled "Movies and TV Shows."** The Movies pane moved whole into
+  `feature/library/` and became kind-parameterised: `LibraryViewModel` over a `LibrarySource`
+  (five suspend fetchers bound by `movieLibrarySource` / `showLibrarySource`; a null liked
+  fetcher is what removes the Liked tab), `LibraryScreen` and `LibraryGenreRow` over
+  `LibraryKind` (heading, nouns, "the movie library" / "the TV show library", tag prefixes, the
+  glyph), `LibraryUiState` / `LibraryTab` / `LibraryFilter` / `LibraryGenre` /
+  `LibraryContent` for `MoviesUiState` / `MoviesTab` / `MoviesFilter` / `MovieGenreWithCount` /
+  `MoviesContent`, `MoviePosterItem` → `PosterItem`. Every Movies tag and announcement is
+  byte-identical; the Movies view-model suite migrated by rename alone.
+- **TV Shows** is the second kind: All Shows · Genres, inert cards, `shows_*` tags, the show
+  routes; see the "TV Shows differences" paragraph. `PaneBranch.TvShows` in the host; the
+  placeholder-based shell tests moved to Photos.
+- **§8.3:** the grid's real cells key as `item_$id`. **Wire:** `MAX_LIBRARY_PER_PAGE` and the
+  paged-list query live in `data/api/PagedListQuery.kt`, shared by `MovieApi` and `ShowApi`, with
+  the comment corrected — the backend clamps a larger `per_page`, it does not reject it.
 
 **2026-09-19 — The Music screen: three tabs, the three-action row, the musician page, and a
 queue-shaped player (§11.5, §11.5.1, §11.5.2, §11.8.2, §9.1, §8.2).**

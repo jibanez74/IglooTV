@@ -16,6 +16,7 @@ import com.igloo.blindpenguincoder.core.storage.StoredProfile
 import com.igloo.blindpenguincoder.data.api.AuthApi
 import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.api.MusicApi
+import com.igloo.blindpenguincoder.data.api.ShowApi
 import com.igloo.blindpenguincoder.data.api.UserApi
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -67,6 +68,8 @@ class TestHttp(
     val movieRepository = MovieRepository(movieApi)
     val musicApi = MusicApi(client, serverUrl)
     val musicRepository = MusicRepository(musicApi)
+    val showApi = ShowApi(client, serverUrl)
+    val showRepository = ShowRepository(showApi)
 
     /** Puts profiles in the vault without going through a sign-in. */
     fun seedVault(
@@ -190,6 +193,42 @@ fun movieGenreWithCountJson(
 
 fun moviesGenresJson(vararg genres: String): String =
     """{"error":false,"message":"movie genres","data":{"genres":[${genres.joinToString(",")}]}}"""
+
+/** One `GET /shows/library` list entry: the show's name and premiere year plus a certification. */
+fun showLibraryItemJson(
+    id: Long = 40,
+    name: String = "Severance",
+    posterPath: String? = "/severance.jpg",
+    premiereYear: Long? = 2022,
+    certification: String? = "TV-MA",
+): String = """{"id":$id,"name":"$name","poster_path":${sqlNullStringJson(posterPath)},""" +
+    """"premiere_year":${sqlNullInt64Json(premiereYear)},""" +
+    """"certification":${sqlNullStringJson(certification)}}"""
+
+/** A `GET /shows/library` page: the movie page's shape under a `shows` key. */
+fun showsLibraryJson(
+    page: Long = 1,
+    perPage: Long = 48,
+    total: Long = 1,
+    totalPages: Long = 1,
+    sort: String = "asc",
+    vararg shows: String,
+): String = """{"error":false,"message":"shows library","data":{""" +
+    """"shows":[${shows.joinToString(",")}],"total":$total,"page":$page,""" +
+    """"per_page":$perPage,"total_pages":$totalPages,"sort":"$sort"}}"""
+
+fun showsStatsJson(totalShows: Long = 1): String =
+    """{"error":false,"message":"show stats","data":{"total_shows":$totalShows}}"""
+
+/** One `GET /shows/genres` list entry. */
+fun showGenreWithCountJson(
+    id: Long = 7,
+    tag: String = "Comedy",
+    showCount: Long = 2,
+): String = """{"genre_id":$id,"genre_tag":"$tag","show_count":$showCount}"""
+
+fun showsGenresJson(vararg genres: String): String =
+    """{"error":false,"message":"show genres","data":{"genres":[${genres.joinToString(",")}]}}"""
 
 /** One `GET /continue-watching` movie entry: the latest-movie shape plus a kind and progress. */
 fun continueWatchingMovieJson(

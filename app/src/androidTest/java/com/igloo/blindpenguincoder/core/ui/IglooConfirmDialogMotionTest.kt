@@ -37,7 +37,7 @@ import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
-import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
+import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.testHomeMovies
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -62,8 +62,8 @@ class IglooConfirmDialogMotionTest {
     // sampled left sliver above the poster's bottom edge on the muted placeholder fill.
     private val continueMovies = (
         testHomeMovies + listOf(
-            MoviePosterItem(id = 4, title = "Solaris", year = 1972, posterUrl = null),
-            MoviePosterItem(id = 5, title = "Alien", year = 1979, posterUrl = null),
+            PosterItem(id = 4, title = "Solaris", year = 1972, posterUrl = null),
+            PosterItem(id = 5, title = "Alien", year = 1979, posterUrl = null),
         )
         ).map {
             HomeContinueMovie(

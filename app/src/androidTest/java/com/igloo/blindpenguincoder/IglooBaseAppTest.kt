@@ -27,6 +27,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -146,12 +147,17 @@ class IglooBaseAppTest {
         composeRule.onNodeWithContentDescription("Music").performClick()
         composeRule.onNodeWithTag("music_tabs").assertIsDisplayed()
 
+        // TV Shows shares the library grid with Movies, under its own tag.
+        composeRule.onNodeWithContentDescription("TV Shows").performClick()
+        composeRule.onNodeWithTag("shows_grid").assertIsDisplayed()
+
         // A destination with no screen yet still swaps the pane. The placeholder is one cleared
         // node (section 10's inert-anchor contract), so it is identified by what it announces
-        // rather than by a loose text node inside it.
-        composeRule.onNodeWithContentDescription("TV Shows").performClick()
+        // rather than by a loose text node inside it. Photos sits past the fold of the rail's
+        // scrolling column at 540dp, so it is brought into view the way d-pad focus would.
+        composeRule.onNodeWithContentDescription("Photos").performScrollTo().performClick()
         composeRule.onNodeWithContentDescription(
-            "TV Shows. ${IglooDestination.TvShows.supportingText}",
+            "Photos. ${IglooDestination.Photos.supportingText}",
         ).assertIsDisplayed()
     }
 

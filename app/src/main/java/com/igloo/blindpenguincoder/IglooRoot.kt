@@ -42,8 +42,9 @@ import com.igloo.blindpenguincoder.feature.home.IglooApp
 import com.igloo.blindpenguincoder.feature.home.SignOutViewModel
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
-import com.igloo.blindpenguincoder.feature.movies.MoviesActions
-import com.igloo.blindpenguincoder.feature.movies.MoviesViewModel
+import com.igloo.blindpenguincoder.feature.library.LibraryViewModel
+import com.igloo.blindpenguincoder.feature.library.actions
+import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.MusicActions
@@ -51,6 +52,7 @@ import com.igloo.blindpenguincoder.feature.music.MusicViewModel
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.TrackLikesViewModel
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
+import com.igloo.blindpenguincoder.feature.shows.showLibrarySource
 import com.igloo.blindpenguincoder.playback.media3.MoviePlaybackServices
 import com.igloo.blindpenguincoder.playback.media3.deviceCanPlayAudioMime
 import com.igloo.blindpenguincoder.playback.media3.exoMoviePlayerEngine
@@ -201,8 +203,18 @@ fun IglooRoot(container: IglooAppContainer) {
                         viewModelStoreOwner = authenticatedSessionOwner,
                         key = "movies",
                     ) {
-                        MoviesViewModel(
-                            container.movieRepository,
+                        LibraryViewModel(
+                            movieLibrarySource(container.movieRepository),
+                            container.serverUrlProvider,
+                        )
+                    }
+                    // The same pane over the show routes; session-scoped for the same reason.
+                    val showsViewModel = viewModel(
+                        viewModelStoreOwner = authenticatedSessionOwner,
+                        key = "shows",
+                    ) {
+                        LibraryViewModel(
+                            showLibrarySource(container.showRepository),
                             container.serverUrlProvider,
                         )
                     }
@@ -292,6 +304,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         musicianDetailsViewModel,
                         trackLikesViewModel,
                         moviesViewModel,
+                        showsViewModel,
                         musicViewModel,
                     ) {
                         scope.launch { sessionManager.revalidateActive() }
@@ -304,23 +317,15 @@ fun IglooRoot(container: IglooAppContainer) {
                         // Re-reads the count and, only if the grid has nothing yet, page one: a
                         // TV woken from standby must keep the pages the user scrolled through.
                         moviesViewModel.refresh()
+                        showsViewModel.refresh()
                         musicViewModel.refresh()
                         onStopOrDispose { }
                     }
                     val home by homeViewModel.uiState.collectAsStateWithLifecycle()
                     val movies by moviesViewModel.uiState.collectAsStateWithLifecycle()
-                    val moviesActions = remember(moviesViewModel) {
-                        MoviesActions(
-                            onRefresh = moviesViewModel::reload,
-                            onRetryFirstPage = moviesViewModel::retryFirstPage,
-                            onRetryAppend = moviesViewModel::retryAppend,
-                            onLoadMore = moviesViewModel::loadMore,
-                            onSelectTab = moviesViewModel::selectTab,
-                            onPressTab = moviesViewModel::pressTab,
-                            onSelectGenre = moviesViewModel::selectGenre,
-                            onToggleSort = moviesViewModel::toggleSort,
-                        )
-                    }
+                    val moviesActions = remember(moviesViewModel) { moviesViewModel.actions() }
+                    val shows by showsViewModel.uiState.collectAsStateWithLifecycle()
+                    val showsActions = remember(showsViewModel) { showsViewModel.actions() }
                     val music by musicViewModel.uiState.collectAsStateWithLifecycle()
                     val musicActions = remember(musicViewModel, trackLikesViewModel) {
                         MusicActions(
@@ -355,6 +360,8 @@ fun IglooRoot(container: IglooAppContainer) {
                         home = home,
                         movies = movies,
                         moviesActions = moviesActions,
+                        shows = shows,
+                        showsActions = showsActions,
                         music = music,
                         musicActions = musicActions,
                         details = if (theaterOpen) theaterDetails else libraryDetails,

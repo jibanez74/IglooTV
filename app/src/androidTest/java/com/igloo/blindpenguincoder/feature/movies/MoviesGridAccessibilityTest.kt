@@ -27,6 +27,9 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.feature.library.LibraryFilter
+import com.igloo.blindpenguincoder.feature.library.LibraryTab
+import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.testMovieGridItems
 import com.igloo.blindpenguincoder.testMoviesState
 import org.junit.Rule
@@ -50,7 +53,7 @@ class MoviesGridAccessibilityTest {
     private var moviesState by mutableStateOf(testMoviesState())
     private var columns = 0
 
-    private fun setContent(initial: MoviesUiState = testMoviesState()) {
+    private fun setContent(initial: LibraryUiState = testMoviesState()) {
         moviesState = initial
         composeRule.setContent {
             IglooTheme {
@@ -231,8 +234,8 @@ class MoviesGridAccessibilityTest {
     fun eachGenreChipAnnouncesItsNameCountAndSelection() {
         setContent(
             testMoviesState(
-                tab = MoviesTab.Genres,
-                genre = MoviesFilter.Genre(id = 7, tag = "Action"),
+                tab = LibraryTab.Genres,
+                genre = LibraryFilter.Genre(id = 7, tag = "Action"),
             ),
         )
 
@@ -251,7 +254,7 @@ class MoviesGridAccessibilityTest {
 
     @Test
     fun theGenresTabWithoutGenresAnnouncesThePlaceholder() {
-        setContent(testMoviesState(tab = MoviesTab.Genres, genre = null, genres = emptyList()))
+        setContent(testMoviesState(tab = LibraryTab.Genres, genre = null, genres = emptyList()))
 
         composeRule.onNodeWithContentDescription(
             "Genres aren't available right now. Refresh to try again.",
@@ -265,7 +268,7 @@ class MoviesGridAccessibilityTest {
     fun theGenresTabWaitingOnItsListAnnouncesTheWait() {
         setContent(
             testMoviesState(
-                tab = MoviesTab.Genres,
+                tab = LibraryTab.Genres,
                 genre = null,
                 genres = emptyList(),
                 genresLoaded = false,
@@ -282,8 +285,8 @@ class MoviesGridAccessibilityTest {
     fun theCountSpeaksTheSelectedGenre() {
         setContent(
             testMoviesState(
-                tab = MoviesTab.Genres,
-                genre = MoviesFilter.Genre(id = 7, tag = "Action"),
+                tab = LibraryTab.Genres,
+                genre = LibraryFilter.Genre(id = 7, tag = "Action"),
                 grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
                 totalMovies = 26,
             ),
@@ -322,7 +325,7 @@ class MoviesGridAccessibilityTest {
     fun theCountSpeaksTheActiveFilter() {
         setContent(
             testMoviesState(
-                tab = MoviesTab.Liked,
+                tab = LibraryTab.Liked,
                 grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
                 totalMovies = 3,
             ),
@@ -336,7 +339,7 @@ class MoviesGridAccessibilityTest {
     fun anEmptyLikedViewAnnouncesItself() {
         setContent(
             testMoviesState(
-                tab = MoviesTab.Liked,
+                tab = LibraryTab.Liked,
                 grid = IglooRailState.Loaded(emptyList()),
             ),
         )
@@ -350,8 +353,8 @@ class MoviesGridAccessibilityTest {
     fun anEmptyGenreViewAnnouncesItself() {
         setContent(
             testMoviesState(
-                tab = MoviesTab.Genres,
-                genre = MoviesFilter.Genre(id = 7, tag = "Action"),
+                tab = LibraryTab.Genres,
+                genre = LibraryFilter.Genre(id = 7, tag = "Action"),
                 grid = IglooRailState.Loaded(emptyList()),
             ),
         )

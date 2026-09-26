@@ -24,12 +24,12 @@ class MovieApi(
         client.get("${serverUrl.require().apiBaseUrl}/movies/latest")
 
     /**
-     * One page of the browsable library, title-ordered server-side. [perPage] is capped at
+     * One page of the browsable library, title-ordered server-side. [perPage] is clamped at
      * [MAX_LIBRARY_PER_PAGE] by the backend; [sort] is only a direction — the endpoint offers
      * no sort-field choice.
      */
     suspend fun moviesLibrary(page: Long, perPage: Long, sort: SortOrder): HttpResponse =
-        pagedMovieList("${serverUrl.require().apiBaseUrl}/movies/library", page, perPage, sort)
+        client.pagedList("${serverUrl.require().apiBaseUrl}/movies/library", page, perPage, sort)
 
     /** All movie genres with per-genre counts, tag-ordered server-side. */
     suspend fun movieGenres(): HttpResponse =
@@ -37,7 +37,7 @@ class MovieApi(
 
     /** One page of one genre's movies; same paging contract as [moviesLibrary]. */
     suspend fun genreMovies(genreId: Long, page: Long, perPage: Long, sort: SortOrder): HttpResponse =
-        pagedMovieList(
+        client.pagedList(
             "${serverUrl.require().apiBaseUrl}/movies/genres/$genreId/movies",
             page,
             perPage,
@@ -46,20 +46,7 @@ class MovieApi(
 
     /** One page of the current user's liked movies; same paging contract as [moviesLibrary]. */
     suspend fun likedMovies(page: Long, perPage: Long, sort: SortOrder): HttpResponse =
-        pagedMovieList("${serverUrl.require().apiBaseUrl}/movies/liked", page, perPage, sort)
-
-    /** Every paged movie list speaks the same query dialect; spell it once. */
-    private suspend fun pagedMovieList(
-        url: String,
-        page: Long,
-        perPage: Long,
-        sort: SortOrder,
-    ): HttpResponse =
-        client.get(url) {
-            parameter("page", page)
-            parameter("per_page", perPage)
-            parameter("sort", sort.wireName)
-        }
+        client.pagedList("${serverUrl.require().apiBaseUrl}/movies/liked", page, perPage, sort)
 
     /** Library-wide counts; today just the total number of movies. */
     suspend fun movieStats(): HttpResponse =
@@ -161,10 +148,7 @@ class MovieApi(
     suspend fun toggleMovieLike(id: Long): HttpResponse =
         client.post("${serverUrl.require().apiBaseUrl}/movies/$id/like")
 
-    companion object {
-        /** The backend rejects a larger `per_page` on every paged movie endpoint. */
-        const val MAX_LIBRARY_PER_PAGE = 48L
-
-        private const val HLS_MANIFEST_TIMEOUT_MS = 45_000L
+    private companion object {
+        const val HLS_MANIFEST_TIMEOUT_MS = 45_000L
     }
 }

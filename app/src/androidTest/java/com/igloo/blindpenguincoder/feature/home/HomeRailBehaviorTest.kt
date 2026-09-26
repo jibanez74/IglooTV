@@ -31,7 +31,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.feature.shared.MoviePosterItem
+import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHomeMovies
@@ -63,7 +63,7 @@ class HomeRailBehaviorTest {
     private var continueState by
         mutableStateOf<IglooRailState<HomeContinueMovie>>(IglooRailState.Loading)
     private var latestState by
-        mutableStateOf<IglooRailState<MoviePosterItem>>(IglooRailState.Loading)
+        mutableStateOf<IglooRailState<PosterItem>>(IglooRailState.Loading)
     private var albumsState by mutableStateOf<IglooRailState<HomeAlbum>>(IglooRailState.Loading)
     private var theatersState by
         mutableStateOf<IglooRailState<HomeTheaterMovie>>(IglooRailState.Loading)
@@ -79,7 +79,7 @@ class HomeRailBehaviorTest {
 
     private fun setShellContent(
         initialContinue: IglooRailState<HomeContinueMovie>,
-        initialLatest: IglooRailState<MoviePosterItem> = IglooRailState.Loaded(movies),
+        initialLatest: IglooRailState<PosterItem> = IglooRailState.Loaded(movies),
         initialAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loaded(albums),
         initialTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loaded(theaterMovies),
         onMovieSelected: ((Long) -> Unit)? = { opened += it },

@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Dp
@@ -90,12 +91,19 @@ class NavigationRailBehaviorTest {
     /**
      * The content anchor on a destination that has no screen yet. The placeholder is one cleared
      * node — the same contract as the hero and an inert poster card — so it is addressed by the
-     * description it announces, not by the text inside it. TV Shows rather than Movies: Movies
-     * renders a real grid now, and this suite's subject is the shell, not a library screen.
+     * description it announces, not by the text inside it. Photos rather than Movies or TV
+     * Shows: both render a real grid now, and this suite's subject is the shell, not a library
+     * screen. Its rail row sits past the fold of the rail's scrolling column at 540dp, so
+     * [openPhotos] brings it into view the way d-pad focus would before pressing it.
      */
     private fun placeholderStartCard() = composeRule.onNodeWithContentDescription(
-        "TV Shows. TV show browsing will use the same remote-first shell.",
+        "Photos. Photo support is reserved for a later Igloo backend feature.",
     )
+
+    private fun openPhotos() {
+        composeRule.onNodeWithContentDescription("Photos").performScrollTo().performClick()
+        composeRule.waitForIdle()
+    }
 
     private fun rail() = composeRule.onNodeWithTag("navigation_rail")
 
@@ -129,12 +137,12 @@ class NavigationRailBehaviorTest {
     fun backFromContentOpensRailOnCurrentDestination() {
         setShellContent()
 
-        composeRule.onNodeWithContentDescription("TV Shows").performClick()
+        openPhotos()
         placeholderStartCard().assertIsFocused()
 
         pressBack()
 
-        composeRule.onNodeWithContentDescription("TV Shows").assertIsFocused()
+        composeRule.onNodeWithContentDescription("Photos").assertIsFocused()
         rail().assertWidthIsEqualTo(expandedWidth)
     }
 
