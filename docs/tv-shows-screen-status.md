@@ -87,8 +87,11 @@ exactly as Movies and Music do.
 - **Show details, seasons and episodes** — the next pass. Until it lands the cards stay inert
   and the pane has no return requester; when it lands, the host gains a `DetailsOrigin` for the
   shows grid the way Movies has one, and the card gets its `onItemSelected`.
-- **Episodes in Continue Watching** — Home still drops `kind: episode` entries
-  (`MovieRepository.continueWatchingMovies`) until an episode has somewhere to open.
+- **Up next after an episode** — Continue Watching now renders `kind: episode` entries and a
+  press resumes the episode in the player (`HomeViewModel.resumeEpisode`, over the shared
+  `VideoPlaybackRepository` routes under `/shows/episodes/{id}`); when the episode ends the
+  player closes back to Home, as for a movie. The web's up-next countdown and hand-off to
+  `next_episode` are the next pass.
 - **Likes for shows** — the backend has none; if it grows them, the source gains a liked
   fetcher and the strip its third tab with no screen change.
 - **Search** — unchanged; `GET /search/shows` is not wired.

@@ -2,8 +2,9 @@ package com.igloo.blindpenguincoder.playback.progress
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
-import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
+import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
+import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,25 +41,28 @@ class ProgressReporterTest {
     // --- ProgressReporter ---
 
     private class RecordingSave(
-        var result: (Long) -> ApiResult<MovieWatchProgressUpdateData> = {
-            ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+        var result: (PlaybackMediaRef) -> ApiResult<WatchProgressUpdateData> = {
+            ApiResult.Success(WatchProgressUpdateData(watched = false))
         },
     ) {
-        val requests = mutableListOf<UpdateMovieWatchProgressRequest>()
+        val requests = mutableListOf<UpdateWatchProgressRequest>()
+
+        val media = mutableListOf<PlaybackMediaRef>()
 
         suspend fun save(
-            movieId: Long,
-            request: UpdateMovieWatchProgressRequest,
-        ): ApiResult<MovieWatchProgressUpdateData> {
+            media: PlaybackMediaRef,
+            request: UpdateWatchProgressRequest,
+        ): ApiResult<WatchProgressUpdateData> {
+            this.media += media
             requests += request
-            return result(movieId)
+            return result(media)
         }
     }
 
     @Test
     fun `one session id spans every save and the sequence strictly increases`() = runTest {
         val recorder = RecordingSave()
-        val reporter = ProgressReporter(movieId = 7, save = recorder::save)
+        val reporter = ProgressReporter(media = PlaybackMediaRef.Movie(7), save = recorder::save)
 
         reporter.saveNow(45.0, 600.0)
         reporter.saveNow(60.0, 600.0)
@@ -72,10 +76,10 @@ class ProgressReporterTest {
     @Test
     fun `a retry of the same position still takes a fresh sequence`() = runTest {
         val recorder = RecordingSave(result = { ApiResult.Failure(AppError.Network) })
-        val reporter = ProgressReporter(movieId = 7, save = recorder::save)
+        val reporter = ProgressReporter(media = PlaybackMediaRef.Movie(7), save = recorder::save)
 
         assertTrue(reporter.saveNow(45.0, 600.0) is ApiResult.Failure)
-        recorder.result = { ApiResult.Success(MovieWatchProgressUpdateData(watched = false)) }
+        recorder.result = { ApiResult.Success(WatchProgressUpdateData(watched = false)) }
         assertEquals(
             false,
             (reporter.saveNow(45.0, 600.0) as ApiResult.Success).value.watched,
@@ -87,17 +91,17 @@ class ProgressReporterTest {
 
     @Test
     fun `two sessions never share an id`() {
-        val first = ProgressReporter(movieId = 7, save = { _, _ -> ApiResult.Failure(AppError.Network) })
-        val second = ProgressReporter(movieId = 7, save = { _, _ -> ApiResult.Failure(AppError.Network) })
+        val first = ProgressReporter(media = PlaybackMediaRef.Movie(7), save = { _, _ -> ApiResult.Failure(AppError.Network) })
+        val second = ProgressReporter(media = PlaybackMediaRef.Movie(7), save = { _, _ -> ApiResult.Failure(AppError.Network) })
         assertFalse(first.sessionId == second.sessionId)
     }
 
     @Test
     fun `the server's watched verdict is surfaced`() = runTest {
         val recorder = RecordingSave(result = {
-            ApiResult.Success(MovieWatchProgressUpdateData(watched = true))
+            ApiResult.Success(WatchProgressUpdateData(watched = true))
         })
-        val reporter = ProgressReporter(movieId = 7, save = recorder::save)
+        val reporter = ProgressReporter(media = PlaybackMediaRef.Movie(7), save = recorder::save)
         assertEquals(
             true,
             (reporter.saveNow(590.0, 600.0) as ApiResult.Success).value.watched,
@@ -107,7 +111,7 @@ class ProgressReporterTest {
     @Test
     fun `positions clamp into the file and a zero duration refuses to send`() = runTest {
         val recorder = RecordingSave()
-        val reporter = ProgressReporter(movieId = 7, save = recorder::save)
+        val reporter = ProgressReporter(media = PlaybackMediaRef.Movie(7), save = recorder::save)
 
         assertTrue(reporter.saveNow(100.0, 0.0) is ApiResult.Failure)
         assertTrue(recorder.requests.isEmpty())

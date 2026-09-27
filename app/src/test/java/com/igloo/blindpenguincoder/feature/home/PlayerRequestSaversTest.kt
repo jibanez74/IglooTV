@@ -9,6 +9,7 @@ import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -33,7 +34,7 @@ class PlayerRequestSaversTest {
     )
 
     private val movie = MoviePlayRequest(
-        movieId = 7,
+        media = PlaybackMediaRef.Movie(7),
         title = "Arrival",
         posterUrl = null,
         mimeType = "video/x-matroska",
@@ -112,6 +113,20 @@ class PlayerRequestSaversTest {
     @Test
     fun `a movie survives a round trip whole`() {
         assertEquals(movie, roundTrip(MoviePlayRequestSaver, movie))
+    }
+
+    @Test
+    fun `an episode survives a round trip whole`() {
+        val episode = movie.copy(media = PlaybackMediaRef.Episode(900), title = "Severance · S1 E3 · In Perpetuity")
+        assertEquals(episode, roundTrip(MoviePlayRequestSaver, episode))
+    }
+
+    /** An older build wrote the movie id as a bare number; it must not crash the relaunch. */
+    @Test
+    fun `a bare movie id from an older build restores as no overlay instead of throwing`() {
+        val saved = with(MoviePlayRequestSaver) { scope.save(movie) }!!.toMutableList()
+        saved[0] = "7"
+        assertNull(MoviePlayRequestSaver.restore(saved))
     }
 
     @Test

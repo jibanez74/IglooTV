@@ -747,7 +747,7 @@ until 2026-08-19.
 | `IglooFilterChip` | One choice in a row of mutually exclusive filters (the Movies index's genre picker, §11.4): `heightIn(min = sizes.controlHeight)`, radius `lg`, `spacing.md` horizontal padding, `bodyMedium` label. Selection and focus compose rather than compete — selected is a `primary` fill that holds while unfocused, focus is the §6.1 ring/scale/glow over whatever fill the chip has; unselected rests as the ring's hairline border and takes the Ghost focus fill. Not an `IglooButton` variant: a selected-state fill on an unfocused node is outside the button contract. Built on the internal `SelectablePill`, which carries that body for both pills. One cleared node: `semanticLabel` replaces the drawn text ("Action · 26" speaks as "Action, 26 movies"), the selected chip announces "Selected" via state description, and `actionLabel` names the press. |
 | `IglooTabRow` / `IglooTab` | A strip of mutually exclusive sections (the Movies index, §11.4) — the web client's tab list. The row is one bordered pill on `muted @ 0.50` with a `border @ 0.50` hairline at `focus.restWidth`, radius `lg`, `spacing.xs` padding and gap, sized to its content and never scrolling (more tabs than fit the panel is too many tabs). A tab is `controlHeight` minus the row's padding, radius `md`, `spacing.md` horizontal padding, `bodyMedium` label: `primary` fill / `primaryForeground` selected, `card @ 0.72` / `foreground` focused, transparent / `mutedForeground` at rest — selection and focus compose as on the chip, but **no focus scale**, since a lifted tab would overlap the row's border. Shares `IglooFilterChip`'s `SelectablePill` body; the five differences (radius, focus scale, height inset, resting label colour, semantics) are its parameters. **Selects on focus**: d-pad landing on a tab is the switch, the Android TV convention. `onPress` is the separate, deliberate signal — TalkBack's click action, and the way back after a failed switch reverted the selection out from under a focused tab — and defaults to `onSelect` for a caller that does not need to tell them apart; the Movies screen does, because the landing is debounced and a press must not wait behind it. The focused-but-unselected treatment exists for exactly that revert window and nowhere else. One cleared node with `Role.Tab`, `selected` set only when true (never false — TalkBack would say "not selected" on every other tab) and `actionLabel` on the press; the row is a `selectableGroup`. Hand-rolled on Foundation, not `androidx.tv.material3.TabRow` (§9.2), and the ground is written out rather than taken from `iglooSurface`, whose `clip` would cut the focused tab's glow at the row's bounds. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
-| `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, compact `formatRemainingTime` ("2h 20m left"), spoken `formatSpokenRemainingTime` ("2 hours and 20 minutes remaining"), `formatTimecode` ("1:01:15"), sparse `formatSpokenTime` ("1 hour and 15 seconds"), and exact `formatSpokenTimeThroughSeconds` ("1 hour, 0 minutes, and 15 seconds"). Both remaining-time forms clamp overshoot and round partial minutes up; they use "Less than 1m left" / "Less than 1 minute remaining" below one minute and defensively fall back to "In progress" for an invalid duration. The exact resume form floors to the last completed second and includes every unit from the largest relevant one through seconds, never a leading zero hour. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
+| `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, compact `formatRemainingTime` ("2h 20m left"), spoken `formatSpokenRemainingTime` ("2 hours and 20 minutes remaining"), `formatTimecode` ("1:01:15"), sparse `formatSpokenTime` ("1 hour and 15 seconds"), and exact `formatSpokenTimeThroughSeconds` ("1 hour, 0 minutes, and 15 seconds"). `formatEpisodeCode` ("S1 E3") names an episode the way the web client does. Both remaining-time forms clamp overshoot and round partial minutes up; they use "Less than 1m left" / "Less than 1 minute remaining" below one minute and defensively fall back to "In progress" for an invalid duration. The exact resume form floors to the last completed second and includes every unit from the largest relevant one through seconds, never a leading zero hour. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
 | `IglooNotice` | One announced line — `bodyMedium` / `mutedForeground`, `liveRegion = Polite`. For a message the user did not ask for and cannot act on: what a gate says after an action that already happened (§10, §11.1.1). Not an error card; no Retry. |
@@ -1315,7 +1315,7 @@ rails fail, retry, and refresh independently (§12's polite live regions depend 
 
 | Rail | Endpoint | Card | Empty copy |
 |---|---|---|---|
-| Continue Watching | `GET /api/continue-watching` (movies and TV episodes; the client keeps only `kind: movie` until an episode has somewhere to open) | poster + progress bar; fully spoken remaining time in card semantics only | "Nothing in progress yet. Movies you start watching appear here." |
+| Continue Watching | `GET /api/continue-watching` (movies and TV episodes, in server order) | poster + progress bar; fully spoken remaining time in card semantics only. A movie card opens its details; an episode card wears the **show's** poster (`TvShows` glyph fallback) with the show name over `S1 E3 · Episode name`, announces "Resume {show} S1 E3", and resumes straight into the player — there is no show details screen yet. The rail's `Long` key folds the kind into the low bit (`id * 2`, `id * 2 + 1`) because a movie id and an episode id can collide. | "Nothing in progress yet. Movies and episodes you start watching appear here." |
 | Recently Added Movies | `GET /api/movies/latest` | poster, year below | "No movies in your library yet. Add a movies folder on the server and run a scan." |
 | Recently Added Albums | `GET /api/music/albums/latest` | `albumAspect` cover, musician below, `Music` glyph fallback | "No albums in your library yet. Add a music folder on the server and run a scan." |
 | Now Playing in Theaters | `GET /api/tmdb/movies/in-theaters` | 2:3 poster, title + year over a bottom scrim, rating badge top-right (§3.2) | "No movies are playing in theaters right now. Check back later." |
@@ -2051,7 +2051,9 @@ near the end and leaving seconds later still marks the movie watched, and so doe
 end and leaving. A pause and the background stop that follows it write once, not twice. The exit
 write is never cancelled by the client, so backing out of the app right after the player cannot
 lose the end of a movie. Save failures never pause playback. They hold the chrome open with a polite,
-D-pad-reachable inline Retry and follow the user back to movie details if exit finishes first.
+D-pad-reachable inline Retry and follow the user back to movie details if exit finishes first —
+or, for an episode resumed from Continue Watching, to Home's notice slot, since no details page
+sits under that launch.
 Retry keeps the original save session id and takes a higher sequence. A retry or later cadence
 success clears the error, safely restores focus if Retry held it, and refreshes movie details and
 Continue Watching.
@@ -2318,6 +2320,24 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-09-26 — Continue Watching: episodes, resumed straight into the player (§11.3.2, §11.8).**
+
+- The rail renders `kind: episode` entries: the show's poster (`TvShows` glyph fallback), the
+  show name over `S1 E3 · Episode name`, the progress bar, a "Resume {show} S1 E3" action. A
+  press prepares the episode on Home (`HomeViewModel.resumeEpisode`: header, technical details,
+  saved position, the capability gate — a refused Direct default falls back to Remux, since Home
+  has no Playback Settings) and opens the player over the pane, Back restoring focus to the card.
+  New empty copy. `HomeContinueItem` (Movie / Episode) with the low-bit rail key.
+- **The player is media-agnostic.** `PlaybackMediaRef` (Movie / Episode) replaces `movieId` in the
+  request, the HLS spec and controller, the progress reporter and the media session (which types
+  an episode `MEDIA_TYPE_TV_SHOW`). The stream, HLS, subtitle and progress-write routes moved
+  from `MovieApi` / `MovieRepository` into `VideoPlaybackApi` / `VideoPlaybackRepository`, which
+  choose `/movies/{id}` or `/shows/episodes/{id}`. `WatchProgress`, `UpdateWatchProgressRequest`
+  and `WatchProgressUpdateData` take the contract's shared names; the stream rows drop `movie_id`
+  (an episode's carry `file_id`). `ShowRepository` gains the three episode reads.
+- A failed exit save after a Home launch surfaces on Home's notice slot (§11.8), where there is no
+  details page to follow the user back to.
 
 **2026-09-26 — TV Shows: the library pane shared between Movies and TV Shows (§11.4, §8.3).**
 

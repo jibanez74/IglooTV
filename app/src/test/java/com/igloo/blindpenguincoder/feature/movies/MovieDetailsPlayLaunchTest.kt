@@ -8,6 +8,7 @@ import com.igloo.blindpenguincoder.data.repository.likeStatusJson
 import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
 import com.igloo.blindpenguincoder.data.repository.technicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.watchProgressJson
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
@@ -109,7 +110,7 @@ class MovieDetailsPlayLaunchTest {
 
         val request = viewModel.requestAndAwaitLaunch()
 
-        assertEquals(1L, request.movieId)
+        assertEquals(PlaybackMediaRef.Movie(1), request.media)
         assertEquals("Heat", request.title)
         assertEquals("video/x-matroska", request.mimeType)
         assertEquals(PlaybackMode.Direct, request.mode)

@@ -24,7 +24,6 @@ class PlaybackSettingsMappingTest {
         codec: String = "dts",
     ) = AudioStream(
         id = id,
-        movieId = 1,
         streamIndex = streamIndex,
         codec = codec,
         bitRate = 0,
@@ -45,7 +44,6 @@ class PlaybackSettingsMappingTest {
         isDefault: Boolean = false,
     ) = Subtitle(
         id = id,
-        movieId = 1,
         streamIndex = streamIndex,
         codec = codec,
         language = sqlString(language),

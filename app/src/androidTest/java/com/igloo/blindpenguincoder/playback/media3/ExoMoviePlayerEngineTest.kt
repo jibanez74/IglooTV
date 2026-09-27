@@ -19,6 +19,7 @@ import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,15 +73,15 @@ class ExoMoviePlayerEngineTest {
             return suspendedResult?.await() ?: result
         }
 
-        override suspend fun stopHlsSession(movieId: Long, sessionUuid: String) {
+        override suspend fun stopHlsSession(media: PlaybackMediaRef, sessionUuid: String) {
             stopped += sessionUuid
         }
 
         override fun hlsPlaylistUrl(spec: HlsSessionSpec): String =
-            "https://203.0.113.1/movies/${spec.movieId}/hls/${spec.profileId}/playlist.m3u8"
+            "https://203.0.113.1/movies/${spec.media.id}/hls/${spec.profileId}/playlist.m3u8"
 
-        override fun movieSubtitleUrl(movieId: Long, trackIndex: Int, startSec: Double): String =
-            "https://203.0.113.1/movies/$movieId/subtitles/$trackIndex/web.vtt"
+        override fun subtitleUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String =
+            "https://203.0.113.1/movies/${media.id}/subtitles/$trackIndex/web.vtt"
     }
 
     private fun playRequest(
@@ -92,7 +93,7 @@ class ExoMoviePlayerEngineTest {
         subtitleTypeIndex: Int? = null,
         subtitleTracks: List<PlayableSubtitleTrack> = listOf(PlayableSubtitleTrack(label = "English")),
     ) = MoviePlayRequest(
-        movieId = 7,
+        media = PlaybackMediaRef.Movie(7),
         title = "Heat",
         posterUrl = null,
         mimeType = "video/x-matroska",
@@ -118,7 +119,7 @@ class ExoMoviePlayerEngineTest {
                 services = MoviePlaybackServices(
                     progressiveDataSourceFactory = DefaultHttpDataSource.Factory(),
                     hlsDataSourceFactory = DefaultHttpDataSource.Factory(),
-                    directStreamUrl = { "https://203.0.113.1/movies/$it/stream" },
+                    directStreamUrl = { "https://203.0.113.1/movies/${it.id}/stream" },
                     hlsSessionApi = api,
                     canPlayAudioMime = canPlayAudioMime,
                     stopScope = stopScope,

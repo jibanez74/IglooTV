@@ -39,4 +39,16 @@ class ShowApi(
     /** Library-wide counts; today just the total number of shows. */
     suspend fun showStats(): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/shows/stats")
+
+    /** The episode player's header: the episode, its season and show, and what follows it. */
+    suspend fun episodePlayback(id: Long): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/shows/episodes/$id")
+
+    /** Probed streams, subtitles, and chapters for one episode file. */
+    suspend fun episodeTechnicalDetails(id: Long): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/shows/episodes/$id/technical-details")
+
+    /** Current user's saved position and watched flag for one episode. */
+    suspend fun episodeWatchProgress(id: Long): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/shows/episodes/$id/watch-progress")
 }

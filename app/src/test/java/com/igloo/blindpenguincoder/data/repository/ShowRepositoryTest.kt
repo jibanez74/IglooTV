@@ -157,4 +157,79 @@ class ShowRepositoryTest {
         assertEquals("/api/shows/stats", requireNotNull(request).url.encodedPath)
         assertEquals(3L, stats.totalShows)
     }
+
+    @Test
+    fun `episode playback hits the contract path and decodes the header`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(episodePlaybackJson(nextEpisode = upNextEpisodeJson()))
+        }
+        http.profiles.setPending("igd_test")
+
+        val result = http.showRepository.episodePlayback(900)
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/shows/episodes/900", captured.url.encodedPath)
+        assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+        val data = (result as ApiResult.Success).value
+        assertEquals("Severance", data.show.name)
+        assertEquals("/severance.jpg", data.show.posterPath.orNull())
+        assertEquals(1L, data.season.seasonNumber)
+        assertEquals(3L, data.episode.episodeNumber)
+        assertEquals("In Perpetuity", data.episode.name)
+    }
+
+    @Test
+    fun `episode technical details decode file-keyed streams and the probed duration`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(
+                episodeTechnicalDetailsJson(
+                    durationSec = 3300.0,
+                    audioStreams = listOf(audioStreamJson(ownerKey = "file_id", codec = "eac3")),
+                    chapters = listOf(chapterJson(ownerKey = "file_id", startTimeSec = 60)),
+                ),
+            )
+        }
+
+        val result = http.showRepository.episodeTechnicalDetails(900)
+
+        assertEquals("/api/shows/episodes/900/technical-details", requireNotNull(request).url.encodedPath)
+        val data = (result as ApiResult.Success).value
+        assertEquals("video/x-matroska", data.file.mimeType)
+        assertEquals(3300.0, requireNotNull(data.file.duration.orNull()), 0.0)
+        assertEquals("eac3", data.audioStreams.single().codec)
+        assertEquals("subrip", data.subtitles.single().codec)
+        assertEquals(60L, data.chapters.single().startTime)
+    }
+
+    @Test
+    fun `episode watch progress hits the contract path and decodes a saved position`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(watchProgressJson(progressSec = 600.0, durationSec = 3300.0))
+        }
+
+        val result = http.showRepository.episodeWatchProgress(900)
+
+        assertEquals("/api/shows/episodes/900/watch-progress", requireNotNull(request).url.encodedPath)
+        val progress = (result as ApiResult.Success).value
+        assertEquals(600.0, requireNotNull(progress.progressSec), 0.0)
+        assertEquals(3300.0, requireNotNull(progress.durationSec), 0.0)
+    }
+
+    @Test
+    fun `an episode server failure preserves the backend message`() = runTest {
+        val http = TestHttp {
+            jsonResponse("""{"error":true,"message":"probe failed"}""", HttpStatusCode.InternalServerError)
+        }
+
+        val result = http.showRepository.episodeTechnicalDetails(900)
+
+        val error = (result as ApiResult.Failure).error as AppError.Api
+        assertEquals("probe failed", error.message)
+    }
 }

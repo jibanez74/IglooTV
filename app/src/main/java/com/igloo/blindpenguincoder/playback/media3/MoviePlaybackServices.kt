@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.playback.media3
 
 import androidx.media3.datasource.DataSource
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionApi
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import kotlinx.coroutines.CoroutineScope
 
 /**
@@ -13,7 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 class MoviePlaybackServices(
     val progressiveDataSourceFactory: DataSource.Factory,
     val hlsDataSourceFactory: DataSource.Factory,
-    val directStreamUrl: (movieId: Long) -> String,
+    val directStreamUrl: (media: PlaybackMediaRef) -> String,
     val hlsSessionApi: HlsSessionApi,
     val canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
     /** App-lifetime scope: the HLS stop request must survive the engine's release. */

@@ -130,7 +130,7 @@ class ShellBleedTest {
         assertTrue("rail right ${rail.right} should reach the panel edge ${panel.right}", rail.right == panel.right)
 
         // The content inside it does not: the first card still rests at the rail + gutter.
-        val firstCard = composeRule.onNodeWithTag("continue_card_${testContinueMovies.first().movie.id}")
+        val firstCard = composeRule.onNodeWithTag("continue_card_${testHomeMovies.first().id}")
             .fetchSemanticsNode().boundsInRoot
         val expected = with(density) { (railWidth + gutter).toPx() }
         assertTrue(

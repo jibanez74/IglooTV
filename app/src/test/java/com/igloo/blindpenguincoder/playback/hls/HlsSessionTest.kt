@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.playback.hls
 
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -14,7 +15,7 @@ class HlsSessionTest {
         reload: Int = 0,
         audioProfile: HlsAudioProfile? = null,
     ) = HlsSessionSpec(
-        movieId = 7,
+        media = PlaybackMediaRef.Movie(7),
         profileId = "remux",
         audioTypeIndex = audioTypeIndex,
         startSec = startSec,

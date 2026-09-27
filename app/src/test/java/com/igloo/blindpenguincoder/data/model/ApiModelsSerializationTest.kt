@@ -221,8 +221,8 @@ class ApiModelsSerializationTest {
     }
 
     /**
-     * `GET /continue-watching` mixes movies and episodes under one `kind`; the episode's extra
-     * show keys must decode as unknowns rather than fail the whole row.
+     * `GET /continue-watching` mixes movies and episodes under one `kind`; the episode-only keys
+     * decode on an episode and stay absent on a movie.
      */
     @Test
     fun decodesContinueWatchingEnvelope() {
@@ -267,12 +267,101 @@ class ApiModelsSerializationTest {
         assertEquals(1995L, items[0].year.orNull())
         assertEquals(1800.5, items[0].progressSec, 0.0)
         assertEquals(10200.0, items[0].durationSec, 0.0)
+        assertNull(items[0].showId)
+        assertNull(items[0].episodeName)
         assertFalse(items[1].isMovie)
+        assertTrue(items[1].isEpisode)
         assertEquals("episode", items[1].kind)
         assertEquals("Severance", items[1].title)
         assertNull(items[1].posterPath.orNull())
         assertNull(items[1].year.orNull())
         assertEquals(45.0, items[1].progressSec, 0.0)
+        assertEquals(40L, items[1].showId)
+        assertEquals(1L, items[1].seasonNumber)
+        assertEquals(3L, items[1].episodeNumber)
+        assertEquals("In Perpetuity", items[1].episodeName)
+    }
+
+    /** `GET /shows/episodes/{id}`: `next_episode` is required but unread, populated or null. */
+    @Test
+    fun decodesShowEpisodePlaybackHeaderIgnoringUpNext() {
+        fun body(nextEpisode: String) = """
+            {
+              "error": false,
+              "data": {
+                "show": {"id": 40, "name": "Severance",
+                         "poster_path": {"String": "/severance.jpg", "Valid": true},
+                         "backdrop_path": {"String": "", "Valid": false}},
+                "season": {"season_number": 1, "name": "Season 1"},
+                "episode": {"id": 900, "episode_number": 3, "name": "In Perpetuity",
+                            "overview": {"String": "", "Valid": false},
+                            "air_date": {"String": "2022-02-25", "Valid": true},
+                            "still_path": {"String": "/still.jpg", "Valid": true},
+                            "tmdb_runtime": {"Int64": 55, "Valid": true},
+                            "vote_average": {"Float64": 8.1, "Valid": true},
+                            "vote_count": {"Int64": 400, "Valid": true}},
+                "next_episode": $nextEpisode
+              }
+            }
+        """.trimIndent()
+        val upNext = """{"id": 901, "season_number": 1, "episode_number": 4, "name": "Next",
+            "still_path": {"String": "", "Valid": false},
+            "progress_sec": {"Float64": 0, "Valid": false},
+            "duration_sec": {"Float64": 0, "Valid": false}, "watched": false}"""
+
+        listOf("null", upNext).forEach { nextEpisode ->
+            val data = json.decodeFromString<ApiEnvelope<ShowEpisodePlaybackData>>(body(nextEpisode)).data!!
+            assertEquals("Severance", data.show.name)
+            assertEquals("/severance.jpg", data.show.posterPath.orNull())
+            assertEquals(1L, data.season.seasonNumber)
+            assertEquals(900L, data.episode.id)
+            assertEquals(3L, data.episode.episodeNumber)
+            assertEquals("In Perpetuity", data.episode.name)
+            assertEquals(55L, data.episode.tmdbRuntime.orNull())
+        }
+    }
+
+    /** `GET /shows/episodes/{id}/technical-details`: the same stream rows, keyed by `file_id`. */
+    @Test
+    fun decodesShowEpisodeTechnicalDetails() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "file": {"file_name": "s01e03.mkv", "size": 1, "container": "mkv",
+                         "mime_type": "video/x-matroska",
+                         "duration": {"Float64": 3300.5, "Valid": true}},
+                "video_streams": [],
+                "audio_streams": [
+                  {"id": 12, "file_id": 7, "stream_index": 1, "codec": "eac3",
+                   "codec_profile": {"String": "", "Valid": false}, "bit_rate": 0,
+                   "sample_rate": {"Int64": 48000, "Valid": true}, "channels": 6,
+                   "channel_layout": {"String": "5.1", "Valid": true},
+                   "language": {"String": "eng", "Valid": true},
+                   "title": {"String": "", "Valid": false}, "is_default": true}
+                ],
+                "subtitles": [
+                  {"id": 13, "file_id": 7, "stream_index": 2, "codec": "subrip",
+                   "language": {"String": "eng", "Valid": true},
+                   "title": {"String": "", "Valid": false},
+                   "is_forced": false, "is_default": false}
+                ],
+                "chapters": [
+                  {"id": 14, "title": "", "start_time": 60,
+                   "thumb": {"String": "", "Valid": false}, "file_id": 7}
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<ShowEpisodeTechnicalDetailsData>>(body).data!!
+
+        assertEquals("video/x-matroska", data.file.mimeType)
+        assertEquals(3300.5, requireNotNull(data.file.duration.orNull()), 0.0)
+        assertEquals("eac3", data.audioStreams.single().codec)
+        assertEquals(6L, data.audioStreams.single().channels)
+        assertEquals("subrip", data.subtitles.single().codec)
+        assertEquals(60L, data.chapters.single().startTime)
     }
 
     @Test
@@ -289,7 +378,7 @@ class ApiModelsSerializationTest {
             }
         """.trimIndent()
 
-        val envelope = json.decodeFromString<ApiEnvelope<MovieWatchProgress>>(body)
+        val envelope = json.decodeFromString<ApiEnvelope<WatchProgress>>(body)
 
         val progress = envelope.data!!
         assertNull(progress.progressSec)
@@ -320,7 +409,7 @@ class ApiModelsSerializationTest {
         assertEquals("\"direct\"", json.encodeToString(PlaybackMode.Direct))
 
         val progress = json.encodeToString(
-            UpdateMovieWatchProgressRequest(
+            UpdateWatchProgressRequest(
                 progressSec = 30.0,
                 durationSec = 7200.0,
                 saveSessionId = "11111111-1111-4111-8111-111111111111",

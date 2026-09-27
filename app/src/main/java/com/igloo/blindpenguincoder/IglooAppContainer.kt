@@ -21,6 +21,7 @@ import com.igloo.blindpenguincoder.data.api.AuthApi
 import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.api.MusicApi
 import com.igloo.blindpenguincoder.data.api.ShowApi
+import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
 import com.igloo.blindpenguincoder.data.api.UserApi
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
@@ -28,6 +29,7 @@ import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.data.repository.ProfileRepository
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
 import com.igloo.blindpenguincoder.data.repository.ShowRepository
+import com.igloo.blindpenguincoder.data.repository.VideoPlaybackRepository
 import com.igloo.blindpenguincoder.feature.auth.SessionManager
 import com.igloo.blindpenguincoder.playback.hls.HLS_SEGMENT_READ_TIMEOUT_MS
 import com.igloo.blindpenguincoder.playback.media3.bearerStreamDataSourceFactory
@@ -84,6 +86,8 @@ class IglooAppContainer(context: Context) {
     val movieRepository by lazy { MovieRepository(movieApi) }
     private val showApi by lazy { ShowApi(httpClient, serverUrlProvider) }
     val showRepository by lazy { ShowRepository(showApi) }
+    private val videoPlaybackApi by lazy { VideoPlaybackApi(httpClient, serverUrlProvider) }
+    val videoPlaybackRepository by lazy { VideoPlaybackRepository(videoPlaybackApi) }
     private val musicApi by lazy { MusicApi(httpClient, serverUrlProvider) }
     val musicRepository by lazy { MusicRepository(musicApi) }
     val authRepository by lazy {

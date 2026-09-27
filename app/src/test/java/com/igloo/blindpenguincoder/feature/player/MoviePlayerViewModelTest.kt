@@ -3,8 +3,9 @@ package com.igloo.blindpenguincoder.feature.player
 import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
-import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
+import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
+import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -25,14 +26,14 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class MoviePlayerViewModelTest {
 
-    private val requests = mutableListOf<UpdateMovieWatchProgressRequest>()
+    private val requests = mutableListOf<UpdateWatchProgressRequest>()
     private var watchedResponse = false
     private var refreshes = 0
 
-    private var save: suspend (Long, UpdateMovieWatchProgressRequest) ->
-    ApiResult<MovieWatchProgressUpdateData> = { _, request ->
+    private var save: suspend (PlaybackMediaRef, UpdateWatchProgressRequest) ->
+    ApiResult<WatchProgressUpdateData> = { _, request ->
         requests += request
-        ApiResult.Success(MovieWatchProgressUpdateData(watched = watchedResponse))
+        ApiResult.Success(WatchProgressUpdateData(watched = watchedResponse))
     }
 
     /** The view model's scope rides Dispatchers.Main; share runTest's scheduler so virtual time moves both. */
@@ -43,7 +44,7 @@ class MoviePlayerViewModelTest {
                 saveProgress = { id, request -> save(id, request) },
                 onWatchedStateCommitted = { refreshes++ },
             )
-            viewModel.startSession(movieId = 7)
+            viewModel.startSession(PlaybackMediaRef.Movie(7))
             block(viewModel)
         } finally {
             Dispatchers.resetMain()
@@ -275,7 +276,7 @@ class MoviePlayerViewModelTest {
 
             save = { _, request ->
                 requests += request
-                ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                ApiResult.Success(WatchProgressUpdateData(watched = false))
             }
             viewModel.retryFailedSave()
             advanceUntilIdle()
@@ -294,7 +295,7 @@ class MoviePlayerViewModelTest {
             if (fail) {
                 ApiResult.Failure(AppError.Timeout)
             } else {
-                ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                ApiResult.Success(WatchProgressUpdateData(watched = false))
             }
         }
         viewModel.play(30.0, 46.0)
@@ -322,7 +323,7 @@ class MoviePlayerViewModelTest {
         assertTrue(viewModel.progressSyncUiState.value is ProgressSyncUiState.Failed)
         save = { _, request ->
             requests += request
-            ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+            ApiResult.Success(WatchProgressUpdateData(watched = false))
         }
         viewModel.retryFailedSave()
         advanceUntilIdle()
@@ -335,14 +336,15 @@ class MoviePlayerViewModelTest {
     @Test
     fun `movie A failure survives movie B success and retries with A session`() =
         test { viewModel ->
-            val calls = mutableListOf<Pair<Long, UpdateMovieWatchProgressRequest>>()
+            val calls = mutableListOf<Pair<Long, UpdateWatchProgressRequest>>()
             var failMovieA = true
-            save = { movieId, request ->
+            save = { media, request ->
+                val movieId = media.id
                 calls += movieId to request
                 if (movieId == 7L && failMovieA) {
                     ApiResult.Failure(AppError.Network)
                 } else {
-                    ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                    ApiResult.Success(WatchProgressUpdateData(watched = false))
                 }
             }
 
@@ -350,7 +352,7 @@ class MoviePlayerViewModelTest {
             advanceUntilIdle()
             val movieAFailure = calls.single().second
 
-            viewModel.startSession(movieId = 8)
+            viewModel.startSession(PlaybackMediaRef.Movie(8))
             viewModel.play(30.0, 46.0)
             advanceUntilIdle()
 
@@ -370,19 +372,20 @@ class MoviePlayerViewModelTest {
     @Test
     fun `retry resends every failed session sequentially and refreshes once`() =
         test { viewModel ->
-            val calls = mutableListOf<Pair<Long, UpdateMovieWatchProgressRequest>>()
+            val calls = mutableListOf<Pair<Long, UpdateWatchProgressRequest>>()
             var failing = true
-            save = { movieId, request ->
+            save = { media, request ->
+                val movieId = media.id
                 calls += movieId to request
                 if (failing) {
                     ApiResult.Failure(AppError.Network)
                 } else {
-                    ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                    ApiResult.Success(WatchProgressUpdateData(watched = false))
                 }
             }
 
             viewModel.play(30.0, 46.0)
-            viewModel.startSession(movieId = 8)
+            viewModel.startSession(PlaybackMediaRef.Movie(8))
             viewModel.play(40.0, 56.0)
             advanceUntilIdle()
             val initialByMovie = calls.associate { it.first to it.second }
@@ -405,19 +408,20 @@ class MoviePlayerViewModelTest {
     @Test
     fun `a session that fails again remains pending after other retries succeed`() =
         test { viewModel ->
-            val calls = mutableListOf<Pair<Long, UpdateMovieWatchProgressRequest>>()
+            val calls = mutableListOf<Pair<Long, UpdateWatchProgressRequest>>()
             var phase = 0
-            save = { movieId, request ->
+            save = { media, request ->
+                val movieId = media.id
                 calls += movieId to request
                 when {
                     phase == 0 -> ApiResult.Failure(AppError.Network)
                     phase == 1 && movieId == 7L -> ApiResult.Failure(AppError.Timeout)
-                    else -> ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                    else -> ApiResult.Success(WatchProgressUpdateData(watched = false))
                 }
             }
 
             viewModel.play(30.0, 46.0)
-            viewModel.startSession(movieId = 8)
+            viewModel.startSession(PlaybackMediaRef.Movie(8))
             viewModel.play(30.0, 46.0)
             advanceUntilIdle()
 
@@ -440,27 +444,28 @@ class MoviePlayerViewModelTest {
     @Test
     fun `later same-session success wins when an older failure resolves last`() =
         test { viewModel ->
-            val calls = mutableListOf<Pair<Long, UpdateMovieWatchProgressRequest>>()
+            val calls = mutableListOf<Pair<Long, UpdateWatchProgressRequest>>()
             val olderMovieAResult =
-                CompletableDeferred<ApiResult<MovieWatchProgressUpdateData>>()
+                CompletableDeferred<ApiResult<WatchProgressUpdateData>>()
             var retrying = false
-            save = { movieId, request ->
+            save = { media, request ->
+                val movieId = media.id
                 calls += movieId to request
                 when {
                     retrying -> ApiResult.Success(
-                        MovieWatchProgressUpdateData(watched = false),
+                        WatchProgressUpdateData(watched = false),
                     )
                     movieId == 8L -> ApiResult.Failure(AppError.Timeout)
                     request.saveSequence == 1L -> olderMovieAResult.await()
-                    else -> ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                    else -> ApiResult.Success(WatchProgressUpdateData(watched = false))
                 }
             }
 
-            viewModel.startSession(movieId = 8)
+            viewModel.startSession(PlaybackMediaRef.Movie(8))
             viewModel.play(30.0, 46.0)
             advanceUntilIdle()
 
-            viewModel.startSession(movieId = 7)
+            viewModel.startSession(PlaybackMediaRef.Movie(7))
             viewModel.play(30.0, 46.0)
             runCurrent()
             viewModel.endSession(finalPositionSec = 46.0, durationSec = 600.0)

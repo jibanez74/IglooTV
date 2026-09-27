@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.playback.hls
 
 import com.igloo.blindpenguincoder.playback.model.HLS_AUDIO_CONVERSION_UNAVAILABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,7 +25,7 @@ class HlsSessionControllerTest {
     private class FakeHlsApi : HlsSessionApi {
         val queuedResults = ArrayDeque<HlsManifestResult>()
         val fetchedSpecs = mutableListOf<HlsSessionSpec>()
-        val stops = mutableListOf<Pair<Long, String>>()
+        val stops = mutableListOf<Pair<PlaybackMediaRef, String>>()
         var fetchOverride: (suspend (HlsSessionSpec) -> HlsManifestResult)? = null
 
         override suspend fun fetchHlsManifest(spec: HlsSessionSpec): HlsManifestResult {
@@ -34,22 +35,24 @@ class HlsSessionControllerTest {
                 ?: HlsManifestResult.Ready("remux", spec.startSec.toDouble())
         }
 
-        override suspend fun stopHlsSession(movieId: Long, sessionUuid: String) {
-            stops += movieId to sessionUuid
+        override suspend fun stopHlsSession(media: PlaybackMediaRef, sessionUuid: String) {
+            stops += media to sessionUuid
         }
 
         override fun hlsPlaylistUrl(spec: HlsSessionSpec): String =
-            "https://server/api/movies/${spec.movieId}/hls/${spec.profileId}/playlist.m3u8"
+            "https://server/api/movies/${spec.media.id}/hls/${spec.profileId}/playlist.m3u8"
 
-        override fun movieSubtitleUrl(movieId: Long, trackIndex: Int, startSec: Double): String =
-            "https://server/api/movies/$movieId/subtitles/$trackIndex/web.vtt"
+        override fun subtitleUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String =
+            "https://server/api/movies/${media.id}/subtitles/$trackIndex/web.vtt"
     }
+
+    private val movie = PlaybackMediaRef.Movie(7)
 
     @Test
     fun `a ready manifest returns the session start and clears the status`() = runTest {
         val api = FakeHlsApi()
         api.queuedResults += HlsManifestResult.Ready("1080p_8mbps", 87.4)
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
         val statuses = mutableListOf<String?>()
 
         val start = controller.start(
@@ -69,7 +72,7 @@ class HlsSessionControllerTest {
     @Test
     fun `the session uuid is reused across uninterrupted hls restarts`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
 
         controller.start("remux", 0, null, 0)
         controller.start("1080p_8mbps", 1, null, 500)
@@ -81,7 +84,7 @@ class HlsSessionControllerTest {
     @Test
     fun `stop rotates the uuid before a later start`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(7, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this)
         controller.start("remux", 0, null, 0)
         val stoppedUuid = controller.sessionUuid
 
@@ -102,13 +105,13 @@ class HlsSessionControllerTest {
         val allowStop = CompletableDeferred<Unit>()
         api.fetchOverride = { spec -> HlsManifestResult.Ready(spec.profileId, spec.startSec.toDouble()) }
         val delayingApi = object : HlsSessionApi by api {
-            override suspend fun stopHlsSession(movieId: Long, sessionUuid: String) {
+            override suspend fun stopHlsSession(media: PlaybackMediaRef, sessionUuid: String) {
                 stopEntered.complete(sessionUuid)
                 allowStop.await()
-                api.stopHlsSession(movieId, sessionUuid)
+                api.stopHlsSession(media, sessionUuid)
             }
         }
-        val controller = HlsSessionController(7, delayingApi, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, delayingApi, backgroundScope, backgroundScope)
         controller.start("remux", 0, null, 0)
         val oldUuid = controller.sessionUuid
 
@@ -121,7 +124,7 @@ class HlsSessionControllerTest {
 
         allowStop.complete(Unit)
         runCurrent()
-        assertEquals(listOf(7L to oldUuid), api.stops)
+        assertEquals(listOf(movie to oldUuid), api.stops)
     }
 
     @Test
@@ -133,7 +136,7 @@ class HlsSessionControllerTest {
             fetchStarted.complete(Unit)
             manifest.await()
         }
-        val controller = HlsSessionController(7, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this)
         val result = CompletableDeferred<Result<HlsSessionStart>>()
         backgroundScope.launch {
             result.complete(runCatching { controller.start("remux", 0, null, 0) })
@@ -153,7 +156,7 @@ class HlsSessionControllerTest {
         val api = FakeHlsApi()
         api.queuedResults += HlsManifestResult.Busy(retryAfterSec = 3)
         api.queuedResults += HlsManifestResult.Ready("remux", 0.0)
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
         val statuses = mutableListOf<String?>()
         val before = currentTime
 
@@ -169,7 +172,7 @@ class HlsSessionControllerTest {
     fun `exhausted capacity retries throw a readable failure`() = runTest {
         val api = FakeHlsApi()
         repeat(7) { api.queuedResults += HlsManifestResult.Busy(retryAfterSec = null) }
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
 
         try {
             controller.start("remux", 0, null, 0)
@@ -190,7 +193,7 @@ class HlsSessionControllerTest {
                 delay(45_000)
                 HlsManifestResult.Busy(retryAfterSec = null)
             }
-            val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+            val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
             val before = currentTime
 
             try {
@@ -210,7 +213,7 @@ class HlsSessionControllerTest {
         val api = FakeHlsApi()
         api.queuedResults += HlsManifestResult.Busy(retryAfterSec = 3)
         api.queuedResults += HlsManifestResult.Ready("remux", 12.0)
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
 
         val start = controller.start("remux", 0, null, 0)
 
@@ -220,7 +223,7 @@ class HlsSessionControllerTest {
     @Test
     fun `a throwing keepalive tick neither ends the loop nor escapes the scope`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
         controller.start("remux", 2, null, 60)
         var lost = 0
         controller.startKeepalive { lost++ }
@@ -243,7 +246,7 @@ class HlsSessionControllerTest {
         val api = FakeHlsApi()
         api.queuedResults += HlsManifestResult.Lost
         api.queuedResults += HlsManifestResult.Ready("remux", 0.0)
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
 
         controller.start("remux", 0, null, 0)
 
@@ -257,7 +260,7 @@ class HlsSessionControllerTest {
         api.queuedResults += HlsManifestResult.Busy(retryAfterSec = 1)
         api.queuedResults += HlsManifestResult.Lost
         api.queuedResults += HlsManifestResult.Ready("remux", 0.0)
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
 
         val start = controller.start("remux", 0, HlsAudioProfile.DolbyDigitalPlus, 0)
         controller.startKeepalive { }
@@ -278,7 +281,7 @@ class HlsSessionControllerTest {
             rejectedRequest = true,
         )
         api.queuedResults += HlsManifestResult.Ready("remux", 0.0)
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
         val statuses = mutableListOf<String?>()
 
         val start = controller.start("remux", 0, HlsAudioProfile.DolbyDigital, 0) { statuses += it }
@@ -299,7 +302,7 @@ class HlsSessionControllerTest {
                 rejectedRequest = true,
             )
         }
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
 
         try {
             controller.start("remux", 0, HlsAudioProfile.DolbyDigitalPlus, 0)
@@ -317,7 +320,7 @@ class HlsSessionControllerTest {
             "The server refused the stream (HTTP 400).",
             rejectedRequest = true,
         )
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
 
         try {
             controller.start("remux", 0, null, 0)
@@ -332,7 +335,7 @@ class HlsSessionControllerTest {
     fun `a failed manifest throws immediately, carrying unauthorized`() = runTest {
         val api = FakeHlsApi()
         api.queuedResults += HlsManifestResult.Failed("Your session is no longer valid.", unauthorized = true)
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
 
         try {
             controller.start("remux", 0, null, 0)
@@ -345,7 +348,7 @@ class HlsSessionControllerTest {
     @Test
     fun `the keepalive refetches the started spec and reports a lost session`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
         controller.start("remux", 2, null, 60)
         var lost = 0
         controller.startKeepalive { lost++ }
@@ -367,7 +370,7 @@ class HlsSessionControllerTest {
     @Test
     fun `the keepalive shrugs off transient failures and keeps ticking`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(7, api, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
         controller.start("remux", 2, null, 60)
         var lost = 0
         controller.startKeepalive { lost++ }
@@ -388,14 +391,14 @@ class HlsSessionControllerTest {
     @Test
     fun `release stops the started session on the surviving scope`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(7, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this)
         controller.start("remux", 0, null, 0)
 
         val stoppedUuid = controller.sessionUuid
         controller.releaseAndStop()
         runCurrent()
 
-        assertEquals(listOf(7L to stoppedUuid), api.stops)
+        assertEquals(listOf(movie to stoppedUuid), api.stops)
     }
 
     @Test
@@ -407,7 +410,7 @@ class HlsSessionControllerTest {
             fetchStarted.complete(Unit)
             manifest.await()
         }
-        val controller = HlsSessionController(7, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this)
         val startup = backgroundScope.launch { controller.start("remux", 0, null, 0) }
         fetchStarted.await()
 
@@ -416,27 +419,27 @@ class HlsSessionControllerTest {
         controller.releaseAndStop()
         runCurrent()
 
-        assertEquals(listOf(7L to stoppedUuid), api.stops)
+        assertEquals(listOf(movie to stoppedUuid), api.stops)
     }
 
     @Test
     fun `release stops a session whose startup failed after issuing a manifest`() = runTest {
         val api = FakeHlsApi()
         api.queuedResults += HlsManifestResult.Failed("No stream.")
-        val controller = HlsSessionController(7, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this)
         runCatching { controller.start("remux", 0, null, 0) }
 
         val stoppedUuid = controller.sessionUuid
         controller.releaseAndStop()
         runCurrent()
 
-        assertEquals(listOf(7L to stoppedUuid), api.stops)
+        assertEquals(listOf(movie to stoppedUuid), api.stops)
     }
 
     @Test
     fun `release before any session started sends no stop`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(7, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this)
 
         controller.releaseAndStop()
         runCurrent()
@@ -447,7 +450,7 @@ class HlsSessionControllerTest {
     @Test
     fun `a reserved generation rotates even before its manifest is issued`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(7, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this)
         val reservedUuid = controller.sessionUuid
         controller.reserveGeneration()
 
@@ -461,7 +464,7 @@ class HlsSessionControllerTest {
     @Test
     fun `repeated stop is idempotent and keepalive stays canceled`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(7, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this)
         controller.start("remux", 0, null, 0)
         controller.startKeepalive { fail("keepalive must be canceled") }
 
@@ -472,5 +475,20 @@ class HlsSessionControllerTest {
 
         assertEquals(1, api.stops.size)
         assertEquals(1, api.fetchedSpecs.size)
+    }
+
+    @Test
+    fun `an episode's session is keyed and stopped by the episode ref`() = runTest {
+        val api = FakeHlsApi()
+        val episode = PlaybackMediaRef.Episode(900)
+        val controller = HlsSessionController(episode, api, backgroundScope, this)
+
+        controller.start("remux", 0, null, 0)
+        val stoppedUuid = controller.sessionUuid
+        controller.releaseAndStop()
+        runCurrent()
+
+        assertEquals(episode, api.fetchedSpecs.single().media)
+        assertEquals(listOf(episode to stoppedUuid), api.stops)
     }
 }

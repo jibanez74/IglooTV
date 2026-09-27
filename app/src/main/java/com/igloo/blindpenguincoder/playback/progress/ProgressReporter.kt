@@ -2,8 +2,9 @@ package com.igloo.blindpenguincoder.playback.progress
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
-import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
+import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
+import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import java.util.UUID
 
 /**
@@ -27,7 +28,7 @@ internal fun shouldSaveProgress(
  * background, and on exit or end. The web's rule: a known duration and a position past
  * [MIN_POSITION_SEC], or one at [COMPLETION_RATIO] so a short film that finishes is still marked
  * watched. There is no actual-playback floor: resuming near the end and leaving seconds later
- * must still tell the server the movie was finished.
+ * must still tell the server the title was finished.
  */
 internal fun shouldPersistProgress(
     positionSec: Double,
@@ -39,16 +40,16 @@ internal fun shouldPersistProgress(
     (positionSec >= MIN_POSITION_SEC || positionSec / durationSec >= COMPLETION_RATIO)
 
 /**
- * One playback session's writes to `PUT /movies/{id}/watch-progress`. The server's upsert rule:
+ * One playback session's writes to the media's `PUT …/watch-progress` route. The server's upsert rule:
  * a different session always wins; within the same session only a strictly higher sequence
  * wins, and a stale save is silently dropped. So the session id is minted once here, and every
  * attempt — including a retry of the same position — takes a fresh `++sequence`, or a retried
  * write could lose to the attempt it is retrying.
  */
 internal class ProgressReporter(
-    private val movieId: Long,
-    private val save: suspend (Long, UpdateMovieWatchProgressRequest) ->
-    ApiResult<MovieWatchProgressUpdateData>,
+    private val media: PlaybackMediaRef,
+    private val save: suspend (PlaybackMediaRef, UpdateWatchProgressRequest) ->
+    ApiResult<WatchProgressUpdateData>,
     val sessionId: String = UUID.randomUUID().toString(),
 ) {
     private var sequence = 0L
@@ -57,17 +58,17 @@ internal class ProgressReporter(
     suspend fun saveNow(
         positionSec: Double,
         durationSec: Double,
-    ): ApiResult<MovieWatchProgressUpdateData> {
+    ): ApiResult<WatchProgressUpdateData> {
         if (durationSec <= 0.0) {
             return ApiResult.Failure(AppError.Validation("Playback duration is not available."))
         }
-        val request = UpdateMovieWatchProgressRequest(
+        val request = UpdateWatchProgressRequest(
             progressSec = positionSec.coerceIn(0.0, durationSec),
             durationSec = durationSec,
             saveSessionId = sessionId,
             saveSequence = ++sequence,
         )
-        return save(movieId, request)
+        return save(media, request)
     }
 }
 
@@ -75,7 +76,7 @@ internal const val SAVE_INTERVAL_SEC = 15.0
 internal const val MIN_PLAYED_SEC = 15.0
 internal const val MIN_POSITION_SEC = 30.0
 
-/** Past this ratio the server marks the movie watched instead of storing progress. */
+/** Past this ratio the server marks the title watched instead of storing progress. */
 internal const val COMPLETION_RATIO = 0.95
 
 /** A tick-to-tick position jump larger than this is a seek, not playback. */

@@ -42,10 +42,10 @@ data class LatestMoviesData(
 
 /**
  * One entry of `GET /continue-watching`, a movie or a TV episode told apart by [kind]. The spec
- * models it as a discriminated `oneOf`; it is decoded flat here because only the fields both
- * kinds share are rendered, and a polymorphic decoder would need an experimental serializer
- * for no gain. An episode's extra keys (`show_id`, `season_number`, `episode_number`,
- * `episode_name`) are left to `ignoreUnknownKeys`.
+ * models it as a discriminated `oneOf`; it is decoded flat here because a polymorphic decoder
+ * would need an experimental serializer for no gain. On an episode [id] is the episode's,
+ * [title], [posterPath] and [year] describe the show, and the four episode-only keys are
+ * required by the contract; they are nullable here only because the movie variant omits them.
  */
 @Serializable
 data class ContinueWatchingItem(
@@ -56,11 +56,17 @@ data class ContinueWatchingItem(
     val year: SqlNullInt64,
     @SerialName("progress_sec") val progressSec: Double,
     @SerialName("duration_sec") val durationSec: Double,
+    @SerialName("show_id") val showId: Long? = null,
+    @SerialName("season_number") val seasonNumber: Long? = null,
+    @SerialName("episode_number") val episodeNumber: Long? = null,
+    @SerialName("episode_name") val episodeName: String? = null,
 ) {
     val isMovie: Boolean get() = kind == KIND_MOVIE
+    val isEpisode: Boolean get() = kind == KIND_EPISODE
 
     companion object {
         const val KIND_MOVIE = "movie"
+        const val KIND_EPISODE = "episode"
     }
 }
 
@@ -194,10 +200,14 @@ data class MovieTechnicalFile(
     @SerialName("mime_type") val mimeType: String,
 )
 
+/**
+ * The stream, subtitle and chapter rows are shared by the movie and episode technical-details
+ * routes, which differ only in the owner key (`movie_id` or `file_id`); the caller already knows
+ * what it asked about, so that key is left to `ignoreUnknownKeys` on all four.
+ */
 @Serializable
 data class VideoStream(
     val id: Long,
-    @SerialName("movie_id") val movieId: Long,
     @SerialName("stream_index") val streamIndex: Long,
     val codec: String,
     @SerialName("codec_profile") val codecProfile: SqlNullString? = null,
@@ -225,7 +235,6 @@ data class VideoStream(
 @Serializable
 data class AudioStream(
     val id: Long,
-    @SerialName("movie_id") val movieId: Long,
     @SerialName("stream_index") val streamIndex: Long,
     val codec: String,
     @SerialName("codec_profile") val codecProfile: SqlNullString? = null,
@@ -241,7 +250,6 @@ data class AudioStream(
 @Serializable
 data class Subtitle(
     val id: Long,
-    @SerialName("movie_id") val movieId: Long,
     @SerialName("stream_index") val streamIndex: Long,
     val codec: String,
     val language: SqlNullString? = null,
@@ -250,21 +258,17 @@ data class Subtitle(
     @SerialName("is_default") val isDefault: Boolean,
 )
 
-/**
- * `movie_id` is left to `ignoreUnknownKeys`: the caller already knows which movie it asked
- * about, so nothing needs it.
- */
 @Serializable
 data class Chapter(
     val id: Long,
     val title: String,
-    /** Seconds from the start of the movie. */
+    /** Seconds from the start of the file. */
     @SerialName("start_time") val startTime: Long,
     val thumb: SqlNullString? = null,
 )
 
 @Serializable
-data class UpdateMovieWatchProgressRequest(
+data class UpdateWatchProgressRequest(
     @SerialName("progress_sec") val progressSec: Double,
     @SerialName("duration_sec") val durationSec: Double,
     // The backend rejects out-of-order saves: the session id is a UUID minted once per
@@ -278,9 +282,9 @@ data class SetMovieWatchedRequest(
     val watched: Boolean,
 )
 
-/** Payload of `WatchProgressEnvelope.data`. */
+/** Payload of `WatchProgressEnvelope.data`; movies and TV episodes share the shape. */
 @Serializable
-data class MovieWatchProgress(
+data class WatchProgress(
     @SerialName("progress_sec") val progressSec: Double?,
     @SerialName("duration_sec") val durationSec: Double?,
     val watched: Boolean,
@@ -289,7 +293,7 @@ data class MovieWatchProgress(
 
 /** Payload of `WatchProgressUpdateEnvelope.data`. */
 @Serializable
-data class MovieWatchProgressUpdateData(
+data class WatchProgressUpdateData(
     val watched: Boolean,
 )
 

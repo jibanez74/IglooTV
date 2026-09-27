@@ -103,6 +103,7 @@ import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
 import kotlinx.coroutines.flow.Flow
@@ -195,7 +196,8 @@ private data class DeferredPlayContext(
     val signOutConfirming: Boolean,
 ) {
     fun accepts(request: MoviePlayRequest): Boolean =
-        libraryDetails && openMovieId == request.movieId && !moreMenuOpen &&
+        libraryDetails && request.media == openMovieId?.let(PlaybackMediaRef::Movie) &&
+            !moreMenuOpen &&
             !playbackSettingsOpen && !trailerOpen && !playerOpen && !signOutConfirming
 }
 
@@ -228,6 +230,9 @@ fun IglooApp(
     musicQueueFetcher: MusicQueueFetcher,
     playRequests: Flow<MoviePlayRequest> = emptyFlow(),
     musicPlayRequests: Flow<MusicPlayRequest> = emptyFlow(),
+    /** Continue Watching episode launches, built by Home from the card the user pressed. */
+    homePlayRequests: Flow<MoviePlayRequest> = emptyFlow(),
+    onResumeEpisode: (Long) -> Unit,
     onRetryRail: (HomeRail) -> Unit,
     onMovieSelected: ((Long) -> Unit)?,
     onTheaterMovieSelected: ((Long) -> Unit)?,
@@ -291,6 +296,10 @@ fun IglooApp(
     var moviePlayRequest by rememberSaveable(stateSaver = MoviePlayRequestSaver) {
         mutableStateOf<MoviePlayRequest?>(null)
     }
+    // Which surface launched the video player: it decides whose closing takes the player with
+    // it and which requester its own close returns focus to (section 6.3). Kept after the
+    // close so a failed exit save can still be reported on the surface that launched it.
+    var videoPlayOrigin by rememberSaveable { mutableStateOf<VideoPlayOrigin?>(null) }
     val playerOpen = moviePlayRequest != null
     // The music player is the album overlay's one player layer, the movie player's sibling in
     // every host contract: existence, Back gating, and focus restore all live here.
@@ -342,7 +351,26 @@ fun IglooApp(
         playRequests.collect { request ->
             val eligible = deferredPlayArmed && deferredPlayContext.accepts(request)
             deferredPlayArmed = false
-            if (eligible) moviePlayRequest = request
+            if (eligible) {
+                moviePlayRequest = request
+                videoPlayOrigin = VideoPlayOrigin.MovieDetails
+            }
+        }
+    }
+    // Home's episode launches: accepted only while Home is what the user is looking at — a
+    // preparation landing after they opened an overlay or left the pane would put a player
+    // over a surface that never asked for one. There is no overlay under this launch, so the
+    // details effect below leaves it alone, like the music pane's launches.
+    val homeCanPlay by rememberUpdatedState(
+        currentDestination == IglooDestination.Home && !anyDetailsOpen &&
+            !trailerOpen && !playerOpen && !musicPlayerOpen && !signOut.confirming,
+    )
+    LaunchedEffect(homePlayRequests) {
+        homePlayRequests.collect { request ->
+            if (homeCanPlay) {
+                moviePlayRequest = request
+                videoPlayOrigin = VideoPlayOrigin.ContinueWatchingRail
+            }
         }
     }
     // Back cannot close the details while the menu is up (its handler is gated on the flag), but
@@ -355,7 +383,7 @@ fun IglooApp(
             playbackSettingsOpen = false
             // The player must not outlive the details page it launched from — a profile switch
             // or session revalidation that closes the overlay takes the movie with it.
-            moviePlayRequest = null
+            if (videoPlayOrigin == VideoPlayOrigin.MovieDetails) moviePlayRequest = null
         }
     }
     // The player must not outlive the album page it launched from — a profile switch or
@@ -419,9 +447,17 @@ fun IglooApp(
     val closeMoviePlayer: () -> Unit = {
         moviePlayRequest = null
         // In the callback, not an effect, for the detach-race reason the details close
-        // documents. The Play button is still composed in every reachable case; the pane's
-        // anchor is the same last-resort fallback the other overlays use.
-        if (!playReturnRequester.requestFocusSafely()) {
+        // documents. The launching control is still composed in every reachable case — the
+        // details page's Play button, or the Continue Watching rail's anchor while Home is the
+        // pane; the pane's anchor is the same last-resort fallback the other overlays use.
+        val returnRequester = when (videoPlayOrigin) {
+            VideoPlayOrigin.MovieDetails -> playReturnRequester
+            VideoPlayOrigin.ContinueWatchingRail ->
+                railReturnRequesters.getValue(HomeRail.ContinueWatching)
+                    .takeIf { currentDestination == IglooDestination.Home }
+            null -> null
+        }
+        if (returnRequester == null || !returnRequester.requestFocusSafely()) {
             contentStartRequester.requestFocusSafely()
         }
     }
@@ -527,8 +563,17 @@ fun IglooApp(
             // The details header owns the notice while the overlay is up; rendering it here too
             // would only shift Home's rails behind a screen nobody can see. It surfaces here
             // when Back closes an overlay whose write had already failed.
-            mutationNotice = (details.mutationNotice ?: trackLikes.notice).takeIf { !anyDetailsOpen },
+            // Home adds its own: why an episode press went nowhere, and — once the player has
+            // closed — an exit save that failed under a Home launch, which has no details page
+            // to follow the user back to (section 11.8).
+            mutationNotice = (
+                details.mutationNotice ?: trackLikes.notice ?: home.playbackNotice
+                    ?: progressSyncError.takeIf {
+                        videoPlayOrigin == VideoPlayOrigin.ContinueWatchingRail && !playerOpen
+                    }
+                ).takeIf { !anyDetailsOpen },
             onRetryRail = onRetryRail,
+            onResumeEpisode = onResumeEpisode,
             openMovie = openMovie,
             openTheaterMovie = openTheaterMovie,
             openAlbum = openAlbum,
@@ -544,8 +589,9 @@ fun IglooApp(
             scrimmed = railHasFocus || signOut.confirming,
             // The overlay covers the shell completely, so the whole thing leaves TalkBack's
             // traversal while it is up — the same treatment the confirm dialog gets.
-            // The music player can sit directly over the pane, with no overlay between.
-            hiddenFromAccessibility = signOut.confirming || anyDetailsOpen || musicPlayerOpen,
+            // Either player can sit directly over the pane, with no overlay between.
+            hiddenFromAccessibility = signOut.confirming || anyDetailsOpen || musicPlayerOpen ||
+                playerOpen,
             onRailFocusChanged = { hasFocus ->
                 if (!hasFocus) railOpenedByBack = false
                 railHasFocus = hasFocus
@@ -798,6 +844,7 @@ private fun IglooShell(
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
     onRetryRail: (HomeRail) -> Unit,
+    onResumeEpisode: (Long) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
     openAlbum: ((DetailsOrigin, Long) -> Unit)?,
@@ -872,6 +919,7 @@ private fun IglooShell(
                 trackLikes = trackLikes,
                 mutationNotice = mutationNotice,
                 onRetryRail = onRetryRail,
+                onResumeEpisode = onResumeEpisode,
                 openMovie = openMovie,
                 openTheaterMovie = openTheaterMovie,
                 openAlbum = openAlbum,
@@ -955,6 +1003,7 @@ private fun ContentPane(
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
     onRetryRail: (HomeRail) -> Unit,
+    onResumeEpisode: (Long) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
     openAlbum: ((DetailsOrigin, Long) -> Unit)?,
@@ -1035,6 +1084,7 @@ private fun ContentPane(
                 mutationNotice = mutationNotice,
                 contentInset = contentInset,
                 onRetryRail = onRetryRail,
+                onResumeEpisode = onResumeEpisode,
                 openMovie = openMovie,
                 openTheaterMovie = openTheaterMovie,
                 openAlbum = openAlbum,
@@ -1143,12 +1193,16 @@ private fun paneBranchOf(destination: IglooDestination): PaneBranch = when (dest
 /** Which surface launched the music player; see `musicPlayOrigin` in [IglooApp]. */
 private enum class MusicPlayOrigin { AlbumDetails, MusicianDetails, MusicPane }
 
+/** Which surface launched the video player; see `videoPlayOrigin` in [IglooApp]. */
+private enum class VideoPlayOrigin { MovieDetails, ContinueWatchingRail }
+
 @Composable
 private fun HomeRails(
     home: HomeUiState,
     mutationNotice: String?,
     contentInset: PaddingValues,
     onRetryRail: (HomeRail) -> Unit,
+    onResumeEpisode: (Long) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
     openAlbum: ((DetailsOrigin, Long) -> Unit)?,
@@ -1213,28 +1267,42 @@ private fun HomeRails(
             contentInset = contentInset,
             title = "Continue Watching",
             state = home.continueWatching,
-            itemKey = { it.movie.id },
+            itemKey = { it.railKey },
             entryRequester = if (heroVisible) continueEntryRequester else contentStartRequester,
             leftFocusRequester = navigationRequester,
             lastFocusedKey = lastFocusedByRail[HomeRail.ContinueWatching],
             onItemFocused = { lastFocusedByRail[HomeRail.ContinueWatching] = it },
             loadingLabel = "Loading continue watching",
             emptyIcon = IglooIcons.Movies,
-            emptyText = "Nothing in progress yet. Movies you start watching appear here.",
+            emptyText = "Nothing in progress yet. Movies and episodes you start watching appear here.",
             onRetry = { onRetryRail(HomeRail.ContinueWatching) },
             returnRequester = railReturnRequesters.getValue(HomeRail.ContinueWatching),
         ) { item, itemModifier, cardAspect ->
-            IglooPosterCard(
-                title = item.movie.title,
-                subtitle = item.movie.year?.toString(),
-                imageUrl = item.movie.posterUrl,
-                onClick = openMovie?.let { open ->
-                    { open(DetailsOrigin.Rail(HomeRail.ContinueWatching), item.movie.id) }
-                },
-                progress = PosterCardProgress(item.progressFraction, item.progressDescription),
-                aspect = cardAspect,
-                modifier = itemModifier.testTag("continue_card_${item.movie.id}"),
-            )
+            when (item) {
+                is HomeContinueItem.Movie -> IglooPosterCard(
+                    title = item.movie.title,
+                    subtitle = item.movie.year?.toString(),
+                    imageUrl = item.movie.posterUrl,
+                    onClick = openMovie?.let { open ->
+                        { open(DetailsOrigin.Rail(HomeRail.ContinueWatching), item.movie.id) }
+                    },
+                    progress = PosterCardProgress(item.progressFraction, item.progressDescription),
+                    aspect = cardAspect,
+                    modifier = itemModifier.testTag("continue_card_${item.movie.id}"),
+                )
+                // An episode has no details page to open; the press resumes it in the player.
+                is HomeContinueItem.Episode -> IglooPosterCard(
+                    title = item.showTitle,
+                    subtitle = item.subtitle,
+                    imageUrl = item.posterUrl,
+                    onClick = { onResumeEpisode(item.episodeId) },
+                    actionLabel = "Resume ${item.showTitle} ${item.episodeCode}",
+                    progress = PosterCardProgress(item.progressFraction, item.progressDescription),
+                    aspect = cardAspect,
+                    fallbackIcon = IglooIcons.TvShows,
+                    modifier = itemModifier.testTag("continue_episode_card_${item.episodeId}"),
+                )
+            }
         }
 
         IglooMediaRail(

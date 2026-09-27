@@ -3,11 +3,14 @@ package com.igloo.blindpenguincoder.data.repository
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.data.api.ShowApi
+import com.igloo.blindpenguincoder.data.model.ShowEpisodePlaybackData
+import com.igloo.blindpenguincoder.data.model.ShowEpisodeTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.ShowGenreWithCount
 import com.igloo.blindpenguincoder.data.model.ShowGenresData
 import com.igloo.blindpenguincoder.data.model.ShowsLibraryData
 import com.igloo.blindpenguincoder.data.model.ShowsStatsData
 import com.igloo.blindpenguincoder.data.model.SortOrder
+import com.igloo.blindpenguincoder.data.model.WatchProgress
 
 class ShowRepository(
     private val api: ShowApi,
@@ -34,4 +37,13 @@ class ShowRepository(
 
     suspend fun showStats(): ApiResult<ShowsStatsData> =
         envelopeData("show stats") { api.showStats() }
+
+    suspend fun episodePlayback(id: Long): ApiResult<ShowEpisodePlaybackData> =
+        envelopeData("episode") { api.episodePlayback(id) }
+
+    suspend fun episodeTechnicalDetails(id: Long): ApiResult<ShowEpisodeTechnicalDetailsData> =
+        envelopeData("technical details") { api.episodeTechnicalDetails(id) }
+
+    suspend fun episodeWatchProgress(id: Long): ApiResult<WatchProgress> =
+        envelopeData("watch progress") { api.episodeWatchProgress(id) }
 }

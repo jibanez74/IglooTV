@@ -5,33 +5,78 @@ import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.core.ui.formatEpisodeCode
 import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
 import com.igloo.blindpenguincoder.core.ui.orKeepContent
 import com.igloo.blindpenguincoder.core.ui.progressFraction
+import com.igloo.blindpenguincoder.data.model.ContinueWatchingItem
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.Movie
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.data.model.ShowEpisodePlaybackData
+import com.igloo.blindpenguincoder.data.model.ShowEpisodeTechnicalDetailsData
+import com.igloo.blindpenguincoder.data.model.WatchProgress
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
+import com.igloo.blindpenguincoder.data.repository.ShowRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
+import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
+import com.igloo.blindpenguincoder.feature.movies.buildVideoPlayRequest
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.posterItem
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
+import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import java.util.Locale
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** A movie in progress: the render-ready movie plus its progress, ready for the card. */
-data class HomeContinueMovie(
-    val movie: PosterItem,
-    val progressFraction: Float,
-    val progressDescription: String,
-)
+/** One Continue Watching card: a movie or a TV episode, each with its progress ready to draw. */
+sealed interface HomeContinueItem {
+    /**
+     * The rail's `Long` item key. A movie id and an episode id can collide, so the kind rides
+     * in the low bit: a movie is `id * 2`, an episode `id * 2 + 1`.
+     */
+    val railKey: Long
+    val progressFraction: Float
+    val progressDescription: String
+
+    data class Movie(
+        val movie: PosterItem,
+        override val progressFraction: Float,
+        override val progressDescription: String,
+    ) : HomeContinueItem {
+        override val railKey: Long get() = movie.id * 2
+    }
+
+    /** Wears the show's poster so the rail keeps one aspect; the episode is named below it. */
+    data class Episode(
+        val episodeId: Long,
+        val showTitle: String,
+        /** "S1 E3" */
+        val episodeCode: String,
+        val episodeName: String,
+        val posterUrl: String?,
+        override val progressFraction: Float,
+        override val progressDescription: String,
+    ) : HomeContinueItem {
+        override val railKey: Long get() = episodeId * 2 + 1
+        val subtitle: String get() = "$episodeCode · $episodeName"
+    }
+}
 
 /** An album ready to render: nullable wire fields resolved, cover taken as the backend sends it. */
 data class HomeAlbum(
@@ -75,16 +120,20 @@ sealed interface HomeHeroState {
 /** Everything Home draws. One object, so a new rail does not re-thread every composable. */
 data class HomeUiState(
     val hero: HomeHeroState = HomeHeroState.Loading,
-    val continueWatching: IglooRailState<HomeContinueMovie> = IglooRailState.Loading,
+    val continueWatching: IglooRailState<HomeContinueItem> = IglooRailState.Loading,
     val latestMovies: IglooRailState<PosterItem> = IglooRailState.Loading,
     val latestAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loading,
     val inTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loading,
+    /** Why the last episode press did not reach the player; cleared by the next press. */
+    val playbackNotice: String? = null,
 )
 
 class HomeViewModel(
     private val movies: MovieRepository,
+    private val shows: ShowRepository,
     private val music: MusicRepository,
     private val serverUrl: ServerUrlProvider,
+    private val canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -92,11 +141,22 @@ class HomeViewModel(
 
     private val loads = mutableMapOf<HomeRail, Job>()
 
+    // Conflated, like the details page's: the host consumes launches, and only the latest one
+    // can matter once it does.
+    private val playRequestChannel = Channel<MoviePlayRequest>(Channel.CONFLATED)
+
+    /** An episode ready to play, once its preparation succeeded; the host opens the player. */
+    val playRequests: Flow<MoviePlayRequest> = playRequestChannel.receiveAsFlow()
+
+    private var resumeEpisodeId: Long? = null
+    private var resumeJob: Job? = null
+
     /**
      * Re-reads every rail. Driven by the host's start effect rather than `init`, so a TV woken
      * from standby days later does not keep showing the library as it was when the session began.
      */
     fun refresh() {
+        _uiState.update { it.copy(playbackNotice = null) }
         loadContinueWatching(userInitiated = false)
         loadLatestMovies(userInitiated = false)
         loadLatestAlbums(userInitiated = false)
@@ -124,24 +184,9 @@ class HomeViewModel(
         }
         launchLoad(HomeRail.ContinueWatching) {
             // Server order is the contract (most recently watched first) — do not re-sort.
-            val next = movies.continueWatchingMovies().toRailState { inProgress ->
+            val next = movies.continueWatching().toRailState { inProgress ->
                 val apiBaseUrl = serverUrl.require().apiBaseUrl
-                inProgress.map { movie ->
-                    HomeContinueMovie(
-                        movie = posterItem(
-                            id = movie.id,
-                            title = movie.title,
-                            posterPath = movie.posterPath,
-                            year = movie.year,
-                            apiBaseUrl = apiBaseUrl,
-                        ),
-                        progressFraction = progressFraction(movie.progressSec, movie.durationSec),
-                        progressDescription = formatSpokenRemainingTime(
-                            movie.progressSec,
-                            movie.durationSec,
-                        ),
-                    )
-                }
+                inProgress.mapNotNull { item -> toContinueItem(item, apiBaseUrl) }
             }
             _uiState.update {
                 it.copy(
@@ -151,6 +196,133 @@ class HomeViewModel(
                     ),
                 )
             }
+        }
+    }
+
+    private fun toContinueItem(item: ContinueWatchingItem, apiBaseUrl: String): HomeContinueItem? {
+        val fraction = progressFraction(item.progressSec, item.durationSec)
+        val description = formatSpokenRemainingTime(item.progressSec, item.durationSec)
+        return when {
+            item.isMovie -> HomeContinueItem.Movie(
+                movie = posterItem(
+                    id = item.id,
+                    title = item.title,
+                    posterPath = item.posterPath,
+                    year = item.year,
+                    apiBaseUrl = apiBaseUrl,
+                ),
+                progressFraction = fraction,
+                progressDescription = description,
+            )
+            item.isEpisode -> HomeContinueItem.Episode(
+                episodeId = item.id,
+                showTitle = item.title,
+                // The contract requires all three on an episode; a row missing one cannot be
+                // named honestly, so it is dropped rather than drawn with a broken subtitle.
+                episodeCode = formatEpisodeCode(
+                    seasonNumber = item.seasonNumber ?: return null,
+                    episodeNumber = item.episodeNumber ?: return null,
+                ),
+                episodeName = item.episodeName ?: return null,
+                posterUrl = tmdbImageUrl(apiBaseUrl, TmdbImageSize.W500, item.posterPath.orNull()),
+                progressFraction = fraction,
+                progressDescription = description,
+            )
+            else -> null
+        }
+    }
+
+    /**
+     * A Continue Watching episode card's press. Like the details page's Play, the launch waits
+     * for the episode's header, technical details and saved position, and repeated presses
+     * while those are in flight coalesce into the one launch. A press on a different card
+     * abandons the earlier preparation: only the latest intent should open a player.
+     */
+    fun resumeEpisode(episodeId: Long) {
+        if (resumeEpisodeId == episodeId && resumeJob?.isActive == true) return
+        resumeJob?.cancel()
+        resumeEpisodeId = episodeId
+        _uiState.update { it.copy(playbackNotice = null) }
+        resumeJob = viewModelScope.launch {
+            when (val prepared = prepareEpisode(episodeId)) {
+                is ApiResult.Success -> playRequestChannel.trySend(prepared.value)
+                is ApiResult.Failure -> _uiState.update {
+                    it.copy(
+                        playbackNotice = "Couldn't prepare playback: " +
+                            prepared.error.toLibraryDisplayMessage(),
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun prepareEpisode(episodeId: Long): ApiResult<MoviePlayRequest> =
+        coroutineScope {
+            val playback = async { shows.episodePlayback(episodeId) }
+            val technical = async { shows.episodeTechnicalDetails(episodeId) }
+            val progress = async { shows.episodeWatchProgress(episodeId) }
+            val header = when (val result = playback.await()) {
+                is ApiResult.Success -> result.value
+                is ApiResult.Failure -> return@coroutineScope result
+            }
+            val file = when (val result = technical.await()) {
+                is ApiResult.Success -> result.value
+                is ApiResult.Failure -> return@coroutineScope result
+            }
+            val saved = when (val result = progress.await()) {
+                is ApiResult.Success -> result.value
+                is ApiResult.Failure -> return@coroutineScope result
+            }
+            ApiResult.Success(toEpisodePlayRequest(episodeId, header, file, saved))
+        }
+
+    /**
+     * Home has no Playback Settings dialog, so the request carries the defaults; when the
+     * capability gate refuses Direct play of the file's default audio track, the launch falls
+     * back to Remux rather than blocking on guidance the user cannot follow from here. The
+     * gate's rule that it never overrides a choice holds: no choice was made.
+     */
+    private fun toEpisodePlayRequest(
+        episodeId: Long,
+        header: ShowEpisodePlaybackData,
+        file: ShowEpisodeTechnicalDetailsData,
+        saved: WatchProgress,
+    ): MoviePlayRequest {
+        val build = { selection: PlaybackSelection ->
+            buildVideoPlayRequest(
+                media = PlaybackMediaRef.Episode(episodeId),
+                title = listOf(
+                    header.show.name,
+                    formatEpisodeCode(header.season.seasonNumber, header.episode.episodeNumber),
+                    header.episode.name,
+                ).joinToString(" · "),
+                // The show's poster, as the rail's card shows it, re-used as session artwork.
+                posterUrl = tmdbImageUrl(
+                    serverUrl.require().apiBaseUrl,
+                    TmdbImageSize.W500,
+                    header.show.posterPath.orNull(),
+                ),
+                mimeType = file.file.mimeType,
+                audioStreams = file.audioStreams,
+                subtitles = file.subtitles,
+                chapters = file.chapters,
+                progress = saved,
+                fileDurationSec = file.file.duration.orNull(),
+                selection = selection,
+            )
+        }
+        val request = build(PlaybackSelection())
+        val gate = evaluatePlaybackGate(
+            mode = request.mode,
+            audioCodec = request.selectedAudioTrack?.codec,
+            audioCodecProfile = request.selectedAudioTrack?.codecProfile,
+            audioChannels = request.selectedAudioTrack?.channels,
+            audioLabel = request.selectedAudioTrack?.label,
+            canPlayMime = { mime -> canPlayAudioMime(mime, request.selectedAudioTrack?.channels) },
+        )
+        return when (gate) {
+            PlaybackGateResult.Proceed -> request
+            is PlaybackGateResult.Blocked -> build(PlaybackSelection(mode = PlaybackMode.Remux))
         }
     }
 

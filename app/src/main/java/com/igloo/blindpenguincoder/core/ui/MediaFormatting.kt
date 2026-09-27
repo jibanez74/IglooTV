@@ -119,3 +119,7 @@ private fun remainingSeconds(progressSec: Double, durationSec: Double): Double? 
     if (!durationSec.isFinite() || durationSec <= 0 || !progressSec.isFinite()) return null
     return (durationSec - progressSec).coerceAtLeast(0.0)
 }
+
+/** `1, 3` -> "S1 E3": the compact episode code the web client also uses. */
+fun formatEpisodeCode(seasonNumber: Long, episodeNumber: Long): String =
+    "S$seasonNumber E$episodeNumber"

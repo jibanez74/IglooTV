@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -49,7 +50,7 @@ class MovieMediaSessionTest {
     }
 
     private fun playRequest(posterUrl: String? = null) = MoviePlayRequest(
-        movieId = 7,
+        media = PlaybackMediaRef.Movie(7),
         title = "Heat",
         posterUrl = posterUrl,
         mimeType = "video/x-matroska",
@@ -126,6 +127,16 @@ class MovieMediaSessionTest {
         assertEquals(MediaMetadata.MEDIA_TYPE_MOVIE, withPoster.mediaType)
 
         assertEquals(null, movieMediaMetadata(playRequest()).artworkUri)
+    }
+
+    @Test
+    fun anEpisodeIsTypedAsATvShowForTheSystemSurface() {
+        val episode = movieMediaMetadata(
+            playRequest().copy(media = PlaybackMediaRef.Episode(900), title = "Severance · S1 E3 · In Perpetuity"),
+        )
+
+        assertEquals("Severance · S1 E3 · In Perpetuity", episode.title.toString())
+        assertEquals(MediaMetadata.MEDIA_TYPE_TV_SHOW, episode.mediaType)
     }
 
     @Test

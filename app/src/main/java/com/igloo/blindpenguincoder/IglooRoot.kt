@@ -184,17 +184,21 @@ fun IglooRoot(container: IglooAppContainer) {
                         SignOutViewModel(sessionManager)
                     }
                     val signOut by signOutViewModel.uiState.collectAsStateWithLifecycle()
+                    val appContext = LocalContext.current.applicationContext
                     val homeViewModel = viewModel(
                         viewModelStoreOwner = authenticatedSessionOwner,
                         key = "home",
                     ) {
                         HomeViewModel(
                             container.movieRepository,
+                            container.showRepository,
                             container.musicRepository,
                             container.serverUrlProvider,
+                            canPlayAudioMime = { mimeType, channels ->
+                                deviceCanPlayAudioMime(appContext, mimeType, channels)
+                            },
                         )
                     }
-                    val appContext = LocalContext.current.applicationContext
                     // Session-scoped like the rest: that is what keeps the library grid's loaded
                     // pages and scroll position alive across a Movies -> Home -> Movies trip.
                     // Created before the details view model, which reports committed like
@@ -237,7 +241,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         key = "movie-player",
                     ) {
                         MoviePlayerViewModel(
-                            saveProgress = container.movieRepository::updateWatchProgress,
+                            saveProgress = container.videoPlaybackRepository::updateWatchProgress,
                             onWatchedStateCommitted = {
                                 homeViewModel.refreshContinueWatching()
                                 // The resume strip and watched pill are current on return to
@@ -395,8 +399,8 @@ fun IglooRoot(container: IglooAppContainer) {
                                 services = MoviePlaybackServices(
                                     progressiveDataSourceFactory = container.streamDataSourceFactory,
                                     hlsDataSourceFactory = container.hlsStreamDataSourceFactory,
-                                    directStreamUrl = container.movieRepository::movieStreamUrl,
-                                    hlsSessionApi = container.movieRepository,
+                                    directStreamUrl = container.videoPlaybackRepository::streamUrl,
+                                    hlsSessionApi = container.videoPlaybackRepository,
                                     canPlayAudioMime = { mimeType, channels ->
                                         deviceCanPlayAudioMime(appContext, mimeType, channels)
                                     },
@@ -427,6 +431,8 @@ fun IglooRoot(container: IglooAppContainer) {
                         trackLikes = trackLikes,
                         onToggleTrackLike = trackLikesViewModel::toggle,
                         onRetryRail = homeViewModel::retry,
+                        homePlayRequests = homeViewModel.playRequests,
+                        onResumeEpisode = homeViewModel::resumeEpisode,
                         onMovieSelected = { movieId ->
                             closeAllDetails()
                             detailsViewModel.open(movieId)

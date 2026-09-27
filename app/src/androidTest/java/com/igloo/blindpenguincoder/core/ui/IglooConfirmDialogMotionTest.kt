@@ -33,7 +33,7 @@ import com.igloo.blindpenguincoder.core.design.IglooDarkColors
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
-import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
+import com.igloo.blindpenguincoder.feature.home.HomeContinueItem
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.SignOutUiState
@@ -66,7 +66,7 @@ class IglooConfirmDialogMotionTest {
             PosterItem(id = 5, title = "Alien", year = 1979, posterUrl = null),
         )
         ).map {
-            HomeContinueMovie(
+            HomeContinueItem.Movie(
                 it,
                 progressFraction = 0.2f,
                 progressDescription = "1 hour and 30 minutes remaining",

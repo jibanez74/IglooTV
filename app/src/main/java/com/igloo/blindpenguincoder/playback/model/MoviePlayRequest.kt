@@ -4,15 +4,16 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import kotlinx.serialization.Serializable
 
 /**
- * Everything the player screen needs to start one movie, assembled by the details screen from
- * the movie, its technical details, the watch progress, and the session's playback selection.
+ * Everything the player screen needs to start one movie or TV episode, assembled by the
+ * launching screen from the title's metadata, its technical details, the watch progress, and the
+ * session's playback selection.
  * Track choices travel as type-relative indexes — the Nth audio/subtitle stream in
  * `stream_index` order — because that ordering is what survives everywhere downstream: it is
  * the demuxed container's track-group order under direct play, and the backend's
  * `audio_track`/`trackIndex` ordinal for HLS sessions and sideloaded subtitles.
  */
 data class MoviePlayRequest(
-    val movieId: Long,
+    val media: PlaybackMediaRef,
     val title: String,
     /** The details page's poster, re-used as the MediaSession artwork. Null = title only. */
     val posterUrl: String?,

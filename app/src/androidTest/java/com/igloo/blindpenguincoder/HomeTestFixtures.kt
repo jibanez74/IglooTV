@@ -7,12 +7,12 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.AudioStream
-import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
 import com.igloo.blindpenguincoder.feature.home.HomeAlbum
-import com.igloo.blindpenguincoder.feature.home.HomeContinueMovie
+import com.igloo.blindpenguincoder.feature.home.HomeContinueItem
 import com.igloo.blindpenguincoder.feature.home.HomeHero
 import com.igloo.blindpenguincoder.feature.home.HomeTheaterMovie
 import com.igloo.blindpenguincoder.feature.library.LibraryActions
@@ -148,23 +148,37 @@ internal fun testLibraryState(
     silentReconcileGeneration = silentReconcileGeneration,
 )
 
-internal val testContinueMovies = listOf(
-    HomeContinueMovie(
+internal val testContinueMovies: List<HomeContinueItem> = listOf(
+    HomeContinueItem.Movie(
         testHomeMovies[0],
         progressFraction = 0.25f,
         progressDescription = "2 hours and 7 minutes remaining",
     ),
-    HomeContinueMovie(
+    HomeContinueItem.Movie(
         testHomeMovies[1],
         progressFraction = 0.5f,
         progressDescription = "58 minutes remaining",
     ),
-    HomeContinueMovie(
+    HomeContinueItem.Movie(
         testHomeMovies[2],
         progressFraction = 0.9f,
         progressDescription = "16 minutes remaining",
     ),
 )
+
+/** Poster-less like the movies: the TV glyph fallback needs no network. */
+internal val testContinueEpisode = HomeContinueItem.Episode(
+    episodeId = 900,
+    showTitle = "Severance",
+    episodeCode = "S1 E3",
+    episodeName = "In Perpetuity",
+    posterUrl = null,
+    progressFraction = 0.18f,
+    progressDescription = "42 minutes remaining",
+)
+
+/** The rail as the server would send it with an episode in progress: most recent first. */
+internal val testContinueItems: List<HomeContinueItem> = listOf(testContinueEpisode) + testContinueMovies
 
 /** Cover-less for the same reason: the Music glyph fallback needs no network. */
 internal val testAlbums = listOf(
@@ -210,7 +224,7 @@ internal val inertDetailsActions = MovieDetailsActions.Library(
 @Composable
 internal fun rememberInertMoviePlayerViewModel(): MoviePlayerViewModel = remember {
     MoviePlayerViewModel(
-        saveProgress = { _, _ -> ApiResult.Success(MovieWatchProgressUpdateData(watched = false)) },
+        saveProgress = { _, _ -> ApiResult.Success(WatchProgressUpdateData(watched = false)) },
         onWatchedStateCommitted = {},
     )
 }
@@ -252,7 +266,6 @@ private fun testAudioStream(
     isDefault: Boolean = false,
 ) = AudioStream(
     id = id,
-    movieId = 1,
     streamIndex = id,
     codec = "dts",
     bitRate = 0,
@@ -269,7 +282,6 @@ private fun testSubtitle(
     language: String,
 ) = Subtitle(
     id = id,
-    movieId = 1,
     streamIndex = id,
     codec = codec,
     language = SqlNullString(language, valid = true),

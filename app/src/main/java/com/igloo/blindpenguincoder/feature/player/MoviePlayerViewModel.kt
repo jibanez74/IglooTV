@@ -3,8 +3,9 @@ package com.igloo.blindpenguincoder.feature.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
-import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
-import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
+import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
+import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.progress.FLUSH_DEDUPE_SEC
 import com.igloo.blindpenguincoder.playback.progress.MAX_TICK_DELTA_SEC
 import com.igloo.blindpenguincoder.playback.progress.ProgressReporter
@@ -54,8 +55,8 @@ private data class ProgressSaveAttempt(
  * wall-clock or seek distance; the other writes skip that floor, like the web.
  */
 class MoviePlayerViewModel(
-    private val saveProgress: suspend (Long, UpdateMovieWatchProgressRequest) ->
-    ApiResult<MovieWatchProgressUpdateData>,
+    private val saveProgress: suspend (PlaybackMediaRef, UpdateWatchProgressRequest) ->
+    ApiResult<WatchProgressUpdateData>,
     private val onWatchedStateCommitted: () -> Unit,
 ) : ViewModel() {
 
@@ -74,9 +75,9 @@ class MoviePlayerViewModel(
     private var nextFailureResolutionOrder = 0L
     private var retryInFlight = false
 
-    fun startSession(movieId: Long) {
+    fun startSession(media: PlaybackMediaRef) {
         val previousSession = activeSession
-        val reporter = ProgressReporter(movieId, saveProgress)
+        val reporter = ProgressReporter(media, saveProgress)
         activeSession = ProgressSaveSession(reporter).also {
             saveSessions[reporter.sessionId] = it
         }

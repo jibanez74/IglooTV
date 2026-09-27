@@ -7,6 +7,7 @@ import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MAX_QUEUE_TRACKS
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
@@ -33,7 +34,7 @@ internal val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Sav
             emptyList()
         } else {
             listOf(
-                request.movieId.toString(),
+                Json.encodeToString<PlaybackMediaRef>(request.media),
                 request.title,
                 request.posterUrl.orEmpty(),
                 request.mimeType,
@@ -55,7 +56,7 @@ internal val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Sav
         } else {
             restoreOrDrop {
                 MoviePlayRequest(
-                    movieId = saved[0].toLong(),
+                    media = Json.decodeFromString<PlaybackMediaRef>(saved[0]),
                     title = saved[1],
                     posterUrl = saved[2].ifEmpty { null },
                     mimeType = saved[3],

@@ -1,19 +1,20 @@
 package com.igloo.blindpenguincoder.playback.hls
 
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_UNAUTHORIZED_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.playbackServerRefusedMessage
 
 /**
- * One HLS playback session as the backend keys it: movie + profile + audio ordinal + audio
+ * One HLS playback session as the backend keys it: media + profile + audio ordinal + audio
  * conversion + client UUID + start second. Any change to these is a new server session (and a
  * new FFmpeg run); `reload` is an opaque cache-buster echoed into rewritten asset URLs,
  * deliberately outside the session key.
  */
 data class HlsSessionSpec(
-    val movieId: Long,
+    val media: PlaybackMediaRef,
     val profileId: String,
-    /** Ordinal into the movie's audio streams in `stream_index` order; null = video-only movie. */
+    /** Ordinal into the media's audio streams in `stream_index` order; null = video-only media. */
     val audioTypeIndex: Int?,
     val startSec: Int,
     val sessionUuid: String,

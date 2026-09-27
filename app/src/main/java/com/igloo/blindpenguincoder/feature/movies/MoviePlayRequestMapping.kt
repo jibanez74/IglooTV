@@ -1,47 +1,55 @@
 package com.igloo.blindpenguincoder.feature.movies
 
-import com.igloo.blindpenguincoder.data.model.Movie
-import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
-import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
+import com.igloo.blindpenguincoder.data.model.AudioStream
+import com.igloo.blindpenguincoder.data.model.Chapter
+import com.igloo.blindpenguincoder.data.model.Subtitle
+import com.igloo.blindpenguincoder.data.model.WatchProgress
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 
 /**
- * Assembles the player's start request from the details screen's fragments. The effective track
- * choice comes from [playbackSettingsUi] — the same resolution the Playback Settings dialog
- * renders — so what the user was shown and what plays can never disagree.
+ * Assembles the player's start request from a launching screen's fragments — a movie's from the
+ * details page, an episode's from the Continue Watching rail. The effective track choice comes
+ * from [playbackSettingsUi] — the same resolution the Playback Settings dialog renders — so what
+ * the user was shown and what plays can never disagree.
  */
-internal fun buildMoviePlayRequest(
-    movie: Movie,
+internal fun buildVideoPlayRequest(
+    media: PlaybackMediaRef,
+    title: String,
     posterUrl: String?,
-    technical: MovieTechnicalDetailsData,
-    progress: MovieWatchProgress?,
+    mimeType: String,
+    audioStreams: List<AudioStream>,
+    subtitles: List<Subtitle>,
+    chapters: List<Chapter>,
+    progress: WatchProgress?,
+    /** The file's own runtime, used only when no progress duration was saved. */
+    fileDurationSec: Double?,
     selection: PlaybackSelection,
 ): MoviePlayRequest {
     val settings = playbackSettingsUi(
-        audioStreams = technical.audioStreams,
-        subtitles = technical.subtitles,
+        audioStreams = audioStreams,
+        subtitles = subtitles,
         selection = selection,
     )
 
-    val audioStreams = technical.audioStreams
     // Sorted here for the same reason the type indexes are: `stream_index` order is the one
     // ordering every consumer shares, and the wire lists are not trusted to arrive sorted.
     val orderedAudio = audioStreams.sortedBy { it.streamIndex }
-    val orderedSubtitles = technical.subtitles.sortedBy { it.streamIndex }
+    val orderedSubtitles = subtitles.sortedBy { it.streamIndex }
 
     return MoviePlayRequest(
-        movieId = movie.id,
-        title = movie.title,
+        media = media,
+        title = title,
         posterUrl = posterUrl,
-        mimeType = technical.movie.mimeType,
+        mimeType = mimeType,
         mode = settings.selectedMode,
         audioTypeIndex = typeIndexOf(settings.selectedAudioId, audioStreams.map { it.id to it.streamIndex }),
         subtitleTypeIndex = typeIndexOf(
             settings.selectedSubtitleId,
-            technical.subtitles.map { it.id to it.streamIndex },
+            subtitles.map { it.id to it.streamIndex },
         ),
         audioTracks = orderedAudio.mapIndexed { index, stream ->
             PlayableAudioTrack(
@@ -59,10 +67,10 @@ internal fun buildMoviePlayRequest(
             )
         },
         resumeAtSec = resumePositionSec(progress),
-        durationSec = progress?.durationSec ?: movie.duration?.orNull(),
+        durationSec = progress?.durationSec ?: fileDurationSec,
         // Sorted here: the player's active-chapter scan and "Chapter N" numbering assume
         // ascending start times, and the wire list is not trusted to arrive sorted.
-        chapters = technical.chapters
+        chapters = chapters
             .sortedBy { it.startTime }
             .map { PlaybackChapter(title = it.title, startTimeSec = it.startTime.toDouble()) },
     )
@@ -88,7 +96,7 @@ private fun typeIndexOf(selectedId: Long?, idsWithStreamIndex: List<Pair<Long, L
  * "start from the beginning without asking". One definition serves both the details screen's
  * progress strip and the player's resume prompt.
  */
-internal fun resumePositionSec(progress: MovieWatchProgress?): Double? {
+internal fun resumePositionSec(progress: WatchProgress?): Double? {
     val progressSec = progress?.progressSec ?: return null
     val durationSec = progress.durationSec ?: return null
     if (!progressSec.isFinite() || !durationSec.isFinite()) return null

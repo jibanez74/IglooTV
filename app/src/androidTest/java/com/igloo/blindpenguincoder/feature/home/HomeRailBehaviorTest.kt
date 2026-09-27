@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -33,6 +34,8 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.testAlbums
+import com.igloo.blindpenguincoder.testContinueEpisode
+import com.igloo.blindpenguincoder.testContinueItems
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHomeMovies
 import com.igloo.blindpenguincoder.testTheaterMovies
@@ -61,7 +64,7 @@ class HomeRailBehaviorTest {
     private val theaterMovies = testTheaterMovies
 
     private var continueState by
-        mutableStateOf<IglooRailState<HomeContinueMovie>>(IglooRailState.Loading)
+        mutableStateOf<IglooRailState<HomeContinueItem>>(IglooRailState.Loading)
     private var latestState by
         mutableStateOf<IglooRailState<PosterItem>>(IglooRailState.Loading)
     private var albumsState by mutableStateOf<IglooRailState<HomeAlbum>>(IglooRailState.Loading)
@@ -72,13 +75,14 @@ class HomeRailBehaviorTest {
     private var albumRetries = 0
     private var theaterRetries = 0
     private val opened = mutableListOf<Long>()
+    private val resumedEpisodes = mutableListOf<Long>()
     private val theatersOpened = mutableListOf<Long>()
     private val albumsOpened = mutableListOf<Long>()
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
 
     private fun setShellContent(
-        initialContinue: IglooRailState<HomeContinueMovie>,
+        initialContinue: IglooRailState<HomeContinueItem>,
         initialLatest: IglooRailState<PosterItem> = IglooRailState.Loaded(movies),
         initialAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loaded(albums),
         initialTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loaded(theaterMovies),
@@ -97,6 +101,7 @@ class HomeRailBehaviorTest {
         opened.clear()
         theatersOpened.clear()
         albumsOpened.clear()
+        resumedEpisodes.clear()
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
@@ -124,6 +129,7 @@ class HomeRailBehaviorTest {
                     onMovieSelected = onMovieSelected,
                     onTheaterMovieSelected = onTheaterMovieSelected,
                     onAlbumSelected = onAlbumSelected,
+                    onResumeEpisode = { resumedEpisodes += it },
                 )
             }
         }
@@ -131,6 +137,9 @@ class HomeRailBehaviorTest {
     }
 
     private fun continueCard(id: Long) = composeRule.onNodeWithTag("continue_card_$id")
+
+    private fun continueEpisodeCard(id: Long) =
+        composeRule.onNodeWithTag("continue_episode_card_$id")
 
     private fun latestCard(id: Long) = composeRule.onNodeWithTag("poster_card_$id")
 
@@ -280,7 +289,7 @@ class HomeRailBehaviorTest {
         setShellContent(IglooRailState.Loaded(emptyList()))
 
         composeRule.onNodeWithContentDescription(
-            "Nothing in progress yet. Movies you start watching appear here.",
+            "Nothing in progress yet. Movies and episodes you start watching appear here.",
         ).assertIsFocused()
     }
 
@@ -307,6 +316,36 @@ class HomeRailBehaviorTest {
             .assertContentDescriptionEquals("Heat, 1995, 2 hours and 7 minutes remaining")
             .assert(hasClickAction())
         composeRule.onAllNodesWithText("2 hours and 7 minutes remaining").assertCountEquals(0)
+    }
+
+    @Test
+    fun episodeCardsAnnounceShowCodeNameAndProgressWithAResumeAction() {
+        setShellContent(IglooRailState.Loaded(testContinueItems))
+
+        // The show's name leads, the episode is named in the subtitle, and the only action an
+        // episode has is to resume — there is no details page to open.
+        continueEpisodeCard(900)
+            .assertContentDescriptionEquals("Severance, S1 E3 · In Perpetuity, 42 minutes remaining")
+            .assert(hasClickAction())
+        composeRule.onAllNodesWithText("42 minutes remaining").assertCountEquals(0)
+        assertEquals(
+            "Resume Severance S1 E3",
+            continueEpisodeCard(900).fetchSemanticsNode()
+                .config[SemanticsActions.OnClick].label,
+        )
+    }
+
+    @Test
+    fun okOnAnEpisodeCardAsksHomeToResumeIt() {
+        setShellContent(IglooRailState.Loaded(testContinueItems))
+
+        // Server order puts the episode first, so it owns the rail's entry anchor.
+        continueEpisodeCard(testContinueEpisode.episodeId).assertIsFocused()
+        continueEpisodeCard(testContinueEpisode.episodeId)
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+
+        assertEquals(listOf(900L), resumedEpisodes)
+        assertEquals(emptyList<Long>(), opened)
     }
 
     @Test

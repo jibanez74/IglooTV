@@ -166,7 +166,7 @@ fun MoviePlayerScreen(
     // The progress session: one per screen visit, and the exit save fires on *any* unmount —
     // Back, Ended, error Close, or the host tearing the overlay down — because the ViewModel
     // outlives this composable and gives the final write somewhere to land.
-    LaunchedEffect(Unit) { viewModel.startSession(request.movieId) }
+    LaunchedEffect(Unit) { viewModel.startSession(request.media) }
     DisposableEffect(Unit) {
         onDispose { viewModel.endSession(lastPositionSec, lastDurationSec) }
     }

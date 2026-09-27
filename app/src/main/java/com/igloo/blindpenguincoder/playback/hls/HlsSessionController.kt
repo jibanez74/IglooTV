@@ -6,6 +6,7 @@ import com.igloo.blindpenguincoder.playback.model.HLS_WAITING_FOR_CAPACITY_MESSA
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_BUSY_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SESSION_LOST_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -17,27 +18,27 @@ import kotlinx.coroutines.withTimeout
 
 /**
  * What the controller needs from the network layer, consumer-owned so JVM tests can fake it.
- * Implemented by the movie repository.
+ * Implemented by the video playback repository.
  */
 interface HlsSessionApi {
     suspend fun fetchHlsManifest(spec: HlsSessionSpec): HlsManifestResult
-    suspend fun stopHlsSession(movieId: Long, sessionUuid: String)
+    suspend fun stopHlsSession(media: PlaybackMediaRef, sessionUuid: String)
     fun hlsPlaylistUrl(spec: HlsSessionSpec): String
-    fun movieSubtitleUrl(movieId: Long, trackIndex: Int, startSec: Double): String
+    fun subtitleUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String
 }
 
 /** A session could not be established within the retry budget. */
 class HlsStartException(message: String, val unauthorized: Boolean = false) : Exception(message)
 
 /**
- * Owns one movie's HLS session lifecycle for the lifetime of one player engine: the
+ * Owns one title's HLS session lifecycle for the lifetime of one player engine: the
  * `playback_session` UUID (reused across uninterrupted HLS restarts so the backend self-evicts
  * the previous session on commit), the preflight manifest fetch with its capacity/lost retry
  * loops, the keepalive that covers the player's quiet stretches, and the best-effort stop on
  * release.
  */
 class HlsSessionController(
-    private val movieId: Long,
+    private val media: PlaybackMediaRef,
     private val api: HlsSessionApi,
     /** Engine-lifetime scope; the keepalive loop dies with it. */
     private val scope: CoroutineScope,
@@ -105,7 +106,7 @@ class HlsSessionController(
         while (true) {
             ensureCurrent(startGeneration, startUuid)
             val spec = HlsSessionSpec(
-                movieId = movieId,
+                media = media,
                 profileId = profileId,
                 audioTypeIndex = audioTypeIndex,
                 startSec = startSec,
@@ -223,7 +224,7 @@ class HlsSessionController(
         sessionUuid = UUID.randomUUID().toString()
         if (shouldStopServer) {
             stopScope.launch {
-                runCatching { api.stopHlsSession(movieId, stoppedUuid) }
+                runCatching { api.stopHlsSession(media, stoppedUuid) }
             }
         }
     }

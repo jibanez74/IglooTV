@@ -13,13 +13,19 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.session.MediaSession
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 
 /** What the system's now-playing surface shows, carried by the engine's media item. */
 internal fun movieMediaMetadata(request: MoviePlayRequest): MediaMetadata =
     MediaMetadata.Builder()
         .setTitle(request.title)
         .setArtworkUri(request.posterUrl?.let(Uri::parse))
-        .setMediaType(MediaMetadata.MEDIA_TYPE_MOVIE)
+        .setMediaType(
+            when (request.media) {
+                is PlaybackMediaRef.Movie -> MediaMetadata.MEDIA_TYPE_MOVIE
+                is PlaybackMediaRef.Episode -> MediaMetadata.MEDIA_TYPE_TV_SHOW
+            },
+        )
         .build()
 
 /**
@@ -37,7 +43,10 @@ internal fun buildMovieMediaSession(
 ): MediaSession = buildIglooMediaSession(
     context = context,
     player = player,
-    idPrefix = "movie-${request.movieId}",
+    idPrefix = when (val media = request.media) {
+        is PlaybackMediaRef.Movie -> "movie-${media.id}"
+        is PlaybackMediaRef.Episode -> "episode-${media.id}"
+    },
     bitmapLoader = DataSourceBitmapLoader.Builder(context)
         .setDataSourceFactory(dataSourceFactory)
         .build(),

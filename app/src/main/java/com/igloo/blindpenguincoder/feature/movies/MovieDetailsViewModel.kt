@@ -15,14 +15,15 @@ import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
-import com.igloo.blindpenguincoder.data.model.MovieWatchProgress
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.data.model.WatchProgress
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.languageDisplayName
 import kotlinx.coroutines.Job
@@ -250,7 +251,7 @@ class MovieDetailsViewModel(
     // open() clears them, and a response for a movie no longer open is dropped.
     private var wireDetails: MovieDetailsData? = null
     private var technicalRead = PlaybackRead<MovieTechnicalDetailsData>()
-    private var progressRead = PlaybackRead<MovieWatchProgress>()
+    private var progressRead = PlaybackRead<WatchProgress>()
     private var playIntentPending = false
 
     // Session-only (the user's decision): reset with the overlay, never persisted. Deliberately
@@ -360,16 +361,21 @@ class MovieDetailsViewModel(
         val details = wireDetails ?: return
         val technical = technicalRead.freshValueOrNull() ?: return
         val progress = progressRead.freshValueOrNull() ?: return
-        val request = buildMoviePlayRequest(
-            movie = details.movie,
+        val request = buildVideoPlayRequest(
+            media = PlaybackMediaRef.Movie(details.movie.id),
+            title = details.movie.title,
             // The same poster the details page shows, re-used as the session artwork.
             posterUrl = tmdbImageUrl(
                 serverUrl.require().apiBaseUrl,
                 TmdbImageSize.W500,
                 details.movie.posterPath?.orNull(),
             ),
-            technical = technical,
+            mimeType = technical.movie.mimeType,
+            audioStreams = technical.audioStreams,
+            subtitles = technical.subtitles,
+            chapters = technical.chapters,
             progress = progress,
+            fileDurationSec = details.movie.duration?.orNull(),
             selection = playbackSelection,
         )
         return when (

@@ -93,7 +93,7 @@ internal class ExoMoviePlayerEngine(
     private val handler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val controller =
-        HlsSessionController(request.movieId, services.hlsSessionApi, scope, services.stopScope)
+        HlsSessionController(request.media, services.hlsSessionApi, scope, services.stopScope)
 
     /**
      * Last successfully committed user intent; every seek, audio swap, and recovery asks for it
@@ -589,7 +589,7 @@ internal class ExoMoviePlayerEngine(
         ProgressiveMediaSource.Factory(services.progressiveDataSourceFactory)
             .createMediaSource(
                 MediaItem.Builder()
-                    .setUri(services.directStreamUrl(request.movieId))
+                    .setUri(services.directStreamUrl(request.media))
                     .setMimeType(request.mimeType)
                     .setMediaMetadata(movieMediaMetadata(request))
                     .build(),
@@ -624,7 +624,7 @@ internal class ExoMoviePlayerEngine(
             if (track.imageBased) return@mapIndexedNotNull null
             MediaItem.SubtitleConfiguration.Builder(
                 Uri.parse(
-                    services.hlsSessionApi.movieSubtitleUrl(request.movieId, index, actualStartSec),
+                    services.hlsSessionApi.subtitleUrl(request.media, index, actualStartSec),
                 ),
             )
                 .setMimeType(MimeTypes.TEXT_VTT)

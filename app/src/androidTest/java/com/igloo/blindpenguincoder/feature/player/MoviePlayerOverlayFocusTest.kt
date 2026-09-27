@@ -31,7 +31,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
@@ -42,7 +42,9 @@ import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
+import com.igloo.blindpenguincoder.testContinueItems
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testMovieDetails
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -67,7 +69,7 @@ class MoviePlayerOverlayFocusTest {
     val composeRule = createComposeRule()
 
     private val playRequest = MoviePlayRequest(
-        movieId = 1,
+        media = PlaybackMediaRef.Movie(1),
         title = "Heat",
         posterUrl = null,
         mimeType = "video/x-matroska",
@@ -81,23 +83,42 @@ class MoviePlayerOverlayFocusTest {
         durationSec = 7200.0,
     )
 
+    private val episodeRequest = playRequest.copy(
+        media = PlaybackMediaRef.Episode(900),
+        title = "Severance · S1 E3 · In Perpetuity",
+        resumeAtSec = null,
+        durationSec = 3300.0,
+    )
+
     private var detailsState by mutableStateOf(MovieDetailsUiState())
     private val engines = mutableListOf<FakeMoviePlayerEngine>()
     private val trailerEngines = mutableListOf<FakeTrailerPlayerEngine>()
     private lateinit var playRequests: MutableSharedFlow<MoviePlayRequest>
+    private lateinit var homePlayRequests: MutableSharedFlow<MoviePlayRequest>
     private var failProgressSaves = false
     private var hostActivity: Activity? = null
 
-    /** Null mimics the gate refusing: the message lands on the page and nothing opens. */
-    private fun setShellContent(requestPlayback: () -> MoviePlayRequest?) {
-        detailsState = MovieDetailsUiState(
-            openMovieId = 1,
-            details = MovieDetailsState.Loaded(testMovieDetails(id = 1)),
-        )
+    /**
+     * Null mimics the gate refusing: the message lands on the page and nothing opens. With
+     * [detailsOpen] false the shell is Home itself, with an episode leading Continue Watching.
+     */
+    private fun setShellContent(
+        detailsOpen: Boolean = true,
+        requestPlayback: () -> MoviePlayRequest? = { playRequest },
+    ) {
+        detailsState = if (detailsOpen) {
+            MovieDetailsUiState(
+                openMovieId = 1,
+                details = MovieDetailsState.Loaded(testMovieDetails(id = 1)),
+            )
+        } else {
+            MovieDetailsUiState()
+        }
         engines.clear()
         trailerEngines.clear()
         failProgressSaves = false
         playRequests = MutableSharedFlow(extraBufferCapacity = 1)
+        homePlayRequests = MutableSharedFlow(extraBufferCapacity = 1)
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
@@ -108,7 +129,7 @@ class MoviePlayerOverlayFocusTest {
                             if (failProgressSaves) {
                                 ApiResult.Failure(AppError.Network)
                             } else {
-                                ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                                ApiResult.Success(WatchProgressUpdateData(watched = false))
                             }
                         },
                         onWatchedStateCommitted = {},
@@ -117,13 +138,14 @@ class MoviePlayerOverlayFocusTest {
                 TestIglooApp(
                     home = HomeUiState(
                         hero = HomeHeroState.Hidden,
-                        continueWatching = IglooRailState.Loaded(testContinueMovies),
+                        continueWatching = IglooRailState.Loaded(testContinueItems),
                     ),
                     details = detailsState,
                     onRequestPlayback = {
                         requestPlayback()?.let(playRequests::tryEmit)
                     },
                     playRequests = playRequests,
+                    homePlayRequests = homePlayRequests,
                     moviePlayerViewModel = progressViewModel,
                     moviePlayerEngineFactory = { _, _ ->
                         FakeMoviePlayerEngine().also { engines += it }
@@ -162,6 +184,12 @@ class MoviePlayerOverlayFocusTest {
 
     private fun emitDelayedPlayRequest() {
         composeRule.runOnIdle { playRequests.tryEmit(playRequest) }
+        composeRule.waitForIdle()
+    }
+
+    /** Home's view model has prepared the episode the user pressed. */
+    private fun emitHomePlayRequest() {
+        composeRule.runOnIdle { homePlayRequests.tryEmit(episodeRequest) }
         composeRule.waitForIdle()
     }
 
@@ -226,6 +254,44 @@ class MoviePlayerOverlayFocusTest {
 
         composeRule.onNodeWithTag("details_progress_error").assertDoesNotExist()
         play.assertIsFocused()
+    }
+
+    @Test
+    fun anEpisodeLaunchedFromHomeHidesTheShellAndBackRestoresTheCard() {
+        setShellContent(detailsOpen = false)
+        val shell = composeRule.onNodeWithTag("shell_content")
+        shell.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+        composeRule.onNodeWithTag("continue_episode_card_900").assertIsFocused()
+
+        emitHomePlayRequest()
+
+        // The player sits straight over the pane — no details overlay between — so the shell
+        // itself leaves TalkBack traversal, and the episode starts from the beginning unasked.
+        composeRule.onNodeWithTag("movie_player").assertExists()
+        composeRule.onNodeWithTag("details_layer").assertDoesNotExist()
+        shell.assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
+        composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
+        assertEquals(listOf("start:null:true"), engines.single().playbackCommands)
+
+        pressBack()
+
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        assertEquals(true, engines.single().released)
+        shell.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+        composeRule.onNodeWithTag("continue_episode_card_900").assertIsFocused()
+    }
+
+    @Test
+    fun aHomeLaunchIsRefusedWhileTheDetailsOverlayIsUp() {
+        setShellContent(detailsOpen = true)
+
+        emitHomePlayRequest()
+
+        // A preparation that lands after the user opened an overlay must not put a player over
+        // a surface that never asked for one.
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        assertEquals(0, engines.size)
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
     }
 
     @Test

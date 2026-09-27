@@ -1,10 +1,14 @@
 package com.igloo.blindpenguincoder.feature.home
 
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.TestHttp
+import com.igloo.blindpenguincoder.data.repository.audioStreamJson
 import com.igloo.blindpenguincoder.data.repository.continueWatchingEpisodeJson
 import com.igloo.blindpenguincoder.data.repository.continueWatchingMovieJson
 import com.igloo.blindpenguincoder.data.repository.continueWatchingJson
+import com.igloo.blindpenguincoder.data.repository.episodePlaybackJson
+import com.igloo.blindpenguincoder.data.repository.episodeTechnicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.latestAlbumsJson
 import com.igloo.blindpenguincoder.data.repository.latestMovieJson
@@ -13,7 +17,10 @@ import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
 import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
 import com.igloo.blindpenguincoder.data.repository.theaterMovieJson
 import com.igloo.blindpenguincoder.data.repository.theaterMoviesJson
+import com.igloo.blindpenguincoder.data.repository.watchProgressJson
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
+import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -23,12 +30,14 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -48,9 +57,19 @@ class HomeViewModelTest {
     }
 
     /** The host's start effect is what fires the first load; there is no fetch in `init`. */
-    private fun viewModel(http: TestHttp) =
-        HomeViewModel(http.movieRepository, http.musicRepository, http.serverUrl)
-            .also { it.refresh() }
+    private fun viewModel(http: TestHttp, canPlayAudioMime: Boolean = true) =
+        newViewModel(http, canPlayAudioMime).also { it.refresh() }
+
+    private fun newViewModel(http: TestHttp, canPlayAudioMime: Boolean = true) = HomeViewModel(
+        http.movieRepository,
+        http.showRepository,
+        http.musicRepository,
+        http.serverUrl,
+        canPlayAudioMime = { _, _ -> canPlayAudioMime },
+    )
+
+    private fun List<HomeContinueItem>.movieTitles() =
+        map { (it as HomeContinueItem.Movie).movie.title }
 
     /** A refresh fires all four rails' requests plus the hero's, so handlers route by path. */
     private fun routedHttp(
@@ -65,10 +84,21 @@ class HomeViewModelTest {
             { jsonResponse(latestAlbumsJson()) },
         theaters: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(theaterMoviesJson()) },
+        episode: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+            { jsonResponse(episodePlaybackJson()) },
+        episodeTechnical: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+            { jsonResponse(episodeTechnicalDetailsJson()) },
+        episodeProgress: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+            { jsonResponse(watchProgressJson(progressSec = 600.0, durationSec = 3300.0)) },
     ) = TestHttp(engineDispatcher) { request ->
         val path = request.url.encodedPath
         when {
             path == "/api/continue-watching" -> continueWatching(request)
+            path.endsWith("/technical-details") && path.startsWith("/api/shows/episodes/") ->
+                episodeTechnical(request)
+            path.endsWith("/watch-progress") && path.startsWith("/api/shows/episodes/") ->
+                episodeProgress(request)
+            path.startsWith("/api/shows/episodes/") -> episode(request)
             path == "/api/music/albums/latest" -> albums(request)
             path == "/api/tmdb/movies/in-theaters" -> theaters(request)
             // Before the catch-all: the details call must never silently get a latest-shaped body.
@@ -81,7 +111,7 @@ class HomeViewModelTest {
         uiState.first { it.latestMovies is IglooRailState.Loaded }
             .latestMovies as IglooRailState.Loaded
 
-    private suspend fun HomeViewModel.awaitContinue(): IglooRailState.Loaded<HomeContinueMovie> =
+    private suspend fun HomeViewModel.awaitContinue(): IglooRailState.Loaded<HomeContinueItem> =
         uiState.first { it.continueWatching is IglooRailState.Loaded }
             .continueWatching as IglooRailState.Loaded
 
@@ -126,7 +156,7 @@ class HomeViewModelTest {
             theaters = { requests++; jsonResponse(theaterMoviesJson()) },
         )
 
-        val viewModel = HomeViewModel(http.movieRepository, http.musicRepository, http.serverUrl)
+        val viewModel = newViewModel(http)
 
         assertEquals(0, requests)
         assertEquals(IglooRailState.Loading, viewModel.uiState.value.continueWatching)
@@ -322,14 +352,14 @@ class HomeViewModelTest {
             },
         )
         val viewModel = viewModel(http)
-        assertEquals(listOf("Heat"), viewModel.awaitContinue().items.map { it.movie.title })
+        assertEquals(listOf("Heat"), viewModel.awaitContinue().items.movieTitles())
 
         viewModel.refreshContinueWatching()
         refreshReached.await()
 
         val during = viewModel.uiState.value.continueWatching
         assertTrue(during is IglooRailState.Loaded)
-        assertEquals(listOf("Heat"), (during as IglooRailState.Loaded).items.map { it.movie.title })
+        assertEquals(listOf("Heat"), (during as IglooRailState.Loaded).items.movieTitles())
         assertEquals(2, continueRequests)
         assertEquals(1, latestRequests)
         assertEquals(1, albumRequests)
@@ -337,7 +367,7 @@ class HomeViewModelTest {
 
         releaseRefresh.complete(Unit)
         viewModel.uiState.first {
-            (it.continueWatching as? IglooRailState.Loaded)?.items?.single()?.movie?.title == "Arrival"
+            (it.continueWatching as? IglooRailState.Loaded)?.items?.movieTitles() == listOf("Arrival")
         }
     }
 
@@ -397,7 +427,7 @@ class HomeViewModelTest {
 
         assertEquals(
             listOf(
-                HomeContinueMovie(
+                HomeContinueItem.Movie(
                     movie = PosterItem(
                         1,
                         "Heat",
@@ -435,13 +465,56 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `an in-progress episode never becomes a card`() = runTest {
+    fun `an in-progress episode becomes a card wearing the show poster and naming the episode`() =
+        runTest {
+            val http = routedHttp(
+                continueWatching = {
+                    jsonResponse(
+                        continueWatchingJson(
+                            continueWatchingEpisodeJson(
+                                id = 900,
+                                showTitle = "Severance",
+                                seasonNumber = 1,
+                                episodeNumber = 3,
+                                episodeName = "In Perpetuity",
+                                progressSec = 600.0,
+                                durationSec = 3300.0,
+                            ),
+                            continueWatchingMovieJson(id = 1, title = "Heat"),
+                        ),
+                    )
+                },
+            )
+
+            val state = viewModel(http).awaitContinue()
+
+            // Server order: the episode was watched most recently, so it leads.
+            val (episode, movie) = state.items
+            assertEquals(
+                HomeContinueItem.Episode(
+                    episodeId = 900,
+                    showTitle = "Severance",
+                    episodeCode = "S1 E3",
+                    episodeName = "In Perpetuity",
+                    posterUrl = "http://igloo.test:8080/api/tmdb/images/w500/severance.jpg",
+                    progressFraction = (600.0 / 3300.0).toFloat(),
+                    progressDescription = "45 minutes remaining",
+                ),
+                episode,
+            )
+            assertEquals("S1 E3 · In Perpetuity", (episode as HomeContinueItem.Episode).subtitle)
+            assertEquals("Heat", (movie as HomeContinueItem.Movie).movie.title)
+        }
+
+    /** A movie and an episode can share an id; the rail's keys must still be distinct. */
+    @Test
+    fun `a movie and an episode with the same id get different rail keys`() = runTest {
         val http = routedHttp(
             continueWatching = {
                 jsonResponse(
                     continueWatchingJson(
-                        continueWatchingEpisodeJson(id = 900, showTitle = "Severance"),
-                        continueWatchingMovieJson(id = 1, title = "Heat"),
+                        continueWatchingEpisodeJson(id = 5),
+                        continueWatchingMovieJson(id = 5),
                     ),
                 )
             },
@@ -449,7 +522,136 @@ class HomeViewModelTest {
 
         val state = viewModel(http).awaitContinue()
 
-        assertEquals(listOf("Heat"), state.items.map { it.movie.title })
+        assertEquals(2, state.items.map { it.railKey }.toSet().size)
+    }
+
+    @Test
+    fun `resuming an episode prepares it and emits a play request for the player`() = runTest {
+        val paths = mutableListOf<String>()
+        val http = routedHttp(
+            episode = { paths += it.url.encodedPath; jsonResponse(episodePlaybackJson()) },
+            episodeTechnical = {
+                paths += it.url.encodedPath
+                jsonResponse(episodeTechnicalDetailsJson(durationSec = 3300.0))
+            },
+            episodeProgress = {
+                paths += it.url.encodedPath
+                jsonResponse(watchProgressJson(progressSec = 600.0, durationSec = 3200.0))
+            },
+        )
+        val viewModel = viewModel(http)
+
+        viewModel.resumeEpisode(900)
+        val request = viewModel.playRequests.first()
+
+        assertEquals(PlaybackMediaRef.Episode(900), request.media)
+        assertEquals("Severance · S1 E3 · In Perpetuity", request.title)
+        assertEquals("http://igloo.test:8080/api/tmdb/images/w500/severance.jpg", request.posterUrl)
+        assertEquals("video/x-matroska", request.mimeType)
+        assertEquals(PlaybackMode.Direct, request.mode)
+        assertEquals(600.0, request.resumeAtSec)
+        // The saved duration wins over the probed one, as it does for a movie.
+        assertEquals(3200.0, request.durationSec)
+        assertEquals(
+            setOf(
+                "/api/shows/episodes/900",
+                "/api/shows/episodes/900/technical-details",
+                "/api/shows/episodes/900/watch-progress",
+            ),
+            paths.toSet(),
+        )
+        assertNull(viewModel.uiState.value.playbackNotice)
+    }
+
+    @Test
+    fun `an episode with no saved duration falls back to the probed file duration`() = runTest {
+        val http = routedHttp(
+            episodeTechnical = { jsonResponse(episodeTechnicalDetailsJson(durationSec = 3300.0)) },
+            episodeProgress = { jsonResponse(watchProgressJson()) },
+        )
+        val viewModel = viewModel(http)
+
+        viewModel.resumeEpisode(900)
+        val request = viewModel.playRequests.first()
+
+        assertEquals(3300.0, request.durationSec)
+        assertNull(request.resumeAtSec)
+    }
+
+    @Test
+    fun `a failed episode read surfaces a notice and launches nothing`() = runTest {
+        var launched = false
+        val http = routedHttp(
+            episodeTechnical = {
+                jsonResponse(
+                    """{"error":true,"message":"probe failed"}""",
+                    HttpStatusCode.InternalServerError,
+                )
+            },
+        )
+        val viewModel = viewModel(http)
+        val watcher = backgroundScope.launch { viewModel.playRequests.collect { launched = true } }
+
+        viewModel.resumeEpisode(900)
+        val notice = viewModel.uiState.first { it.playbackNotice != null }.playbackNotice
+
+        assertEquals("Couldn't prepare playback: probe failed", notice)
+        assertFalse(launched)
+        watcher.cancel()
+
+        // A refresh — the host's start effect — starts clean.
+        viewModel.refresh()
+        assertNull(viewModel.uiState.value.playbackNotice)
+    }
+
+    @Test
+    fun `repeated presses while preparing coalesce into one launch`() = runTest {
+        var headerRequests = 0
+        val release = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            episode = {
+                headerRequests += 1
+                release.await()
+                jsonResponse(episodePlaybackJson())
+            },
+        )
+        val viewModel = viewModel(http)
+
+        viewModel.resumeEpisode(900)
+        viewModel.resumeEpisode(900)
+        viewModel.resumeEpisode(900)
+        release.complete(Unit)
+        val request = viewModel.playRequests.first()
+
+        assertEquals(1, headerRequests)
+        assertEquals(PlaybackMediaRef.Episode(900), request.media)
+    }
+
+    /**
+     * Home has no Playback Settings to point the user at, so a Direct request the device cannot
+     * decode is relaunched as Remux instead of being refused with unreachable guidance.
+     */
+    @Test
+    fun `an undecodable default track falls back to remux instead of blocking`() = runTest {
+        val http = routedHttp(
+            episodeTechnical = {
+                jsonResponse(
+                    episodeTechnicalDetailsJson(
+                        audioStreams = listOf(
+                            audioStreamJson(ownerKey = "file_id", codec = "truehd", channels = 8),
+                        ),
+                    ),
+                )
+            },
+        )
+        val viewModel = viewModel(http, canPlayAudioMime = false)
+
+        viewModel.resumeEpisode(900)
+        val request = viewModel.playRequests.first()
+
+        assertEquals(PlaybackMode.Remux, request.mode)
+        assertEquals("truehd", request.selectedAudioTrack?.codec)
+        assertNull(viewModel.uiState.value.playbackNotice)
     }
 
     @Test
@@ -718,7 +920,7 @@ class HomeViewModelTest {
         assertEquals(IglooRailState.Loading, viewModel.uiState.value.continueWatching)
         assertTrue(viewModel.uiState.value.latestMovies is IglooRailState.Loaded)
         gate.complete(Unit)
-        assertEquals(listOf("Ran"), viewModel.awaitContinue().items.map { it.movie.title })
+        assertEquals(listOf("Ran"), viewModel.awaitContinue().items.movieTitles())
         assertEquals(1, latestRequests)
     }
 

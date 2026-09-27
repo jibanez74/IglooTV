@@ -34,9 +34,9 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.data.model.MovieWatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
-import com.igloo.blindpenguincoder.data.model.UpdateMovieWatchProgressRequest
+import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
@@ -45,6 +45,7 @@ import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.TrackOption
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -68,7 +69,7 @@ class MoviePlayerScreenTest {
 
     private lateinit var engine: FakeMoviePlayerEngine
     private lateinit var viewModel: MoviePlayerViewModel
-    private val savedRequests = mutableListOf<UpdateMovieWatchProgressRequest>()
+    private val savedRequests = mutableListOf<UpdateWatchProgressRequest>()
     private var closes = 0
     private var failProgressSaves = false
     private var hostActivity: Activity? = null
@@ -95,7 +96,7 @@ class MoviePlayerScreenTest {
         subtitleTypeIndex: Int? = null,
         subtitleTracks: List<PlayableSubtitleTrack> = emptyList(),
     ) = MoviePlayRequest(
-        movieId = 7,
+        media = PlaybackMediaRef.Movie(7),
         title = "Heat",
         posterUrl = null,
         mimeType = "video/x-matroska",
@@ -137,7 +138,7 @@ class MoviePlayerScreenTest {
                 if (failProgressSaves) {
                     ApiResult.Failure(AppError.Network)
                 } else {
-                    ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                    ApiResult.Success(WatchProgressUpdateData(watched = false))
                 }
             },
             onWatchedStateCommitted = {},
@@ -195,7 +196,7 @@ class MoviePlayerScreenTest {
         viewModel = MoviePlayerViewModel(
             saveProgress = { _, body ->
                 savedRequests += body
-                ApiResult.Success(MovieWatchProgressUpdateData(watched = false))
+                ApiResult.Success(WatchProgressUpdateData(watched = false))
             },
             onWatchedStateCommitted = {},
         )

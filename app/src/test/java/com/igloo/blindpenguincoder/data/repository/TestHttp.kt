@@ -18,6 +18,7 @@ import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.api.MusicApi
 import com.igloo.blindpenguincoder.data.api.ShowApi
 import com.igloo.blindpenguincoder.data.api.UserApi
+import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockEngineConfig
@@ -70,6 +71,8 @@ class TestHttp(
     val musicRepository = MusicRepository(musicApi)
     val showApi = ShowApi(client, serverUrl)
     val showRepository = ShowRepository(showApi)
+    val videoPlaybackApi = VideoPlaybackApi(client, serverUrl)
+    val videoPlaybackRepository = VideoPlaybackRepository(videoPlaybackApi)
 
     /** Puts profiles in the vault without going through a sign-in. */
     fun seedVault(
@@ -649,13 +652,13 @@ fun extraVideoJson(
 
 fun videoStreamJson(
     id: Long = 1,
-    movieId: Long = 1,
+    ownerKey: String = "movie_id",
     codec: String = "hevc",
     width: Long = 3840,
     height: Long = 1600,
     colorTransfer: String? = "smpte2084",
     bitDepth: Long? = 10,
-): String = """{"id":$id,"movie_id":$movieId,"stream_index":0,"codec":"$codec",""" +
+): String = """{"id":$id,"$ownerKey":1,"stream_index":0,"codec":"$codec",""" +
     """"codec_profile":${sqlNullStringJson("Main 10")},"codec_level":${sqlNullInt64Json(153)},""" +
     """"bit_rate":0,"width":$width,"height":$height,""" +
     """"coded_width":${sqlNullInt64Json(width)},"coded_height":${sqlNullInt64Json(height)},""" +
@@ -670,13 +673,13 @@ fun videoStreamJson(
 
 fun audioStreamJson(
     id: Long = 1,
-    movieId: Long = 1,
+    ownerKey: String = "movie_id",
     codec: String = "dts",
     channels: Long = 6,
     channelLayout: String? = "5.1(side)",
     language: String? = "eng",
     isDefault: Boolean = true,
-): String = """{"id":$id,"movie_id":$movieId,"stream_index":1,"codec":"$codec",""" +
+): String = """{"id":$id,"$ownerKey":1,"stream_index":1,"codec":"$codec",""" +
     """"codec_profile":${sqlNullStringJson("DTS-HD MA")},"bit_rate":0,""" +
     """"sample_rate":${sqlNullInt64Json(48000)},"channels":$channels,""" +
     """"channel_layout":${sqlNullStringJson(channelLayout)},""" +
@@ -685,12 +688,12 @@ fun audioStreamJson(
 
 fun subtitleJson(
     id: Long = 1,
-    movieId: Long = 1,
+    ownerKey: String = "movie_id",
     codec: String = "subrip",
     language: String? = "eng",
     isForced: Boolean = false,
     isDefault: Boolean = false,
-): String = """{"id":$id,"movie_id":$movieId,"stream_index":2,"codec":"$codec",""" +
+): String = """{"id":$id,"$ownerKey":1,"stream_index":2,"codec":"$codec",""" +
     """"language":${sqlNullStringJson(language)},"title":${sqlNullStringJson(null)},""" +
     """"is_forced":$isForced,"is_default":$isDefault}"""
 
@@ -699,9 +702,9 @@ fun chapterJson(
     title: String = "00:03:13.026",
     startTimeSec: Long = 193,
     thumb: String? = null,
-    movieId: Long = 1,
+    ownerKey: String = "movie_id",
 ): String = """{"id":$id,"title":"$title","start_time":$startTimeSec,""" +
-    """"thumb":${sqlNullStringJson(thumb)},"movie_id":$movieId}"""
+    """"thumb":${sqlNullStringJson(thumb)},"$ownerKey":1}"""
 
 /** `GET /movies/{id}/technical-details` payload; `movie` is the file's playback subset. */
 fun technicalDetailsJson(
@@ -721,7 +724,55 @@ fun technicalDetailsJson(
     }}
 """.trimIndent()
 
-/** `GET /movies/{id}/watch-progress` payload — plain JSON nulls, not `sql.Null*` wrappers. */
+/** `GET /shows/episodes/{id}/technical-details` payload; stream rows carry `file_id`, not `movie_id`. */
+fun episodeTechnicalDetailsJson(
+    mimeType: String = "video/x-matroska",
+    durationSec: Double? = 3300.0,
+    videoStreams: List<String> = listOf(videoStreamJson(ownerKey = "file_id")),
+    audioStreams: List<String> = listOf(audioStreamJson(ownerKey = "file_id")),
+    subtitles: List<String> = listOf(subtitleJson(ownerKey = "file_id")),
+    chapters: List<String> = emptyList(),
+): String = """
+    {"error":false,"message":"technical details","data":{
+      "file":{"file_name":"s01e03.mkv","size":2000000000,"container":"mkv","mime_type":"$mimeType",
+        "duration":${sqlNullFloat64Json(durationSec)}},
+      "video_streams":[${videoStreams.joinToString(",")}],
+      "audio_streams":[${audioStreams.joinToString(",")}],
+      "subtitles":[${subtitles.joinToString(",")}],
+      "chapters":[${chapters.joinToString(",")}]
+    }}
+""".trimIndent()
+
+/** `GET /shows/episodes/{id}` payload: the episode player's header. */
+fun episodePlaybackJson(
+    episodeId: Long = 900,
+    showId: Long = 40,
+    showName: String = "Severance",
+    posterPath: String? = "/severance.jpg",
+    seasonNumber: Long = 1,
+    episodeNumber: Long = 3,
+    episodeName: String = "In Perpetuity",
+    nextEpisode: String = "null",
+): String = """
+    {"error":false,"message":"episode","data":{
+      "show":{"id":$showId,"name":"$showName","poster_path":${sqlNullStringJson(posterPath)},
+        "backdrop_path":${sqlNullStringJson("/severance-backdrop.jpg")}},
+      "season":{"season_number":$seasonNumber,"name":"Season $seasonNumber"},
+      "episode":{"id":$episodeId,"episode_number":$episodeNumber,"name":"$episodeName",
+        "overview":${sqlNullStringJson("Helly's training continues.")},
+        "air_date":${sqlNullStringJson("2022-02-25")},"still_path":${sqlNullStringJson("/still.jpg")},
+        "tmdb_runtime":${sqlNullInt64Json(55)},"vote_average":${sqlNullFloat64Json(8.1)},
+        "vote_count":${sqlNullInt64Json(400)}},
+      "next_episode":$nextEpisode
+    }}
+""".trimIndent()
+
+/** A populated `next_episode`, for proving the client ignores it until it can advance. */
+fun upNextEpisodeJson(): String = """{"id":901,"season_number":1,"episode_number":4,""" +
+    """"name":"The You You Are","still_path":${sqlNullStringJson("/next.jpg")},""" +
+    """"progress_sec":${sqlNullFloat64Json(null)},"duration_sec":${sqlNullFloat64Json(null)},"watched":false}"""
+
+/** `GET …/watch-progress` payload — plain JSON nulls, not `sql.Null*` wrappers. */
 fun watchProgressJson(
     progressSec: Double? = null,
     durationSec: Double? = null,

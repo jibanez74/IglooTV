@@ -13,7 +13,7 @@ class MoviePlayRequestTest {
         audioTypeIndex: Int?,
         audioTracks: List<PlayableAudioTrack>,
     ) = MoviePlayRequest(
-        movieId = 1,
+        media = PlaybackMediaRef.Movie(1),
         title = "Heat",
         posterUrl = null,
         mimeType = "video/x-matroska",
