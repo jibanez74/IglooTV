@@ -2,7 +2,7 @@ package com.igloo.blindpenguincoder.playback.media3
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
+import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import kotlinx.coroutines.flow.SharedFlow
 
 /**
@@ -15,8 +15,8 @@ import kotlinx.coroutines.flow.SharedFlow
  * session's media may begin mid-movie; the engine owns that offset so the reducer, seek bar,
  * chapters, resume, and progress saves never learn HLS exists.
  */
-interface MoviePlayerEngine {
-    val events: SharedFlow<MoviePlayerEvent>
+interface VideoPlayerEngine {
+    val events: SharedFlow<VideoPlayerEvent>
 
     /** Engine-authoritative type ordinal; null keeps the container's default audio. */
     val currentAudioTypeIndex: Int?

@@ -51,12 +51,12 @@ import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicViewModel
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.TrackLikesViewModel
-import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
+import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.shows.showLibrarySource
-import com.igloo.blindpenguincoder.playback.media3.MoviePlaybackServices
+import com.igloo.blindpenguincoder.playback.media3.VideoPlaybackServices
 import com.igloo.blindpenguincoder.playback.media3.deviceCanDecodeVideoMime
 import com.igloo.blindpenguincoder.playback.media3.deviceCanPlayAudioMime
-import com.igloo.blindpenguincoder.playback.media3.exoMoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.exoVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.exoMusicPlayerEngine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -239,11 +239,11 @@ fun IglooRoot(container: IglooAppContainer) {
                             canPlayAudioMime = canPlayAudioMime,
                         )
                     }
-                    val moviePlayerViewModel = viewModel(
+                    val videoPlayerViewModel = viewModel(
                         viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "movie-player",
+                        key = "video-player",
                     ) {
-                        MoviePlayerViewModel(
+                        VideoPlayerViewModel(
                             saveProgress = container.videoPlaybackRepository::updateWatchProgress,
                             onWatchedStateCommitted = {
                                 homeViewModel.refreshContinueWatching()
@@ -394,12 +394,12 @@ fun IglooRoot(container: IglooAppContainer) {
                         },
                         onRequestPlayback = detailsViewModel::requestPlayback,
                         playRequests = detailsViewModel.playRequests,
-                        moviePlayerViewModel = moviePlayerViewModel,
-                        moviePlayerEngineFactory = { context, request ->
-                            exoMoviePlayerEngine(
+                        videoPlayerViewModel = videoPlayerViewModel,
+                        videoPlayerEngineFactory = { context, request ->
+                            exoVideoPlayerEngine(
                                 context = context,
                                 request = request,
-                                services = MoviePlaybackServices(
+                                services = VideoPlaybackServices(
                                     progressiveDataSourceFactory = container.streamDataSourceFactory,
                                     hlsDataSourceFactory = container.hlsStreamDataSourceFactory,
                                     directStreamUrl = container.videoPlaybackRepository::streamUrl,

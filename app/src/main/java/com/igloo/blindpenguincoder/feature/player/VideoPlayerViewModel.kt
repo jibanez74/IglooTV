@@ -54,7 +54,7 @@ private data class ProgressSaveAttempt(
  * by [MAX_TICK_DELTA_SEC] — so the cadence's "15 seconds of actual playback" means playback, not
  * wall-clock or seek distance; the other writes skip that floor, like the web.
  */
-class MoviePlayerViewModel(
+class VideoPlayerViewModel(
     private val saveProgress: suspend (PlaybackMediaRef, UpdateWatchProgressRequest) ->
     ApiResult<WatchProgressUpdateData>,
     private val onWatchedStateCommitted: () -> Unit,

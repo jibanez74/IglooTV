@@ -24,7 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class MoviePlayerViewModelTest {
+class VideoPlayerViewModelTest {
 
     private val requests = mutableListOf<UpdateWatchProgressRequest>()
     private var watchedResponse = false
@@ -37,10 +37,10 @@ class MoviePlayerViewModelTest {
     }
 
     /** The view model's scope rides Dispatchers.Main; share runTest's scheduler so virtual time moves both. */
-    private fun test(block: suspend TestScope.(MoviePlayerViewModel) -> Unit) = runTest {
+    private fun test(block: suspend TestScope.(VideoPlayerViewModel) -> Unit) = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         try {
-            val viewModel = MoviePlayerViewModel(
+            val viewModel = VideoPlayerViewModel(
                 saveProgress = { id, request -> save(id, request) },
                 onWatchedStateCommitted = { refreshes++ },
             )
@@ -52,7 +52,7 @@ class MoviePlayerViewModelTest {
     }
 
     /** Half-second ticks from [fromSec] to [toSec], all playing — the engine's cadence. */
-    private fun MoviePlayerViewModel.play(fromSec: Double, toSec: Double, durationSec: Double = 600.0) {
+    private fun VideoPlayerViewModel.play(fromSec: Double, toSec: Double, durationSec: Double = 600.0) {
         var position = fromSec
         while (position < toSec) {
             onTick(position, durationSec, isPlaying = true)

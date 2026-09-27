@@ -38,9 +38,9 @@ import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
 import com.igloo.blindpenguincoder.feature.home.findActivity
-import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
-import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
+import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.TrackOption
@@ -59,7 +59,7 @@ import org.junit.runner.RunWith
  * lands, an error pins Retry, a revoked session pins Close.
  */
 @RunWith(AndroidJUnit4::class)
-class MoviePlayerScreenTest {
+class VideoPlayerScreenTest {
 
     @get:Rule(order = 0)
     val animationScale = AnimationScaleRule()
@@ -67,17 +67,17 @@ class MoviePlayerScreenTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private lateinit var engine: FakeMoviePlayerEngine
-    private lateinit var viewModel: MoviePlayerViewModel
+    private lateinit var engine: FakeVideoPlayerEngine
+    private lateinit var viewModel: VideoPlayerViewModel
     private val savedRequests = mutableListOf<UpdateWatchProgressRequest>()
     private var closes = 0
     private var failProgressSaves = false
     private var hostActivity: Activity? = null
     private lateinit var restorationTester: StateRestorationTester
-    private val restorationEngines = mutableListOf<FakeMoviePlayerEngine>()
-    private val engineRequests = mutableListOf<MoviePlayRequest>()
+    private val restorationEngines = mutableListOf<FakeVideoPlayerEngine>()
+    private val engineRequests = mutableListOf<VideoPlayRequest>()
     private val requestedModes = mutableListOf<PlaybackMode>()
-    private var currentRequest by mutableStateOf<MoviePlayRequest?>(null)
+    private var currentRequest by mutableStateOf<VideoPlayRequest?>(null)
 
     /** The host contract: closing unmounts the screen, which is what fires the exit save. */
     private var open by mutableStateOf(true)
@@ -95,7 +95,7 @@ class MoviePlayerScreenTest {
         mode: PlaybackMode = PlaybackMode.Direct,
         subtitleTypeIndex: Int? = null,
         subtitleTracks: List<PlayableSubtitleTrack> = emptyList(),
-    ) = MoviePlayRequest(
+    ) = VideoPlayRequest(
         media = PlaybackMediaRef.Movie(7),
         title = "Heat",
         posterUrl = null,
@@ -123,8 +123,8 @@ class MoviePlayerScreenTest {
         PlaybackChapter(title = "The Heist", startTimeSec = 1800.0),
     )
 
-    private fun setContent(request: MoviePlayRequest = playRequest()) {
-        engine = FakeMoviePlayerEngine()
+    private fun setContent(request: VideoPlayRequest = playRequest()) {
+        engine = FakeVideoPlayerEngine()
         currentRequest = request
         engineRequests.clear()
         requestedModes.clear()
@@ -132,7 +132,7 @@ class MoviePlayerScreenTest {
         closes = 0
         failProgressSaves = false
         open = true
-        viewModel = MoviePlayerViewModel(
+        viewModel = VideoPlayerViewModel(
             saveProgress = { _, body ->
                 savedRequests += body
                 if (failProgressSaves) {
@@ -151,7 +151,7 @@ class MoviePlayerScreenTest {
             IglooTheme {
                 CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
                     if (open) {
-                        MoviePlayerScreen(
+                        VideoPlayerScreen(
                             request = requireNotNull(currentRequest),
                             viewModel = viewModel,
                             onClose = {
@@ -184,7 +184,7 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
     }
 
-    private fun setRestorableContent(request: MoviePlayRequest = playRequest()) {
+    private fun setRestorableContent(request: VideoPlayRequest = playRequest()) {
         savedRequests.clear()
         closes = 0
         failProgressSaves = false
@@ -193,7 +193,7 @@ class MoviePlayerScreenTest {
         restorationEngines.clear()
         engineRequests.clear()
         requestedModes.clear()
-        viewModel = MoviePlayerViewModel(
+        viewModel = VideoPlayerViewModel(
             saveProgress = { _, body ->
                 savedRequests += body
                 ApiResult.Success(WatchProgressUpdateData(watched = false))
@@ -209,7 +209,7 @@ class MoviePlayerScreenTest {
             IglooTheme {
                 CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
                     if (open) {
-                        MoviePlayerScreen(
+                        VideoPlayerScreen(
                             request = requireNotNull(currentRequest),
                             viewModel = viewModel,
                             onClose = {
@@ -228,7 +228,7 @@ class MoviePlayerScreenTest {
                             },
                             engineFactory = { _, engineRequest ->
                                 engineRequests += engineRequest
-                                FakeMoviePlayerEngine().also {
+                                FakeVideoPlayerEngine().also {
                                     it.setCurrentTrackSelection(
                                         engineRequest.audioTypeIndex,
                                         engineRequest.subtitleTypeIndex,
@@ -246,8 +246,8 @@ class MoviePlayerScreenTest {
     }
 
     private fun startPlaying(durationSec: Double = 7200.0) {
-        engine.emit(MoviePlayerEvent.Ready(durationSec))
-        engine.emit(MoviePlayerEvent.IsPlayingChanged(true))
+        engine.emit(VideoPlayerEvent.Ready(durationSec))
+        engine.emit(VideoPlayerEvent.IsPlayingChanged(true))
         composeRule.waitForIdle()
     }
 
@@ -256,7 +256,7 @@ class MoviePlayerScreenTest {
         engine.audioTypeIndices["2:0"] = 1
         engine.subtitleTypeIndices["3:0"] = 0
         engine.emit(
-            MoviePlayerEvent.TracksChanged(
+            VideoPlayerEvent.TracksChanged(
                 audio = listOf(
                     TrackOption(
                         id = "1:0",
@@ -289,7 +289,7 @@ class MoviePlayerScreenTest {
     private fun emitHlsSubtitleRows() {
         engine.subtitleTypeIndices["3:0"] = 0
         engine.emit(
-            MoviePlayerEvent.TracksChanged(
+            VideoPlayerEvent.TracksChanged(
                 audio = emptyList(),
                 subtitles = listOf(
                     TrackOption(id = "3:0", label = "English", selected = false),
@@ -316,7 +316,7 @@ class MoviePlayerScreenTest {
     private fun qualityOptionsEvent(
         selectedId: String,
         requestedMode: PlaybackMode,
-    ) = MoviePlayerEvent.QualityOptionsChanged(
+    ) = VideoPlayerEvent.QualityOptionsChanged(
         PlaybackMode.entries.map { mode ->
             TrackOption(
                 id = mode.name,
@@ -348,7 +348,7 @@ class MoviePlayerScreenTest {
     /** Delivers realistic one-second ticks, the cadence a real engine accrues played time from. */
     private fun playThrough(fromSec: Int, toSec: Int, durationSec: Double = 7200.0) {
         (fromSec..toSec).forEach { position ->
-            engine.emit(MoviePlayerEvent.Time(position.toDouble(), durationSec))
+            engine.emit(VideoPlayerEvent.Time(position.toDouble(), durationSec))
         }
         composeRule.waitForIdle()
     }
@@ -422,7 +422,7 @@ class MoviePlayerScreenTest {
     fun pausedIntentAndPositionRestoreWithoutAutoplayUntilExplicitPlay() {
         setRestorableContent()
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
         composeRule.waitForIdle()
 
         val playPause = composeRule.onNodeWithTag("movie_play_pause")
@@ -457,7 +457,7 @@ class MoviePlayerScreenTest {
         composeRule.onNodeWithTag("movie_resume")
             .performKeyInput { pressKey(Key.DirectionCenter) }
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 930.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 930.0, durationSec = 7200.0))
         composeRule.waitForIdle()
         val originalEngine = engine
 
@@ -495,7 +495,7 @@ class MoviePlayerScreenTest {
         playPause.performKeyInput { pressKey(Key.DirectionCenter) }
         assertEquals(listOf("start:null:true", "pause"), engine.playbackCommands)
 
-        engine.emit(MoviePlayerEvent.IsPlayingChanged(false))
+        engine.emit(VideoPlayerEvent.IsPlayingChanged(false))
         composeRule.waitForIdle()
 
         playPause.assertContentDescriptionEquals("Play")
@@ -512,9 +512,9 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
         assertEquals(listOf("start:null:true", "pause"), engine.playbackCommands)
 
-        engine.emit(MoviePlayerEvent.PlayWhenReadyChanged(true))
-        engine.emit(MoviePlayerEvent.IsPlayingChanged(true))
-        engine.emit(MoviePlayerEvent.Buffering)
+        engine.emit(VideoPlayerEvent.PlayWhenReadyChanged(true))
+        engine.emit(VideoPlayerEvent.IsPlayingChanged(true))
+        engine.emit(VideoPlayerEvent.Buffering)
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("movie_play_pause")
             .performKeyInput { pressKey(Key.DirectionCenter) }
@@ -546,7 +546,7 @@ class MoviePlayerScreenTest {
     fun mediaTransportKeysSeekTenSecondsRegardlessOfChrome() {
         setContent()
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 30.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 30.0, durationSec = 7200.0))
         composeRule.waitForIdle()
         letChromeHide()
 
@@ -564,7 +564,7 @@ class MoviePlayerScreenTest {
     fun withChromeHiddenLeftSeeksInsteadOfMovingFocus() {
         setContent()
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 60.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 60.0, durationSec = 7200.0))
         composeRule.waitForIdle()
         letChromeHide()
 
@@ -772,7 +772,7 @@ class MoviePlayerScreenTest {
             lifecycleOwner.registry.currentState = Lifecycle.State.CREATED
         }
         composeRule.waitForIdle()
-        engine = FakeMoviePlayerEngine()
+        engine = FakeVideoPlayerEngine()
         composeRule.runOnUiThread {
             lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         }
@@ -785,8 +785,8 @@ class MoviePlayerScreenTest {
         setContent()
         startPlaying()
 
-        engine.emit(MoviePlayerEvent.Buffering)
-        engine.emit(MoviePlayerEvent.StatusMessage("Waiting for the server to free up…"))
+        engine.emit(VideoPlayerEvent.Buffering)
+        engine.emit(VideoPlayerEvent.StatusMessage("Waiting for the server to free up…"))
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Waiting for the server to free up…").assertExists()
@@ -798,7 +798,7 @@ class MoviePlayerScreenTest {
                 ),
             )
 
-        engine.emit(MoviePlayerEvent.StatusMessage("Reconnecting to the stream…"))
+        engine.emit(VideoPlayerEvent.StatusMessage("Reconnecting to the stream…"))
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("Reconnecting to the stream…")
             .assert(
@@ -809,7 +809,7 @@ class MoviePlayerScreenTest {
             )
 
         startPlaying()
-        engine.emit(MoviePlayerEvent.Buffering)
+        engine.emit(VideoPlayerEvent.Buffering)
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Buffering…").assertExists()
@@ -846,7 +846,7 @@ class MoviePlayerScreenTest {
         setContent(playRequest(chapters = chapterFixture()))
         startPlaying()
         // Inside the second chapter, whose title is blank.
-        engine.emit(MoviePlayerEvent.Time(currentSec = 700.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 700.0, durationSec = 7200.0))
         composeRule.waitForIdle()
 
         openPlayerMenu("movie_chapters")
@@ -898,7 +898,7 @@ class MoviePlayerScreenTest {
         startPlaying()
         openPlayerMenu("movie_chapters")
 
-        engine.emit(MoviePlayerEvent.Error("The movie stream stopped unexpectedly."))
+        engine.emit(VideoPlayerEvent.Error("The movie stream stopped unexpectedly."))
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("movie_chapter_menu").assertDoesNotExist()
@@ -931,7 +931,7 @@ class MoviePlayerScreenTest {
         // Ended must turn the final snapshot into the known full duration.
         playThrough(fromSec = 0, toSec = 16)
 
-        engine.emit(MoviePlayerEvent.Ended)
+        engine.emit(VideoPlayerEvent.Ended)
         composeRule.waitForIdle()
 
         assertEquals(1, closes)
@@ -947,7 +947,7 @@ class MoviePlayerScreenTest {
         setContent()
         startPlaying()
         playThrough(fromSec = 584, toSec = 600)
-        engine.emit(MoviePlayerEvent.IsPlayingChanged(false))
+        engine.emit(VideoPlayerEvent.IsPlayingChanged(false))
         composeRule.waitForIdle()
 
         // Paused, so chrome may not hide: one Back closes.
@@ -966,7 +966,7 @@ class MoviePlayerScreenTest {
     fun pauseWritesTheCurrentPositionAtOnce() {
         setContent()
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("movie_play_pause")
@@ -983,7 +983,7 @@ class MoviePlayerScreenTest {
     fun aTripToTheBackgroundWritesOnceAndTheRebuiltEngineWritesNothing() {
         setContent()
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
         composeRule.waitForIdle()
 
         composeRule.runOnUiThread {
@@ -992,7 +992,7 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
         awaitSaveCount(1)
 
-        engine = FakeMoviePlayerEngine()
+        engine = FakeVideoPlayerEngine()
         composeRule.runOnUiThread {
             lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         }
@@ -1009,9 +1009,9 @@ class MoviePlayerScreenTest {
     fun aTickAfterEndedDoesNotLowerTheExitSave() {
         setContent()
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 7000.0, durationSec = 7200.0))
-        engine.emit(MoviePlayerEvent.Ended)
-        engine.emit(MoviePlayerEvent.Time(currentSec = 7001.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 7000.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Ended)
+        engine.emit(VideoPlayerEvent.Time(currentSec = 7001.0, durationSec = 7200.0))
         composeRule.waitForIdle()
 
         assertEquals(1, closes)
@@ -1024,8 +1024,8 @@ class MoviePlayerScreenTest {
         setContent()
         val failedEngine = engine
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
-        engine.emit(MoviePlayerEvent.Error("The movie stream stopped unexpectedly."))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Error("The movie stream stopped unexpectedly."))
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("The movie stream stopped unexpectedly.").assertExists()
@@ -1033,7 +1033,7 @@ class MoviePlayerScreenTest {
         retry.assertIsFocused()
 
         // The retry press lands on a fresh engine; swap the fake the factory hands out first.
-        engine = FakeMoviePlayerEngine()
+        engine = FakeVideoPlayerEngine()
         retry.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
 
@@ -1045,7 +1045,7 @@ class MoviePlayerScreenTest {
     fun unauthorizedErrorOffersCloseInsteadOfRetry() {
         setContent()
         engine.emit(
-            MoviePlayerEvent.Error("Your session is no longer valid.", unauthorized = true),
+            VideoPlayerEvent.Error("Your session is no longer valid.", unauthorized = true),
         )
         composeRule.waitForIdle()
 
@@ -1063,7 +1063,7 @@ class MoviePlayerScreenTest {
     fun backgroundReleasesOldEngineAndReconstructsPausedAtLastPosition() {
         setContent()
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
         composeRule.waitForIdle()
         val oldEngine = engine
         assertEquals(1, oldEngine.surfaceCreateCount)
@@ -1078,7 +1078,7 @@ class MoviePlayerScreenTest {
         oldEngine.play()
         assertEquals(transportBeforeStandby, oldEngine.playbackCommands)
 
-        engine = FakeMoviePlayerEngine()
+        engine = FakeVideoPlayerEngine()
         composeRule.runOnUiThread {
             lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         }
@@ -1105,7 +1105,7 @@ class MoviePlayerScreenTest {
     fun backgroundDuringPendingQualityReconstructsThatRequestPaused() {
         setContent()
         startPlaying()
-        engine.emit(MoviePlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
         emitQualityOptions()
         emitQualityOptions(selectedId = "Direct", requestedMode = PlaybackMode.Remux)
         assertEquals(PlaybackMode.Remux, requireNotNull(currentRequest).mode)
@@ -1117,7 +1117,7 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
         assertTrue(oldEngine.released)
 
-        engine = FakeMoviePlayerEngine()
+        engine = FakeVideoPlayerEngine()
         composeRule.runOnUiThread {
             lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         }
@@ -1134,13 +1134,13 @@ class MoviePlayerScreenTest {
         emitQualityOptions()
         engine.emit(qualityOptionsEvent("Direct", PlaybackMode.Remux))
         engine.emit(qualityOptionsEvent("Direct", PlaybackMode.Direct))
-        engine.emit(MoviePlayerEvent.Error("The server refused the stream."))
+        engine.emit(VideoPlayerEvent.Error("The server refused the stream."))
         composeRule.waitForIdle()
         assertEquals(listOf(PlaybackMode.Remux, PlaybackMode.Direct), requestedModes)
         assertEquals(PlaybackMode.Direct, requireNotNull(currentRequest).mode)
 
         val failedEngine = engine
-        engine = FakeMoviePlayerEngine()
+        engine = FakeVideoPlayerEngine()
         composeRule.onNodeWithContentDescription("Retry playing movie")
             .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
@@ -1168,7 +1168,7 @@ class MoviePlayerScreenTest {
         assertEquals(PlaybackMode.Remux, engineRequests.last().mode)
 
         val recreated = engine
-        recreated.emit(MoviePlayerEvent.Error("The movie stream stopped unexpectedly."))
+        recreated.emit(VideoPlayerEvent.Error("The movie stream stopped unexpectedly."))
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("Retry playing movie")
             .performKeyInput { pressKey(Key.DirectionCenter) }
@@ -1260,7 +1260,7 @@ class MoviePlayerScreenTest {
         composeRule.waitForIdle()
         assertTrue(oldEngine.released)
 
-        engine = FakeMoviePlayerEngine()
+        engine = FakeVideoPlayerEngine()
         composeRule.runOnUiThread {
             lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         }
@@ -1283,7 +1283,7 @@ class MoviePlayerScreenTest {
         composeRule.onNodeWithTag("movie_track_Direct")
             .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
-        engine.emit(MoviePlayerEvent.ModeRefused(REFUSAL))
+        engine.emit(VideoPlayerEvent.ModeRefused(REFUSAL))
         composeRule.waitForIdle()
 
         // The refusal is shown in place, politely, without dismissing or seizing focus.
@@ -1309,7 +1309,7 @@ class MoviePlayerScreenTest {
         startPlaying()
         emitQualityOptions()
         openPlayerMenu("movie_quality")
-        engine.emit(MoviePlayerEvent.ModeRefused(REFUSAL))
+        engine.emit(VideoPlayerEvent.ModeRefused(REFUSAL))
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("movie_track_refusal").assertExists()
 
@@ -1344,13 +1344,13 @@ class MoviePlayerScreenTest {
         assertEquals(listOf(true), engine.startRewinds)
 
         repeat(2) {
-            engine.emit(MoviePlayerEvent.Time(currentSec = 900.0, durationSec = 7200.0))
+            engine.emit(VideoPlayerEvent.Time(currentSec = 900.0, durationSec = 7200.0))
             composeRule.waitForIdle()
             composeRule.runOnUiThread {
                 lifecycleOwner.registry.currentState = Lifecycle.State.CREATED
             }
             composeRule.waitForIdle()
-            engine = FakeMoviePlayerEngine()
+            engine = FakeVideoPlayerEngine()
             composeRule.runOnUiThread {
                 lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
             }
@@ -1382,7 +1382,7 @@ class MoviePlayerScreenTest {
         failProgressSaves = true
         var position = 30.0
         while (position <= 46.0) {
-            engine.emit(MoviePlayerEvent.Time(position, 7200.0))
+            engine.emit(VideoPlayerEvent.Time(position, 7200.0))
             position += 0.5
         }
         composeRule.waitForIdle()
@@ -1446,7 +1446,7 @@ class MoviePlayerScreenTest {
     fun mediaTransportKeysAreInertOnTheErrorSurface() {
         setContent()
         startPlaying()
-        engine.emit(MoviePlayerEvent.Error("The movie stream stopped unexpectedly."))
+        engine.emit(VideoPlayerEvent.Error("The movie stream stopped unexpectedly."))
         composeRule.waitForIdle()
         val commandsBefore = engine.playbackCommands.toList()
 

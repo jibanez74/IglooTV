@@ -28,7 +28,7 @@ sealed interface PlaybackGateResult {
  * the caller (the engine, mid-session) is playing a different one — in [mode].
  */
 fun evaluatePlaybackGate(
-    request: MoviePlayRequest,
+    request: VideoPlayRequest,
     canPlayVideoMime: (mimeType: String) -> Boolean,
     canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
     mode: PlaybackMode = request.mode,

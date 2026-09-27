@@ -3,7 +3,7 @@ package com.igloo.blindpenguincoder.playback.model
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 
 /** The movie player's phases; the chrome renders exactly one of these at a time. */
-enum class MoviePlayerPhase { AwaitingResume, Loading, Playing, Paused, Buffering, Ended, Error }
+enum class VideoPlayerPhase { AwaitingResume, Loading, Playing, Paused, Buffering, Ended, Error }
 
 /**
  * One row of an in-player track menu. [id] is engine-opaque ("group:track" for ExoPlayer).
@@ -20,14 +20,14 @@ data class TrackOption(
 /**
  * The movie player's render-ready state, reduced purely from engine events so the whole machine
  * is testable without ExoPlayer. Two rules bind every transition, both inherited from the
- * trailer machine: an [MoviePlayerPhase.Error] is sticky — later events never downgrade the
+ * trailer machine: an [VideoPlayerPhase.Error] is sticky — later events never downgrade the
  * first failure the user saw — and a known [durationSec] never shrinks back to zero, because a
  * seek bar that collapses mid-play reads as a crash. Unlike the trailer, a seek clamped to the
  * very end is allowed to land: Ended comes from the engine and exits with full progress, which
  * is exactly what finishing a movie means.
  */
-data class MoviePlayerState(
-    val phase: MoviePlayerPhase = MoviePlayerPhase.Loading,
+data class VideoPlayerState(
+    val phase: VideoPlayerPhase = VideoPlayerPhase.Loading,
     val ready: Boolean = false,
     val playWhenReady: Boolean = false,
     val currentTimeSec: Double = 0.0,
@@ -45,9 +45,9 @@ data class MoviePlayerState(
     val modeRefusalMessage: String? = null,
 ) {
     /** The resume decision was made; the engine is starting and the chrome shows loading. */
-    fun onResumeChosen(): MoviePlayerState = when (phase) {
-        MoviePlayerPhase.AwaitingResume -> copy(
-            phase = MoviePlayerPhase.Loading,
+    fun onResumeChosen(): VideoPlayerState = when (phase) {
+        VideoPlayerPhase.AwaitingResume -> copy(
+            phase = VideoPlayerPhase.Loading,
             playWhenReady = true,
         )
         else -> this
@@ -57,55 +57,55 @@ data class MoviePlayerState(
      * STATE_READY: the surface has media. Paused, not Playing — the play/pause truth is
      * [onIsPlayingChanged], which fires in the same batch when playback actually starts.
      */
-    fun onReady(durationSec: Double): MoviePlayerState = when (phase) {
-        MoviePlayerPhase.Error, MoviePlayerPhase.Ended -> this
-        MoviePlayerPhase.Loading, MoviePlayerPhase.Buffering -> copy(
+    fun onReady(durationSec: Double): VideoPlayerState = when (phase) {
+        VideoPlayerPhase.Error, VideoPlayerPhase.Ended -> this
+        VideoPlayerPhase.Loading, VideoPlayerPhase.Buffering -> copy(
             ready = true,
-            phase = MoviePlayerPhase.Paused,
+            phase = VideoPlayerPhase.Paused,
             durationSec = keptDuration(durationSec),
             statusMessage = null,
         )
         else -> copy(ready = true, durationSec = keptDuration(durationSec), statusMessage = null)
     }
 
-    fun onBuffering(): MoviePlayerState = when (phase) {
-        MoviePlayerPhase.Error, MoviePlayerPhase.Ended, MoviePlayerPhase.AwaitingResume -> this
-        else -> copy(phase = MoviePlayerPhase.Buffering)
+    fun onBuffering(): VideoPlayerState = when (phase) {
+        VideoPlayerPhase.Error, VideoPlayerPhase.Ended, VideoPlayerPhase.AwaitingResume -> this
+        else -> copy(phase = VideoPlayerPhase.Buffering)
     }
 
     /**
      * ExoPlayer reports isPlaying=false for pause, buffering, and ended alike; the specific
      * events carry those, so false only ever downgrades an actual Playing phase.
      */
-    fun onIsPlayingChanged(playing: Boolean): MoviePlayerState = when {
-        phase == MoviePlayerPhase.Error || phase == MoviePlayerPhase.Ended -> this
-        playing -> copy(phase = MoviePlayerPhase.Playing)
-        phase == MoviePlayerPhase.Playing -> copy(phase = MoviePlayerPhase.Paused)
+    fun onIsPlayingChanged(playing: Boolean): VideoPlayerState = when {
+        phase == VideoPlayerPhase.Error || phase == VideoPlayerPhase.Ended -> this
+        playing -> copy(phase = VideoPlayerPhase.Playing)
+        phase == VideoPlayerPhase.Playing -> copy(phase = VideoPlayerPhase.Paused)
         else -> this
     }
 
-    fun onPlayWhenReadyChanged(playWhenReady: Boolean): MoviePlayerState = when (phase) {
-        MoviePlayerPhase.Error, MoviePlayerPhase.Ended -> this
+    fun onPlayWhenReadyChanged(playWhenReady: Boolean): VideoPlayerState = when (phase) {
+        VideoPlayerPhase.Error, VideoPlayerPhase.Ended -> this
         else -> copy(playWhenReady = playWhenReady)
     }
 
-    fun onEnded(): MoviePlayerState = when (phase) {
-        MoviePlayerPhase.Error -> this
+    fun onEnded(): VideoPlayerState = when (phase) {
+        VideoPlayerPhase.Error -> this
         else -> copy(
-            phase = MoviePlayerPhase.Ended,
+            phase = VideoPlayerPhase.Ended,
             playWhenReady = false,
             currentTimeSec = durationSec.takeIf { it > 0.0 } ?: currentTimeSec,
         )
     }
 
     /** The first failure wins; later messages never replace what the user already saw. */
-    fun onError(message: String): MoviePlayerState = when (phase) {
-        MoviePlayerPhase.Error -> this
-        else -> copy(phase = MoviePlayerPhase.Error, errorMessage = message)
+    fun onError(message: String): VideoPlayerState = when (phase) {
+        VideoPlayerPhase.Error -> this
+        else -> copy(phase = VideoPlayerPhase.Error, errorMessage = message)
     }
 
-    fun onTime(currentSec: Double, durationSec: Double): MoviePlayerState = when (phase) {
-        MoviePlayerPhase.Error, MoviePlayerPhase.Ended -> this
+    fun onTime(currentSec: Double, durationSec: Double): VideoPlayerState = when (phase) {
+        VideoPlayerPhase.Error, VideoPlayerPhase.Ended -> this
         else -> copy(
             currentTimeSec = currentSec.coerceAtLeast(0.0),
             durationSec = keptDuration(durationSec),
@@ -115,23 +115,23 @@ data class MoviePlayerState(
     fun onTracksChanged(
         audio: List<TrackOption>,
         subtitles: List<TrackOption>,
-    ): MoviePlayerState = copy(audioOptions = audio, subtitleOptions = subtitles)
+    ): VideoPlayerState = copy(audioOptions = audio, subtitleOptions = subtitles)
 
     /** An accepted switch re-emits the ladder, which is also what clears a stale refusal. */
-    fun onQualityOptionsChanged(options: List<TrackOption>): MoviePlayerState =
+    fun onQualityOptionsChanged(options: List<TrackOption>): VideoPlayerState =
         copy(qualityOptions = options, modeRefusalMessage = null)
 
-    fun onModeRefused(message: String): MoviePlayerState = copy(modeRefusalMessage = message)
+    fun onModeRefused(message: String): VideoPlayerState = copy(modeRefusalMessage = message)
 
     /** Closing the Quality menu retires its refusal; the next visit starts clean. */
-    fun onModeRefusalDismissed(): MoviePlayerState = when (modeRefusalMessage) {
+    fun onModeRefusalDismissed(): VideoPlayerState = when (modeRefusalMessage) {
         null -> this
         else -> copy(modeRefusalMessage = null)
     }
 
     /** Narration only matters while the user is still waiting for media. */
-    fun onStatusMessage(message: String?): MoviePlayerState = when (phase) {
-        MoviePlayerPhase.Error, MoviePlayerPhase.Ended -> this
+    fun onStatusMessage(message: String?): VideoPlayerState = when (phase) {
+        VideoPlayerPhase.Error, VideoPlayerPhase.Ended -> this
         else -> copy(statusMessage = message)
     }
 
@@ -139,8 +139,8 @@ data class MoviePlayerState(
     fun seekTarget(deltaSec: Double): Double = clampToPlayable(currentTimeSec + deltaSec)
 
     /** An optimistic seek: the bar moves under a held key without waiting for the next tick. */
-    fun onSeekApplied(targetSec: Double): MoviePlayerState = when (phase) {
-        MoviePlayerPhase.Error, MoviePlayerPhase.Ended -> this
+    fun onSeekApplied(targetSec: Double): VideoPlayerState = when (phase) {
+        VideoPlayerPhase.Error, VideoPlayerPhase.Ended -> this
         else -> copy(currentTimeSec = clampToPlayable(targetSec))
     }
 
@@ -152,33 +152,33 @@ data class MoviePlayerState(
 }
 
 /** The existing polite live region prefers actionable wait detail over generic phase copy. */
-internal fun moviePlayerAnnouncement(
-    phase: MoviePlayerPhase,
+internal fun videoPlayerAnnouncement(
+    phase: VideoPlayerPhase,
     statusMessage: String?,
     title: String,
 ): String? = when (phase) {
-    MoviePlayerPhase.Playing -> "Playing: $title"
-    MoviePlayerPhase.Paused -> "Paused: $title"
-    MoviePlayerPhase.Loading -> statusMessage ?: "Loading movie"
-    MoviePlayerPhase.Buffering -> statusMessage ?: "Buffering"
+    VideoPlayerPhase.Playing -> "Playing: $title"
+    VideoPlayerPhase.Paused -> "Paused: $title"
+    VideoPlayerPhase.Loading -> statusMessage ?: "Loading movie"
+    VideoPlayerPhase.Buffering -> statusMessage ?: "Buffering"
     else -> null
 }
 
-/** What the engine reports upward; each maps 1:1 onto a [MoviePlayerState] transition. */
-sealed interface MoviePlayerEvent {
-    data class Ready(val durationSec: Double) : MoviePlayerEvent
-    data object Buffering : MoviePlayerEvent
-    data class IsPlayingChanged(val playing: Boolean) : MoviePlayerEvent
-    data class PlayWhenReadyChanged(val playWhenReady: Boolean) : MoviePlayerEvent
-    data object Ended : MoviePlayerEvent
+/** What the engine reports upward; each maps 1:1 onto a [VideoPlayerState] transition. */
+sealed interface VideoPlayerEvent {
+    data class Ready(val durationSec: Double) : VideoPlayerEvent
+    data object Buffering : VideoPlayerEvent
+    data class IsPlayingChanged(val playing: Boolean) : VideoPlayerEvent
+    data class PlayWhenReadyChanged(val playWhenReady: Boolean) : VideoPlayerEvent
+    data object Ended : VideoPlayerEvent
 
     /** [unauthorized] rides along so the screen can distinguish a revoked session's message. */
-    data class Error(val message: String, val unauthorized: Boolean = false) : MoviePlayerEvent
-    data class Time(val currentSec: Double, val durationSec: Double) : MoviePlayerEvent
+    data class Error(val message: String, val unauthorized: Boolean = false) : VideoPlayerEvent
+    data class Time(val currentSec: Double, val durationSec: Double) : VideoPlayerEvent
     data class TracksChanged(
         val audio: List<TrackOption>,
         val subtitles: List<TrackOption>,
-    ) : MoviePlayerEvent
+    ) : VideoPlayerEvent
     /**
      * The quality ladder plus the accepted requested mode. During HLS preflight this is the
      * pending request so lifecycle reconstruction can preserve it; otherwise it is the last
@@ -187,25 +187,25 @@ sealed interface MoviePlayerEvent {
     data class QualityOptionsChanged(
         val options: List<TrackOption>,
         val requestedMode: PlaybackMode,
-    ) : MoviePlayerEvent
+    ) : VideoPlayerEvent
 
     /** The engine declined a quality choice and kept playing; [message] says why. */
-    data class ModeRefused(val message: String) : MoviePlayerEvent
+    data class ModeRefused(val message: String) : VideoPlayerEvent
 
     /** Narration for long engine waits; null clears it. */
-    data class StatusMessage(val message: String?) : MoviePlayerEvent
+    data class StatusMessage(val message: String?) : VideoPlayerEvent
 }
 
-fun MoviePlayerState.onEvent(event: MoviePlayerEvent): MoviePlayerState = when (event) {
-    is MoviePlayerEvent.Ready -> onReady(event.durationSec)
-    is MoviePlayerEvent.Buffering -> onBuffering()
-    is MoviePlayerEvent.IsPlayingChanged -> onIsPlayingChanged(event.playing)
-    is MoviePlayerEvent.PlayWhenReadyChanged -> onPlayWhenReadyChanged(event.playWhenReady)
-    is MoviePlayerEvent.Ended -> onEnded()
-    is MoviePlayerEvent.Error -> onError(event.message)
-    is MoviePlayerEvent.Time -> onTime(event.currentSec, event.durationSec)
-    is MoviePlayerEvent.TracksChanged -> onTracksChanged(event.audio, event.subtitles)
-    is MoviePlayerEvent.QualityOptionsChanged -> onQualityOptionsChanged(event.options)
-    is MoviePlayerEvent.ModeRefused -> onModeRefused(event.message)
-    is MoviePlayerEvent.StatusMessage -> onStatusMessage(event.message)
+fun VideoPlayerState.onEvent(event: VideoPlayerEvent): VideoPlayerState = when (event) {
+    is VideoPlayerEvent.Ready -> onReady(event.durationSec)
+    is VideoPlayerEvent.Buffering -> onBuffering()
+    is VideoPlayerEvent.IsPlayingChanged -> onIsPlayingChanged(event.playing)
+    is VideoPlayerEvent.PlayWhenReadyChanged -> onPlayWhenReadyChanged(event.playWhenReady)
+    is VideoPlayerEvent.Ended -> onEnded()
+    is VideoPlayerEvent.Error -> onError(event.message)
+    is VideoPlayerEvent.Time -> onTime(event.currentSec, event.durationSec)
+    is VideoPlayerEvent.TracksChanged -> onTracksChanged(event.audio, event.subtitles)
+    is VideoPlayerEvent.QualityOptionsChanged -> onQualityOptionsChanged(event.options)
+    is VideoPlayerEvent.ModeRefused -> onModeRefused(event.message)
+    is VideoPlayerEvent.StatusMessage -> onStatusMessage(event.message)
 }

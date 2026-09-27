@@ -5,11 +5,11 @@ import com.igloo.blindpenguincoder.data.model.Chapter
 import com.igloo.blindpenguincoder.data.model.Subtitle
 import com.igloo.blindpenguincoder.data.model.VideoStream
 import com.igloo.blindpenguincoder.data.model.WatchProgress
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 
 /**
  * Assembles the player's start request from a launching screen's fragments — a movie's from the
@@ -30,7 +30,7 @@ internal fun buildVideoPlayRequest(
     /** The file's own runtime, used only when no progress duration was saved. */
     fileDurationSec: Double?,
     selection: PlaybackSelection,
-): MoviePlayRequest {
+): VideoPlayRequest {
     val settings = playbackSettingsUi(
         audioStreams = audioStreams,
         subtitles = subtitles,
@@ -42,7 +42,7 @@ internal fun buildVideoPlayRequest(
     val orderedAudio = audioStreams.sortedBy { it.streamIndex }
     val orderedSubtitles = subtitles.sortedBy { it.streamIndex }
 
-    return MoviePlayRequest(
+    return VideoPlayRequest(
         media = media,
         title = title,
         posterUrl = posterUrl,
@@ -80,7 +80,7 @@ internal fun buildVideoPlayRequest(
 }
 
 /**
- * The wire id of an effective choice, as the type-relative index [MoviePlayRequest] carries:
+ * The wire id of an effective choice, as the type-relative index [VideoPlayRequest] carries:
  * the Nth stream of that type in `stream_index` order — the ordering that survives demuxing,
  * where ExoPlayer exposes the same streams as the Nth track group of the type. The wire list is
  * not trusted to arrive sorted. Null in, null out: no explicit track, or subtitles off.

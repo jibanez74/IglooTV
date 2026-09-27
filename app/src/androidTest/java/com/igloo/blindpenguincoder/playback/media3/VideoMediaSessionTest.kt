@@ -14,8 +14,8 @@ import androidx.media3.session.MediaSession
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -31,7 +31,7 @@ import org.junit.runner.RunWith
  * is constructed before the old one's disposal releases it, which throws unless ids differ.
  */
 @RunWith(AndroidJUnit4::class)
-class MovieMediaSessionTest {
+class VideoMediaSessionTest {
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
@@ -49,7 +49,7 @@ class MovieMediaSessionTest {
         }
     }
 
-    private fun playRequest(posterUrl: String? = null) = MoviePlayRequest(
+    private fun playRequest(posterUrl: String? = null) = VideoPlayRequest(
         media = PlaybackMediaRef.Movie(7),
         title = "Heat",
         posterUrl = posterUrl,
@@ -74,10 +74,10 @@ class MovieMediaSessionTest {
             player.setMediaItem(
                 MediaItem.Builder()
                     .setUri("https://203.0.113.1/movie")
-                    .setMediaMetadata(movieMediaMetadata(playRequest()))
+                    .setMediaMetadata(videoMediaMetadata(playRequest()))
                     .build(),
             )
-            val session = buildMovieMediaSession(
+            val session = buildVideoMediaSession(
                 context = context,
                 player = player,
                 request = playRequest(),
@@ -115,7 +115,7 @@ class MovieMediaSessionTest {
 
     @Test
     fun metadataCarriesTitleArtworkAndMovieType() {
-        val withPoster = movieMediaMetadata(
+        val withPoster = videoMediaMetadata(
             playRequest(posterUrl = "https://server/api/tmdb/images/w500/heat.jpg"),
         )
 
@@ -126,12 +126,12 @@ class MovieMediaSessionTest {
         )
         assertEquals(MediaMetadata.MEDIA_TYPE_MOVIE, withPoster.mediaType)
 
-        assertEquals(null, movieMediaMetadata(playRequest()).artworkUri)
+        assertEquals(null, videoMediaMetadata(playRequest()).artworkUri)
     }
 
     @Test
     fun anEpisodeIsTypedAsATvShowForTheSystemSurface() {
-        val episode = movieMediaMetadata(
+        val episode = videoMediaMetadata(
             playRequest().copy(media = PlaybackMediaRef.Episode(900), title = "Severance · S1 E3 · In Perpetuity"),
         )
 

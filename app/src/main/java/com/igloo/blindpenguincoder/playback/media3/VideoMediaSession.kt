@@ -12,11 +12,11 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.session.MediaSession
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 
 /** What the system's now-playing surface shows, carried by the engine's media item. */
-internal fun movieMediaMetadata(request: MoviePlayRequest): MediaMetadata =
+internal fun videoMediaMetadata(request: VideoPlayRequest): MediaMetadata =
     MediaMetadata.Builder()
         .setTitle(request.title)
         .setArtworkUri(request.posterUrl?.let(Uri::parse))
@@ -35,10 +35,10 @@ internal fun movieMediaMetadata(request: MoviePlayRequest): MediaMetadata =
  * them the bitmap instead. A failed load degrades to title-only metadata — artwork must never
  * surface an error.
  */
-internal fun buildMovieMediaSession(
+internal fun buildVideoMediaSession(
     context: Context,
     player: Player,
-    request: MoviePlayRequest,
+    request: VideoPlayRequest,
     dataSourceFactory: DataSource.Factory,
 ): MediaSession = buildIglooMediaSession(
     context = context,

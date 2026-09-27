@@ -17,10 +17,10 @@ import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicUiState
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
-import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
-import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
+import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
+import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.queue.InertMusicQueueFetcher
 import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
@@ -78,15 +78,15 @@ internal fun TestIglooApp(
     trackLikes: TrackLikesUiState = TrackLikesUiState(likedIds = emptySet()),
     onToggleTrackLike: (Long) -> Unit = {},
     onRequestPlayback: () -> Unit = {},
-    moviePlayerViewModel: MoviePlayerViewModel = rememberInertMoviePlayerViewModel(),
-    moviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine =
-        fakeMoviePlayerEngineFactory,
+    videoPlayerViewModel: VideoPlayerViewModel = rememberInertVideoPlayerViewModel(),
+    videoPlayerEngineFactory: (Context, VideoPlayRequest) -> VideoPlayerEngine =
+        fakeVideoPlayerEngineFactory,
     musicPlayerEngineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine =
         fakeMusicPlayerEngineFactory,
     musicQueueFetcher: MusicQueueFetcher = InertMusicQueueFetcher,
-    playRequests: Flow<MoviePlayRequest> = emptyFlow(),
+    playRequests: Flow<VideoPlayRequest> = emptyFlow(),
     musicPlayRequests: Flow<MusicPlayRequest> = emptyFlow(),
-    homePlayRequests: Flow<MoviePlayRequest> = emptyFlow(),
+    homePlayRequests: Flow<VideoPlayRequest> = emptyFlow(),
     onResumeEpisode: (Long) -> Unit = {},
     onRetryRail: (HomeRail) -> Unit = {},
     onMovieSelected: ((Long) -> Unit)? = null,
@@ -123,8 +123,8 @@ internal fun TestIglooApp(
         trackLikes = trackLikes,
         onToggleTrackLike = onToggleTrackLike,
         onRequestPlayback = onRequestPlayback,
-        moviePlayerViewModel = moviePlayerViewModel,
-        moviePlayerEngineFactory = moviePlayerEngineFactory,
+        videoPlayerViewModel = videoPlayerViewModel,
+        videoPlayerEngineFactory = videoPlayerEngineFactory,
         musicPlayerEngineFactory = musicPlayerEngineFactory,
         musicQueueFetcher = musicQueueFetcher,
         playRequests = playRequests,

@@ -47,15 +47,15 @@ import com.igloo.blindpenguincoder.feature.music.tracksEntries
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUi
 import com.igloo.blindpenguincoder.feature.music.AlbumDiscUi
 import com.igloo.blindpenguincoder.feature.music.AlbumFactUi
-import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
+import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
-import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
-import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 
 /**
@@ -222,15 +222,15 @@ internal val inertDetailsActions = MovieDetailsActions.Library(
  * succeed silently, and the factory hands out an inert fake so no decoder is touched.
  */
 @Composable
-internal fun rememberInertMoviePlayerViewModel(): MoviePlayerViewModel = remember {
-    MoviePlayerViewModel(
+internal fun rememberInertVideoPlayerViewModel(): VideoPlayerViewModel = remember {
+    VideoPlayerViewModel(
         saveProgress = { _, _ -> ApiResult.Success(WatchProgressUpdateData(watched = false)) },
         onWatchedStateCommitted = {},
     )
 }
 
-internal val fakeMoviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine =
-    { _, _ -> FakeMoviePlayerEngine() }
+internal val fakeVideoPlayerEngineFactory: (Context, VideoPlayRequest) -> VideoPlayerEngine =
+    { _, _ -> FakeVideoPlayerEngine() }
 
 internal val fakeMusicPlayerEngineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine =
     { _, request -> FakeMusicPlayerEngine(request.tracks.map { it.durationSec }) }

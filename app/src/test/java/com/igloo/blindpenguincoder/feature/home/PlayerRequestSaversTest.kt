@@ -2,7 +2,7 @@ package com.igloo.blindpenguincoder.feature.home
 
 import androidx.compose.runtime.saveable.SaverScope
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MAX_QUEUE_TRACKS
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
@@ -33,7 +33,7 @@ class PlayerRequestSaversTest {
         ),
     )
 
-    private val movie = MoviePlayRequest(
+    private val movie = VideoPlayRequest(
         media = PlaybackMediaRef.Movie(7),
         title = "Arrival",
         posterUrl = null,
@@ -113,32 +113,32 @@ class PlayerRequestSaversTest {
 
     @Test
     fun `a movie survives a round trip whole`() {
-        assertEquals(movie, roundTrip(MoviePlayRequestSaver, movie))
+        assertEquals(movie, roundTrip(VideoPlayRequestSaver, movie))
     }
 
     @Test
     fun `an episode survives a round trip whole`() {
         val episode = movie.copy(media = PlaybackMediaRef.Episode(900), title = "Severance · S1 E3 · In Perpetuity")
-        assertEquals(episode, roundTrip(MoviePlayRequestSaver, episode))
+        assertEquals(episode, roundTrip(VideoPlayRequestSaver, episode))
     }
 
     @Test
     fun `an unknown video codec restores as null, not as empty text`() {
         val unknown = movie.copy(videoCodec = null)
-        assertEquals(unknown, roundTrip(MoviePlayRequestSaver, unknown))
+        assertEquals(unknown, roundTrip(VideoPlayRequestSaver, unknown))
     }
 
     /** An older build wrote the movie id as a bare number; it must not crash the relaunch. */
     @Test
     fun `a bare movie id from an older build restores as no overlay instead of throwing`() {
-        val saved = with(MoviePlayRequestSaver) { scope.save(movie) }!!.toMutableList()
+        val saved = with(VideoPlayRequestSaver) { scope.save(movie) }!!.toMutableList()
         saved[0] = "7"
-        assertNull(MoviePlayRequestSaver.restore(saved))
+        assertNull(VideoPlayRequestSaver.restore(saved))
     }
 
     @Test
     fun `no movie saves and restores as no overlay`() {
-        assertNull(roundTrip(MoviePlayRequestSaver, null))
+        assertNull(roundTrip(VideoPlayRequestSaver, null))
     }
 
     @Test
@@ -149,14 +149,14 @@ class PlayerRequestSaversTest {
 
     @Test
     fun `an unknown playback mode restores as no overlay instead of throwing`() {
-        val saved = with(MoviePlayRequestSaver) { scope.save(movie) }!!.toMutableList()
+        val saved = with(VideoPlayRequestSaver) { scope.save(movie) }!!.toMutableList()
         saved[4] = "SomeModeFromANewerBuild"
-        assertNull(MoviePlayRequestSaver.restore(saved))
+        assertNull(VideoPlayRequestSaver.restore(saved))
     }
 
     @Test
     fun `a truncated bundle restores as no overlay instead of throwing`() {
         assertNull(MusicPlayRequestSaver.restore(listOf("""{"type":"tracks"}""", "0")))
-        assertNull(MoviePlayRequestSaver.restore(listOf("7", "Arrival")))
+        assertNull(VideoPlayRequestSaver.restore(listOf("7", "Arrival")))
     }
 }

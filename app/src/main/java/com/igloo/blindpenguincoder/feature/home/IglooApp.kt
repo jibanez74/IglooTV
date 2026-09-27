@@ -96,14 +96,14 @@ import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.music.toMusicPlayRequest
 import com.igloo.blindpenguincoder.feature.music.toShuffledMusicPlayRequest
 import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
-import com.igloo.blindpenguincoder.feature.player.MoviePlayerScreen
-import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
+import com.igloo.blindpenguincoder.feature.player.VideoPlayerScreen
+import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.player.MusicPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.ProgressSyncUiState
 import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
-import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
@@ -197,7 +197,7 @@ private data class DeferredPlayContext(
     val playerOpen: Boolean,
     val signOutConfirming: Boolean,
 ) {
-    fun accepts(request: MoviePlayRequest): Boolean =
+    fun accepts(request: VideoPlayRequest): Boolean =
         libraryDetails && request.media == openMovieId?.let(PlaybackMediaRef::Movie) &&
             !moreMenuOpen &&
             !playbackSettingsOpen && !trailerOpen && !playerOpen && !signOutConfirming
@@ -226,14 +226,14 @@ fun IglooApp(
     trackLikes: TrackLikesUiState,
     onToggleTrackLike: (Long) -> Unit,
     onRequestPlayback: () -> Unit,
-    moviePlayerViewModel: MoviePlayerViewModel,
-    moviePlayerEngineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine,
+    videoPlayerViewModel: VideoPlayerViewModel,
+    videoPlayerEngineFactory: (Context, VideoPlayRequest) -> VideoPlayerEngine,
     musicPlayerEngineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine,
     musicQueueFetcher: MusicQueueFetcher,
-    playRequests: Flow<MoviePlayRequest> = emptyFlow(),
+    playRequests: Flow<VideoPlayRequest> = emptyFlow(),
     musicPlayRequests: Flow<MusicPlayRequest> = emptyFlow(),
     /** Continue Watching episode launches, built by Home from the card the user pressed. */
-    homePlayRequests: Flow<MoviePlayRequest> = emptyFlow(),
+    homePlayRequests: Flow<VideoPlayRequest> = emptyFlow(),
     onResumeEpisode: (Long) -> Unit,
     onRetryRail: (HomeRail) -> Unit,
     onMovieSelected: ((Long) -> Unit)?,
@@ -295,14 +295,14 @@ fun IglooApp(
     // The movie player shares the details page's one player-overlay slot with the trailer. The
     // host owns its existence and focus restore, and an older deferred Play may not replace a
     // newer menu, dialog, or trailer action.
-    var moviePlayRequest by rememberSaveable(stateSaver = MoviePlayRequestSaver) {
-        mutableStateOf<MoviePlayRequest?>(null)
+    var videoPlayRequest by rememberSaveable(stateSaver = VideoPlayRequestSaver) {
+        mutableStateOf<VideoPlayRequest?>(null)
     }
     // Which surface launched the video player: it decides whose closing takes the player with
     // it and which requester its own close returns focus to (section 6.3). Kept after the
     // close so a failed exit save can still be reported on the surface that launched it.
     var videoPlayOrigin by rememberSaveable { mutableStateOf<VideoPlayOrigin?>(null) }
-    val playerOpen = moviePlayRequest != null
+    val playerOpen = videoPlayRequest != null
     // The music player is the album overlay's one player layer, the movie player's sibling in
     // every host contract: existence, Back gating, and focus restore all live here.
     var musicPlayRequest by rememberSaveable(stateSaver = MusicPlayRequestSaver) {
@@ -316,7 +316,7 @@ fun IglooApp(
     // closing the player restores focus to the control that launched it (section 6.3).
     val albumPlayReturnRequester = remember { FocusRequester() }
     val musicianPlayReturnRequester = remember { FocusRequester() }
-    val progressSync by moviePlayerViewModel.progressSyncUiState.collectAsStateWithLifecycle()
+    val progressSync by videoPlayerViewModel.progressSyncUiState.collectAsStateWithLifecycle()
     val progressSyncError = (progressSync as? ProgressSyncUiState.Failed)?.message
     val playReturnRequester = remember { FocusRequester() }
     // Parked by the extras rail on its last-focused card, so closing the player restores focus
@@ -354,7 +354,7 @@ fun IglooApp(
             val eligible = deferredPlayArmed && deferredPlayContext.accepts(request)
             deferredPlayArmed = false
             if (eligible) {
-                moviePlayRequest = request
+                videoPlayRequest = request
                 videoPlayOrigin = VideoPlayOrigin.MovieDetails
             }
         }
@@ -370,7 +370,7 @@ fun IglooApp(
     LaunchedEffect(homePlayRequests) {
         homePlayRequests.collect { request ->
             if (homeCanPlay) {
-                moviePlayRequest = request
+                videoPlayRequest = request
                 videoPlayOrigin = VideoPlayOrigin.ContinueWatchingRail
             }
         }
@@ -385,7 +385,7 @@ fun IglooApp(
             playbackSettingsOpen = false
             // The player must not outlive the details page it launched from — a profile switch
             // or session revalidation that closes the overlay takes the movie with it.
-            if (videoPlayOrigin == VideoPlayOrigin.MovieDetails) moviePlayRequest = null
+            if (videoPlayOrigin == VideoPlayOrigin.MovieDetails) videoPlayRequest = null
         }
     }
     // The player must not outlive the album page it launched from — a profile switch or
@@ -446,8 +446,8 @@ fun IglooApp(
             contentStartRequester.requestFocusSafely()
         }
     }
-    val closeMoviePlayer: () -> Unit = {
-        moviePlayRequest = null
+    val closeVideoPlayer: () -> Unit = {
+        videoPlayRequest = null
         // In the callback, not an effect, for the detach-race reason the details close
         // documents. The launching control is still composed in every reachable case — the
         // details page's Play button, or the Continue Watching rail's anchor while Home is the
@@ -574,7 +574,7 @@ fun IglooApp(
                 videoPlayOrigin == VideoPlayOrigin.ContinueWatchingRail && !playerOpen &&
                     !anyDetailsOpen
             },
-            onRetryProgressSync = moviePlayerViewModel::retryFailedSave,
+            onRetryProgressSync = videoPlayerViewModel::retryFailedSave,
             onRetryRail = onRetryRail,
             onResumeEpisode = onResumeEpisode,
             openMovie = openMovie,
@@ -761,7 +761,7 @@ fun IglooApp(
                         detailsActions is MovieDetailsActions.Library &&
                             videoPlayOrigin == VideoPlayOrigin.MovieDetails
                     },
-                    onRetryProgressSync = moviePlayerViewModel::retryFailedSave,
+                    onRetryProgressSync = videoPlayerViewModel::retryFailedSave,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
@@ -794,16 +794,16 @@ fun IglooApp(
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
         }
-        moviePlayRequest?.let { request ->
-            MoviePlayerScreen(
+        videoPlayRequest?.let { request ->
+            VideoPlayerScreen(
                 request = request,
-                viewModel = moviePlayerViewModel,
-                onClose = closeMoviePlayer,
+                viewModel = videoPlayerViewModel,
+                onClose = closeVideoPlayer,
                 onPlaybackModeRequested = { mode ->
-                    moviePlayRequest = moviePlayRequest?.copy(mode = mode)
+                    videoPlayRequest = videoPlayRequest?.copy(mode = mode)
                 },
                 onTrackSelectionChanged = { audioTypeIndex, subtitleTypeIndex ->
-                    moviePlayRequest = moviePlayRequest?.let { current ->
+                    videoPlayRequest = videoPlayRequest?.let { current ->
                         if (
                             current.audioTypeIndex == audioTypeIndex &&
                             current.subtitleTypeIndex == subtitleTypeIndex
@@ -817,7 +817,7 @@ fun IglooApp(
                         }
                     }
                 },
-                engineFactory = moviePlayerEngineFactory,
+                engineFactory = videoPlayerEngineFactory,
             )
         }
     }

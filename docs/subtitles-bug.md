@@ -41,10 +41,10 @@ Product policy, chosen explicitly: **the user's subtitle choice is remembered an
 silently substituted.**
 
 - `currentSubtitleTypeIndex` is redefined as the user's *chosen* ordinal, not the rendered one
-  (`MoviePlayerEngine` KDoc carries the contract). It survives in-place source swaps, host
+  (`VideoPlayerEngine` KDoc carries the contract). It survives in-place source swaps, host
   persistence, and engine reconstruction unchanged.
 - Whether the choice can render on the current source is decided per prepare by
-  `MoviePlayRequest.subtitleRenderableInMode`: under HLS a bitmap (or out-of-range) ordinal
+  `VideoPlayRequest.subtitleRenderableInMode`: under HLS a bitmap (or out-of-range) ordinal
   disables the text track type outright and clears any text override, so nothing renders and
   Media3 has no room to auto-select a sideloaded VTT. Returning to Direct re-enables the text
   type and the swap-apply restores the bitmap group override.
@@ -63,23 +63,23 @@ silently substituted.**
 
 - Entering HLS with a selected bitmap subtitle produces an explicit, deterministic subtitle
   state; never Media3 auto-selection —
-  `ExoMoviePlayerEngineTest.switchingToHlsWithABitmapSubtitleGoesDeterministicallyOffAndKeepsTheChoice`,
+  `ExoVideoPlayerEngineTest.switchingToHlsWithABitmapSubtitleGoesDeterministicallyOffAndKeepsTheChoice`,
   `…reconstructingIntoHlsWithABitmapOrdinalStaysOffButKeepsTheOrdinal`,
-  `MoviePlayRequestTest` (`subtitleRenderableInMode` cases).
+  `VideoPlayRequestTest` (`subtitleRenderableInMode` cases).
 - `currentSubtitleTypeIndex`, the visible selected row, and the rendered player state agree
   after every Direct/HLS source swap —
   `TrackOptionsTest.aRememberedBitmapChoiceMarksItsInertRowSelected`,
-  `ExoMoviePlayerEngineTest.aTextOrdinalKeepsTextEnabledUnderHls`.
+  `ExoVideoPlayerEngineTest.aTextOrdinalKeepsTextEnabledUnderHls`.
 - An unavailable bitmap choice cannot cause an unrelated VTT track to become selected —
   the deterministic-off engine tests above, plus
-  `ExoMoviePlayerEngineTest.anUnresolvableSubtitleOptionIdIsANoOp`.
+  `ExoVideoPlayerEngineTest.anUnresolvableSubtitleOptionIdIsANoOp`.
 - Restoring the choice on return to Direct is the documented product policy —
-  `ExoMoviePlayerEngineTest.returningToDirectReenablesTextForTheRememberedChoice`,
-  `MoviePlayerScreenTest.aBitmapSubtitleChoiceSurvivesSavedStateRecreationUnderHls`.
+  `ExoVideoPlayerEngineTest.returningToDirectReenablesTextForTheRememberedChoice`,
+  `VideoPlayerScreenTest.aBitmapSubtitleChoiceSurvivesSavedStateRecreationUnderHls`.
 - Text subtitle ordinals and generated `/subtitles/{trackIndex}/web.vtt` URLs remain correct
   when bitmap and text streams are interleaved —
   `TrackOptionsTest.hlsSubtitleRowsInterleaveInertBitmapRowsInWireOrder`,
   `…aSideloadedSubtitleIsFoundByItsStampedIdNotItsGroupPosition`.
 - Menu state is visible and TalkBack-reachable through the transition —
-  `MoviePlayerScreenTest.anInertImageBasedSubtitleRowIsFocusableSelectedAndNotActivatable`,
+  `VideoPlayerScreenTest.anInertImageBasedSubtitleRowIsFocusableSelectedAndNotActivatable`,
   `…selectingARealVttUnderHlsReplacesTheBitmapMemory`.

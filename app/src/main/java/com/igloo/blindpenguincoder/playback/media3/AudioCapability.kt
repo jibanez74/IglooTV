@@ -13,7 +13,7 @@ import androidx.media3.common.Format
 import androidx.media3.exoplayer.audio.AudioCapabilities
 
 /** The player's audio identity: media usage, movie content, and audio-focus handling. */
-internal val moviePlaybackAudioAttributes: AudioAttributes = AudioAttributes.Builder()
+internal val videoPlaybackAudioAttributes: AudioAttributes = AudioAttributes.Builder()
     .setUsage(C.USAGE_MEDIA)
     .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
     .build()
@@ -40,8 +40,8 @@ fun deviceCanPlayAudioMime(context: Context, mimeType: String, channelCount: Int
         .setSampleRate(48_000)
         .build()
     val passthrough = AudioCapabilities
-        .getCapabilities(context, moviePlaybackAudioAttributes, null)
-        .isPassthroughPlaybackSupported(format, moviePlaybackAudioAttributes)
+        .getCapabilities(context, videoPlaybackAudioAttributes, null)
+        .isPassthroughPlaybackSupported(format, videoPlaybackAudioAttributes)
     return passthrough || hasDecoder(mimeType, channels)
 }
 

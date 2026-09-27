@@ -19,7 +19,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-class MoviePlayRequestMappingTest {
+class VideoPlayRequestMappingTest {
 
     @Test
     fun `carries the movie identity and the selected mode`() {

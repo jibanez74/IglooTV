@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
  * the demuxed container's track-group order under direct play, and the backend's
  * `audio_track`/`trackIndex` ordinal for HLS sessions and sideloaded subtitles.
  */
-data class MoviePlayRequest(
+data class VideoPlayRequest(
     val media: PlaybackMediaRef,
     val title: String,
     /** The details page's poster, re-used as the MediaSession artwork. Null = title only. */
@@ -57,10 +57,10 @@ data class MoviePlayRequest(
  * chosen ordinal is remembered even where it cannot render — an HLS session only serves the
  * text streams as sideloaded VTT — so the player must disable the text renderer outright
  * rather than leave Media3 free to auto-select an unrelated track. Direct trusts the container
- * over [MoviePlayRequest.subtitleTracks]: the wire list can be degraded or empty while the
+ * over [VideoPlayRequest.subtitleTracks]: the wire list can be degraded or empty while the
  * demuxed file still carries the stream.
  */
-internal fun MoviePlayRequest.subtitleRenderableInMode(typeIndex: Int?, hls: Boolean): Boolean =
+internal fun VideoPlayRequest.subtitleRenderableInMode(typeIndex: Int?, hls: Boolean): Boolean =
     when {
         typeIndex == null -> false
         !hls -> true

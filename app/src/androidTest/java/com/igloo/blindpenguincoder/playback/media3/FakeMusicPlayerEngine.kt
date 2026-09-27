@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.SharedFlow
 /**
  * The test-side [MusicPlayerEngine]: records the commands the chrome sends and lets a test emit
  * the events a real ExoPlayer would, so player suites run without touching a decoder or the
- * network. The [FakeMoviePlayerEngine] recipe minus the movie-only members (no surface, no
+ * network. The [FakeVideoPlayerEngine] recipe minus the movie-only members (no surface, no
  * track/quality selection), plus the queue commands the music seam adds.
  */
 class FakeMusicPlayerEngine(

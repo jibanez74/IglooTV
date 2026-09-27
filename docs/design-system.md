@@ -2341,6 +2341,10 @@ forgot to change the code.**
 - A failed exit save after a Home launch surfaces on Home as the inline Retry card above Continue
   Watching (§11.8), where there is no details page to follow the user back to; movie details no
   longer shows a failure its page did not launch.
+- **The player is named for video, not movies.** `MoviePlayRequest`, `MoviePlayerScreen`,
+  `MoviePlayerViewModel`, `MoviePlayerEngine` / `ExoMoviePlayerEngine`, `MoviePlaybackServices`,
+  `MoviePlayerState` / `Event` / `Phase` and `MovieMediaSession` became their `Video*`
+  equivalents. Test tags are unchanged (`movie_player`, `movie_play_pause`, …).
 
 **2026-09-26 — TV Shows: the library pane shared between Movies and TV Shows (§11.4, §8.3).**
 

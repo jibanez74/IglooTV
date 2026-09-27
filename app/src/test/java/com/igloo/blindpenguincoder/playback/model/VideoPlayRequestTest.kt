@@ -7,12 +7,12 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class MoviePlayRequestTest {
+class VideoPlayRequestTest {
 
     private fun request(
         audioTypeIndex: Int?,
         audioTracks: List<PlayableAudioTrack>,
-    ) = MoviePlayRequest(
+    ) = VideoPlayRequest(
         media = PlaybackMediaRef.Movie(1),
         title = "Heat",
         posterUrl = null,

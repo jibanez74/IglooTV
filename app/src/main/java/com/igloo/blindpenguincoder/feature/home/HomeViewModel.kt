@@ -29,7 +29,7 @@ import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.posterItem
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
@@ -147,10 +147,10 @@ class HomeViewModel(
 
     // Conflated, like the details page's: the host consumes launches, and only the latest one
     // can matter once it does.
-    private val playRequestChannel = Channel<MoviePlayRequest>(Channel.CONFLATED)
+    private val playRequestChannel = Channel<VideoPlayRequest>(Channel.CONFLATED)
 
     /** An episode ready to play, once its preparation succeeded; the host opens the player. */
-    val playRequests: Flow<MoviePlayRequest> = playRequestChannel.receiveAsFlow()
+    val playRequests: Flow<VideoPlayRequest> = playRequestChannel.receiveAsFlow()
 
     private var resumeEpisodeId: Long? = null
     private var resumeJob: Job? = null
@@ -260,7 +260,7 @@ class HomeViewModel(
         }
     }
 
-    private suspend fun prepareEpisode(episodeId: Long): ApiResult<MoviePlayRequest> =
+    private suspend fun prepareEpisode(episodeId: Long): ApiResult<VideoPlayRequest> =
         coroutineScope {
             val playback = async { shows.episodePlayback(episodeId) }
             val technical = async { shows.episodeTechnicalDetails(episodeId) }
@@ -289,7 +289,7 @@ class HomeViewModel(
         header: ShowEpisodePlaybackData,
         file: ShowEpisodeTechnicalDetailsData,
         saved: WatchProgress,
-    ): MoviePlayRequest {
+    ): VideoPlayRequest {
         val title = listOf(
             header.show.name,
             formatEpisodeCode(header.season.seasonNumber, header.episode.episodeNumber),

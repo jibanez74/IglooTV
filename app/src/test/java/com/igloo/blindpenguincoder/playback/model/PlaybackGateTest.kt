@@ -29,7 +29,7 @@ class PlaybackGateTest {
 
     // --- over a built request ---
 
-    private val request = MoviePlayRequest(
+    private val request = VideoPlayRequest(
         media = PlaybackMediaRef.Episode(900),
         title = "Severance · S1 E3 · In Perpetuity",
         posterUrl = null,

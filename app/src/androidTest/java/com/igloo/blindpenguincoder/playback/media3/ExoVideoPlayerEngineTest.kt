@@ -15,11 +15,11 @@ import com.igloo.blindpenguincoder.playback.hls.HlsManifestResult
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionApi
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
-import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,13 +43,13 @@ import org.junit.runner.RunWith
  * the engine's side of the seam — the decisions that were previously reachable only by hand.
  */
 @RunWith(AndroidJUnit4::class)
-class ExoMoviePlayerEngineTest {
+class ExoVideoPlayerEngineTest {
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
 
     private val stopScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val engines = mutableListOf<MoviePlayerEngine>()
+    private val engines = mutableListOf<VideoPlayerEngine>()
 
     @After
     fun releaseAll() {
@@ -93,7 +93,7 @@ class ExoMoviePlayerEngineTest {
         ),
         subtitleTypeIndex: Int? = null,
         subtitleTracks: List<PlayableSubtitleTrack> = listOf(PlayableSubtitleTrack(label = "English")),
-    ) = MoviePlayRequest(
+    ) = VideoPlayRequest(
         media = PlaybackMediaRef.Movie(7),
         title = "Heat",
         posterUrl = null,
@@ -109,17 +109,17 @@ class ExoMoviePlayerEngineTest {
     )
 
     private fun engine(
-        request: MoviePlayRequest = playRequest(),
+        request: VideoPlayRequest = playRequest(),
         api: FakeHlsApi = FakeHlsApi(),
         canPlayAudioMime: (String, Int?) -> Boolean = { _, _ -> true },
         canPlayVideoMime: (String) -> Boolean = { true },
-    ): MoviePlayerEngine {
-        lateinit var built: MoviePlayerEngine
+    ): VideoPlayerEngine {
+        lateinit var built: VideoPlayerEngine
         instrumentation.runOnMainSync {
-            built = exoMoviePlayerEngine(
+            built = exoVideoPlayerEngine(
                 context = context,
                 request = request,
-                services = MoviePlaybackServices(
+                services = VideoPlaybackServices(
                     progressiveDataSourceFactory = DefaultHttpDataSource.Factory(),
                     hlsDataSourceFactory = DefaultHttpDataSource.Factory(),
                     directStreamUrl = { "https://203.0.113.1/movies/${it.id}/stream" },
@@ -147,11 +147,11 @@ class ExoMoviePlayerEngineTest {
 
     private fun onMain(block: () -> Unit) = instrumentation.runOnMainSync(block)
 
-    private fun MoviePlayerEngine.errors(): List<MoviePlayerEvent.Error> =
-        events.replayCache.filterIsInstance<MoviePlayerEvent.Error>()
+    private fun VideoPlayerEngine.errors(): List<VideoPlayerEvent.Error> =
+        events.replayCache.filterIsInstance<VideoPlayerEvent.Error>()
 
-    private fun MoviePlayerEngine.refusals(): List<String> =
-        events.replayCache.filterIsInstance<MoviePlayerEvent.ModeRefused>().map { it.message }
+    private fun VideoPlayerEngine.refusals(): List<String> =
+        events.replayCache.filterIsInstance<VideoPlayerEvent.ModeRefused>().map { it.message }
 
     // --- starting a session ---
 
@@ -278,7 +278,7 @@ class ExoMoviePlayerEngineTest {
         preflight.complete(HlsManifestResult.Ready("remux", 1_000.0))
         waitFor("the source prepared at the moved target") {
             engine.events.replayCache
-                .filterIsInstance<MoviePlayerEvent.Time>()
+                .filterIsInstance<VideoPlayerEvent.Time>()
                 .lastOrNull()
                 ?.currentSec == 1_030.0
         }
@@ -352,11 +352,11 @@ class ExoMoviePlayerEngineTest {
 
         onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
         waitFor("the quality options") {
-            engine.events.replayCache.any { it is MoviePlayerEvent.QualityOptionsChanged }
+            engine.events.replayCache.any { it is VideoPlayerEvent.QualityOptionsChanged }
         }
 
         val ladder = engine.events.replayCache
-            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .filterIsInstance<VideoPlayerEvent.QualityOptionsChanged>()
             .last()
         assertEquals(PlaybackMode.entries.size, ladder.options.size)
         assertEquals(PlaybackMode.P1080Mbps8.name, ladder.options.single { it.selected }.id)
@@ -369,7 +369,7 @@ class ExoMoviePlayerEngineTest {
         val engine = engine(playRequest(), api)
         onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
         waitFor("the direct quality options") {
-            engine.events.replayCache.any { it is MoviePlayerEvent.QualityOptionsChanged }
+            engine.events.replayCache.any { it is VideoPlayerEvent.QualityOptionsChanged }
         }
 
         val firstPreflight = CompletableDeferred<HlsManifestResult>()
@@ -378,7 +378,7 @@ class ExoMoviePlayerEngineTest {
         waitFor("the suspended preflight") { api.fetched.size == 1 }
 
         val pending = engine.events.replayCache
-            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .filterIsInstance<VideoPlayerEvent.QualityOptionsChanged>()
             .last()
         assertEquals(PlaybackMode.P1080Mbps8, pending.requestedMode)
         assertEquals(PlaybackMode.Direct.name, pending.options.single { it.selected }.id)
@@ -386,7 +386,7 @@ class ExoMoviePlayerEngineTest {
         firstPreflight.complete(HlsManifestResult.Ready("1080p_8mbps", 0.0))
         waitFor("the committed quality") {
             engine.events.replayCache
-                .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+                .filterIsInstance<VideoPlayerEvent.QualityOptionsChanged>()
                 .last()
                 .options
                 .single { it.selected }
@@ -400,7 +400,7 @@ class ExoMoviePlayerEngineTest {
         assertEquals(
             PlaybackMode.P720Mbps3,
             engine.events.replayCache
-                .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+                .filterIsInstance<VideoPlayerEvent.QualityOptionsChanged>()
                 .last()
                 .requestedMode,
         )
@@ -409,13 +409,13 @@ class ExoMoviePlayerEngineTest {
         waitFor("the terminal failure") { engine.errors().isNotEmpty() }
 
         val events = engine.events.replayCache
-        val errorIndex = events.indexOfLast { it is MoviePlayerEvent.Error }
+        val errorIndex = events.indexOfLast { it is VideoPlayerEvent.Error }
         val rollbackIndex = events.indexOfLast {
-            it is MoviePlayerEvent.QualityOptionsChanged &&
+            it is VideoPlayerEvent.QualityOptionsChanged &&
                 it.requestedMode == PlaybackMode.P1080Mbps8
         }
         assertTrue("the committed request must be restored before the error", rollbackIndex in 0 until errorIndex)
-        val rollback = events[rollbackIndex] as MoviePlayerEvent.QualityOptionsChanged
+        val rollback = events[rollbackIndex] as VideoPlayerEvent.QualityOptionsChanged
         assertEquals(PlaybackMode.P1080Mbps8.name, rollback.options.single { it.selected }.id)
     }
 
@@ -427,7 +427,7 @@ class ExoMoviePlayerEngineTest {
         onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
         waitFor("the effective source") {
             engine.events.replayCache
-                .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+                .filterIsInstance<VideoPlayerEvent.QualityOptionsChanged>()
                 .lastOrNull()
                 ?.options
                 ?.single { it.selected }
@@ -441,7 +441,7 @@ class ExoMoviePlayerEngineTest {
         onMain { engine.selectPlaybackMode(PlaybackMode.P1080Mbps8.name) }
 
         val restored = engine.events.replayCache
-            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .filterIsInstance<VideoPlayerEvent.QualityOptionsChanged>()
             .last()
         assertEquals(PlaybackMode.Remux, restored.requestedMode)
         assertEquals(PlaybackMode.P1080Mbps8.name, restored.options.single { it.selected }.id)
@@ -449,7 +449,7 @@ class ExoMoviePlayerEngineTest {
         preflight.complete(HlsManifestResult.Ready("720p_3mbps", 0.0))
         instrumentation.waitForIdleSync()
         val afterLateCompletion = engine.events.replayCache
-            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .filterIsInstance<VideoPlayerEvent.QualityOptionsChanged>()
             .last()
         assertEquals(restored, afterLateCompletion)
         assertTrue(engine.errors().isEmpty())
@@ -484,7 +484,7 @@ class ExoMoviePlayerEngineTest {
         assertEquals(
             PlaybackMode.Remux,
             engine.events.replayCache
-                .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+                .filterIsInstance<VideoPlayerEvent.QualityOptionsChanged>()
                 .last()
                 .requestedMode,
         )
@@ -546,10 +546,10 @@ class ExoMoviePlayerEngineTest {
 
         // The quality menu tells the truth: Remux effective, Remux the reported intent.
         waitFor("the quality options") {
-            engine.events.replayCache.any { it is MoviePlayerEvent.QualityOptionsChanged }
+            engine.events.replayCache.any { it is VideoPlayerEvent.QualityOptionsChanged }
         }
         val ladder = engine.events.replayCache
-            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .filterIsInstance<VideoPlayerEvent.QualityOptionsChanged>()
             .last()
         assertEquals(PlaybackMode.Remux.name, ladder.options.single { it.selected }.id)
         assertEquals(PlaybackMode.Remux, ladder.requestedMode)
@@ -577,12 +577,12 @@ class ExoMoviePlayerEngineTest {
 
         onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
         waitFor("the quality options") {
-            engine.events.replayCache.any { it is MoviePlayerEvent.QualityOptionsChanged }
+            engine.events.replayCache.any { it is VideoPlayerEvent.QualityOptionsChanged }
         }
 
         assertTrue(api.fetched.isEmpty())
         val ladder = engine.events.replayCache
-            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .filterIsInstance<VideoPlayerEvent.QualityOptionsChanged>()
             .last()
         assertEquals(PlaybackMode.Direct.name, ladder.options.single { it.selected }.id)
     }
@@ -651,18 +651,18 @@ class ExoMoviePlayerEngineTest {
         PlayableSubtitleTrack(label = "Spanish"),
     )
 
-    private fun selectedQualityId(engine: MoviePlayerEngine): String? =
+    private fun selectedQualityId(engine: VideoPlayerEngine): String? =
         engine.events.replayCache
-            .filterIsInstance<MoviePlayerEvent.QualityOptionsChanged>()
+            .filterIsInstance<VideoPlayerEvent.QualityOptionsChanged>()
             .lastOrNull()
             ?.options
             ?.singleOrNull { it.selected }
             ?.id
 
     /** Reads the live selection parameters on the main thread via the instrumentation seam. */
-    private fun selectionParameters(engine: MoviePlayerEngine): TrackSelectionParameters {
+    private fun selectionParameters(engine: VideoPlayerEngine): TrackSelectionParameters {
         lateinit var params: TrackSelectionParameters
-        onMain { params = (engine as ExoMoviePlayerEngine).currentTrackSelectionParameters }
+        onMain { params = (engine as ExoVideoPlayerEngine).currentTrackSelectionParameters }
         return params
     }
 

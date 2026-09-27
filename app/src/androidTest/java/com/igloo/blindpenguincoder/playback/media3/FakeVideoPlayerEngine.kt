@@ -4,20 +4,20 @@ import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
-import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
+import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
 /**
- * The test-side [MoviePlayerEngine]: records the commands the chrome sends and lets a test emit
+ * The test-side [VideoPlayerEngine]: records the commands the chrome sends and lets a test emit
  * the events a real ExoPlayer would, so player suites run without touching a decoder or the
  * network. The [FakeTrailerPlayerEngine] recipe, extended with the movie seam's start and
  * track-selection members.
  */
-class FakeMoviePlayerEngine : MoviePlayerEngine {
+class FakeVideoPlayerEngine : VideoPlayerEngine {
 
-    private val _events = MutableSharedFlow<MoviePlayerEvent>(replay = 64)
-    override val events: SharedFlow<MoviePlayerEvent> = _events
+    private val _events = MutableSharedFlow<VideoPlayerEvent>(replay = 64)
+    override val events: SharedFlow<VideoPlayerEvent> = _events
     override var currentAudioTypeIndex: Int? = null
         private set
     override var currentSubtitleTypeIndex: Int? = null
@@ -69,19 +69,19 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
         if (released) return
         startRewinds += rewindOnResume
         commands += "start:$startPositionSec:$initialPlayWhenReady"
-        emit(MoviePlayerEvent.PlayWhenReadyChanged(initialPlayWhenReady))
+        emit(VideoPlayerEvent.PlayWhenReadyChanged(initialPlayWhenReady))
     }
 
     override fun play() {
         if (released || !hostActive) return
         commands += "play"
-        emit(MoviePlayerEvent.PlayWhenReadyChanged(true))
+        emit(VideoPlayerEvent.PlayWhenReadyChanged(true))
     }
 
     override fun pause() {
         if (released) return
         commands += "pause"
-        emit(MoviePlayerEvent.PlayWhenReadyChanged(false))
+        emit(VideoPlayerEvent.PlayWhenReadyChanged(false))
     }
 
     override fun seekTo(seconds: Double) {
@@ -121,7 +121,7 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
         if (released) return
         hostActive = false
         commands += "hostPaused"
-        emit(MoviePlayerEvent.PlayWhenReadyChanged(false))
+        emit(VideoPlayerEvent.PlayWhenReadyChanged(false))
     }
 
     override fun onHostResumed() {
@@ -136,7 +136,7 @@ class FakeMoviePlayerEngine : MoviePlayerEngine {
         released = true
     }
 
-    fun emit(event: MoviePlayerEvent) {
+    fun emit(event: VideoPlayerEvent) {
         check(_events.tryEmit(event)) { "event buffer full" }
     }
 }

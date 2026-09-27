@@ -11,7 +11,7 @@ import kotlinx.coroutines.CoroutineScope
  * HLS segment requests long-poll the server for up to two minutes while FFmpeg encodes, a
  * patience that would only mask real stalls on a progressive stream.
  */
-class MoviePlaybackServices(
+class VideoPlaybackServices(
     val progressiveDataSourceFactory: DataSource.Factory,
     val hlsDataSourceFactory: DataSource.Factory,
     val directStreamUrl: (media: PlaybackMediaRef) -> String,

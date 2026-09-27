@@ -46,8 +46,8 @@ import com.igloo.blindpenguincoder.playback.hls.shouldRebaseHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRebasePendingHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRecoverLostHlsSession
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
-import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.TrackOption
@@ -81,14 +81,14 @@ import kotlinx.coroutines.launch
  * media starts at the server-reported actual start; [timelineOffsetSec] holds that offset and
  * this class is the only place it exists.
  */
-internal class ExoMoviePlayerEngine(
+internal class ExoVideoPlayerEngine(
     context: Context,
-    private val request: MoviePlayRequest,
-    private val services: MoviePlaybackServices,
-) : MoviePlayerEngine {
+    private val request: VideoPlayRequest,
+    private val services: VideoPlaybackServices,
+) : VideoPlayerEngine {
 
-    private val _events = MutableSharedFlow<MoviePlayerEvent>(replay = 64)
-    override val events: SharedFlow<MoviePlayerEvent> = _events.asSharedFlow()
+    private val _events = MutableSharedFlow<VideoPlayerEvent>(replay = 64)
+    override val events: SharedFlow<VideoPlayerEvent> = _events.asSharedFlow()
 
     private val handler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -126,10 +126,10 @@ internal class ExoMoviePlayerEngine(
     private val playbackIntent = PlaybackIntent()
 
     private val player: ExoPlayer = ExoPlayer.Builder(context)
-        .setAudioAttributes(moviePlaybackAudioAttributes, /* handleAudioFocus= */ true)
+        .setAudioAttributes(videoPlaybackAudioAttributes, /* handleAudioFocus= */ true)
         .build()
 
-    private val session = buildMovieMediaSession(
+    private val session = buildVideoMediaSession(
         context,
         AbsoluteTimelinePlayer(player),
         request,
@@ -148,15 +148,15 @@ internal class ExoMoviePlayerEngine(
     private val listener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
-                Player.STATE_READY -> emit(MoviePlayerEvent.Ready(durationSec()))
-                Player.STATE_BUFFERING -> emit(MoviePlayerEvent.Buffering)
-                Player.STATE_ENDED -> emit(MoviePlayerEvent.Ended)
+                Player.STATE_READY -> emit(VideoPlayerEvent.Ready(durationSec()))
+                Player.STATE_BUFFERING -> emit(VideoPlayerEvent.Buffering)
+                Player.STATE_ENDED -> emit(VideoPlayerEvent.Ended)
                 else -> Unit
             }
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            emit(MoviePlayerEvent.IsPlayingChanged(isPlaying))
+            emit(VideoPlayerEvent.IsPlayingChanged(isPlaying))
         }
 
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -171,7 +171,7 @@ internal class ExoMoviePlayerEngine(
                 applySelectionAfterSourceSwap(tracks)
             }
             emit(
-                MoviePlayerEvent.TracksChanged(
+                VideoPlayerEvent.TracksChanged(
                     audio = when {
                         isHls -> hlsAudioTrackOptions(request.audioTracks, effectiveAudioOrdinal())
                         else -> audioTrackOptions(tracks)
@@ -215,7 +215,7 @@ internal class ExoMoviePlayerEngine(
                     player.playbackState == Player.STATE_READY ||
                     player.playbackState == Player.STATE_BUFFERING
                 ) {
-                    emit(MoviePlayerEvent.Time(currentAbsoluteSec(), durationSec()))
+                    emit(VideoPlayerEvent.Time(currentAbsoluteSec(), durationSec()))
                 }
             }
             true
@@ -382,7 +382,7 @@ internal class ExoMoviePlayerEngine(
             return
         }
         refusalFor(mode)?.let { message ->
-            emit(MoviePlayerEvent.ModeRefused(message))
+            emit(VideoPlayerEvent.ModeRefused(message))
             return
         }
         restartInPlace(mode, currentAudioTypeIndex, intendedAbsoluteSec())
@@ -460,7 +460,7 @@ internal class ExoMoviePlayerEngine(
         controller.cancelKeepalive()
         // Freeze the old source while preflight runs without changing transport intent.
         player.pause()
-        emit(MoviePlayerEvent.Buffering)
+        emit(VideoPlayerEvent.Buffering)
         emitQualityOptions()
         if (mode == PlaybackMode.Direct) {
             // Leaving HLS ends and rotates that generation before Direct can later start HLS.
@@ -487,7 +487,7 @@ internal class ExoMoviePlayerEngine(
                     startSec = startSec,
                 ) { message ->
                     if (isRestartCurrent(generation)) {
-                        emit(MoviePlayerEvent.StatusMessage(message))
+                        emit(VideoPlayerEvent.StatusMessage(message))
                     }
                 }
                 if (!isRestartCurrent(generation)) return@launch
@@ -505,7 +505,7 @@ internal class ExoMoviePlayerEngine(
                 if (isRestartCurrent(generation)) {
                     rollbackPendingMode()
                     transitionToTerminal(
-                        MoviePlayerEvent.Error(
+                        VideoPlayerEvent.Error(
                             failure.message ?: "Playback failed.",
                             failure.unauthorized,
                         ),
@@ -520,7 +520,7 @@ internal class ExoMoviePlayerEngine(
                 if (isRestartCurrent(generation)) {
                     rollbackPendingMode()
                     transitionToTerminal(
-                        MoviePlayerEvent.Error(
+                        VideoPlayerEvent.Error(
                             failure.message?.let { "Playback failed ($it)." } ?: "Playback failed.",
                         ),
                     )
@@ -572,7 +572,7 @@ internal class ExoMoviePlayerEngine(
             controller.startKeepalive(::onKeepaliveSessionLost)
         }
         player.playWhenReady = playbackIntent.shouldPlay
-        emit(MoviePlayerEvent.StatusMessage(null))
+        emit(VideoPlayerEvent.StatusMessage(null))
         emitQualityOptions()
     }
 
@@ -590,7 +590,7 @@ internal class ExoMoviePlayerEngine(
                 MediaItem.Builder()
                     .setUri(services.directStreamUrl(request.media))
                     .setMimeType(request.mimeType)
-                    .setMediaMetadata(movieMediaMetadata(request))
+                    .setMediaMetadata(videoMediaMetadata(request))
                     .build(),
             )
 
@@ -599,7 +599,7 @@ internal class ExoMoviePlayerEngine(
             MediaItem.Builder()
                 .setUri(start.playlistUrl)
                 .setMimeType(MimeTypes.APPLICATION_M3U8)
-                .setMediaMetadata(movieMediaMetadata(request))
+                .setMediaMetadata(videoMediaMetadata(request))
                 .setSubtitleConfigurations(textSubtitleConfigs(start.actualStartSec))
                 // A remux session is a live EVENT playlist until FFmpeg finishes; pinning the
                 // speed stops ExoPlayer's live catch-up from subtly fast-forwarding the movie.
@@ -699,7 +699,7 @@ internal class ExoMoviePlayerEngine(
         val options = availablePlaybackModes()
             .map { TrackOption(id = it.name, label = playbackModeLabel(it), selected = it == effectiveMode) }
         emit(
-            MoviePlayerEvent.QualityOptionsChanged(
+            VideoPlayerEvent.QualityOptionsChanged(
                 options,
                 pendingMode ?: committedRequestedMode,
             ),
@@ -722,7 +722,7 @@ internal class ExoMoviePlayerEngine(
         if (!isPastEndHlsSegment(http?.responseCode, http?.dataSpec?.uri?.path, http?.headerFields)) {
             return false
         }
-        emit(MoviePlayerEvent.Ended)
+        emit(VideoPlayerEvent.Ended)
         return true
     }
 
@@ -784,7 +784,7 @@ internal class ExoMoviePlayerEngine(
         }
     }
 
-    private fun errorEvent(error: PlaybackException): MoviePlayerEvent.Error {
+    private fun errorEvent(error: PlaybackException): VideoPlayerEvent.Error {
         val http = httpErrorCause(error)
         val failure = playerFailure(
             errorCode = error.errorCode,
@@ -793,16 +793,16 @@ internal class ExoMoviePlayerEngine(
             isHls = isHls,
             httpRequestPath = http?.dataSpec?.uri?.path,
         )
-        return MoviePlayerEvent.Error(failure.message, failure.unauthorized)
+        return VideoPlayerEvent.Error(failure.message, failure.unauthorized)
     }
 
-    private fun emit(event: MoviePlayerEvent) {
+    private fun emit(event: VideoPlayerEvent) {
         if (playbackIntent.released) return
         _events.tryEmit(event)
     }
 
     private fun emitDesiredPlayWhenReady() {
-        emit(MoviePlayerEvent.PlayWhenReadyChanged(playbackIntent.shouldPlay))
+        emit(VideoPlayerEvent.PlayWhenReadyChanged(playbackIntent.shouldPlay))
     }
 
     /**
@@ -810,7 +810,7 @@ internal class ExoMoviePlayerEngine(
      * stay alive for the error screen, but all loading, transport, keepalive, and backend work
      * stops until the screen creates a fresh engine for an explicit Retry.
      */
-    private fun transitionToTerminal(error: MoviePlayerEvent.Error) {
+    private fun transitionToTerminal(error: VideoPlayerEvent.Error) {
         if (!playbackIntent.failTerminal()) return
         restartGeneration++
         pendingMode = null
@@ -834,8 +834,8 @@ internal class ExoMoviePlayerEngine(
     private inner class AbsoluteTimelinePlayer(player: Player) : IntentRoutingPlayer(
         player,
         playbackIntent,
-        onPlay = { this@ExoMoviePlayerEngine.play() },
-        onPause = { this@ExoMoviePlayerEngine.pause() },
+        onPlay = { this@ExoVideoPlayerEngine.play() },
+        onPause = { this@ExoVideoPlayerEngine.pause() },
     ) {
         private val offsetMs: Long
             get() = (timelineOffsetSec * 1000).toLong()
@@ -850,19 +850,19 @@ internal class ExoMoviePlayerEngine(
         override fun getContentDuration(): Long = getDuration()
 
         override fun seekTo(positionMs: Long) {
-            this@ExoMoviePlayerEngine.seekTo(positionMs / 1000.0)
+            this@ExoVideoPlayerEngine.seekTo(positionMs / 1000.0)
         }
 
         override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
-            this@ExoMoviePlayerEngine.seekTo(positionMs / 1000.0)
+            this@ExoVideoPlayerEngine.seekTo(positionMs / 1000.0)
         }
 
         override fun seekBack() {
-            this@ExoMoviePlayerEngine.seekTo(intendedAbsoluteSec() - seekBackIncrement / 1000.0)
+            this@ExoVideoPlayerEngine.seekTo(intendedAbsoluteSec() - seekBackIncrement / 1000.0)
         }
 
         override fun seekForward() {
-            this@ExoMoviePlayerEngine.seekTo(intendedAbsoluteSec() + seekForwardIncrement / 1000.0)
+            this@ExoVideoPlayerEngine.seekTo(intendedAbsoluteSec() + seekForwardIncrement / 1000.0)
         }
     }
 
@@ -873,8 +873,8 @@ internal class ExoMoviePlayerEngine(
     private data class PendingRestart(val startSec: Int, val targetSec: Double)
 }
 
-fun exoMoviePlayerEngine(
+fun exoVideoPlayerEngine(
     context: Context,
-    request: MoviePlayRequest,
-    services: MoviePlaybackServices,
-): MoviePlayerEngine = ExoMoviePlayerEngine(context, request, services)
+    request: VideoPlayRequest,
+    services: VideoPlaybackServices,
+): VideoPlayerEngine = ExoVideoPlayerEngine(context, request, services)

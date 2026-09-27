@@ -33,7 +33,7 @@ import io.ktor.http.HttpStatusCode
 
 /**
  * The Play press: [MovieDetailsViewModel.requestPlayback] assembling the request and running the
- * pre-flight gate. The mapping itself is covered in [MoviePlayRequestMappingTest]; here the
+ * pre-flight gate. The mapping itself is covered in [VideoPlayRequestMappingTest]; here the
  * subject is the launch decision and where a refusal lands.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -233,7 +233,7 @@ class MovieDetailsPlayLaunchTest {
                     }
                 }
                 val viewModel = viewModel(http)
-                val launches = mutableListOf<com.igloo.blindpenguincoder.playback.model.MoviePlayRequest>()
+                val launches = mutableListOf<com.igloo.blindpenguincoder.playback.model.VideoPlayRequest>()
                 backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
                     viewModel.playRequests.collect { launches += it }
                 }
@@ -312,7 +312,7 @@ class MovieDetailsPlayLaunchTest {
             }
         }
         val viewModel = viewModel(http) { _, _ -> true }
-        val launches = mutableListOf<com.igloo.blindpenguincoder.playback.model.MoviePlayRequest>()
+        val launches = mutableListOf<com.igloo.blindpenguincoder.playback.model.VideoPlayRequest>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             viewModel.playRequests.collect { launches += it }
         }

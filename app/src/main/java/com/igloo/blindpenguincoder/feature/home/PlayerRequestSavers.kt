@@ -2,7 +2,7 @@ package com.igloo.blindpenguincoder.feature.home
 
 import androidx.compose.runtime.saveable.Saver
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MAX_QUEUE_TRACKS
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
@@ -28,7 +28,7 @@ private inline fun <T> restoreOrDrop(block: () -> T): T? = runCatching(block).ge
  * to its saved position). Nullable fields ride as "" — no title is ever blank, so the encoding
  * is unambiguous.
  */
-internal val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Saver(
+internal val VideoPlayRequestSaver: Saver<VideoPlayRequest?, List<String>> = Saver(
     save = { request ->
         if (request == null) {
             emptyList()
@@ -56,7 +56,7 @@ internal val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Sav
             null
         } else {
             restoreOrDrop {
-                MoviePlayRequest(
+                VideoPlayRequest(
                     media = Json.decodeFromString<PlaybackMediaRef>(saved[0]),
                     title = saved[1],
                     posterUrl = saved[2].ifEmpty { null },
@@ -77,7 +77,7 @@ internal val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Sav
 )
 
 /**
- * What the music player overlay is playing, encoded like [MoviePlayRequestSaver]: the source
+ * What the music player overlay is playing, encoded like [VideoPlayRequestSaver]: the source
  * and the queue as JSON, the start index between them. The host keeps the request current as
  * an endless queue grows, so what is saved is the queue as it stands. A queue past
  * [MAX_QUEUE_TRACKS] — only a finite one can get there, an endless one stops refilling — is

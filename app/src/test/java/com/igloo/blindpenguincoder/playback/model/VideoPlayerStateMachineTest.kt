@@ -5,31 +5,31 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class MoviePlayerStateMachineTest {
+class VideoPlayerStateMachineTest {
 
-    private val loading = MoviePlayerState()
+    private val loading = VideoPlayerState()
 
     private fun playing(duration: Double = 600.0, position: Double = 100.0) = loading
-        .onEvent(MoviePlayerEvent.PlayWhenReadyChanged(true))
-        .onEvent(MoviePlayerEvent.Ready(duration))
-        .onEvent(MoviePlayerEvent.IsPlayingChanged(true))
-        .onEvent(MoviePlayerEvent.Time(position, duration))
+        .onEvent(VideoPlayerEvent.PlayWhenReadyChanged(true))
+        .onEvent(VideoPlayerEvent.Ready(duration))
+        .onEvent(VideoPlayerEvent.IsPlayingChanged(true))
+        .onEvent(VideoPlayerEvent.Time(position, duration))
 
     // --- resume ---
 
     @Test
     fun `resume choice moves awaiting-resume to loading and nothing else`() {
-        val awaiting = MoviePlayerState(phase = MoviePlayerPhase.AwaitingResume)
-        assertEquals(MoviePlayerPhase.Loading, awaiting.onResumeChosen().phase)
-        assertEquals(MoviePlayerPhase.Playing, playing().onResumeChosen().phase)
+        val awaiting = VideoPlayerState(phase = VideoPlayerPhase.AwaitingResume)
+        assertEquals(VideoPlayerPhase.Loading, awaiting.onResumeChosen().phase)
+        assertEquals(VideoPlayerPhase.Playing, playing().onResumeChosen().phase)
     }
 
     @Test
     fun `buffering does not disturb the resume prompt`() {
-        val awaiting = MoviePlayerState(phase = MoviePlayerPhase.AwaitingResume)
+        val awaiting = VideoPlayerState(phase = VideoPlayerPhase.AwaitingResume)
         assertEquals(
-            MoviePlayerPhase.AwaitingResume,
-            awaiting.onEvent(MoviePlayerEvent.Buffering).phase,
+            VideoPlayerPhase.AwaitingResume,
+            awaiting.onEvent(VideoPlayerEvent.Buffering).phase,
         )
     }
 
@@ -37,55 +37,55 @@ class MoviePlayerStateMachineTest {
 
     @Test
     fun `ready lands on paused until playback actually starts`() {
-        val state = loading.onEvent(MoviePlayerEvent.Ready(3600.0))
+        val state = loading.onEvent(VideoPlayerEvent.Ready(3600.0))
         assertTrue(state.ready)
-        assertEquals(MoviePlayerPhase.Paused, state.phase)
+        assertEquals(VideoPlayerPhase.Paused, state.phase)
         assertEquals(3600.0, state.durationSec, 0.0)
     }
 
     @Test
     fun `is-playing true and false toggle playing and paused`() {
         val state = playing()
-        assertEquals(MoviePlayerPhase.Playing, state.phase)
+        assertEquals(VideoPlayerPhase.Playing, state.phase)
         assertEquals(
-            MoviePlayerPhase.Paused,
-            state.onEvent(MoviePlayerEvent.IsPlayingChanged(false)).phase,
+            VideoPlayerPhase.Paused,
+            state.onEvent(VideoPlayerEvent.IsPlayingChanged(false)).phase,
         )
     }
 
     @Test
     fun `is-playing false does not downgrade buffering`() {
-        val state = playing().onEvent(MoviePlayerEvent.Buffering)
-        assertEquals(MoviePlayerPhase.Buffering, state.phase)
+        val state = playing().onEvent(VideoPlayerEvent.Buffering)
+        assertEquals(VideoPlayerPhase.Buffering, state.phase)
         assertEquals(
-            MoviePlayerPhase.Buffering,
-            state.onEvent(MoviePlayerEvent.IsPlayingChanged(false)).phase,
+            VideoPlayerPhase.Buffering,
+            state.onEvent(VideoPlayerEvent.IsPlayingChanged(false)).phase,
         )
     }
 
     @Test
     fun `buffering preserves play intent and pause cancels pending autoplay`() {
-        val buffering = playing().onEvent(MoviePlayerEvent.Buffering)
+        val buffering = playing().onEvent(VideoPlayerEvent.Buffering)
         assertTrue(buffering.playWhenReady)
 
-        val pausedIntent = buffering.onEvent(MoviePlayerEvent.PlayWhenReadyChanged(false))
-        assertEquals(MoviePlayerPhase.Buffering, pausedIntent.phase)
+        val pausedIntent = buffering.onEvent(VideoPlayerEvent.PlayWhenReadyChanged(false))
+        assertEquals(VideoPlayerPhase.Buffering, pausedIntent.phase)
         assertTrue(!pausedIntent.playWhenReady)
 
-        val ready = pausedIntent.onEvent(MoviePlayerEvent.Ready(600.0))
-        assertEquals(MoviePlayerPhase.Paused, ready.phase)
+        val ready = pausedIntent.onEvent(VideoPlayerEvent.Ready(600.0))
+        assertEquals(VideoPlayerPhase.Paused, ready.phase)
         assertTrue(!ready.playWhenReady)
     }
 
     @Test
     fun `ready after a mid-play rebuffer returns to paused until play resumes`() {
         val state = playing()
-            .onEvent(MoviePlayerEvent.Buffering)
-            .onEvent(MoviePlayerEvent.Ready(600.0))
-        assertEquals(MoviePlayerPhase.Paused, state.phase)
+            .onEvent(VideoPlayerEvent.Buffering)
+            .onEvent(VideoPlayerEvent.Ready(600.0))
+        assertEquals(VideoPlayerPhase.Paused, state.phase)
         assertEquals(
-            MoviePlayerPhase.Playing,
-            state.onEvent(MoviePlayerEvent.IsPlayingChanged(true)).phase,
+            VideoPlayerPhase.Playing,
+            state.onEvent(VideoPlayerEvent.IsPlayingChanged(true)).phase,
         )
     }
 
@@ -94,7 +94,7 @@ class MoviePlayerStateMachineTest {
     @Test
     fun `a known duration never shrinks back to zero`() {
         val state = playing(duration = 600.0)
-            .onEvent(MoviePlayerEvent.Time(150.0, 0.0))
+            .onEvent(VideoPlayerEvent.Time(150.0, 0.0))
         assertEquals(600.0, state.durationSec, 0.0)
         assertEquals(150.0, state.currentTimeSec, 0.0)
     }
@@ -103,7 +103,7 @@ class MoviePlayerStateMachineTest {
     fun `time clamps a negative position to zero`() {
         assertEquals(
             0.0,
-            playing().onEvent(MoviePlayerEvent.Time(-3.0, 600.0)).currentTimeSec,
+            playing().onEvent(VideoPlayerEvent.Time(-3.0, 600.0)).currentTimeSec,
             0.0,
         )
     }
@@ -137,31 +137,31 @@ class MoviePlayerStateMachineTest {
 
     @Test
     fun `ended pins the position to the duration`() {
-        val state = playing(duration = 600.0, position = 590.0).onEvent(MoviePlayerEvent.Ended)
-        assertEquals(MoviePlayerPhase.Ended, state.phase)
+        val state = playing(duration = 600.0, position = 590.0).onEvent(VideoPlayerEvent.Ended)
+        assertEquals(VideoPlayerPhase.Ended, state.phase)
         assertEquals(600.0, state.currentTimeSec, 0.0)
     }
 
     @Test
     fun `ended keeps the last real position when every duration is unknown`() {
-        val state = MoviePlayerState(currentTimeSec = 123.0)
-            .onEvent(MoviePlayerEvent.Ended)
+        val state = VideoPlayerState(currentTimeSec = 123.0)
+            .onEvent(VideoPlayerEvent.Ended)
         assertEquals(123.0, state.currentTimeSec, 0.0)
     }
 
     @Test
     fun `ended uses the request duration seeded into state`() {
-        val state = MoviePlayerState(currentTimeSec = 123.0, durationSec = 600.0)
-            .onEvent(MoviePlayerEvent.Ended)
+        val state = VideoPlayerState(currentTimeSec = 123.0, durationSec = 600.0)
+            .onEvent(VideoPlayerEvent.Ended)
         assertEquals(600.0, state.currentTimeSec, 0.0)
     }
 
     @Test
     fun `events after ended change nothing`() {
-        val ended = playing().onEvent(MoviePlayerEvent.Ended)
-        assertEquals(ended, ended.onEvent(MoviePlayerEvent.IsPlayingChanged(true)))
-        assertEquals(ended, ended.onEvent(MoviePlayerEvent.Buffering))
-        assertEquals(ended, ended.onEvent(MoviePlayerEvent.Time(10.0, 600.0)))
+        val ended = playing().onEvent(VideoPlayerEvent.Ended)
+        assertEquals(ended, ended.onEvent(VideoPlayerEvent.IsPlayingChanged(true)))
+        assertEquals(ended, ended.onEvent(VideoPlayerEvent.Buffering))
+        assertEquals(ended, ended.onEvent(VideoPlayerEvent.Time(10.0, 600.0)))
         assertEquals(ended, ended.onSeekApplied(10.0))
     }
 
@@ -169,24 +169,24 @@ class MoviePlayerStateMachineTest {
 
     @Test
     fun `the first error is sticky`() {
-        val failed = playing().onEvent(MoviePlayerEvent.Error("The stream stopped."))
-        assertEquals(MoviePlayerPhase.Error, failed.phase)
+        val failed = playing().onEvent(VideoPlayerEvent.Error("The stream stopped."))
+        assertEquals(VideoPlayerPhase.Error, failed.phase)
         assertEquals("The stream stopped.", failed.errorMessage)
 
         val after = failed
-            .onEvent(MoviePlayerEvent.Error("Something else."))
-            .onEvent(MoviePlayerEvent.IsPlayingChanged(true))
-            .onEvent(MoviePlayerEvent.Ready(600.0))
-            .onEvent(MoviePlayerEvent.Ended)
-        assertEquals(MoviePlayerPhase.Error, after.phase)
+            .onEvent(VideoPlayerEvent.Error("Something else."))
+            .onEvent(VideoPlayerEvent.IsPlayingChanged(true))
+            .onEvent(VideoPlayerEvent.Ready(600.0))
+            .onEvent(VideoPlayerEvent.Ended)
+        assertEquals(VideoPlayerPhase.Error, after.phase)
         assertEquals("The stream stopped.", after.errorMessage)
     }
 
     @Test
     fun `an error can still follow ended`() {
-        val state = playing().onEvent(MoviePlayerEvent.Ended)
-            .onEvent(MoviePlayerEvent.Error("The stream stopped."))
-        assertEquals(MoviePlayerPhase.Error, state.phase)
+        val state = playing().onEvent(VideoPlayerEvent.Ended)
+            .onEvent(VideoPlayerEvent.Error("The stream stopped."))
+        assertEquals(VideoPlayerPhase.Error, state.phase)
     }
 
     // --- tracks ---
@@ -195,13 +195,13 @@ class MoviePlayerStateMachineTest {
     fun `tracks changed replaces both menus and survives every phase`() {
         val audio = listOf(TrackOption("0:0", "English · 5.1 surround", selected = true))
         val subtitles = listOf(TrackOption("1:0", "English", selected = false))
-        val state = playing().onEvent(MoviePlayerEvent.TracksChanged(audio, subtitles))
+        val state = playing().onEvent(VideoPlayerEvent.TracksChanged(audio, subtitles))
         assertEquals(audio, state.audioOptions)
         assertEquals(subtitles, state.subtitleOptions)
 
         // Even under an error the menus keep their last real content.
-        val failed = state.onEvent(MoviePlayerEvent.Error("boom"))
-            .onEvent(MoviePlayerEvent.TracksChanged(emptyList(), emptyList()))
+        val failed = state.onEvent(VideoPlayerEvent.Error("boom"))
+            .onEvent(VideoPlayerEvent.TracksChanged(emptyList(), emptyList()))
         assertTrue(failed.audioOptions.isEmpty())
     }
 
@@ -213,13 +213,13 @@ class MoviePlayerStateMachineTest {
             TrackOption("Direct", "Original quality — plays the file as-is", selected = true),
             TrackOption("Remux", "Original quality — audio adjusted", selected = false),
         )
-        val state = playing().onEvent(MoviePlayerEvent.QualityOptionsChanged(first, PlaybackMode.Direct))
+        val state = playing().onEvent(VideoPlayerEvent.QualityOptionsChanged(first, PlaybackMode.Direct))
         assertEquals(first, state.qualityOptions)
 
         val switched = first.map { it.copy(selected = it.id == "Remux") }
         assertEquals(
             switched,
-            state.onEvent(MoviePlayerEvent.QualityOptionsChanged(switched, PlaybackMode.Remux)).qualityOptions,
+            state.onEvent(VideoPlayerEvent.QualityOptionsChanged(switched, PlaybackMode.Remux)).qualityOptions,
         )
     }
 
@@ -227,29 +227,29 @@ class MoviePlayerStateMachineTest {
 
     @Test
     fun `a status message shows while waiting and ready clears it`() {
-        val waiting = loading.onEvent(MoviePlayerEvent.StatusMessage("Waiting for the server to free up…"))
+        val waiting = loading.onEvent(VideoPlayerEvent.StatusMessage("Waiting for the server to free up…"))
         assertEquals("Waiting for the server to free up…", waiting.statusMessage)
 
-        val ready = waiting.onEvent(MoviePlayerEvent.Ready(3600.0))
+        val ready = waiting.onEvent(VideoPlayerEvent.Ready(3600.0))
         assertEquals(null, ready.statusMessage)
     }
 
     @Test
     fun `a null status message clears the narration`() {
         val cleared = loading
-            .onEvent(MoviePlayerEvent.StatusMessage("Reconnecting to the stream…"))
-            .onEvent(MoviePlayerEvent.StatusMessage(null))
+            .onEvent(VideoPlayerEvent.StatusMessage("Reconnecting to the stream…"))
+            .onEvent(VideoPlayerEvent.StatusMessage(null))
         assertEquals(null, cleared.statusMessage)
     }
 
     @Test
     fun `status messages never disturb a terminal phase`() {
-        val failed = playing().onEvent(MoviePlayerEvent.Error("boom"))
-            .onEvent(MoviePlayerEvent.StatusMessage("Waiting…"))
+        val failed = playing().onEvent(VideoPlayerEvent.Error("boom"))
+            .onEvent(VideoPlayerEvent.StatusMessage("Waiting…"))
         assertEquals(null, failed.statusMessage)
 
-        val ended = playing().onEvent(MoviePlayerEvent.Ended)
-            .onEvent(MoviePlayerEvent.StatusMessage("Waiting…"))
+        val ended = playing().onEvent(VideoPlayerEvent.Ended)
+            .onEvent(VideoPlayerEvent.StatusMessage("Waiting…"))
         assertEquals(null, ended.statusMessage)
     }
 
@@ -257,16 +257,16 @@ class MoviePlayerStateMachineTest {
     fun `detailed wait messages outrank generic loading and buffering announcements`() {
         assertEquals(
             "Waiting for the server to free up…",
-            moviePlayerAnnouncement(
-                MoviePlayerPhase.Loading,
+            videoPlayerAnnouncement(
+                VideoPlayerPhase.Loading,
                 "Waiting for the server to free up…",
                 "Heat",
             ),
         )
         assertEquals(
             "Reconnecting to the stream…",
-            moviePlayerAnnouncement(
-                MoviePlayerPhase.Buffering,
+            videoPlayerAnnouncement(
+                VideoPlayerPhase.Buffering,
                 "Reconnecting to the stream…",
                 "Heat",
             ),
@@ -277,11 +277,11 @@ class MoviePlayerStateMachineTest {
     fun `wait announcements fall back to the generic phase text`() {
         assertEquals(
             "Loading movie",
-            moviePlayerAnnouncement(MoviePlayerPhase.Loading, null, "Heat"),
+            videoPlayerAnnouncement(VideoPlayerPhase.Loading, null, "Heat"),
         )
         assertEquals(
             "Buffering",
-            moviePlayerAnnouncement(MoviePlayerPhase.Buffering, null, "Heat"),
+            videoPlayerAnnouncement(VideoPlayerPhase.Buffering, null, "Heat"),
         )
     }
 }

@@ -38,9 +38,9 @@ import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
-import com.igloo.blindpenguincoder.playback.media3.FakeMoviePlayerEngine
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
-import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
+import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
@@ -60,7 +60,7 @@ import org.junit.runner.RunWith
  * closing restores focus to the control that led away.
  */
 @RunWith(AndroidJUnit4::class)
-class MoviePlayerOverlayFocusTest {
+class VideoPlayerOverlayFocusTest {
 
     @get:Rule(order = 0)
     val animationScale = AnimationScaleRule()
@@ -68,7 +68,7 @@ class MoviePlayerOverlayFocusTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private val playRequest = MoviePlayRequest(
+    private val playRequest = VideoPlayRequest(
         media = PlaybackMediaRef.Movie(1),
         title = "Heat",
         posterUrl = null,
@@ -91,10 +91,10 @@ class MoviePlayerOverlayFocusTest {
     )
 
     private var detailsState by mutableStateOf(MovieDetailsUiState())
-    private val engines = mutableListOf<FakeMoviePlayerEngine>()
+    private val engines = mutableListOf<FakeVideoPlayerEngine>()
     private val trailerEngines = mutableListOf<FakeTrailerPlayerEngine>()
-    private lateinit var playRequests: MutableSharedFlow<MoviePlayRequest>
-    private lateinit var homePlayRequests: MutableSharedFlow<MoviePlayRequest>
+    private lateinit var playRequests: MutableSharedFlow<VideoPlayRequest>
+    private lateinit var homePlayRequests: MutableSharedFlow<VideoPlayRequest>
     private var failProgressSaves = false
     private var hostActivity: Activity? = null
 
@@ -104,7 +104,7 @@ class MoviePlayerOverlayFocusTest {
      */
     private fun setShellContent(
         detailsOpen: Boolean = true,
-        requestPlayback: () -> MoviePlayRequest? = { playRequest },
+        requestPlayback: () -> VideoPlayRequest? = { playRequest },
     ) {
         detailsState = if (detailsOpen) {
             MovieDetailsUiState(
@@ -124,7 +124,7 @@ class MoviePlayerOverlayFocusTest {
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 val progressViewModel = remember {
-                    MoviePlayerViewModel(
+                    VideoPlayerViewModel(
                         saveProgress = { _, _ ->
                             if (failProgressSaves) {
                                 ApiResult.Failure(AppError.Network)
@@ -146,9 +146,9 @@ class MoviePlayerOverlayFocusTest {
                     },
                     playRequests = playRequests,
                     homePlayRequests = homePlayRequests,
-                    moviePlayerViewModel = progressViewModel,
-                    moviePlayerEngineFactory = { _, _ ->
-                        FakeMoviePlayerEngine().also { engines += it }
+                    videoPlayerViewModel = progressViewModel,
+                    videoPlayerEngineFactory = { _, _ ->
+                        FakeVideoPlayerEngine().also { engines += it }
                     },
                     onMovieSelected = {},
                     onTheaterMovieSelected = {},
@@ -273,12 +273,12 @@ class MoviePlayerOverlayFocusTest {
     }
 
     /** Plays [engine] past the first cadence save while saves fail, raising the chrome's error. */
-    private fun failACadenceSave(engine: FakeMoviePlayerEngine, durationSec: Double) {
-        engine.emit(MoviePlayerEvent.IsPlayingChanged(true))
+    private fun failACadenceSave(engine: FakeVideoPlayerEngine, durationSec: Double) {
+        engine.emit(VideoPlayerEvent.IsPlayingChanged(true))
         failProgressSaves = true
         var position = 30.0
         while (position <= 46.0) {
-            engine.emit(MoviePlayerEvent.Time(position, durationSec))
+            engine.emit(VideoPlayerEvent.Time(position, durationSec))
             position += 0.5
         }
         composeRule.waitForIdle()

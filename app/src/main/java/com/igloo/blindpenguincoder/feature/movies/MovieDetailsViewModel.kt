@@ -21,7 +21,7 @@ import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
@@ -205,8 +205,8 @@ class MovieDetailsViewModel(
     private val _uiState = MutableStateFlow(MovieDetailsUiState())
     val uiState: StateFlow<MovieDetailsUiState> = _uiState.asStateFlow()
 
-    private val playRequestChannel = Channel<MoviePlayRequest>(Channel.CONFLATED)
-    val playRequests: Flow<MoviePlayRequest> = playRequestChannel.receiveAsFlow()
+    private val playRequestChannel = Channel<VideoPlayRequest>(Channel.CONFLATED)
+    val playRequests: Flow<VideoPlayRequest> = playRequestChannel.receiveAsFlow()
 
     private enum class Read { Details, Technical, Progress, Like }
 

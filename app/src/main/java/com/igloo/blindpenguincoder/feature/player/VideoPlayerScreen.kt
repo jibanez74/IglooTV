@@ -61,15 +61,15 @@ import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
-import com.igloo.blindpenguincoder.playback.media3.MoviePlayerEngine
-import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
-import com.igloo.blindpenguincoder.playback.model.MoviePlayerEvent
-import com.igloo.blindpenguincoder.playback.model.MoviePlayerPhase
-import com.igloo.blindpenguincoder.playback.model.MoviePlayerState
+import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.TrackOption
-import com.igloo.blindpenguincoder.playback.model.moviePlayerAnnouncement
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
+import com.igloo.blindpenguincoder.playback.model.VideoPlayerPhase
+import com.igloo.blindpenguincoder.playback.model.VideoPlayerState
 import com.igloo.blindpenguincoder.playback.model.onEvent
+import com.igloo.blindpenguincoder.playback.model.videoPlayerAnnouncement
 import kotlinx.coroutines.delay
 
 /**
@@ -83,13 +83,13 @@ import kotlinx.coroutines.delay
  * engine needs the stream URL and data-source factory, which are the host's to know.
  */
 @Composable
-fun MoviePlayerScreen(
-    request: MoviePlayRequest,
-    viewModel: MoviePlayerViewModel,
+fun VideoPlayerScreen(
+    request: VideoPlayRequest,
+    viewModel: VideoPlayerViewModel,
     onClose: () -> Unit,
     onPlaybackModeRequested: (PlaybackMode) -> Unit,
     onTrackSelectionChanged: (audioTypeIndex: Int?, subtitleTypeIndex: Int?) -> Unit,
-    engineFactory: (Context, MoviePlayRequest) -> MoviePlayerEngine,
+    engineFactory: (Context, VideoPlayRequest) -> VideoPlayerEngine,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -113,8 +113,8 @@ fun MoviePlayerScreen(
 
     var state by remember(engine) {
         mutableStateOf(
-            MoviePlayerState(
-                phase = if (resumeDecided) MoviePlayerPhase.Loading else MoviePlayerPhase.AwaitingResume,
+            VideoPlayerState(
+                phase = if (resumeDecided) VideoPlayerPhase.Loading else VideoPlayerPhase.AwaitingResume,
                 playWhenReady = host.playWhenReadyIntent,
                 currentTimeSec = lastPositionSec.takeIf { it > 0.0 }
                     ?: chosenStartSec.takeIf { resumeDecided }
@@ -138,7 +138,7 @@ fun MoviePlayerScreen(
     val subtitlesButtonRequester = remember { FocusRequester() }
     val qualityButtonRequester = remember { FocusRequester() }
 
-    val persistTrackSelection: (MoviePlayerEngine) -> Unit = { source ->
+    val persistTrackSelection: (VideoPlayerEngine) -> Unit = { source ->
         val audioTypeIndex = source.currentAudioTypeIndex
         val subtitleTypeIndex = source.currentSubtitleTypeIndex
         val saved = latestRequest
@@ -181,17 +181,17 @@ fun MoviePlayerScreen(
             val next = previous.onEvent(event)
             state = next
             when (event) {
-                is MoviePlayerEvent.Error -> if (event.unauthorized) unauthorized = true
+                is VideoPlayerEvent.Error -> if (event.unauthorized) unauthorized = true
                 // Accepted pending requests are published before HLS preflight so background
                 // reconstruction can preserve them. A terminal failure publishes the prior
                 // committed request first, while refused choices never reach this event.
-                is MoviePlayerEvent.QualityOptionsChanged ->
+                is VideoPlayerEvent.QualityOptionsChanged ->
                     if (event.requestedMode != reconstructedMode) {
                         reconstructedMode = event.requestedMode
                         latestOnPlaybackModeRequested(event.requestedMode)
                     }
-                is MoviePlayerEvent.TracksChanged -> persistTrackSelection(engine)
-                is MoviePlayerEvent.PlayWhenReadyChanged -> {
+                is VideoPlayerEvent.TracksChanged -> persistTrackSelection(engine)
+                is VideoPlayerEvent.PlayWhenReadyChanged -> {
                     host.onEnginePlayWhenReady(event.playWhenReady)
                     // A real pause — chrome, media key, media session or the host's ON_PAUSE —
                     // writes progress at once, like the web. A rebuilt engine's paused start
@@ -204,18 +204,18 @@ fun MoviePlayerScreen(
                     }
                 }
                 // A tick that outruns Ended must not pull the final snapshot back below the end.
-                is MoviePlayerEvent.Time -> if (next.phase != MoviePlayerPhase.Ended) {
+                is VideoPlayerEvent.Time -> if (next.phase != VideoPlayerPhase.Ended) {
                     lastPositionSec = event.currentSec
                     if (event.durationSec > 0.0) lastDurationSec = event.durationSec
                     viewModel.onTick(
                         positionSec = event.currentSec,
                         durationSec = lastDurationSec,
-                        isPlaying = next.phase == MoviePlayerPhase.Playing,
+                        isPlaying = next.phase == VideoPlayerPhase.Playing,
                     )
                 }
                 // Finishing means full progress: the exit save must record the end, not the
                 // last tick before it.
-                is MoviePlayerEvent.Ended -> lastPositionSec = next.currentTimeSec
+                is VideoPlayerEvent.Ended -> lastPositionSec = next.currentTimeSec
                 else -> Unit
             }
         }
@@ -238,18 +238,18 @@ fun MoviePlayerScreen(
     LaunchedEffect(state.phase, progressSyncError) {
         // A menu must not survive into the error surface: it would swallow the screen while
         // entry focus lands on the Retry button hidden underneath it.
-        if (state.phase == MoviePlayerPhase.Error) playerMenu = null
+        if (state.phase == VideoPlayerPhase.Error) playerMenu = null
         when (state.phase) {
-            MoviePlayerPhase.Ended -> closeAndRelease()
+            VideoPlayerPhase.Ended -> closeAndRelease()
             // Chrome may only rest hidden over a moving picture; any other phase surfaces it.
-            MoviePlayerPhase.Playing -> if (progressSyncError != null) chromeVisible = true
+            VideoPlayerPhase.Playing -> if (progressSyncError != null) chromeVisible = true
             else -> chromeVisible = true
         }
     }
 
     LaunchedEffect(chromeVisible, state.phase, interactionTick, playerMenu, progressSyncError) {
         if (
-            chromeVisible && state.phase == MoviePlayerPhase.Playing && playerMenu == null &&
+            chromeVisible && state.phase == VideoPlayerPhase.Playing && playerMenu == null &&
             progressSyncError == null
         ) {
             delay(CHROME_HIDE_MS)
@@ -275,8 +275,8 @@ fun MoviePlayerScreen(
     // Entry focus: Play/Pause anchors the screen; the error surface moves it to its one action,
     // and the resume prompt and track menus request their own on composition.
     val focusAnchor = when (state.phase) {
-        MoviePlayerPhase.Error -> FocusAnchor.ErrorAction
-        MoviePlayerPhase.AwaitingResume -> FocusAnchor.Modal
+        VideoPlayerPhase.Error -> FocusAnchor.ErrorAction
+        VideoPlayerPhase.AwaitingResume -> FocusAnchor.Modal
         else -> FocusAnchor.Transport
     }
     LaunchedEffect(focusAnchor) {
@@ -298,7 +298,7 @@ fun MoviePlayerScreen(
     // fires only with the plain chrome up.
     BackHandler {
         if (
-            chromeVisible && state.phase == MoviePlayerPhase.Playing && progressSyncError == null
+            chromeVisible && state.phase == VideoPlayerPhase.Playing && progressSyncError == null
         ) {
             chromeVisible = false
         } else {
@@ -319,7 +319,7 @@ fun MoviePlayerScreen(
         },
     )
 
-    val modalUp = state.phase == MoviePlayerPhase.AwaitingResume || playerMenu != null
+    val modalUp = state.phase == VideoPlayerPhase.AwaitingResume || playerMenu != null
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -328,7 +328,7 @@ fun MoviePlayerScreen(
                 handlePlayerKey(
                     event = event,
                     chromeVisible = chromeVisible,
-                    controlsDisabled = state.phase == MoviePlayerPhase.Error || modalUp,
+                    controlsDisabled = state.phase == VideoPlayerPhase.Error || modalUp,
                     showChrome = showChrome,
                     play = play,
                     pause = pause,
@@ -351,7 +351,7 @@ fun MoviePlayerScreen(
             )
         }
 
-        if (state.phase == MoviePlayerPhase.Error) {
+        if (state.phase == VideoPlayerPhase.Error) {
             PlayerFailureSurface(
                 message = state.errorMessage,
                 unauthorized = unauthorized,
@@ -366,7 +366,7 @@ fun MoviePlayerScreen(
                 onClose = closeAndRelease,
             )
         } else {
-            MoviePlayerChrome(
+            VideoPlayerChrome(
                 title = request.title,
                 state = state,
                 visible = chromeVisible,
@@ -390,7 +390,7 @@ fun MoviePlayerScreen(
         }
 
         when (state.phase) {
-            MoviePlayerPhase.AwaitingResume -> ResumePrompt(
+            VideoPlayerPhase.AwaitingResume -> ResumePrompt(
                 resumeAtSec = requireNotNull(request.resumeAtSec),
                 onResume = {
                     host.playWhenReadyIntent = true
@@ -466,7 +466,7 @@ fun MoviePlayerScreen(
         }
 
         PoliteAnnouncement(
-            moviePlayerAnnouncement(
+            videoPlayerAnnouncement(
                 phase = state.phase,
                 statusMessage = state.statusMessage,
                 title = request.title,
@@ -486,9 +486,9 @@ private enum class LastControl { Forward, Chapters, Audio, Subtitles, Quality }
 
 /** The chrome: a top title bar and a bottom transport, each on its own section 3.2 scrim. */
 @Composable
-private fun MoviePlayerChrome(
+private fun VideoPlayerChrome(
     title: String,
-    state: MoviePlayerState,
+    state: VideoPlayerState,
     visible: Boolean,
     chapterCount: Int,
     playPauseRequester: FocusRequester,
@@ -513,7 +513,7 @@ private fun MoviePlayerChrome(
     val chromeAlpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
         animationSpec = iglooTween(IglooMotion.STANDARD_MS),
-        label = "moviePlayerChrome",
+        label = "videoPlayerChrome",
     )
     val playing = state.playWhenReady
     // A one-track menu is a choice with no alternatives; the subtitle menu earns its place with
@@ -555,8 +555,8 @@ private fun MoviePlayerChrome(
         Box(modifier = Modifier.weight(1f)) {
             // The engine's own narration (capacity waits, reconnects) outranks the generic word.
             val holdMessage = when (state.phase) {
-                MoviePlayerPhase.Loading -> state.statusMessage ?: "Loading movie…"
-                MoviePlayerPhase.Buffering -> state.statusMessage ?: "Buffering…"
+                VideoPlayerPhase.Loading -> state.statusMessage ?: "Loading movie…"
+                VideoPlayerPhase.Buffering -> state.statusMessage ?: "Buffering…"
                 else -> null
             }
             if (holdMessage != null) {
@@ -1054,7 +1054,7 @@ private fun ChapterMenuDialog(
 
 /** Phases in which a dropped play intent is a pause of something the viewer was watching. */
 private val PROGRESS_FLUSH_PHASES = setOf(
-    MoviePlayerPhase.Playing,
-    MoviePlayerPhase.Paused,
-    MoviePlayerPhase.Buffering,
+    VideoPlayerPhase.Playing,
+    VideoPlayerPhase.Paused,
+    VideoPlayerPhase.Buffering,
 )
