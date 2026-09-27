@@ -27,6 +27,55 @@ class PlaybackGateTest {
         canPlayAudioMime = { canPlay },
     )
 
+    // --- over a built request ---
+
+    private val request = MoviePlayRequest(
+        media = PlaybackMediaRef.Episode(900),
+        title = "Severance · S1 E3 · In Perpetuity",
+        posterUrl = null,
+        mimeType = "video/x-matroska",
+        mode = PlaybackMode.Direct,
+        videoCodec = "h264",
+        audioTypeIndex = null,
+        subtitleTypeIndex = null,
+        audioTracks = listOf(
+            PlayableAudioTrack(label = "English · AAC", codec = "aac", channels = 2),
+            PlayableAudioTrack(label = "English · TrueHD", codec = "truehd", channels = 8, isDefault = true),
+        ),
+        resumeAtSec = null,
+        durationSec = null,
+    )
+
+    @Test
+    fun `a request is gated on its selected track, asking capability with that track's channels`() {
+        var askedChannels: Int? = null
+        val result = evaluatePlaybackGate(
+            request = request,
+            canPlayVideoMime = { true },
+            canPlayAudioMime = { _, channels ->
+                askedChannels = channels
+                false
+            },
+        ) as PlaybackGateResult.Blocked
+
+        assertTrue(result.message.contains("English · TrueHD"))
+        assertEquals(8, askedChannels)
+    }
+
+    @Test
+    fun `the engine's mode and track override the request's own`() {
+        val refuseTrueHd: (String, Int?) -> Boolean = { mime, _ -> mime != "audio/true-hd" }
+
+        assertEquals(
+            PlaybackGateResult.Proceed,
+            evaluatePlaybackGate(request, { true }, refuseTrueHd, track = request.audioTracks[0]),
+        )
+        assertEquals(
+            PlaybackGateResult.Proceed,
+            evaluatePlaybackGate(request, { true }, refuseTrueHd, mode = PlaybackMode.Remux),
+        )
+    }
+
     // --- mode gating ---
 
     @Test

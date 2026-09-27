@@ -44,8 +44,9 @@ data class LatestMoviesData(
  * One entry of `GET /continue-watching`, a movie or a TV episode told apart by [kind]. The spec
  * models it as a discriminated `oneOf`; it is decoded flat here because a polymorphic decoder
  * would need an experimental serializer for no gain. On an episode [id] is the episode's,
- * [title], [posterPath] and [year] describe the show, and the four episode-only keys are
- * required by the contract; they are nullable here only because the movie variant omits them.
+ * [title], [posterPath] and [year] describe the show, and the three episode-only keys read here
+ * are required by the contract; they are nullable only because the movie variant omits them.
+ * `show_id` is left to `ignoreUnknownKeys`.
  */
 @Serializable
 data class ContinueWatchingItem(
@@ -56,7 +57,6 @@ data class ContinueWatchingItem(
     val year: SqlNullInt64,
     @SerialName("progress_sec") val progressSec: Double,
     @SerialName("duration_sec") val durationSec: Double,
-    @SerialName("show_id") val showId: Long? = null,
     @SerialName("season_number") val seasonNumber: Long? = null,
     @SerialName("episode_number") val episodeNumber: Long? = null,
     @SerialName("episode_name") val episodeName: String? = null,

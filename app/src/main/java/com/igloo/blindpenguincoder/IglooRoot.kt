@@ -186,6 +186,10 @@ fun IglooRoot(container: IglooAppContainer) {
                     }
                     val signOut by signOutViewModel.uiState.collectAsStateWithLifecycle()
                     val appContext = LocalContext.current.applicationContext
+                    // One capability check for every launch surface, so each judges a file alike.
+                    val canPlayAudioMime: (String, Int?) -> Boolean = { mimeType, channels ->
+                        deviceCanPlayAudioMime(appContext, mimeType, channels)
+                    }
                     val homeViewModel = viewModel(
                         viewModelStoreOwner = authenticatedSessionOwner,
                         key = "home",
@@ -196,9 +200,7 @@ fun IglooRoot(container: IglooAppContainer) {
                             container.musicRepository,
                             container.serverUrlProvider,
                             canPlayVideoMime = ::deviceCanDecodeVideoMime,
-                            canPlayAudioMime = { mimeType, channels ->
-                                deviceCanPlayAudioMime(appContext, mimeType, channels)
-                            },
+                            canPlayAudioMime = canPlayAudioMime,
                         )
                     }
                     // Session-scoped like the rest: that is what keeps the library grid's loaded
@@ -234,9 +236,7 @@ fun IglooRoot(container: IglooAppContainer) {
                             onWatchedStateCommitted = homeViewModel::refreshContinueWatching,
                             onLikeStateCommitted = moviesViewModel::onLikeCommitted,
                             canPlayVideoMime = ::deviceCanDecodeVideoMime,
-                            canPlayAudioMime = { mimeType, channels ->
-                                deviceCanPlayAudioMime(appContext, mimeType, channels)
-                            },
+                            canPlayAudioMime = canPlayAudioMime,
                         )
                     }
                     val moviePlayerViewModel = viewModel(
@@ -405,9 +405,7 @@ fun IglooRoot(container: IglooAppContainer) {
                                     directStreamUrl = container.videoPlaybackRepository::streamUrl,
                                     hlsSessionApi = container.videoPlaybackRepository,
                                     canPlayVideoMime = ::deviceCanDecodeVideoMime,
-                                    canPlayAudioMime = { mimeType, channels ->
-                                        deviceCanPlayAudioMime(appContext, mimeType, channels)
-                                    },
+                                    canPlayAudioMime = canPlayAudioMime,
                                     stopScope = container.applicationScope,
                                 ),
                             )

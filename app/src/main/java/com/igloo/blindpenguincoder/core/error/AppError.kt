@@ -20,3 +20,8 @@ inline fun <T, R> ApiResult<T>.map(transform: (T) -> R): ApiResult<R> = when (th
     is ApiResult.Success -> ApiResult.Success(transform(value))
     is ApiResult.Failure -> this
 }
+
+inline fun <T, R> ApiResult<T>.flatMap(transform: (T) -> ApiResult<R>): ApiResult<R> = when (this) {
+    is ApiResult.Success -> transform(value)
+    is ApiResult.Failure -> this
+}

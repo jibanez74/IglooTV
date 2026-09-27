@@ -380,18 +380,7 @@ class MovieDetailsViewModel(
             fileDurationSec = details.movie.duration?.orNull(),
             selection = playbackSelection,
         )
-        return when (
-            val gate = evaluatePlaybackGate(
-                mode = request.mode,
-                videoCodec = request.videoCodec,
-                audioCodec = request.selectedAudioTrack?.codec,
-                audioCodecProfile = request.selectedAudioTrack?.codecProfile,
-                audioChannels = request.selectedAudioTrack?.channels,
-                audioLabel = request.selectedAudioTrack?.label,
-                canPlayVideoMime = canPlayVideoMime,
-                canPlayAudioMime = { mime -> canPlayAudioMime(mime, request.selectedAudioTrack?.channels) },
-            )
-        ) {
+        return when (val gate = evaluatePlaybackGate(request, canPlayVideoMime, canPlayAudioMime)) {
             PlaybackGateResult.Proceed -> {
                 playIntentPending = false
                 playRequestChannel.trySend(request)

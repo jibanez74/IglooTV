@@ -396,16 +396,12 @@ internal class ExoMoviePlayerEngine(
      * names the codec. The mode is never substituted.
      */
     private fun refusalFor(mode: PlaybackMode): String? {
-        val track = effectiveAudioOrdinal()?.let(request.audioTracks::getOrNull)
         val gate = evaluatePlaybackGate(
-            mode = mode,
-            videoCodec = request.videoCodec,
-            audioCodec = track?.codec,
-            audioCodecProfile = track?.codecProfile,
-            audioChannels = track?.channels,
-            audioLabel = track?.label,
+            request = request,
             canPlayVideoMime = services.canPlayVideoMime,
-            canPlayAudioMime = { mime -> services.canPlayAudioMime(mime, track?.channels) },
+            canPlayAudioMime = services.canPlayAudioMime,
+            mode = mode,
+            track = effectiveAudioOrdinal()?.let(request.audioTracks::getOrNull),
         )
         return (gate as? PlaybackGateResult.Blocked)?.message
     }

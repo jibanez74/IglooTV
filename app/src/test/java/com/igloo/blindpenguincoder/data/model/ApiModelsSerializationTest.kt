@@ -267,7 +267,6 @@ class ApiModelsSerializationTest {
         assertEquals(1995L, items[0].year.orNull())
         assertEquals(1800.5, items[0].progressSec, 0.0)
         assertEquals(10200.0, items[0].durationSec, 0.0)
-        assertNull(items[0].showId)
         assertNull(items[0].episodeName)
         assertFalse(items[1].isMovie)
         assertTrue(items[1].isEpisode)
@@ -276,13 +275,15 @@ class ApiModelsSerializationTest {
         assertNull(items[1].posterPath.orNull())
         assertNull(items[1].year.orNull())
         assertEquals(45.0, items[1].progressSec, 0.0)
-        assertEquals(40L, items[1].showId)
         assertEquals(1L, items[1].seasonNumber)
         assertEquals(3L, items[1].episodeNumber)
         assertEquals("In Perpetuity", items[1].episodeName)
     }
 
-    /** `GET /shows/episodes/{id}`: `next_episode` is required but unread, populated or null. */
+    /**
+     * `GET /shows/episodes/{id}`: `next_episode` is required but unread, populated or null, and
+     * the catalog fields the player does not read ride along unmodelled.
+     */
     @Test
     fun decodesShowEpisodePlaybackHeaderIgnoringUpNext() {
         fun body(nextEpisode: String) = """
@@ -314,10 +315,8 @@ class ApiModelsSerializationTest {
             assertEquals("Severance", data.show.name)
             assertEquals("/severance.jpg", data.show.posterPath.orNull())
             assertEquals(1L, data.season.seasonNumber)
-            assertEquals(900L, data.episode.id)
             assertEquals(3L, data.episode.episodeNumber)
             assertEquals("In Perpetuity", data.episode.name)
-            assertEquals(55L, data.episode.tmdbRuntime.orNull())
         }
     }
 

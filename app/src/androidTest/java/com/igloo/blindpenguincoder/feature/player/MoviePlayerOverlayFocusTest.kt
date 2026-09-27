@@ -218,16 +218,7 @@ class MoviePlayerOverlayFocusTest {
     fun failedProgressSaveFollowsBackToDetailsAndRetryRestoresPlayFocus() {
         setShellContent { playRequest }
         pressPlay()
-        val engine = engines.single()
-        engine.emit(MoviePlayerEvent.IsPlayingChanged(true))
-        failProgressSaves = true
-        var position = 30.0
-        while (position <= 46.0) {
-            engine.emit(MoviePlayerEvent.Time(position, 7200.0))
-            position += 0.5
-        }
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("movie_progress_error").assertExists()
+        failACadenceSave(engines.single(), durationSec = 7200.0)
         composeRule
             .onAllNodesWithText("Couldn't save playback progress:", substring = true)
             .filterToOne(hasAnyAncestor(hasTestTag("movie_progress_error")))
@@ -279,6 +270,65 @@ class MoviePlayerOverlayFocusTest {
         assertEquals(true, engines.single().released)
         shell.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
         composeRule.onNodeWithTag("continue_episode_card_900").assertIsFocused()
+    }
+
+    /** Plays [engine] past the first cadence save while saves fail, raising the chrome's error. */
+    private fun failACadenceSave(engine: FakeMoviePlayerEngine, durationSec: Double) {
+        engine.emit(MoviePlayerEvent.IsPlayingChanged(true))
+        failProgressSaves = true
+        var position = 30.0
+        while (position <= 46.0) {
+            engine.emit(MoviePlayerEvent.Time(position, durationSec))
+            position += 0.5
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("movie_progress_error").assertExists()
+    }
+
+    @Test
+    fun anEpisodesFailedSaveFollowsBackToHomeWithARetryThatReturnsFocusToTheCard() {
+        setShellContent(detailsOpen = false)
+        emitHomePlayRequest()
+        failACadenceSave(engines.single(), durationSec = 3300.0)
+
+        pressBack()
+
+        // No details page sits under a Home launch, so Home carries the Retry itself, directly
+        // above the rail: Up from the card the player closed onto reaches it.
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        composeRule.onNodeWithTag("home_progress_error").assertExists()
+        val card = composeRule.onNodeWithTag("continue_episode_card_900")
+        card.assertIsFocused()
+        card.performKeyInput { pressKey(Key.DirectionUp) }
+        val retry = composeRule.onNodeWithTag("home_progress_retry")
+        retry.assertIsFocused()
+
+        failProgressSaves = false
+        retry.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("home_progress_error").assertDoesNotExist()
+        card.assertIsFocused()
+    }
+
+    @Test
+    fun anEpisodesFailedSaveStaysOffAnUnrelatedMoviesDetailsPage() {
+        setShellContent(detailsOpen = false)
+        emitHomePlayRequest()
+        failACadenceSave(engines.single(), durationSec = 3300.0)
+        pressBack()
+        composeRule.onNodeWithTag("home_progress_error").assertExists()
+
+        composeRule.runOnIdle {
+            detailsState = MovieDetailsUiState(
+                openMovieId = 1,
+                details = MovieDetailsState.Loaded(testMovieDetails(id = 1)),
+            )
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("details_progress_error").assertDoesNotExist()
+        composeRule.onNodeWithTag("home_progress_error").assertDoesNotExist()
     }
 
     @Test

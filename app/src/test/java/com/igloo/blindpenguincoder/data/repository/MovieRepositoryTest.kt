@@ -222,7 +222,6 @@ class MovieRepositoryTest {
         assertEquals(listOf("Severance", "Heat", "Arrival"), items.map { it.title })
         assertEquals(listOf(true, false, false), items.map { it.isEpisode })
         val episode = items.first()
-        assertEquals(40L, episode.showId)
         assertEquals(1L, episode.seasonNumber)
         assertEquals(3L, episode.episodeNumber)
         assertEquals("In Perpetuity", episode.episodeName)

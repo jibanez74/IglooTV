@@ -29,6 +29,7 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -611,6 +612,26 @@ class HomeViewModelTest {
         // A refresh — the host's start effect — starts clean.
         viewModel.refresh()
         assertNull(viewModel.uiState.value.playbackNotice)
+    }
+
+    @Test
+    fun `a failed episode header answers the press without waiting out the other reads`() = runTest {
+        val http = routedHttp(
+            episode = {
+                jsonResponse(
+                    """{"error":true,"message":"episode not found"}""",
+                    HttpStatusCode.NotFound,
+                )
+            },
+            episodeTechnical = { awaitCancellation() },
+            episodeProgress = { awaitCancellation() },
+        )
+        val viewModel = viewModel(http)
+
+        viewModel.resumeEpisode(900)
+        val notice = viewModel.uiState.first { it.playbackNotice != null }.playbackNotice
+
+        assertEquals("Couldn't prepare playback: episode not found", notice)
     }
 
     @Test

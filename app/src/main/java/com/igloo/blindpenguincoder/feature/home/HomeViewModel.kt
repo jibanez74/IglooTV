@@ -3,6 +3,8 @@ package com.igloo.blindpenguincoder.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.error.flatMap
+import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.formatEpisodeCode
@@ -34,6 +36,7 @@ import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -262,19 +265,16 @@ class HomeViewModel(
             val playback = async { shows.episodePlayback(episodeId) }
             val technical = async { shows.episodeTechnicalDetails(episodeId) }
             val progress = async { shows.episodeWatchProgress(episodeId) }
-            val header = when (val result = playback.await()) {
-                is ApiResult.Success -> result.value
-                is ApiResult.Failure -> return@coroutineScope result
+            playback.await().flatMap { header ->
+                technical.await().flatMap { file ->
+                    progress.await().map { saved ->
+                        toEpisodePlayRequest(episodeId, header, file, saved)
+                    }
+                }
+            }.also { prepared ->
+                // The first failure answers the press; the reads still in flight are not waited out.
+                if (prepared is ApiResult.Failure) coroutineContext.cancelChildren()
             }
-            val file = when (val result = technical.await()) {
-                is ApiResult.Success -> result.value
-                is ApiResult.Failure -> return@coroutineScope result
-            }
-            val saved = when (val result = progress.await()) {
-                is ApiResult.Success -> result.value
-                is ApiResult.Failure -> return@coroutineScope result
-            }
-            ApiResult.Success(toEpisodePlayRequest(episodeId, header, file, saved))
         }
 
     /**
@@ -290,20 +290,22 @@ class HomeViewModel(
         file: ShowEpisodeTechnicalDetailsData,
         saved: WatchProgress,
     ): MoviePlayRequest {
+        val title = listOf(
+            header.show.name,
+            formatEpisodeCode(header.season.seasonNumber, header.episode.episodeNumber),
+            header.episode.name,
+        ).joinToString(" · ")
+        // The show's poster, as the rail's card shows it, re-used as session artwork.
+        val posterUrl = tmdbImageUrl(
+            serverUrl.require().apiBaseUrl,
+            TmdbImageSize.W500,
+            header.show.posterPath.orNull(),
+        )
         val build = { selection: PlaybackSelection ->
             buildVideoPlayRequest(
                 media = PlaybackMediaRef.Episode(episodeId),
-                title = listOf(
-                    header.show.name,
-                    formatEpisodeCode(header.season.seasonNumber, header.episode.episodeNumber),
-                    header.episode.name,
-                ).joinToString(" · "),
-                // The show's poster, as the rail's card shows it, re-used as session artwork.
-                posterUrl = tmdbImageUrl(
-                    serverUrl.require().apiBaseUrl,
-                    TmdbImageSize.W500,
-                    header.show.posterPath.orNull(),
-                ),
+                title = title,
+                posterUrl = posterUrl,
                 mimeType = file.file.mimeType,
                 videoStreams = file.videoStreams,
                 audioStreams = file.audioStreams,
@@ -315,17 +317,7 @@ class HomeViewModel(
             )
         }
         val request = build(PlaybackSelection())
-        val gate = evaluatePlaybackGate(
-            mode = request.mode,
-            videoCodec = request.videoCodec,
-            audioCodec = request.selectedAudioTrack?.codec,
-            audioCodecProfile = request.selectedAudioTrack?.codecProfile,
-            audioChannels = request.selectedAudioTrack?.channels,
-            audioLabel = request.selectedAudioTrack?.label,
-            canPlayVideoMime = canPlayVideoMime,
-            canPlayAudioMime = { mime -> canPlayAudioMime(mime, request.selectedAudioTrack?.channels) },
-        )
-        return when (gate) {
+        return when (evaluatePlaybackGate(request, canPlayVideoMime, canPlayAudioMime)) {
             PlaybackGateResult.Proceed -> request
             is PlaybackGateResult.Blocked -> build(PlaybackSelection(mode = PlaybackMode.Remux))
         }

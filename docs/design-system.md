@@ -2052,8 +2052,10 @@ end and leaving. A pause and the background stop that follows it write once, not
 write is never cancelled by the client, so backing out of the app right after the player cannot
 lose the end of a movie. Save failures never pause playback. They hold the chrome open with a polite,
 D-pad-reachable inline Retry and follow the user back to movie details if exit finishes first —
-or, for an episode resumed from Continue Watching, to Home's notice slot, since no details page
-sits under that launch.
+or, for an episode resumed from Continue Watching, to Home, since no details page sits under that
+launch: the same Retry card sits directly above the Continue Watching rail, reached by Up from the
+card the player closed onto, and hands focus back to that card when it clears. Each surface shows
+only the failures of the launches it made.
 Retry keeps the original save session id and takes a higher sequence. A retry or later cadence
 success clears the error, safely restores focus if Retry held it, and refreshes movie details and
 Continue Watching.
@@ -2336,8 +2338,9 @@ forgot to change the code.**
   choose `/movies/{id}` or `/shows/episodes/{id}`. `WatchProgress`, `UpdateWatchProgressRequest`
   and `WatchProgressUpdateData` take the contract's shared names; the stream rows drop `movie_id`
   (an episode's carry `file_id`). `ShowRepository` gains the three episode reads.
-- A failed exit save after a Home launch surfaces on Home's notice slot (§11.8), where there is no
-  details page to follow the user back to.
+- A failed exit save after a Home launch surfaces on Home as the inline Retry card above Continue
+  Watching (§11.8), where there is no details page to follow the user back to; movie details no
+  longer shows a failure its page did not launch.
 
 **2026-09-26 — TV Shows: the library pane shared between Movies and TV Shows (§11.4, §8.3).**
 

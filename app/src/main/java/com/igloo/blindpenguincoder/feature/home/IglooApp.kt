@@ -42,6 +42,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -61,6 +62,7 @@ import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooConfirmDialog
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
@@ -563,15 +565,16 @@ fun IglooApp(
             // The details header owns the notice while the overlay is up; rendering it here too
             // would only shift Home's rails behind a screen nobody can see. It surfaces here
             // when Back closes an overlay whose write had already failed.
-            // Home adds its own: why an episode press went nowhere, and — once the player has
-            // closed — an exit save that failed under a Home launch, which has no details page
-            // to follow the user back to (section 11.8).
-            mutationNotice = (
-                details.mutationNotice ?: trackLikes.notice ?: home.playbackNotice
-                    ?: progressSyncError.takeIf {
-                        videoPlayOrigin == VideoPlayOrigin.ContinueWatchingRail && !playerOpen
-                    }
-                ).takeIf { !anyDetailsOpen },
+            // Home adds its own: why an episode press went nowhere.
+            mutationNotice = (details.mutationNotice ?: trackLikes.notice ?: home.playbackNotice)
+                .takeIf { !anyDetailsOpen },
+            // An exit save that failed under a Home launch has no details page to follow the
+            // user back to, so Home carries its Retry once the player has closed (section 11.8).
+            progressSyncError = progressSyncError.takeIf {
+                videoPlayOrigin == VideoPlayOrigin.ContinueWatchingRail && !playerOpen &&
+                    !anyDetailsOpen
+            },
+            onRetryProgressSync = moviePlayerViewModel::retryFailedSave,
             onRetryRail = onRetryRail,
             onResumeEpisode = onResumeEpisode,
             openMovie = openMovie,
@@ -754,8 +757,10 @@ fun IglooApp(
                         }
                     },
                     mutationNotice = details.mutationNotice,
-                    progressSyncError = progressSyncError
-                        .takeIf { detailsActions is MovieDetailsActions.Library },
+                    progressSyncError = progressSyncError.takeIf {
+                        detailsActions is MovieDetailsActions.Library &&
+                            videoPlayOrigin == VideoPlayOrigin.MovieDetails
+                    },
                     onRetryProgressSync = moviePlayerViewModel::retryFailedSave,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
@@ -843,6 +848,8 @@ private fun IglooShell(
     musicActions: MusicActions,
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
+    progressSyncError: String?,
+    onRetryProgressSync: () -> Unit,
     onRetryRail: (HomeRail) -> Unit,
     onResumeEpisode: (Long) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
@@ -918,6 +925,8 @@ private fun IglooShell(
                 musicActions = musicActions,
                 trackLikes = trackLikes,
                 mutationNotice = mutationNotice,
+                progressSyncError = progressSyncError,
+                onRetryProgressSync = onRetryProgressSync,
                 onRetryRail = onRetryRail,
                 onResumeEpisode = onResumeEpisode,
                 openMovie = openMovie,
@@ -1002,6 +1011,8 @@ private fun ContentPane(
     musicActions: MusicActions,
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
+    progressSyncError: String?,
+    onRetryProgressSync: () -> Unit,
     onRetryRail: (HomeRail) -> Unit,
     onResumeEpisode: (Long) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
@@ -1082,6 +1093,8 @@ private fun ContentPane(
             IglooDestination.Home -> HomeRails(
                 home = home,
                 mutationNotice = mutationNotice,
+                progressSyncError = progressSyncError,
+                onRetryProgressSync = onRetryProgressSync,
                 contentInset = contentInset,
                 onRetryRail = onRetryRail,
                 onResumeEpisode = onResumeEpisode,
@@ -1200,6 +1213,8 @@ private enum class VideoPlayOrigin { MovieDetails, ContinueWatchingRail }
 private fun HomeRails(
     home: HomeUiState,
     mutationNotice: String?,
+    progressSyncError: String?,
+    onRetryProgressSync: () -> Unit,
     contentInset: PaddingValues,
     onRetryRail: (HomeRail) -> Unit,
     onResumeEpisode: (Long) -> Unit,
@@ -1227,6 +1242,17 @@ private fun HomeRails(
     LaunchedEffect(home.hero) {
         if (heroHadFocusAtSwap) {
             contentStartRequester.requestFocus()
+        }
+    }
+    // A Retry that clears while focused leaves focus on nothing; it goes back to the card the
+    // player closed onto, the same hand-back the details page's Retry makes.
+    var progressRetryFocused by remember { mutableStateOf(false) }
+    val retryHadFocusWhenStateChanged = remember(progressSyncError) { progressRetryFocused }
+    LaunchedEffect(progressSyncError) {
+        if (progressSyncError == null && retryHadFocusWhenStateChanged &&
+            !railReturnRequesters.getValue(HomeRail.ContinueWatching).requestFocusSafely()
+        ) {
+            contentStartRequester.requestFocusSafely()
         }
     }
 
@@ -1260,6 +1286,28 @@ private fun HomeRails(
                     { movieId -> open(DetailsOrigin.Hero, movieId) }
                 },
                 modifier = Modifier.onFocusChanged { heroHasFocus = it.hasFocus },
+            )
+        }
+
+        // Directly above the rail whose card launched the player, so Up from that card reaches it.
+        if (progressSyncError != null) {
+            IglooInlineError(
+                message = progressSyncError,
+                actionText = "Retry",
+                actionSemanticLabel = "Retry saving playback progress",
+                onAction = onRetryProgressSync,
+                actionModifier = Modifier
+                    .focusProperties {
+                        left = navigationRequester
+                        right = FocusRequester.Cancel
+                    }
+                    .onFocusChanged { progressRetryFocused = it.isFocused }
+                    .testTag("home_progress_retry"),
+                liveRegionMode = LiveRegionMode.Polite,
+                modifier = Modifier
+                    .padding(contentInset)
+                    .width(IglooTheme.layout.dialogWidth)
+                    .testTag("home_progress_error"),
             )
         }
 

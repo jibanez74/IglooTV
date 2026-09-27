@@ -46,42 +46,32 @@ data class ShowsStatsData(
 )
 
 /**
- * Payload of `ShowEpisodePlaybackEnvelope.data`: what the player needs to title an episode.
- * `next_episode` is left to `ignoreUnknownKeys` until the player advances between episodes.
+ * Payload of `ShowEpisodePlaybackEnvelope.data`, reduced to what the player needs to title an
+ * episode. `next_episode` and the catalog fields (ids, backdrop, season name, overview, air date,
+ * still, runtime, votes) are left to `ignoreUnknownKeys` until a screen reads them.
  */
 @Serializable
 data class ShowEpisodePlaybackData(
     val show: ShowEpisodePlaybackShow,
     val season: ShowEpisodePlaybackSeason,
-    val episode: ShowEpisodeSummary,
+    val episode: ShowEpisodePlaybackEpisode,
 )
 
 @Serializable
 data class ShowEpisodePlaybackShow(
-    val id: Long,
     val name: String,
     @SerialName("poster_path") val posterPath: SqlNullString,
-    @SerialName("backdrop_path") val backdropPath: SqlNullString,
 )
 
 @Serializable
 data class ShowEpisodePlaybackSeason(
     @SerialName("season_number") val seasonNumber: Long,
-    val name: String,
 )
 
-/** One episode's catalog metadata (TMDB fields only). */
 @Serializable
-data class ShowEpisodeSummary(
-    val id: Long,
+data class ShowEpisodePlaybackEpisode(
     @SerialName("episode_number") val episodeNumber: Long,
     val name: String,
-    val overview: SqlNullString,
-    @SerialName("air_date") val airDate: SqlNullString,
-    @SerialName("still_path") val stillPath: SqlNullString,
-    @SerialName("tmdb_runtime") val tmdbRuntime: SqlNullInt64,
-    @SerialName("vote_average") val voteAverage: SqlNullFloat64,
-    @SerialName("vote_count") val voteCount: SqlNullInt64,
 )
 
 /** Payload of `ShowEpisodeTechnicalDetailsEnvelope.data`; the stream rows are the movie ones. */

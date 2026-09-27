@@ -23,6 +23,27 @@ sealed interface PlaybackGateResult {
     data class Blocked(val message: String) : PlaybackGateResult
 }
 
+/**
+ * The gate over a built request: its video, and [track] — the request's selected track unless
+ * the caller (the engine, mid-session) is playing a different one — in [mode].
+ */
+fun evaluatePlaybackGate(
+    request: MoviePlayRequest,
+    canPlayVideoMime: (mimeType: String) -> Boolean,
+    canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
+    mode: PlaybackMode = request.mode,
+    track: PlayableAudioTrack? = request.selectedAudioTrack,
+): PlaybackGateResult = evaluatePlaybackGate(
+    mode = mode,
+    videoCodec = request.videoCodec,
+    audioCodec = track?.codec,
+    audioCodecProfile = track?.codecProfile,
+    audioChannels = track?.channels,
+    audioLabel = track?.label,
+    canPlayVideoMime = canPlayVideoMime,
+    canPlayAudioMime = { mime -> canPlayAudioMime(mime, track?.channels) },
+)
+
 fun evaluatePlaybackGate(
     mode: PlaybackMode,
     videoCodec: String?,
