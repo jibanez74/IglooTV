@@ -261,6 +261,7 @@ class VideoPlayerStateMachineTest {
                 VideoPlayerPhase.Loading,
                 "Waiting for the server to free up…",
                 "Heat",
+                "movie",
             ),
         )
         assertEquals(
@@ -269,6 +270,7 @@ class VideoPlayerStateMachineTest {
                 VideoPlayerPhase.Buffering,
                 "Reconnecting to the stream…",
                 "Heat",
+                "movie",
             ),
         )
     }
@@ -277,11 +279,15 @@ class VideoPlayerStateMachineTest {
     fun `wait announcements fall back to the generic phase text`() {
         assertEquals(
             "Loading movie",
-            videoPlayerAnnouncement(VideoPlayerPhase.Loading, null, "Heat"),
+            videoPlayerAnnouncement(VideoPlayerPhase.Loading, null, "Heat", "movie"),
         )
         assertEquals(
             "Buffering",
-            videoPlayerAnnouncement(VideoPlayerPhase.Buffering, null, "Heat"),
+            videoPlayerAnnouncement(VideoPlayerPhase.Buffering, null, "Heat", "movie"),
+        )
+        assertEquals(
+            "Loading episode",
+            videoPlayerAnnouncement(VideoPlayerPhase.Loading, null, "Severance", "episode"),
         )
     }
 }

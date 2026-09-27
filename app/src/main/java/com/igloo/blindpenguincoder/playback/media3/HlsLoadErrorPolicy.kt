@@ -9,7 +9,7 @@ import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import com.igloo.blindpenguincoder.playback.hls.HLS_CAPACITY_RETRY_MAX_ATTEMPTS
 import com.igloo.blindpenguincoder.playback.hls.hlsLoadRetryDelayMs
-import com.igloo.blindpenguincoder.playback.hls.isMovieHlsRequestPath
+import com.igloo.blindpenguincoder.playback.hls.isVideoHlsRequestPath
 import com.igloo.blindpenguincoder.playback.hls.retryAfterSecondsFrom
 
 /**
@@ -23,11 +23,11 @@ internal class HlsLoadErrorPolicy : DefaultLoadErrorHandlingPolicy() {
     override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
         val http = httpErrorCause(loadErrorInfo.exception)
         val defaultDelayMs = super.getRetryDelayMsFor(loadErrorInfo)
-        val movieHlsResponseCode = http?.responseCode?.takeIf {
-            isMovieHlsRequestPath(http.dataSpec.uri.path)
+        val videoHlsResponseCode = http?.responseCode?.takeIf {
+            isVideoHlsRequestPath(http.dataSpec.uri.path)
         }
         val delayMs = hlsLoadRetryDelayMs(
-            responseCode = movieHlsResponseCode,
+            responseCode = videoHlsResponseCode,
             retryAfterSec = retryAfterSecondsFrom(http?.headerFields),
             errorCount = loadErrorInfo.errorCount,
             defaultRetryCount = super.getMinimumLoadableRetryCount(loadErrorInfo.mediaLoadData.dataType),

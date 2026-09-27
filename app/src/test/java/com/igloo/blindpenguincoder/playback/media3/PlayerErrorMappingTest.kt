@@ -22,7 +22,8 @@ class PlayerErrorMappingTest {
         } else {
             null
         },
-    ) = playerFailure(errorCode, errorCodeName, httpResponseCode, isHls, httpRequestPath)
+        mediaNoun: String = "movie",
+    ) = playerFailure(errorCode, errorCodeName, httpResponseCode, isHls, httpRequestPath, mediaNoun)
 
     // --- HTTP statuses outrank error codes ---
 
@@ -41,6 +42,19 @@ class PlayerErrorMappingTest {
         assertEquals(
             "The server refused the stream (HTTP 404).",
             event(httpResponseCode = 404, isHls = false).message,
+        )
+    }
+
+    @Test
+    fun `an episode's HLS 404 and 503 read like a movie's`() {
+        val path = "/api/shows/episodes/900/hls/remux/segment_1.m4s"
+        assertEquals(
+            PLAYBACK_SESSION_LOST_MESSAGE,
+            event(httpResponseCode = 404, isHls = true, httpRequestPath = path).message,
+        )
+        assertEquals(
+            PLAYBACK_SERVER_BUSY_MESSAGE,
+            event(httpResponseCode = 503, isHls = true, httpRequestPath = path).message,
         )
     }
 

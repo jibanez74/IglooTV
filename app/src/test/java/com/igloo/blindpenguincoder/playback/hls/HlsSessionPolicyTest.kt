@@ -158,11 +158,14 @@ class HlsSessionPolicyTest {
     // --- mid-play lost-session recovery ---
 
     @Test
-    fun `only movie HLS asset 404s recover in place`() {
+    fun `only movie and episode HLS asset 404s recover in place`() {
         listOf(
             "/api/movies/7/hls/remux/playlist.m3u8",
             "/api/movies/7/hls/remux/init.mp4",
             "/api/movies/7/hls/remux/segment_42.m4s",
+            "/api/shows/episodes/900/hls/remux/playlist.m3u8",
+            "/api/shows/episodes/900/hls/remux/init.mp4",
+            EPISODE_SEGMENT_PATH,
         ).forEach { path ->
             assertTrue(shouldRecoverLostHlsSession(404, path, recoveries = 0))
         }
@@ -174,6 +177,9 @@ class HlsSessionPolicyTest {
             ),
         )
         assertFalse(shouldRecoverLostHlsSession(404, "/api/watch-rooms/7/hls/playlist.m3u8", 0))
+        assertFalse(
+            shouldRecoverLostHlsSession(404, "/api/shows/episodes/900/subtitles/0/web.vtt", 0),
+        )
         assertFalse(shouldRecoverLostHlsSession(503, MOVIE_SEGMENT_PATH, recoveries = 0))
         assertFalse(shouldRecoverLostHlsSession(null, MOVIE_SEGMENT_PATH, recoveries = 0))
     }
@@ -181,6 +187,7 @@ class HlsSessionPolicyTest {
     @Test
     fun `a segment 500 recovers because the server replaces a failed session`() {
         assertTrue(shouldRecoverLostHlsSession(500, MOVIE_SEGMENT_PATH, recoveries = 0))
+        assertTrue(shouldRecoverLostHlsSession(500, EPISODE_SEGMENT_PATH, recoveries = 0))
         assertFalse(shouldRecoverLostHlsSession(500, "/api/movies/7/hls/remux/playlist.m3u8", 0))
         assertFalse(shouldRecoverLostHlsSession(500, "/api/movies/7/hls/remux/init.mp4", 0))
         assertFalse(
@@ -206,6 +213,7 @@ class HlsSessionPolicyTest {
             "x-igloo-segment" to listOf("past-end"),
         )
         assertTrue(isPastEndHlsSegment(404, MOVIE_SEGMENT_PATH, pastEnd))
+        assertTrue(isPastEndHlsSegment(404, EPISODE_SEGMENT_PATH, pastEnd))
     }
 
     @Test
@@ -280,5 +288,6 @@ class HlsSessionPolicyTest {
 
     private companion object {
         const val MOVIE_SEGMENT_PATH = "/api/movies/7/hls/remux/segment_1.m4s"
+        const val EPISODE_SEGMENT_PATH = "/api/shows/episodes/900/hls/remux/segment_1.m4s"
     }
 }

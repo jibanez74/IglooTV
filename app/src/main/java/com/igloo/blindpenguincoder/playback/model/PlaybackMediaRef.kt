@@ -21,3 +21,10 @@ sealed interface PlaybackMediaRef {
     @SerialName("episode")
     data class Episode(override val id: Long) : PlaybackMediaRef
 }
+
+/** What the player calls this media in its spoken and error copy. */
+val PlaybackMediaRef.noun: String
+    get() = when (this) {
+        is PlaybackMediaRef.Movie -> "movie"
+        is PlaybackMediaRef.Episode -> "episode"
+    }

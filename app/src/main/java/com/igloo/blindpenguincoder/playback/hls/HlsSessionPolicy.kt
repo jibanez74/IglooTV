@@ -61,15 +61,17 @@ const val HLS_SESSION_LOST_INCIDENT_WINDOW_MS = 60_000L
 private const val HLS_SEGMENT_STATUS_HEADER = "X-Igloo-Segment"
 private const val HLS_SEGMENT_STATUS_PAST_END = "past-end"
 
-private val MOVIE_HLS_REQUEST_PATH = Regex(
-    "^/api/movies/[^/]+/hls/[^/]+/(?:playlist\\.m3u8|init\\.mp4|segment_[0-9]+\\.m4s)$",
-)
+// Movies and TV episodes serve the same session assets under their own prefixes.
+private const val VIDEO_HLS_PREFIX = "^/api/(?:movies|shows/episodes)/[^/]+/hls/[^/]+/"
 
-private val MOVIE_HLS_SEGMENT_PATH = Regex("^/api/movies/[^/]+/hls/[^/]+/segment_[0-9]+\\.m4s$")
+private val VIDEO_HLS_REQUEST_PATH =
+    Regex(VIDEO_HLS_PREFIX + "(?:playlist\\.m3u8|init\\.mp4|segment_[0-9]+\\.m4s)$")
 
-/** True only for the movie HLS routes whose assets are owned by an ephemeral FFmpeg session. */
-fun isMovieHlsRequestPath(path: String?): Boolean =
-    path != null && MOVIE_HLS_REQUEST_PATH.matches(path)
+private val VIDEO_HLS_SEGMENT_PATH = Regex(VIDEO_HLS_PREFIX + "segment_[0-9]+\\.m4s$")
+
+/** True only for the video HLS routes whose assets are owned by an ephemeral FFmpeg session. */
+fun isVideoHlsRequestPath(path: String?): Boolean =
+    path != null && VIDEO_HLS_REQUEST_PATH.matches(path)
 
 /** Session start second for a resume at [requestedSec], rewound and clamped at zero. */
 fun hlsResumeStartSec(requestedSec: Double): Int =
@@ -115,12 +117,12 @@ fun sessionLostRetryDelayMs(attempt: Int): Long? {
 
 /**
  * Whether a mid-play load failure should recreate the session in place rather than surface as
- * a terminal error. A 404 from an ephemeral movie HLS playlist/init/segment means "the
+ * a terminal error. A 404 from an ephemeral video HLS playlist/init/segment means "the
  * server-side session evaporated" (idle eviction, restart). A 500 on a segment means FFmpeg
  * died partway through, and the server replaces a failed session on the next manifest
  * request. Sideloaded WebVTT and unrelated endpoints retain ordinary HTTP handling.
  * [recoveries] is how many recreations this incident has already run (see
- * [sessionLostRecoveriesAt]), so a genuinely missing movie cannot loop forever.
+ * [sessionLostRecoveriesAt]), so a genuinely missing title cannot loop forever.
  */
 fun shouldRecoverLostHlsSession(
     responseCode: Int?,
@@ -128,8 +130,8 @@ fun shouldRecoverLostHlsSession(
     recoveries: Int,
 ): Boolean = recoveries < HLS_SESSION_LOST_MAX_ATTEMPTS &&
     when (responseCode) {
-        404 -> isMovieHlsRequestPath(requestPath)
-        500 -> requestPath != null && MOVIE_HLS_SEGMENT_PATH.matches(requestPath)
+        404 -> isVideoHlsRequestPath(requestPath)
+        500 -> requestPath != null && VIDEO_HLS_SEGMENT_PATH.matches(requestPath)
         else -> false
     }
 
@@ -143,7 +145,7 @@ fun isPastEndHlsSegment(
     requestPath: String?,
     headerFields: Map<out String?, List<String>>?,
 ): Boolean = responseCode == 404 &&
-    requestPath != null && MOVIE_HLS_SEGMENT_PATH.matches(requestPath) &&
+    requestPath != null && VIDEO_HLS_SEGMENT_PATH.matches(requestPath) &&
     headerValueFrom(headerFields, HLS_SEGMENT_STATUS_HEADER) == HLS_SEGMENT_STATUS_PAST_END
 
 /**

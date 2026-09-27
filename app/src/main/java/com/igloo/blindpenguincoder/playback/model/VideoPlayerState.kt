@@ -156,10 +156,11 @@ internal fun videoPlayerAnnouncement(
     phase: VideoPlayerPhase,
     statusMessage: String?,
     title: String,
+    mediaNoun: String,
 ): String? = when (phase) {
     VideoPlayerPhase.Playing -> "Playing: $title"
     VideoPlayerPhase.Paused -> "Paused: $title"
-    VideoPlayerPhase.Loading -> statusMessage ?: "Loading movie"
+    VideoPlayerPhase.Loading -> statusMessage ?: "Loading $mediaNoun"
     VideoPlayerPhase.Buffering -> statusMessage ?: "Buffering"
     else -> null
 }

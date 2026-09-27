@@ -69,6 +69,7 @@ import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerPhase
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerState
 import com.igloo.blindpenguincoder.playback.model.onEvent
+import com.igloo.blindpenguincoder.playback.model.noun
 import com.igloo.blindpenguincoder.playback.model.videoPlayerAnnouncement
 import kotlinx.coroutines.delay
 
@@ -338,7 +339,7 @@ fun VideoPlayerScreen(
                 )
             }
             .semantics {
-                paneTitle = "Movie player"
+                paneTitle = "${request.media.noun.replaceFirstChar(Char::uppercase)} player"
                 isTraversalGroup = true
             }
             .testTag("movie_player"),
@@ -355,7 +356,7 @@ fun VideoPlayerScreen(
             PlayerFailureSurface(
                 message = state.errorMessage,
                 unauthorized = unauthorized,
-                mediaNoun = "movie",
+                mediaNoun = request.media.noun,
                 actionRequester = retryRequester,
                 onRetry = {
                     // Retry is a fresh, explicit Play intent after the failed engine's
@@ -368,6 +369,7 @@ fun VideoPlayerScreen(
         } else {
             VideoPlayerChrome(
                 title = request.title,
+                mediaNoun = request.media.noun,
                 state = state,
                 visible = chromeVisible,
                 chapterCount = request.chapters.size,
@@ -470,6 +472,7 @@ fun VideoPlayerScreen(
                 phase = state.phase,
                 statusMessage = state.statusMessage,
                 title = request.title,
+                mediaNoun = request.media.noun,
             ),
         )
     }
@@ -488,6 +491,7 @@ private enum class LastControl { Forward, Chapters, Audio, Subtitles, Quality }
 @Composable
 private fun VideoPlayerChrome(
     title: String,
+    mediaNoun: String,
     state: VideoPlayerState,
     visible: Boolean,
     chapterCount: Int,
@@ -555,7 +559,7 @@ private fun VideoPlayerChrome(
         Box(modifier = Modifier.weight(1f)) {
             // The engine's own narration (capacity waits, reconnects) outranks the generic word.
             val holdMessage = when (state.phase) {
-                VideoPlayerPhase.Loading -> state.statusMessage ?: "Loading movie…"
+                VideoPlayerPhase.Loading -> state.statusMessage ?: "Loading $mediaNoun…"
                 VideoPlayerPhase.Buffering -> state.statusMessage ?: "Buffering…"
                 else -> null
             }

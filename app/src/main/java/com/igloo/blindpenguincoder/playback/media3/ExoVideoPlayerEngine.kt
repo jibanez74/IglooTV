@@ -54,6 +54,7 @@ import com.igloo.blindpenguincoder.playback.model.TrackOption
 import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.hlsAudioConversionFor
+import com.igloo.blindpenguincoder.playback.model.noun
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import com.igloo.blindpenguincoder.playback.model.subtitleRenderableInMode
 import kotlin.math.floor
@@ -792,6 +793,7 @@ internal class ExoVideoPlayerEngine(
             httpResponseCode = http?.responseCode,
             isHls = isHls,
             httpRequestPath = http?.dataSpec?.uri?.path,
+            mediaNoun = request.media.noun,
         )
         return VideoPlayerEvent.Error(failure.message, failure.unauthorized)
     }

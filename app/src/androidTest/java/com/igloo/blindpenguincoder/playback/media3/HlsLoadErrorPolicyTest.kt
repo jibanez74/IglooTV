@@ -65,11 +65,14 @@ class HlsLoadErrorPolicyTest {
     }
 
     @Test
-    fun everyMovieHlsAssetGetsPatient503Handling() {
+    fun everyMovieAndEpisodeHlsAssetGetsPatient503Handling() {
         listOf(
             "/api/movies/7/hls/remux/playlist.m3u8",
             "/api/movies/7/hls/remux/init.mp4",
             "/api/movies/7/hls/remux/segment_1.m4s",
+            "/api/shows/episodes/900/hls/remux/playlist.m3u8",
+            "/api/shows/episodes/900/hls/remux/init.mp4",
+            "/api/shows/episodes/900/hls/remux/segment_1.m4s",
         ).forEach { path ->
             assertEquals(
                 5_000L,

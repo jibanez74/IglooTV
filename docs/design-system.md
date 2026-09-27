@@ -2345,6 +2345,11 @@ forgot to change the code.**
   `MoviePlayerViewModel`, `MoviePlayerEngine` / `ExoMoviePlayerEngine`, `MoviePlaybackServices`,
   `MoviePlayerState` / `Event` / `Phase` and `MovieMediaSession` became their `Video*`
   equivalents. Test tags are unchanged (`movie_player`, `movie_play_pause`, …).
+- **HLS recovery covers episodes.** The lost-session 404, failed-transcode 500, busy-503 retry and
+  past-end 404 rules matched only `/api/movies/{id}/hls/…`, so an episode on HLS failed where a
+  movie recovered or ended cleanly; they now match `/api/shows/episodes/{id}/hls/…` too
+  (`isVideoHlsRequestPath`). The player's own copy names what it plays: "Episode player" as the
+  pane title, "Loading episode…", and "the episode" in decode and read failures.
 
 **2026-09-26 — TV Shows: the library pane shared between Movies and TV Shows (§11.4, §8.3).**
 

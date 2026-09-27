@@ -258,7 +258,8 @@ class VideoPlayerOverlayFocusTest {
 
         // The player sits straight over the pane — no details overlay between — so the shell
         // itself leaves TalkBack traversal, and the episode starts from the beginning unasked.
-        composeRule.onNodeWithTag("movie_player").assertExists()
+        composeRule.onNodeWithTag("movie_player")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Episode player"))
         composeRule.onNodeWithTag("details_layer").assertDoesNotExist()
         shell.assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
         composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
