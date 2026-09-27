@@ -389,20 +389,23 @@ internal class ExoMoviePlayerEngine(
     }
 
     /**
-     * Why this mode cannot start, or null to proceed. The same pre-play gate, over the audio
-     * track this session would actually use: switching to Direct is the one in-player choice
-     * that can land on a track this TV has no decoder and no passthrough for, and silent video
-     * is worse than the refusal that names the codec. The mode is never substituted.
+     * Why this mode cannot start, or null to proceed. The same pre-play gate, over the video and
+     * the audio track this session would actually use: switching to Direct is the one in-player
+     * choice that can land on a video codec this TV cannot decode, or a track it has no decoder
+     * and no passthrough for, and a black screen or silent video is worse than the refusal that
+     * names the codec. The mode is never substituted.
      */
     private fun refusalFor(mode: PlaybackMode): String? {
         val track = effectiveAudioOrdinal()?.let(request.audioTracks::getOrNull)
         val gate = evaluatePlaybackGate(
             mode = mode,
+            videoCodec = request.videoCodec,
             audioCodec = track?.codec,
             audioCodecProfile = track?.codecProfile,
             audioChannels = track?.channels,
             audioLabel = track?.label,
-            canPlayMime = { mime -> services.canPlayAudioMime(mime, track?.channels) },
+            canPlayVideoMime = services.canPlayVideoMime,
+            canPlayAudioMime = { mime -> services.canPlayAudioMime(mime, track?.channels) },
         )
         return (gate as? PlaybackGateResult.Blocked)?.message
     }

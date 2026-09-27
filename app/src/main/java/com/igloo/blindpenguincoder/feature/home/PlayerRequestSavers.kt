@@ -47,6 +47,7 @@ internal val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Sav
                 request.resumeAtSec?.toString().orEmpty(),
                 request.durationSec?.toString().orEmpty(),
                 Json.encodeToString(request.chapters),
+                request.videoCodec.orEmpty(),
             )
         }
     },
@@ -68,6 +69,7 @@ internal val MoviePlayRequestSaver: Saver<MoviePlayRequest?, List<String>> = Sav
                     resumeAtSec = saved[9].toDoubleOrNull(),
                     durationSec = saved[10].toDoubleOrNull(),
                     chapters = Json.decodeFromString<List<PlaybackChapter>>(saved[11]),
+                    videoCodec = saved[12].ifEmpty { null },
                 )
             }
         }
@@ -110,5 +112,5 @@ internal val MusicPlayRequestSaver: Saver<MusicPlayRequest?, List<String>> = Sav
     },
 )
 
-private const val MOVIE_SLOTS = 12
+private const val MOVIE_SLOTS = 13
 private const val MUSIC_SLOTS = 3

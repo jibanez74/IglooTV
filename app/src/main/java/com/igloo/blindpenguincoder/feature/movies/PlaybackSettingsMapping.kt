@@ -64,9 +64,9 @@ data class PlaybackSettingsUi(
  *
  * Resolution rules:
  * - Modes: [availablePlaybackModes] returns the normative seven-mode ladder in order. Direct
- *   stays listed and selectable even when the selected audio track can't play on this
- *   device — offers may be filtered, but a user's choice is never overridden; the explanation
- *   (and the Play gate, in the same words) says why Direct would refuse.
+ *   stays listed and selectable even when the file's video or the selected audio track can't
+ *   play on this device — offers may be filtered, but a user's choice is never overridden; the
+ *   explanation (and the Play gate, in the same words) says why Direct would refuse.
  * - Effective audio: the selected id if the file still has it, else the `is_default` stream,
  *   else the first. A selection is matched by id, so a track list that changed under a kept
  *   selection degrades to the default instead of pointing at nothing. Unlike the web client,
@@ -80,6 +80,9 @@ internal fun playbackSettingsUi(
     audioStreams: List<AudioStream>?,
     subtitles: List<Subtitle>?,
     selection: PlaybackSelection,
+    /** The primary video stream's codec; null while technical details are in flight. */
+    videoCodec: String? = null,
+    canPlayVideoMime: (mimeType: String) -> Boolean = { true },
     canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean = { _, _ -> true },
 ): PlaybackSettingsUi {
     val modes = availablePlaybackModes()
@@ -127,11 +130,13 @@ internal fun playbackSettingsUi(
     // learns about an unplayable Direct combination while still inside the dialog.
     val directCaution = evaluatePlaybackGate(
         mode = selection.mode,
+        videoCodec = videoCodec,
         audioCodec = effectiveAudio?.codec,
         audioCodecProfile = effectiveAudio?.codecProfile?.orNull(),
         audioChannels = effectiveAudio?.channels?.toInt(),
         audioLabel = effectiveAudio?.let { audioTrackLabel(it, effectiveAudioIndex) },
-        canPlayMime = { mime -> canPlayAudioMime(mime, effectiveAudio?.channels?.toInt()) },
+        canPlayVideoMime = canPlayVideoMime,
+        canPlayAudioMime = { mime -> canPlayAudioMime(mime, effectiveAudio?.channels?.toInt()) },
     ) as? PlaybackGateResult.Blocked
 
     // The same predicate the engine uses to substitute the Remux conversion under Direct —

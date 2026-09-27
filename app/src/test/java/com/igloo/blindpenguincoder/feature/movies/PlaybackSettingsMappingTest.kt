@@ -307,6 +307,31 @@ class PlaybackSettingsMappingTest {
         assertTrue(!ui.explanation.contains("can't play"))
     }
 
+    @Test
+    fun `a direct pick over undecodable video explains why and stays selected`() {
+        val ui = playbackSettingsUi(
+            audioStreams = listOf(audioStream()),
+            subtitles = null,
+            selection = PlaybackSelection(mode = PlaybackMode.Direct),
+            videoCodec = "msmpeg4v3",
+            canPlayVideoMime = { false },
+        )
+        assertEquals(PlaybackMode.Direct, ui.selectedMode)
+        assertTrue(ui.explanation.contains("DivX 3 (MS-MPEG-4) video"))
+    }
+
+    @Test
+    fun `an HLS mode never warns about the source video`() {
+        val ui = playbackSettingsUi(
+            audioStreams = listOf(audioStream()),
+            subtitles = null,
+            selection = PlaybackSelection(mode = PlaybackMode.Remux),
+            videoCodec = "msmpeg4v3",
+            canPlayVideoMime = { false },
+        )
+        assertTrue(!ui.explanation.contains("can't play"))
+    }
+
     // --- the automatic audio conversion ---
 
     /** Tracks the engine converts get an announcement instead of the capability caution. */

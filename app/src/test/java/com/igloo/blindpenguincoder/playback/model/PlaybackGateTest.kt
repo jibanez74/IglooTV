@@ -9,18 +9,22 @@ class PlaybackGateTest {
 
     private fun gate(
         mode: PlaybackMode = PlaybackMode.Direct,
+        videoCodec: String? = "hevc",
         codec: String? = "truehd",
         profile: String? = null,
         channels: Int? = null,
         label: String? = "English · 7.1 surround",
+        canPlayVideo: (String) -> Boolean = { true },
         canPlay: Boolean = true,
     ) = evaluatePlaybackGate(
         mode = mode,
+        videoCodec = videoCodec,
         audioCodec = codec,
         audioCodecProfile = profile,
         audioChannels = channels,
         audioLabel = label,
-        canPlayMime = { canPlay },
+        canPlayVideoMime = canPlayVideo,
+        canPlayAudioMime = { canPlay },
     )
 
     // --- mode gating ---
@@ -84,6 +88,59 @@ class PlaybackGateTest {
         )
     }
 
+    // --- video capability gating ---
+
+    /** Media3 plays a DivX 3 AVI's sound over a black screen; the gate must stop it first. */
+    @Test
+    fun `undecodable video is blocked naming the codec and the converted way out`() {
+        val result = gate(
+            videoCodec = "msmpeg4v3",
+            codec = "mp3",
+            canPlayVideo = { false },
+        ) as PlaybackGateResult.Blocked
+        assertTrue(result.message.contains("DivX 3 (MS-MPEG-4) video"))
+        assertTrue(result.message.contains("Playback Settings"))
+        assertTrue(result.message.contains("converted qualities"))
+    }
+
+    @Test
+    fun `the video decoder is asked about the codec's media3 mime type`() {
+        val asked = mutableListOf<String>()
+        gate(videoCodec = "msmpeg4v3", canPlayVideo = { asked += it; true })
+        assertEquals(listOf("video/mp43"), asked)
+    }
+
+    @Test
+    fun `decodable video proceeds`() {
+        assertEquals(PlaybackGateResult.Proceed, gate(videoCodec = "mpeg4", canPlayVideo = { true }))
+    }
+
+    @Test
+    fun `unmapped or missing video codecs proceed without consulting capability`() {
+        val neverAsked: (String) -> Boolean = { error("asked about $it") }
+        assertEquals(PlaybackGateResult.Proceed, gate(videoCodec = "h264", canPlayVideo = neverAsked))
+        assertEquals(PlaybackGateResult.Proceed, gate(videoCodec = null, canPlayVideo = neverAsked))
+    }
+
+    @Test
+    fun `every non-direct mode proceeds even with undecodable video`() {
+        for (mode in PlaybackMode.entries.filter { it != PlaybackMode.Direct }) {
+            assertEquals(
+                PlaybackGateResult.Proceed,
+                gate(mode = mode, videoCodec = "msmpeg4v3", canPlayVideo = { false }),
+            )
+        }
+    }
+
+    /** The audio conversion cannot bring back a picture, so it never excuses the video. */
+    @Test
+    fun `undecodable video is blocked even over a track the audio conversion covers`() {
+        assertTrue(
+            gate(videoCodec = "msmpeg4v3", codec = "dts", canPlayVideo = { false })
+                is PlaybackGateResult.Blocked,
+        )
+    }
+
     // --- codec → MIME table ---
 
     @Test
@@ -105,6 +162,27 @@ class PlaybackGateTest {
         assertEquals("audio/vorbis", audioCodecToMimeType("vorbis", null))
         assertEquals("audio/raw", audioCodecToMimeType("pcm_s16le", null))
         assertEquals(null, audioCodecToMimeType("exotic_new_codec", null))
+    }
+
+    @Test
+    fun `video codec names map to media3 mime types`() {
+        assertEquals("video/hevc", videoCodecToMimeType("hevc"))
+        assertEquals("video/x-vnd.on2.vp9", videoCodecToMimeType("vp9"))
+        assertEquals("video/av01", videoCodecToMimeType("av1"))
+        assertEquals("video/mpeg2", videoCodecToMimeType("mpeg2video"))
+        assertEquals("video/mp4v-es", videoCodecToMimeType("mpeg4"))
+        assertEquals("video/mp42", videoCodecToMimeType("msmpeg4v2"))
+        assertEquals("video/mp43", videoCodecToMimeType("MSMPEG4V3"))
+        assertEquals("video/wvc1", videoCodecToMimeType("vc1"))
+        assertEquals(null, videoCodecToMimeType("h264"))
+    }
+
+    @Test
+    fun `video display names read like a person would say them`() {
+        assertEquals("HEVC", videoCodecDisplayName("hevc"))
+        assertEquals("MPEG-4 Part 2", videoCodecDisplayName("mpeg4"))
+        assertEquals("DivX 3 (MS-MPEG-4)", videoCodecDisplayName("msmpeg4v3"))
+        assertEquals("PRORES", videoCodecDisplayName("prores"))
     }
 
     @Test

@@ -17,6 +17,7 @@ import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
 import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
 import com.igloo.blindpenguincoder.data.repository.theaterMovieJson
 import com.igloo.blindpenguincoder.data.repository.theaterMoviesJson
+import com.igloo.blindpenguincoder.data.repository.videoStreamJson
 import com.igloo.blindpenguincoder.data.repository.watchProgressJson
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
@@ -57,14 +58,22 @@ class HomeViewModelTest {
     }
 
     /** The host's start effect is what fires the first load; there is no fetch in `init`. */
-    private fun viewModel(http: TestHttp, canPlayAudioMime: Boolean = true) =
-        newViewModel(http, canPlayAudioMime).also { it.refresh() }
+    private fun viewModel(
+        http: TestHttp,
+        canPlayAudioMime: Boolean = true,
+        canPlayVideoMime: Boolean = true,
+    ) = newViewModel(http, canPlayAudioMime, canPlayVideoMime).also { it.refresh() }
 
-    private fun newViewModel(http: TestHttp, canPlayAudioMime: Boolean = true) = HomeViewModel(
+    private fun newViewModel(
+        http: TestHttp,
+        canPlayAudioMime: Boolean = true,
+        canPlayVideoMime: Boolean = true,
+    ) = HomeViewModel(
         http.movieRepository,
         http.showRepository,
         http.musicRepository,
         http.serverUrl,
+        canPlayVideoMime = { canPlayVideoMime },
         canPlayAudioMime = { _, _ -> canPlayAudioMime },
     )
 
@@ -651,6 +660,42 @@ class HomeViewModelTest {
 
         assertEquals(PlaybackMode.Remux, request.mode)
         assertEquals("truehd", request.selectedAudioTrack?.codec)
+        assertNull(viewModel.uiState.value.playbackNotice)
+    }
+
+    /**
+     * Media3 extracts a DivX 3 AVI's video yet nothing decodes it, and it then plays the sound
+     * over a black screen. Remux is the way out: the server transcodes video it cannot copy.
+     */
+    @Test
+    fun `an undecodable video falls back to remux instead of playing sound alone`() = runTest {
+        val http = routedHttp(
+            episodeTechnical = {
+                jsonResponse(
+                    episodeTechnicalDetailsJson(
+                        mimeType = "video/x-msvideo",
+                        videoStreams = listOf(
+                            videoStreamJson(
+                                ownerKey = "file_id",
+                                codec = "msmpeg4v3",
+                                width = 512,
+                                height = 384,
+                            ),
+                        ),
+                        audioStreams = listOf(
+                            audioStreamJson(ownerKey = "file_id", codec = "mp3", channels = 2),
+                        ),
+                    ),
+                )
+            },
+        )
+        val viewModel = viewModel(http, canPlayVideoMime = false)
+
+        viewModel.resumeEpisode(900)
+        val request = viewModel.playRequests.first()
+
+        assertEquals(PlaybackMode.Remux, request.mode)
+        assertEquals("msmpeg4v3", request.videoCodec)
         assertNull(viewModel.uiState.value.playbackNotice)
     }
 

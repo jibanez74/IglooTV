@@ -54,6 +54,7 @@ import com.igloo.blindpenguincoder.feature.music.TrackLikesViewModel
 import com.igloo.blindpenguincoder.feature.player.MoviePlayerViewModel
 import com.igloo.blindpenguincoder.feature.shows.showLibrarySource
 import com.igloo.blindpenguincoder.playback.media3.MoviePlaybackServices
+import com.igloo.blindpenguincoder.playback.media3.deviceCanDecodeVideoMime
 import com.igloo.blindpenguincoder.playback.media3.deviceCanPlayAudioMime
 import com.igloo.blindpenguincoder.playback.media3.exoMoviePlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.exoMusicPlayerEngine
@@ -194,6 +195,7 @@ fun IglooRoot(container: IglooAppContainer) {
                             container.showRepository,
                             container.musicRepository,
                             container.serverUrlProvider,
+                            canPlayVideoMime = ::deviceCanDecodeVideoMime,
                             canPlayAudioMime = { mimeType, channels ->
                                 deviceCanPlayAudioMime(appContext, mimeType, channels)
                             },
@@ -231,6 +233,7 @@ fun IglooRoot(container: IglooAppContainer) {
                             container.serverUrlProvider,
                             onWatchedStateCommitted = homeViewModel::refreshContinueWatching,
                             onLikeStateCommitted = moviesViewModel::onLikeCommitted,
+                            canPlayVideoMime = ::deviceCanDecodeVideoMime,
                             canPlayAudioMime = { mimeType, channels ->
                                 deviceCanPlayAudioMime(appContext, mimeType, channels)
                             },
@@ -401,6 +404,7 @@ fun IglooRoot(container: IglooAppContainer) {
                                     hlsDataSourceFactory = container.hlsStreamDataSourceFactory,
                                     directStreamUrl = container.videoPlaybackRepository::streamUrl,
                                     hlsSessionApi = container.videoPlaybackRepository,
+                                    canPlayVideoMime = ::deviceCanDecodeVideoMime,
                                     canPlayAudioMime = { mimeType, channels ->
                                         deviceCanPlayAudioMime(appContext, mimeType, channels)
                                     },

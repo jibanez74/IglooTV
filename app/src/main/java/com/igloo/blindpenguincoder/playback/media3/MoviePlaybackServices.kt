@@ -16,6 +16,7 @@ class MoviePlaybackServices(
     val hlsDataSourceFactory: DataSource.Factory,
     val directStreamUrl: (media: PlaybackMediaRef) -> String,
     val hlsSessionApi: HlsSessionApi,
+    val canPlayVideoMime: (mimeType: String) -> Boolean,
     val canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
     /** App-lifetime scope: the HLS stop request must survive the engine's release. */
     val stopScope: CoroutineScope,

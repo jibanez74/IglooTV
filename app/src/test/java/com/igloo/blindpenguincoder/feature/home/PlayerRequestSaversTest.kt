@@ -39,6 +39,7 @@ class PlayerRequestSaversTest {
         posterUrl = null,
         mimeType = "video/x-matroska",
         mode = PlaybackMode.Direct,
+        videoCodec = "hevc",
         audioTypeIndex = 1,
         subtitleTypeIndex = null,
         audioTracks = listOf(PlayableAudioTrack(label = "English", codec = "eac3", channels = 6)),
@@ -119,6 +120,12 @@ class PlayerRequestSaversTest {
     fun `an episode survives a round trip whole`() {
         val episode = movie.copy(media = PlaybackMediaRef.Episode(900), title = "Severance · S1 E3 · In Perpetuity")
         assertEquals(episode, roundTrip(MoviePlayRequestSaver, episode))
+    }
+
+    @Test
+    fun `an unknown video codec restores as null, not as empty text`() {
+        val unknown = movie.copy(videoCodec = null)
+        assertEquals(unknown, roundTrip(MoviePlayRequestSaver, unknown))
     }
 
     /** An older build wrote the movie id as a bare number; it must not crash the relaunch. */

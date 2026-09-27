@@ -19,6 +19,8 @@ data class MoviePlayRequest(
     val posterUrl: String?,
     val mimeType: String,
     val mode: PlaybackMode,
+    /** The primary video stream's ffprobe codec; the capability gate reads it. Null = unknown. */
+    val videoCodec: String? = null,
     /** Null = the container's default track. */
     val audioTypeIndex: Int?,
     /** Null = subtitles off. */

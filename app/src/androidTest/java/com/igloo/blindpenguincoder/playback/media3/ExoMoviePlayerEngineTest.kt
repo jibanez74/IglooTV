@@ -86,6 +86,7 @@ class ExoMoviePlayerEngineTest {
 
     private fun playRequest(
         mode: PlaybackMode = PlaybackMode.Direct,
+        videoCodec: String? = null,
         audioTracks: List<PlayableAudioTrack> = listOf(
             PlayableAudioTrack(label = "English · Surround", codec = "eac3", isDefault = true),
             PlayableAudioTrack(label = "Spanish · Stereo", codec = "aac"),
@@ -98,6 +99,7 @@ class ExoMoviePlayerEngineTest {
         posterUrl = null,
         mimeType = "video/x-matroska",
         mode = mode,
+        videoCodec = videoCodec,
         audioTypeIndex = null,
         subtitleTypeIndex = subtitleTypeIndex,
         audioTracks = audioTracks,
@@ -110,6 +112,7 @@ class ExoMoviePlayerEngineTest {
         request: MoviePlayRequest = playRequest(),
         api: FakeHlsApi = FakeHlsApi(),
         canPlayAudioMime: (String, Int?) -> Boolean = { _, _ -> true },
+        canPlayVideoMime: (String) -> Boolean = { true },
     ): MoviePlayerEngine {
         lateinit var built: MoviePlayerEngine
         instrumentation.runOnMainSync {
@@ -121,6 +124,7 @@ class ExoMoviePlayerEngineTest {
                     hlsDataSourceFactory = DefaultHttpDataSource.Factory(),
                     directStreamUrl = { "https://203.0.113.1/movies/${it.id}/stream" },
                     hlsSessionApi = api,
+                    canPlayVideoMime = canPlayVideoMime,
                     canPlayAudioMime = canPlayAudioMime,
                     stopScope = stopScope,
                 ),
@@ -484,6 +488,25 @@ class ExoMoviePlayerEngineTest {
                 .last()
                 .requestedMode,
         )
+    }
+
+    @Test
+    fun switchingToDirectIsRefusedWhenThisTvCannotDecodeTheVideo() {
+        val api = FakeHlsApi()
+        val engine = engine(
+            playRequest(mode = PlaybackMode.Remux, videoCodec = "msmpeg4v3"),
+            api,
+            canPlayVideoMime = { false },
+        )
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the first manifest") { api.fetched.size == 1 }
+
+        onMain { engine.selectPlaybackMode(PlaybackMode.Direct.name) }
+        waitFor("the refusal") { engine.refusals().isNotEmpty() }
+
+        assertTrue(engine.refusals().single().contains("DivX 3"))
+        assertTrue(api.stopped.isEmpty())
+        assertTrue(engine.errors().isEmpty())
     }
 
     @Test

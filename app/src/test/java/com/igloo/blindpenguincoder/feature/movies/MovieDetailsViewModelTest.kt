@@ -72,6 +72,7 @@ class MovieDetailsViewModelTest {
             http.serverUrl,
             onWatchedStateCommitted,
             onLikeStateCommitted,
+            canPlayVideoMime = { true },
             canPlayAudioMime = { _, _ -> true },
         )
             .also { viewModels += it }

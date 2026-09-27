@@ -198,6 +198,7 @@ class MovieDetailsViewModel(
     private val onWatchedStateCommitted: () -> Unit = {},
     private val onLikeStateCommitted: () -> Unit = {},
     /** The pre-flight gate's device capability, injected so the launch rules stay JVM-testable. */
+    private val canPlayVideoMime: (mimeType: String) -> Boolean,
     private val canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
 ) : ViewModel() {
 
@@ -371,6 +372,7 @@ class MovieDetailsViewModel(
                 details.movie.posterPath?.orNull(),
             ),
             mimeType = technical.movie.mimeType,
+            videoStreams = technical.videoStreams,
             audioStreams = technical.audioStreams,
             subtitles = technical.subtitles,
             chapters = technical.chapters,
@@ -381,11 +383,13 @@ class MovieDetailsViewModel(
         return when (
             val gate = evaluatePlaybackGate(
                 mode = request.mode,
+                videoCodec = request.videoCodec,
                 audioCodec = request.selectedAudioTrack?.codec,
                 audioCodecProfile = request.selectedAudioTrack?.codecProfile,
                 audioChannels = request.selectedAudioTrack?.channels,
                 audioLabel = request.selectedAudioTrack?.label,
-                canPlayMime = { mime -> canPlayAudioMime(mime, request.selectedAudioTrack?.channels) },
+                canPlayVideoMime = canPlayVideoMime,
+                canPlayAudioMime = { mime -> canPlayAudioMime(mime, request.selectedAudioTrack?.channels) },
             )
         ) {
             PlaybackGateResult.Proceed -> {
@@ -727,6 +731,8 @@ class MovieDetailsViewModel(
                 audioStreams = technical?.audioStreams,
                 subtitles = technical?.subtitles,
                 selection = playbackSelection,
+                videoCodec = technical?.let { primaryVideoStream(it.videoStreams) }?.codec,
+                canPlayVideoMime = canPlayVideoMime,
                 canPlayAudioMime = canPlayAudioMime,
             ),
         )
@@ -753,7 +759,7 @@ class MovieDetailsViewModel(
     private fun mediaBadges(tech: MovieTechnicalDetailsData): List<String> = buildList {
         // Width thresholds deliberately catch scope/anamorphic sources (web parity): a 3840x1600
         // scope master is 4K even though its height is under 2160.
-        val video = tech.videoStreams.maxByOrNull { it.width }
+        val video = primaryVideoStream(tech.videoStreams)
         if (video != null) {
             when {
                 video.width >= 3200 || video.height >= 2100 -> add("4K")

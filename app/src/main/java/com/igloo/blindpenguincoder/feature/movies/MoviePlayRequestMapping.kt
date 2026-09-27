@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.feature.movies
 import com.igloo.blindpenguincoder.data.model.AudioStream
 import com.igloo.blindpenguincoder.data.model.Chapter
 import com.igloo.blindpenguincoder.data.model.Subtitle
+import com.igloo.blindpenguincoder.data.model.VideoStream
 import com.igloo.blindpenguincoder.data.model.WatchProgress
 import com.igloo.blindpenguincoder.playback.model.MoviePlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
@@ -21,6 +22,7 @@ internal fun buildVideoPlayRequest(
     title: String,
     posterUrl: String?,
     mimeType: String,
+    videoStreams: List<VideoStream>,
     audioStreams: List<AudioStream>,
     subtitles: List<Subtitle>,
     chapters: List<Chapter>,
@@ -46,6 +48,7 @@ internal fun buildVideoPlayRequest(
         posterUrl = posterUrl,
         mimeType = mimeType,
         mode = settings.selectedMode,
+        videoCodec = primaryVideoStream(videoStreams)?.codec,
         audioTypeIndex = typeIndexOf(settings.selectedAudioId, audioStreams.map { it.id to it.streamIndex }),
         subtitleTypeIndex = typeIndexOf(
             settings.selectedSubtitleId,
@@ -89,6 +92,13 @@ private fun typeIndexOf(selectedId: Long?, idsWithStreamIndex: List<Pair<Long, L
         .indexOfFirst { (id, _) -> id == selectedId }
         .takeIf { it >= 0 }
 }
+
+/**
+ * The file's main picture: the widest video stream, so an embedded cover-art thumbnail never
+ * stands in for it.
+ */
+internal fun primaryVideoStream(videoStreams: List<VideoStream>): VideoStream? =
+    videoStreams.maxByOrNull { it.width }
 
 /**
  * The saved position, when it is worth resuming from: at least [RESUME_MIN_SEC] in and short of

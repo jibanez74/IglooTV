@@ -9,6 +9,7 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
+import com.igloo.blindpenguincoder.data.model.VideoStream
 import com.igloo.blindpenguincoder.data.model.WatchProgress
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
@@ -44,6 +45,7 @@ class MoviePlayRequestMappingTest {
             title = "Severance · S1 E3 · In Perpetuity",
             posterUrl = null,
             mimeType = "video/x-matroska",
+            videoStreams = emptyList(),
             audioStreams = emptyList(),
             subtitles = emptyList(),
             chapters = emptyList(),
@@ -166,6 +168,7 @@ class MoviePlayRequestMappingTest {
         assertNull(request.audioTypeIndex)
         assertNull(request.subtitleTypeIndex)
         assertNull(request.selectedAudioTrack)
+        assertNull(request.videoCodec)
         assertEquals(emptyList<PlayableAudioTrack>(), request.audioTracks)
         assertEquals(emptyList<PlayableSubtitleTrack>(), request.subtitleTracks)
     }
@@ -200,6 +203,25 @@ class MoviePlayRequestMappingTest {
         assertEquals("TrueHD + Atmos", selected.codecProfile)
         assertEquals(8, selected.channels)
         assertEquals("English · 7.1 surround", selected.label)
+    }
+
+    /** An embedded cover-art thumbnail is a video stream too; the gate must judge the picture. */
+    @Test
+    fun `the gate's video codec comes from the widest video stream`() {
+        val request = build(
+            movie = movie(),
+            posterUrl = null,
+            technical = technical(
+                video = listOf(
+                    videoStream(streamIndex = 0, codec = "msmpeg4v3", width = 640, height = 480),
+                    videoStream(streamIndex = 3, codec = "mjpeg", width = 320, height = 240),
+                ),
+            ),
+            progress = null,
+            selection = PlaybackSelection(),
+        )
+
+        assertEquals("msmpeg4v3", request.videoCodec)
     }
 
     /**
@@ -352,6 +374,7 @@ class MoviePlayRequestMappingTest {
         title = movie.title,
         posterUrl = posterUrl,
         mimeType = technical.movie.mimeType,
+        videoStreams = technical.videoStreams,
         audioStreams = technical.audioStreams,
         subtitles = technical.subtitles,
         chapters = technical.chapters,
@@ -373,12 +396,13 @@ class MoviePlayRequestMappingTest {
 
     private fun technical(
         mimeType: String = "video/x-matroska",
+        video: List<VideoStream> = emptyList(),
         audio: List<AudioStream> = listOf(audioStream(id = 1, streamIndex = 1, isDefault = true)),
         subtitles: List<Subtitle> = emptyList(),
         chapters: List<Chapter> = emptyList(),
     ) = MovieTechnicalDetailsData(
         movie = MovieTechnicalFile(mimeType = mimeType),
-        videoStreams = emptyList(),
+        videoStreams = video,
         audioStreams = audio,
         subtitles = subtitles,
         chapters = chapters,
@@ -389,6 +413,17 @@ class MoviePlayRequestMappingTest {
         title = title,
         startTime = startTime,
     )
+
+    private fun videoStream(streamIndex: Long, codec: String, width: Long, height: Long) =
+        VideoStream(
+            id = streamIndex,
+            streamIndex = streamIndex,
+            codec = codec,
+            bitRate = 0,
+            width = width,
+            height = height,
+            frameRate = 23.976,
+        )
 
     private fun audioStream(
         id: Long,

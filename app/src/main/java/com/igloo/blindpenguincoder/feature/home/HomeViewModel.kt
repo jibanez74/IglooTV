@@ -133,6 +133,7 @@ class HomeViewModel(
     private val shows: ShowRepository,
     private val music: MusicRepository,
     private val serverUrl: ServerUrlProvider,
+    private val canPlayVideoMime: (mimeType: String) -> Boolean,
     private val canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
 ) : ViewModel() {
 
@@ -278,9 +279,10 @@ class HomeViewModel(
 
     /**
      * Home has no Playback Settings dialog, so the request carries the defaults; when the
-     * capability gate refuses Direct play of the file's default audio track, the launch falls
-     * back to Remux rather than blocking on guidance the user cannot follow from here. The
-     * gate's rule that it never overrides a choice holds: no choice was made.
+     * capability gate refuses Direct play of the file's video or default audio track, the launch
+     * falls back to Remux rather than blocking on guidance the user cannot follow from here. For
+     * video the server cannot copy, it answers that Remux with a transcode. The gate's rule that
+     * it never overrides a choice holds: no choice was made.
      */
     private fun toEpisodePlayRequest(
         episodeId: Long,
@@ -303,6 +305,7 @@ class HomeViewModel(
                     header.show.posterPath.orNull(),
                 ),
                 mimeType = file.file.mimeType,
+                videoStreams = file.videoStreams,
                 audioStreams = file.audioStreams,
                 subtitles = file.subtitles,
                 chapters = file.chapters,
@@ -314,11 +317,13 @@ class HomeViewModel(
         val request = build(PlaybackSelection())
         val gate = evaluatePlaybackGate(
             mode = request.mode,
+            videoCodec = request.videoCodec,
             audioCodec = request.selectedAudioTrack?.codec,
             audioCodecProfile = request.selectedAudioTrack?.codecProfile,
             audioChannels = request.selectedAudioTrack?.channels,
             audioLabel = request.selectedAudioTrack?.label,
-            canPlayMime = { mime -> canPlayAudioMime(mime, request.selectedAudioTrack?.channels) },
+            canPlayVideoMime = canPlayVideoMime,
+            canPlayAudioMime = { mime -> canPlayAudioMime(mime, request.selectedAudioTrack?.channels) },
         )
         return when (gate) {
             PlaybackGateResult.Proceed -> request

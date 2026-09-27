@@ -7,6 +7,7 @@ import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.likeStatusJson
 import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
 import com.igloo.blindpenguincoder.data.repository.technicalDetailsJson
+import com.igloo.blindpenguincoder.data.repository.videoStreamJson
 import com.igloo.blindpenguincoder.data.repository.watchProgressJson
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import kotlinx.coroutines.Dispatchers
@@ -72,11 +73,13 @@ class MovieDetailsPlayLaunchTest {
 
     private fun viewModel(
         http: TestHttp,
+        canPlayVideoMime: (String) -> Boolean = { true },
         canPlayAudioMime: (String, Int?) -> Boolean = { _, _ -> true },
     ) = MovieDetailsViewModel(
         http.movieRepository,
         http.serverUrl,
         onWatchedStateCommitted = {},
+        canPlayVideoMime = canPlayVideoMime,
         canPlayAudioMime = canPlayAudioMime,
     ).also { viewModels += it }
 
@@ -132,6 +135,24 @@ class MovieDetailsPlayLaunchTest {
         val notice = requireNotNull(viewModel.uiState.value.mutationNotice)
         assertTrue(notice.contains("Dolby TrueHD"))
         assertTrue(notice.contains("English · 5.1 surround"))
+    }
+
+    /** A picture nothing can decode is refused like an undecodable track, naming the codec. */
+    @Test
+    fun `an undecodable video blocks a direct launch onto the details notice`() = runTest {
+        val technical = technicalDetailsJson(
+            mimeType = "video/x-msvideo",
+            videoStreams = listOf(videoStreamJson(codec = "msmpeg4v3", width = 512, height = 384)),
+        )
+        val viewModel = viewModel(http(technicalJson = technical), canPlayVideoMime = { false })
+        viewModel.open(1)
+        viewModel.awaitTracksResolved()
+
+        viewModel.requestPlayback()
+
+        val notice = requireNotNull(viewModel.uiState.value.mutationNotice)
+        assertTrue(notice.contains("DivX 3"))
+        assertTrue(notice.contains("Playback Settings"))
     }
 
     /** DTS-family tracks are the engine's Remux conversion's to handle — the gate lets them by. */
