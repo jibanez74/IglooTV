@@ -534,7 +534,6 @@ class MovieRepositoryTest {
         assertEquals("/api/movies/5/watch-progress/watched", captured.url.encodedPath)
         assertEquals("PUT", captured.method.value)
         val data = (result as ApiResult.Success).value
-        assertEquals(5L, data.movieId)
         assertTrue(data.watched)
     }
 
@@ -566,7 +565,6 @@ class MovieRepositoryTest {
         assertEquals("/api/movies/5/like", captured.url.encodedPath)
         assertEquals("POST", captured.method.value)
         val data = (result as ApiResult.Success).value
-        assertEquals(5L, data.movieId)
         assertTrue(data.isLiked)
     }
 

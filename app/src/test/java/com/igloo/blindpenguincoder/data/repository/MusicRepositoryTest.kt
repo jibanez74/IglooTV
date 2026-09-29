@@ -32,7 +32,6 @@ class MusicRepositoryTest {
         assertEquals("Help!", album.title)
         assertEquals("https://i.scdn.co/image/help.jpg", album.cover.orNull())
         assertEquals("The Beatles", album.musician.orNull())
-        assertEquals(1965L, album.year.orNull())
     }
 
     /** The route takes none, so a stray one would be a contract invention. */
@@ -59,7 +58,6 @@ class MusicRepositoryTest {
 
         assertNull(album.cover.orNull())
         assertNull(album.musician.orNull())
-        assertNull(album.year.orNull())
     }
 
     @Test
@@ -355,7 +353,6 @@ class MusicRepositoryTest {
         assertNull(data.tracks[1].musicianName.orNull())
         assertNull(data.tracks[1].albumId.orNull())
         assertEquals(150L, data.total)
-        assertEquals(50L, data.offset)
         assertTrue(data.hasMore)
     }
 
@@ -435,7 +432,6 @@ class MusicRepositoryTest {
         assertEquals("POST", captured.method.value)
         assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
         val data = (result as ApiResult.Success).value
-        assertEquals(900L, data.trackId)
         assertEquals(false, data.isLiked)
     }
 

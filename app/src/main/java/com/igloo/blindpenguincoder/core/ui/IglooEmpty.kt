@@ -21,17 +21,15 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 
 /**
  * Empty state, minimal variant (docs/design-system.md section 10): a faded icon and one
- * message line. Hosts that need the empty state itself to hold focus wrap it and own the
- * semantics; standalone, the live region announces the emptiness when it appears.
+ * message line. Visual only — [IglooFocusableEmpty] owns the semantics.
  */
 @Composable
-fun IglooEmpty(
+private fun IglooEmpty(
     icon: ImageVector,
     message: String,
     modifier: Modifier = Modifier,
@@ -52,7 +50,6 @@ fun IglooEmpty(
             text = message,
             style = IglooTheme.typography.bodyMedium,
             color = colors.mutedForeground,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         )
     }
 }

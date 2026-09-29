@@ -26,8 +26,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
@@ -81,11 +79,6 @@ class VideoPlayerScreenTest {
 
     /** The host contract: closing unmounts the screen, which is what fires the exit save. */
     private var open by mutableStateOf(true)
-
-    private class TestLifecycleOwner : LifecycleOwner {
-        val registry = LifecycleRegistry.createUnsafe(this)
-        override val lifecycle: Lifecycle get() = registry
-    }
 
     private lateinit var lifecycleOwner: TestLifecycleOwner
 

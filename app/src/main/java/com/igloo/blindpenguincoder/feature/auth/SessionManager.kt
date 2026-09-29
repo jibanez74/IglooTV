@@ -52,7 +52,7 @@ class SessionManager(
     private val serverUrl: ServerUrlProvider,
     authEvents: AuthEventBus,
     private val scope: CoroutineScope,
-    private val imageCache: ImageCache = ImageCache.None,
+    private val imageCache: ImageCache,
     private val elapsed: () -> Long = SystemClock::elapsedRealtime,
 ) {
     private val _state = MutableStateFlow<AppAuthState>(AppAuthState.Loading)

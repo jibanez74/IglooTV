@@ -187,8 +187,6 @@ private data class PlaybackRead<T>(
         is ApiResult.Failure -> copy(readiness = PlaybackReadiness.Failed)
     }
 
-    fun renderableValueOrNull(): T? = value
-
     fun freshValueOrNull(): T? = value.takeIf { readiness == PlaybackReadiness.Ready }
 }
 
@@ -653,7 +651,7 @@ class MovieDetailsViewModel(
         // Zero-guarded like the Home hero: the scraper writes TMDB's "no data" as a valid 0.
         val ratingBadge = movie.criticRating?.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
         val certification = movie.certification?.orNullIfBlank()
-        val technical = technicalRead.renderableValueOrNull()
+        val technical = technicalRead.value
         val badges = technical?.let(::mediaBadges).orEmpty()
         val runtimeMinutes = movie.runTime?.orNull()?.takeIf { it > 0 }
         val releaseDateText = movie.releaseDate?.orNullIfBlank()?.let(::formatReleaseDate)
@@ -733,7 +731,7 @@ class MovieDetailsViewModel(
      */
     private fun progressUi(movieId: Long): ProgressUi? {
         if (mutationState(MutationType.Watched, movieId).displayed == true) return null
-        val progress = progressRead.renderableValueOrNull()
+        val progress = progressRead.value
         val progressSec = resumePositionSec(progress) ?: return null
         val durationSec = progress?.durationSec ?: return null
         return ProgressUi(

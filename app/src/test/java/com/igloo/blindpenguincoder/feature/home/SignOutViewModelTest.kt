@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
@@ -88,6 +89,7 @@ class SignOutViewModelTest {
             settings = settings,
             serverUrl = http.serverUrl,
             authEvents = http.authEvents,
+            imageCache = NoOpImageCache,
             scope = scope,
             elapsed = { 0L },
         )

@@ -22,16 +22,11 @@ class MusicPlayRequestMappingTest {
     ) = Album(
         id = 7L,
         title = title,
-        sortTitle = title,
-        spotifyId = SqlNullString("", false),
         spotifyPopularity = SqlNullFloat64(0.0, false),
         musician = SqlNullString(musician.orEmpty(), musician != null),
         releaseDate = SqlNullString("", false),
         year = SqlNullInt64(0, false),
-        totalTracks = SqlNullInt64(0, false),
         cover = SqlNullString(cover.orEmpty(), cover != null),
-        createdAt = "",
-        updatedAt = "",
     )
 
     private fun track(id: Long, title: String, index: Long, disc: Long, durationMs: Long) =

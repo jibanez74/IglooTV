@@ -180,7 +180,6 @@ fun IglooIconButton(
     semanticLabel: String,
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
-    variant: IglooButtonVariant = IglooButtonVariant.Ghost,
     restingFill: Color? = null,
     contentColor: Color? = null,
     iconTint: Color? = null,
@@ -189,20 +188,12 @@ fun IglooIconButton(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val background = when (variant) {
-        IglooButtonVariant.Primary -> colors.primary
-        IglooButtonVariant.Ghost -> when {
-            restingFill != null -> restingFill
-            focused -> colors.card.copy(alpha = 0.72f)
-            else -> Color.Transparent
-        }
-        IglooButtonVariant.Destructive -> colors.destructive
+    val background = when {
+        restingFill != null -> restingFill
+        focused -> colors.card.copy(alpha = 0.72f)
+        else -> Color.Transparent
     }
-    val foreground = contentColor ?: when (variant) {
-        IglooButtonVariant.Primary -> colors.primaryForeground
-        IglooButtonVariant.Ghost -> colors.foreground
-        IglooButtonVariant.Destructive -> colors.destructiveForeground
-    }
+    val foreground = contentColor ?: colors.foreground
 
     Box(
         modifier = modifier

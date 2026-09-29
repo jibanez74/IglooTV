@@ -272,7 +272,6 @@ private fun testAudioStream(
     channels = channels,
     channelLayout = SqlNullString(channelLayout, valid = true),
     language = SqlNullString(language, valid = true),
-    title = null,
     isDefault = isDefault,
 )
 

@@ -84,7 +84,6 @@ class MusicMappingTest {
             title = "",
             cover = SqlNullString("", valid = true),
             musician = SqlNullString(" ", valid = true),
-            year = SqlNullInt64(0, valid = false),
         ).toCardUi()
 
         assertEquals("Untitled album", card.title)

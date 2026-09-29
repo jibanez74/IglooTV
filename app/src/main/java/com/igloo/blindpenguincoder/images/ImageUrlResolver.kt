@@ -1,12 +1,13 @@
 package com.igloo.blindpenguincoder.images
 
-/** Sizes the backend's TMDB image proxy accepts (`GET /api/tmdb/images/{size}/{file}`). */
+/**
+ * The sizes the app requests from the backend's TMDB image proxy
+ * (`GET /api/tmdb/images/{size}/{file}`), which also accepts `w92` and `original`.
+ */
 enum class TmdbImageSize(val segment: String) {
-    W92("w92"),
     W185("w185"),
     W500("w500"),
     W1280("w1280"),
-    Original("original"),
 }
 
 /**

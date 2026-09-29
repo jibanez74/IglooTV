@@ -33,7 +33,6 @@ import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
-import com.igloo.blindpenguincoder.data.model.hlsProfileId
 import com.igloo.blindpenguincoder.playback.hls.HLS_SEEK_SETTLE_MS
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionController
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionStart

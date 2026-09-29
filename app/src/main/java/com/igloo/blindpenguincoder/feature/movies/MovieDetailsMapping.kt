@@ -83,7 +83,7 @@ internal fun normalizedVideoValue(value: String): String =
     value.trim().lowercase(Locale.US).replace('-', '_')
 
 /** Trailers, then special features, then the rest; unknown types sort last (web parity). */
-internal fun extraVideoSortRank(type: String): Int = when (normalizedVideoValue(type)) {
+private fun extraVideoSortRank(type: String): Int = when (normalizedVideoValue(type)) {
     "trailer" -> 0
     "special_feature" -> 1
     "other" -> 2
@@ -95,7 +95,7 @@ internal fun extraVideoSortRank(type: String): Int = when (normalizedVideoValue(
  * free-form type ("Featurette", "Behind the Scenes"), which arrives already titled, so only the
  * snake_case values need splitting and nothing is lower-cased on the way through.
  */
-internal fun extraVideoTypeLabel(type: String): String = when (normalizedVideoValue(type)) {
+private fun extraVideoTypeLabel(type: String): String = when (normalizedVideoValue(type)) {
     "trailer" -> "Trailer"
     "special_feature" -> "Special feature"
     "other" -> "Other"

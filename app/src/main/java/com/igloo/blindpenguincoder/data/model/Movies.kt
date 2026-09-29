@@ -91,7 +91,6 @@ data class MovieLikeStatusData(
 /** Payload of `MovieLikeToggleEnvelope.data`. */
 @Serializable
 data class MovieLikeToggleData(
-    @SerialName("movie_id") val movieId: Long,
     @SerialName("is_liked") val isLiked: Boolean,
 )
 
@@ -112,9 +111,6 @@ data class MovieGenresData(
 data class Movie(
     val id: Long,
     val title: String,
-    val adult: Boolean,
-    @SerialName("tmdb_id") val tmdbId: SqlNullInt64? = null,
-    @SerialName("imdb_id") val imdbId: SqlNullString? = null,
     @SerialName("poster_path") val posterPath: SqlNullString? = null,
     @SerialName("backdrop_path") val backdropPath: SqlNullString? = null,
     val language: SqlNullString? = null,
@@ -124,7 +120,6 @@ data class Movie(
     @SerialName("tag_line") val tagLine: SqlNullString? = null,
     val certification: SqlNullString? = null,
     @SerialName("critic_rating") val criticRating: SqlNullFloat64? = null,
-    @SerialName("audience_rating") val audienceRating: SqlNullFloat64? = null,
     val revenue: SqlNullFloat64? = null,
     val budget: SqlNullFloat64? = null,
     @SerialName("run_time") val runTime: SqlNullInt64? = null,
@@ -153,7 +148,6 @@ data class MovieCastMember(
 
 @Serializable
 data class MovieCrewMember(
-    val id: Long,
     val job: String,
     val department: String,
     @SerialName("artist_name") val artistName: String,
@@ -161,13 +155,11 @@ data class MovieCrewMember(
 
 @Serializable
 data class MovieGenre(
-    val id: Long,
     val tag: String,
 )
 
 @Serializable
 data class MovieProductionCompany(
-    val id: Long,
     val name: String,
 )
 
@@ -207,29 +199,10 @@ data class MovieTechnicalFile(
  */
 @Serializable
 data class VideoStream(
-    val id: Long,
-    @SerialName("stream_index") val streamIndex: Long,
     val codec: String,
-    @SerialName("codec_profile") val codecProfile: SqlNullString? = null,
-    @SerialName("codec_level") val codecLevel: SqlNullInt64? = null,
-    @SerialName("bit_rate") val bitRate: Long,
     val width: Long,
     val height: Long,
-    @SerialName("coded_width") val codedWidth: SqlNullInt64? = null,
-    @SerialName("coded_height") val codedHeight: SqlNullInt64? = null,
-    @SerialName("aspect_ratio") val aspectRatio: SqlNullString? = null,
-    @SerialName("frame_rate") val frameRate: Double,
-    @SerialName("avg_frame_rate") val avgFrameRate: SqlNullString? = null,
-    @SerialName("bit_depth") val bitDepth: SqlNullInt64? = null,
-    @SerialName("pixel_format") val pixelFormat: SqlNullString? = null,
-    @SerialName("color_range") val colorRange: SqlNullString? = null,
-    @SerialName("color_space") val colorSpace: SqlNullString? = null,
-    @SerialName("color_primaries") val colorPrimaries: SqlNullString? = null,
     @SerialName("color_transfer") val colorTransfer: SqlNullString? = null,
-    @SerialName("field_order") val fieldOrder: SqlNullString? = null,
-    val rotation: SqlNullInt64? = null,
-    val language: SqlNullString? = null,
-    val title: SqlNullString? = null,
 )
 
 @Serializable
@@ -238,12 +211,9 @@ data class AudioStream(
     @SerialName("stream_index") val streamIndex: Long,
     val codec: String,
     @SerialName("codec_profile") val codecProfile: SqlNullString? = null,
-    @SerialName("bit_rate") val bitRate: Long,
-    @SerialName("sample_rate") val sampleRate: SqlNullInt64? = null,
     val channels: Long,
     @SerialName("channel_layout") val channelLayout: SqlNullString? = null,
     val language: SqlNullString? = null,
-    val title: SqlNullString? = null,
     @SerialName("is_default") val isDefault: Boolean,
 )
 
@@ -260,11 +230,9 @@ data class Subtitle(
 
 @Serializable
 data class Chapter(
-    val id: Long,
     val title: String,
     /** Seconds from the start of the file. */
     @SerialName("start_time") val startTime: Long,
-    val thumb: SqlNullString? = null,
 )
 
 @Serializable
@@ -288,7 +256,6 @@ data class WatchProgress(
     @SerialName("progress_sec") val progressSec: Double?,
     @SerialName("duration_sec") val durationSec: Double?,
     val watched: Boolean,
-    @SerialName("updated_at") val updatedAt: String?,
 )
 
 /** Payload of `WatchProgressUpdateEnvelope.data`. */
@@ -300,7 +267,6 @@ data class WatchProgressUpdateData(
 /** Payload of `MovieWatchedEnvelope.data`. */
 @Serializable
 data class MovieWatchedData(
-    @SerialName("movie_id") val movieId: Long,
     val watched: Boolean,
 )
 

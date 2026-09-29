@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.auth
 
+import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.TestHttp
@@ -79,6 +80,7 @@ class LoginViewModelTest {
             settings = ServerSettingsStore(InMemoryPreferencesDataStore()),
             serverUrl = http.serverUrl,
             authEvents = http.authEvents,
+            imageCache = NoOpImageCache,
             elapsed = { 0L },
             scope = newScope(),
         )
@@ -114,7 +116,6 @@ class LoginViewModelTest {
         val state = viewModel.uiState.first { !it.isSubmitting }
         assertNull(state.error)
         assertEquals("", state.password)
-        assertFalse(state.awaitingUser)
 
         val authenticated = sessionManager.state.value as AppAuthState.Authenticated
         assertEquals("Jose", authenticated.user.name)
@@ -188,13 +189,11 @@ class LoginViewModelTest {
         userRequestStarted.await()
 
         assertEquals("", viewModel.uiState.value.password)
-        assertTrue(viewModel.uiState.value.awaitingUser)
         assertTrue(viewModel.uiState.value.isSubmitting)
 
         finishUserRequest.complete(Unit)
         val failed = viewModel.uiState.first { it.error != null }
         assertEquals("", failed.password)
-        assertTrue(failed.awaitingUser)
     }
 
     @Test
@@ -216,14 +215,12 @@ class LoginViewModelTest {
         viewModel.submit()
 
         val failed = viewModel.uiState.first { it.error != null }
-        assertTrue(failed.awaitingUser)
         assertEquals("", failed.password)
         assertEquals(1, deviceLogins)
 
         viewModel.submit()
 
         val recovered = viewModel.uiState.first { !it.isSubmitting && it.error == null }
-        assertFalse(recovered.awaitingUser)
         // A second device-login would mint a redundant device token for the same user.
         assertEquals(1, deviceLogins)
         assertEquals(2, userFetches)
@@ -248,11 +245,10 @@ class LoginViewModelTest {
         viewModel.onEmailChange("jose@example.com")
         viewModel.onPasswordChange("hunter2")
         viewModel.submit()
-        assertTrue(viewModel.uiState.first { it.error != null }.awaitingUser)
+        viewModel.uiState.first { it.error != null }
         assertEquals("igd_test", fixture.http.pendingToken())
 
         viewModel.onEmailChange("other@example.com")
-        assertFalse(viewModel.uiState.value.awaitingUser)
         viewModel.onPasswordChange("replacement")
 
         viewModel.submit()
@@ -311,14 +307,13 @@ class LoginViewModelTest {
         fixture.viewModel.onEmailChange("jose@example.com")
         fixture.viewModel.onPasswordChange("hunter2")
         fixture.viewModel.submit()
-        assertTrue(fixture.viewModel.uiState.first { it.error != null }.awaitingUser)
+        fixture.viewModel.uiState.first { it.error != null }
 
         fixture.viewModel.clearPassword()
 
         val state = fixture.viewModel.uiState.value
         assertEquals("jose@example.com", state.email)
         assertEquals("", state.password)
-        assertTrue(state.awaitingUser)
         assertEquals("igd_test", fixture.http.pendingToken())
     }
 

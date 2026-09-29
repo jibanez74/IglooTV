@@ -6,12 +6,9 @@ package com.igloo.blindpenguincoder.playback.media3
  * choice.
  */
 internal class PlaybackIntent {
-    var desiredPlayWhenReady = false
-        private set
-    var hostActive = true
-        private set
-    var terminal = false
-        private set
+    private var desiredPlayWhenReady = false
+    private var hostActive = true
+    private var terminal = false
     var released = false
         private set
 

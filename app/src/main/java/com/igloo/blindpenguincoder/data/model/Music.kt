@@ -9,7 +9,6 @@ data class SimpleAlbum(
     val title: String,
     val cover: SqlNullString,
     val musician: SqlNullString,
-    val year: SqlNullInt64,
 )
 
 /**
@@ -58,8 +57,6 @@ data class LatestAlbumsData(
 data class AlbumsData(
     val albums: List<SimpleAlbum>,
     val total: Long,
-    val page: Long,
-    @SerialName("per_page") val perPage: Long,
     @SerialName("total_pages") val totalPages: Long,
 )
 
@@ -68,16 +65,11 @@ data class AlbumsData(
 data class Album(
     val id: Long,
     val title: String,
-    @SerialName("sort_title") val sortTitle: String,
-    @SerialName("spotify_id") val spotifyId: SqlNullString,
     @SerialName("spotify_popularity") val spotifyPopularity: SqlNullFloat64,
     val musician: SqlNullString,
     @SerialName("release_date") val releaseDate: SqlNullString,
     val year: SqlNullInt64,
-    @SerialName("total_tracks") val totalTracks: SqlNullInt64,
     val cover: SqlNullString,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("updated_at") val updatedAt: String,
 )
 
 /**
@@ -102,7 +94,6 @@ data class AlbumTrack(
 data class AlbumArtist(
     val id: Long,
     val name: String,
-    val thumb: SqlNullString,
 )
 
 /** One track→genre-tag association from the album details payload. */
@@ -128,8 +119,6 @@ data class AlbumDetailsData(
 data class MusiciansData(
     val musicians: List<SimpleMusician>,
     val total: Long,
-    val page: Long,
-    @SerialName("per_page") val perPage: Long,
     @SerialName("total_pages") val totalPages: Long,
 )
 
@@ -184,8 +173,6 @@ data class MusicianDetailsData(
 data class TracksData(
     val tracks: List<TrackListItem>,
     val total: Long,
-    val offset: Long,
-    val limit: Long,
     @SerialName("has_more") val hasMore: Boolean,
 )
 
@@ -198,7 +185,6 @@ data class ShuffleTracksData(
 /** Payload of `TrackLikeToggleEnvelope.data`. */
 @Serializable
 data class TrackLikeToggleData(
-    @SerialName("track_id") val trackId: Long,
     @SerialName("is_liked") val isLiked: Boolean,
 )
 

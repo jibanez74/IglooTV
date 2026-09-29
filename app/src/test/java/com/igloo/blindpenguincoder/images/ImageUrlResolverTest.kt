@@ -37,12 +37,12 @@ class ImageUrlResolverTest {
     @Test
     fun `each size maps to its route segment`() {
         assertEquals(
-            listOf("w92", "w185", "w500", "w1280", "original"),
+            listOf("w185", "w500", "w1280"),
             TmdbImageSize.entries.map { it.segment },
         )
         assertEquals(
-            "http://igloo.test:8080/api/tmdb/images/original/abc.jpg",
-            tmdbImageUrl(apiBase, TmdbImageSize.Original, "abc.jpg"),
+            "http://igloo.test:8080/api/tmdb/images/w1280/abc.jpg",
+            tmdbImageUrl(apiBase, TmdbImageSize.W1280, "abc.jpg"),
         )
     }
 

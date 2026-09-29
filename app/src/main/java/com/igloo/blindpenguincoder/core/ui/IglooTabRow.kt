@@ -52,8 +52,7 @@ fun IglooTabRow(
  * One section in an [IglooTabRow]. **Selects on focus**: d-pad landing on a tab is the switch,
  * the Android TV convention, so flipping between sections is one press per tab with nothing to
  * confirm. [onPress] selects too — that is TalkBack's click action, and the way back after a
- * failed switch reverted the selection out from under a focused tab. It defaults to [onSelect]
- * and is worth splitting only when a press must be treated as more deliberate than a pass-over.
+ * failed switch reverted the selection out from under a focused tab.
  *
  * Selection and focus compose as on [IglooFilterChip], via the shared [SelectablePill]: selected
  * is the `primary` fill that holds while unfocused, focus is the section 6.1 ring over whatever
@@ -69,10 +68,10 @@ fun IglooTab(
     text: String,
     selected: Boolean,
     onSelect: () -> Unit,
+    onPress: () -> Unit,
+    semanticLabel: String,
+    actionLabel: String,
     modifier: Modifier = Modifier,
-    onPress: () -> Unit = onSelect,
-    semanticLabel: String = text,
-    actionLabel: String = "Show $text",
 ) {
     val colors = IglooTheme.colors
     SelectablePill(

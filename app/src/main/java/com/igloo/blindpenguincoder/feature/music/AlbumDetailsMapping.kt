@@ -79,6 +79,7 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
     val artistNames = artists.map { it.name }.ifEmpty { listOfNotNull(artistName) }
     val artistNamesLine = joinedLine(artistNames, ", ")
     val discs = discs(data.tracks, trackGenres = data.trackGenres.groupBy({ it.trackId }, { it.tag }))
+    val hasMultipleDiscs = discs.size > 1
     val audioQuality = audioQualitySummary(data.tracks)
     val facts = buildList {
         // Web parity: the facts row wants the full date and shows nothing for a bare year;
@@ -89,7 +90,7 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
         add(AlbumFactUi("Total duration", totalDurationText))
         artistNamesLine?.let { add(AlbumFactUi("Artist", it)) }
         joinedLine(data.albumGenres, ", ")?.let { add(AlbumFactUi("Genres", it)) }
-        if (discs.size > 1) add(AlbumFactUi("Discs", "${discs.size}"))
+        if (hasMultipleDiscs) add(AlbumFactUi("Discs", "${discs.size}"))
         audioQuality?.let { add(AlbumFactUi("Audio quality", it)) }
         popularity?.let { add(AlbumFactUi("Spotify popularity", "$it / 100")) }
     }
@@ -105,7 +106,7 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
         popularity = popularity,
         artists = artists.ifEmpty { listOfNotNull(artistName?.let { AlbumArtistUi(id = null, name = it) }) },
         discs = discs,
-        hasMultipleDiscs = discs.size > 1,
+        hasMultipleDiscs = hasMultipleDiscs,
         facts = facts,
         factsDescription = factsDescription("Album details", facts),
         heroInfoDescription = heroInfoDescription(
@@ -157,26 +158,24 @@ private fun discs(
     tracks: List<AlbumTrack>,
     trackGenres: Map<Long, List<String>>,
 ): List<AlbumDiscUi> {
-    val hasMultipleDiscs = tracks.map { discNumber(it) }.distinct().size > 1
-    return tracks
-        .groupBy { discNumber(it) }
-        .toSortedMap()
-        .map { (disc, discTracks) ->
-            AlbumDiscUi(
-                disc = disc,
-                tracks = discTracks
-                    .sortedWith(compareBy({ it.trackIndex }, { it.id }))
-                    .mapIndexed { indexInDisc, track ->
-                        toTrackUi(
-                            track = track,
-                            genres = trackGenres[track.id].orEmpty(),
-                            // The header is plain text a TV screen reader never reaches, so the
-                            // disc is folded into its first row's sentence (section 11.5.1).
-                            discSpoken = disc.takeIf { hasMultipleDiscs && indexInDisc == 0 },
-                        )
-                    },
-            )
-        }
+    val byDisc = tracks.groupBy { discNumber(it) }.toSortedMap()
+    val hasMultipleDiscs = byDisc.size > 1
+    return byDisc.map { (disc, discTracks) ->
+        AlbumDiscUi(
+            disc = disc,
+            tracks = discTracks
+                .sortedWith(compareBy({ it.trackIndex }, { it.id }))
+                .mapIndexed { indexInDisc, track ->
+                    toTrackUi(
+                        track = track,
+                        genres = trackGenres[track.id].orEmpty(),
+                        // The header is plain text a TV screen reader never reaches, so the
+                        // disc is folded into its first row's sentence (section 11.5.1).
+                        discSpoken = disc.takeIf { hasMultipleDiscs && indexInDisc == 0 },
+                    )
+                },
+        )
+    }
 }
 
 private fun discNumber(track: AlbumTrack): Long = if (track.disc > 0) track.disc else 1

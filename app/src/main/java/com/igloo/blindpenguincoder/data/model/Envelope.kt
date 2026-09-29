@@ -9,15 +9,12 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class ApiEnvelope<T>(
-    val error: Boolean,
-    val message: String? = null,
     val data: T? = null,
 )
 
 /** Envelope for endpoints that return only `error` and `message`. */
 @Serializable
 data class MessageResponse(
-    val error: Boolean,
     val message: String? = null,
 )
 
@@ -53,11 +50,9 @@ data class SqlNullFloat64(
 
 /**
  * Direction-only sort shared by every paged library endpoint; there is no sort-field choice.
- * [wireName] repeats each `@SerialName` because a query parameter is built by hand rather than
- * serialized, and `toString()` would send the Kotlin constant name.
+ * It only ever travels as a query parameter, spelled [wireName].
  */
-@Serializable
 enum class SortOrder(val wireName: String) {
-    @SerialName("asc") Ascending("asc"),
-    @SerialName("desc") Descending("desc"),
+    Ascending("asc"),
+    Descending("desc"),
 }

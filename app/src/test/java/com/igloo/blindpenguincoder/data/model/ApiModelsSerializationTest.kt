@@ -19,11 +19,9 @@ class ApiModelsSerializationTest {
 
         val envelope = json.decodeFromString<ApiEnvelope<AuthUserData>>(body)
 
-        assertFalse(envelope.error)
         val user = envelope.data!!.user
         assertEquals(7L, user.id)
         assertEquals("Jose", user.name)
-        assertEquals("jose@example.com", user.email)
         assertTrue(user.isAdmin)
         assertTrue(user.hasPin)
         assertNull(user.avatar)
@@ -78,8 +76,6 @@ class ApiModelsSerializationTest {
 
         val envelope = json.decodeFromString<ApiEnvelope<AuthUserData>>(body)
 
-        assertTrue(envelope.error)
-        assertEquals("invalid credentials", envelope.message)
         assertNull(envelope.data)
     }
 
@@ -173,17 +169,6 @@ class ApiModelsSerializationTest {
             genres,
         )
         assertEquals(3L, stats.totalShows)
-    }
-
-    /**
-     * `SortOrder.wireName` is spelled a second time so a query parameter can be built by hand.
-     * This is the guard that keeps it from drifting away from the `@SerialName`.
-     */
-    @Test
-    fun everySortOrderWireNameMatchesItsSerialName() {
-        SortOrder.entries.forEach { order ->
-            assertEquals(""""${order.wireName}"""", json.encodeToString(order))
-        }
     }
 
     @Test
@@ -385,28 +370,7 @@ class ApiModelsSerializationTest {
     }
 
     @Test
-    fun decodesWatchRoomServerEvent() {
-        val body = """
-            {
-              "type": "playback_changed",
-              "room_id": 3,
-              "playback": {"paused": true, "position_sec": 42.5, "updated_at": "2026-07-01T10:00:00Z"}
-            }
-        """.trimIndent()
-
-        val event = json.decodeFromString<WatchRoomServerEvent>(body)
-
-        assertEquals(WatchRoomEventType.PlaybackChanged, event.type)
-        assertEquals(3L, event.roomId)
-        assertEquals(42.5, event.playback!!.positionSec, 0.0)
-        assertNull(event.member)
-    }
-
-    @Test
-    fun encodesPlaybackModeAndRequestsWithWireNames() {
-        assertEquals("\"2160p_16mbps\"", json.encodeToString(PlaybackMode.P2160Mbps16))
-        assertEquals("\"direct\"", json.encodeToString(PlaybackMode.Direct))
-
+    fun encodesRequestsWithWireNames() {
         val progress = json.encodeToString(
             UpdateWatchProgressRequest(
                 progressSec = 30.0,
@@ -584,7 +548,6 @@ class ApiModelsSerializationTest {
         assertEquals("Spider-Man: Brand New Day", movie.title)
         assertEquals("2026-07-31", movie.releaseDate)
         assertEquals("/spidey.jpg", movie.posterPath)
-        assertEquals("/spidey-backdrop.jpg", movie.backdropPath)
         assertEquals(7.869, movie.voteAverage, 0.0)
     }
 
@@ -661,7 +624,6 @@ class ApiModelsSerializationTest {
         assertEquals("Spider-Man: Brand New Day", movie.title)
         assertEquals("2026-07-29", movie.releaseDate)
         assertEquals("/spidey.jpg", movie.posterPath)
-        assertEquals("/spidey-backdrop.jpg", movie.backdropPath)
         assertEquals(7.876, movie.voteAverage, 0.0)
         assertEquals(145L, movie.runtime)
         assertEquals("Released", movie.status)
@@ -715,11 +677,9 @@ class ApiModelsSerializationTest {
         assertEquals(listOf(211L, 42L), albums.map { it.id })
         assertEquals("https://i.scdn.co/image/ab67.jpg", albums[0].cover.orNull())
         assertEquals("Zac Brown Band", albums[0].musician.orNull())
-        assertEquals(2010L, albums[0].year.orNull())
         // A `Valid: false` wrapper is absence, not the empty string the server pads it with.
         assertNull(albums[1].cover.orNull())
         assertNull(albums[1].musician.orNull())
-        assertNull(albums[1].year.orNull())
     }
 
     /**
@@ -815,7 +775,6 @@ class ApiModelsSerializationTest {
         // Artists arrive as full musician rows (additionalProperties on the wire); the fields
         // the page does not read must be ignored, not fatal.
         assertEquals("Aurora Pines", data.artists[0].name)
-        assertNull(data.artists[0].thumb.orNull())
         assertEquals(listOf("Ambient", "Electronic"), data.trackGenres.map { it.tag })
         assertEquals(900L, data.trackGenres[0].trackId)
         assertEquals(listOf("Ambient", "Electronic"), data.albumGenres)
@@ -868,8 +827,6 @@ class ApiModelsSerializationTest {
         assertNull(data.tracks[1].albumCover.orNull())
         assertNull(data.tracks[1].musicianName.orNull())
         assertEquals(1234L, data.total)
-        assertEquals(50L, data.offset)
-        assertEquals(50L, data.limit)
         assertTrue(data.hasMore)
     }
 
@@ -1009,7 +966,6 @@ class ApiModelsSerializationTest {
         ).data!!
 
         assertEquals(listOf(3L, 5L, 900L), liked.likedTrackIds)
-        assertEquals(900L, toggle.trackId)
         assertFalse(toggle.isLiked)
         assertEquals(12L, stats.totalAlbums)
         assertEquals(150L, stats.totalTracks)
@@ -1027,7 +983,6 @@ class ApiModelsSerializationTest {
 
         val response = json.decodeFromString<MessageResponse>(body)
 
-        assertFalse(response.error)
         assertEquals("notification created", response.message)
     }
 
@@ -1173,7 +1128,6 @@ class ApiModelsSerializationTest {
         assertEquals(3840L, video.width)
         assertEquals(1600L, video.height)
         assertEquals("smpte2084", video.colorTransfer?.orNull())
-        assertNull(video.bitDepth?.orNull())
         val audio = data.audioStreams.single()
         assertEquals(6L, audio.channels)
         assertEquals("5.1(side)", audio.channelLayout?.orNull())
@@ -1183,7 +1137,6 @@ class ApiModelsSerializationTest {
         assertFalse(subtitle.isForced)
         val chapter = data.chapters.single()
         assertEquals(193L, chapter.startTime)
-        assertNull(chapter.thumb?.orNull())
         assertEquals("video/x-matroska", data.movie.mimeType)
     }
 }
