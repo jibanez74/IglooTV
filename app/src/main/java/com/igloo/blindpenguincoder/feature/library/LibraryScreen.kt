@@ -50,7 +50,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooSkeletonTextureCell
 import com.igloo.blindpenguincoder.core.ui.IglooTab
 import com.igloo.blindpenguincoder.core.ui.IglooTabRow
 import com.igloo.blindpenguincoder.core.ui.IglooText
-import com.igloo.blindpenguincoder.core.ui.integerCountFormat
+import com.igloo.blindpenguincoder.core.ui.formatCount
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.data.model.SortOrder
@@ -671,7 +671,7 @@ private fun countLine(kind: LibraryKind, total: Long?): String =
     if (total == null) {
         "—"
     } else {
-        "${integerCountFormat.format(total)} ${kind.noun(total)}"
+        "${formatCount(total)} ${kind.noun(total)}"
     }
 
 /**
@@ -695,7 +695,7 @@ private fun spokenCount(
         loadedCount == null -> countLine(kind, total)
         else -> buildString {
             append("Showing $loadedCount of ")
-            append("${integerCountFormat.format(total)} ${filterNoun(kind, filter, total)}")
+            append("${formatCount(total)} ${filterNoun(kind, filter, total)}")
             if (appendState == AppendState.Loading) {
                 append(". Loading more ${kind.plural}.")
             }

@@ -34,6 +34,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.testMovieDetails
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -56,8 +57,8 @@ class MovieDetailsAccessibilityTest {
     @get:Rule(order = 1)
     val composeRule = createComposeRule()
 
-    private var state by mutableStateOf<MovieDetailsState>(
-        MovieDetailsState.Loaded(testMovieDetails()),
+    private var state by mutableStateOf<DetailsState<MovieDetailsUi>>(
+        DetailsState.Loaded(testMovieDetails()),
     )
     private var moreMenuOpen by mutableStateOf(false)
     private val moreRequester = FocusRequester()
@@ -69,7 +70,7 @@ class MovieDetailsAccessibilityTest {
     private val menuSelections = mutableListOf<String>()
 
     private fun setContent(
-        initial: MovieDetailsState = MovieDetailsState.Loaded(testMovieDetails()),
+        initial: DetailsState<MovieDetailsUi> = DetailsState.Loaded(testMovieDetails()),
         mutationNotice: String? = null,
         isAdmin: Boolean = false,
         // Explicit, never the ambient default: the Shield test device runs TalkBack, and these
@@ -165,7 +166,7 @@ class MovieDetailsAccessibilityTest {
             watched.clickActionLabel(),
         )
 
-        state = MovieDetailsState.Loaded(testMovieDetails(watched = true))
+        state = DetailsState.Loaded(testMovieDetails(watched = true))
         composeRule.waitForIdle()
 
         watched
@@ -189,7 +190,7 @@ class MovieDetailsAccessibilityTest {
         val like = composeRule.onNodeWithTag("details_like")
         like.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Not liked"))
 
-        state = MovieDetailsState.Loaded(testMovieDetails(liked = true))
+        state = DetailsState.Loaded(testMovieDetails(liked = true))
         composeRule.waitForIdle()
 
         like.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Liked"))
@@ -197,14 +198,14 @@ class MovieDetailsAccessibilityTest {
 
     @Test
     fun likeHasNoActionUntilItsStatusIsKnown() {
-        setContent(MovieDetailsState.Loaded(testMovieDetails(liked = null)))
+        setContent(DetailsState.Loaded(testMovieDetails(liked = null)))
 
         val like = composeRule.onNodeWithTag("details_like")
         like
             .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Disabled))
             .assertHasNoClickAction()
 
-        state = MovieDetailsState.Loaded(testMovieDetails(liked = false))
+        state = DetailsState.Loaded(testMovieDetails(liked = false))
         composeRule.waitForIdle()
 
         like
@@ -288,7 +289,7 @@ class MovieDetailsAccessibilityTest {
     fun theOverviewIsClampedVisuallyButNotForTalkBack() {
         val long = "A ".repeat(400) + "end."
         setContent(
-            MovieDetailsState.Loaded(testMovieDetails().copy(overview = long)),
+            DetailsState.Loaded(testMovieDetails().copy(overview = long)),
         )
 
         // One text node carrying the whole string: the six-line clamp is a visual limit only
@@ -304,11 +305,11 @@ class MovieDetailsAccessibilityTest {
     @Test
     fun theOverviewFadeArmsOnlyWhenTheTextOverflows() {
         val long = "A ".repeat(400) + "end."
-        setContent(MovieDetailsState.Loaded(testMovieDetails().copy(overview = long)))
+        setContent(DetailsState.Loaded(testMovieDetails().copy(overview = long)))
 
         assertTrue("six lines cannot hold this overview", overviewLayout(long).hasVisualOverflow)
 
-        state = MovieDetailsState.Loaded(testMovieDetails())
+        state = DetailsState.Loaded(testMovieDetails())
         composeRule.waitForIdle()
 
         val short = testMovieDetails().overview!!
@@ -317,7 +318,7 @@ class MovieDetailsAccessibilityTest {
 
     @Test
     fun theLoadingStateAnnouncesItselfAndHoldsFocus() {
-        setContent(MovieDetailsState.Loading)
+        setContent(DetailsState.Loading)
 
         composeRule.onNodeWithContentDescription("Loading movie details")
             .assertIsFocused()
@@ -331,7 +332,7 @@ class MovieDetailsAccessibilityTest {
 
     @Test
     fun theErrorStateOffersAFocusedRetry() {
-        setContent(MovieDetailsState.Error("Could not reach the server."))
+        setContent(DetailsState.Error("Could not reach the server."))
 
         val retry = composeRule.onNodeWithContentDescription("Retry loading movie details")
         retry.assertIsFocused()
@@ -507,7 +508,7 @@ class MovieDetailsAccessibilityTest {
         play.performKeyInput { pressKey(Key.DirectionCenter) }
         assertEquals(1, plays)
 
-        state = MovieDetailsState.Loaded(testMovieDetails(progress = null))
+        state = DetailsState.Loaded(testMovieDetails(progress = null))
         composeRule.waitForIdle()
 
         play
@@ -526,14 +527,14 @@ class MovieDetailsAccessibilityTest {
     /** A pane-title change is spoken, so the loaded page names the film, not a generic frame. */
     @Test
     fun thePaneAnnouncesTheMovieOnceLoaded() {
-        setContent(MovieDetailsState.Loading)
+        setContent(DetailsState.Loading)
 
         val pane = composeRule.onNodeWithTag("movie_details")
         pane.assert(
             SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Movie details"),
         )
 
-        state = MovieDetailsState.Loaded(testMovieDetails())
+        state = DetailsState.Loaded(testMovieDetails())
         composeRule.waitForIdle()
 
         pane.assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Heat"))

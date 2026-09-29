@@ -7,6 +7,7 @@ import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
+import com.igloo.blindpenguincoder.playback.queue.shuffled
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
@@ -143,7 +144,7 @@ class MusicPlayRequestMappingTest {
         )
         val inOrder = toMusicPlayRequest(album)
 
-        val shuffles = (1L..5L).map { seed -> toShuffledMusicPlayRequest(album, Random(seed)) }
+        val shuffles = (1L..5L).map { seed -> inOrder.shuffled(Random(seed)) }
 
         shuffles.forEach { shuffled ->
             assertEquals(inOrder.source, shuffled.source)

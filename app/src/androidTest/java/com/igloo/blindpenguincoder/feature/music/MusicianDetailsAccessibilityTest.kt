@@ -20,6 +20,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.testMusicianDetails
 import org.junit.Rule
 import org.junit.Test
@@ -62,12 +63,12 @@ class MusicianDetailsAccessibilityTest {
 
     private fun loadedState(musician: MusicianDetailsUi = testMusicianDetails()) = MusicianDetailsUiState(
         openMusicianId = musician.id,
-        details = MusicianDetailsState.Loaded(musician),
+        details = DetailsState.Loaded(musician),
     )
 
     @Test
     fun thePaneAnnouncesTheArtistOnceLoaded() {
-        setContent(MusicianDetailsUiState(openMusicianId = 4, details = MusicianDetailsState.Loading))
+        setContent(MusicianDetailsUiState(openMusicianId = 4, details = DetailsState.Loading))
 
         val pane = composeRule.onNodeWithTag("musician_details")
         pane.assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Artist details"))

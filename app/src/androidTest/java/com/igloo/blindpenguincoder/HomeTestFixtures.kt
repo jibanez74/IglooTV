@@ -11,7 +11,6 @@ import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
-import com.igloo.blindpenguincoder.feature.home.HomeAlbum
 import com.igloo.blindpenguincoder.feature.home.HomeContinueItem
 import com.igloo.blindpenguincoder.feature.home.HomeHero
 import com.igloo.blindpenguincoder.feature.home.HomeTheaterMovie
@@ -182,9 +181,9 @@ internal val testContinueItems: List<HomeContinueItem> = listOf(testContinueEpis
 
 /** Cover-less for the same reason: the Music glyph fallback needs no network. */
 internal val testAlbums = listOf(
-    HomeAlbum(id = 11, title = "Help!", musician = "The Beatles", coverUrl = null),
-    HomeAlbum(id = 12, title = "1984", musician = "Van Halen", coverUrl = null),
-    HomeAlbum(id = 13, title = "Tribalistas", musician = "Tribalistas", coverUrl = null),
+    AlbumCardUi(id = 11, title = "Help!", subtitle = "The Beatles", coverUrl = null),
+    AlbumCardUi(id = 12, title = "1984", subtitle = "Van Halen", coverUrl = null),
+    AlbumCardUi(id = 13, title = "Tribalistas", subtitle = "Tribalistas", coverUrl = null),
 )
 
 /** Poster-less for the same reason; ratings span the badge's three tiers. */

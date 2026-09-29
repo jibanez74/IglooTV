@@ -10,6 +10,7 @@ import com.igloo.blindpenguincoder.data.api.MAX_LIBRARY_PER_PAGE
 import com.igloo.blindpenguincoder.data.model.MusicStats
 import com.igloo.blindpenguincoder.data.model.TrackListItem
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
+import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.DUPLICATE_PAGE_BACKOFF_MS
@@ -410,7 +411,7 @@ class MusicViewModel(
                 }
 
                 is ApiResult.Failure -> _uiState.update {
-                    it.copy(notice = "Couldn't start shuffle: " + result.error.toLibraryDisplayMessage())
+                    it.copy(notice = result.error.toFailureNotice("start shuffle"))
                 }
             }
         }
@@ -433,3 +434,20 @@ class MusicViewModel(
         const val TRACKS_PAGE_SIZE = 50L
     }
 }
+
+/**
+ * The pane's actions bound to this view model, so the host wires the pane in one line. Likes
+ * belong to the shared track-likes view model, which the host passes in.
+ */
+fun MusicViewModel.actions(onToggleLike: (Long) -> Unit): MusicActions = MusicActions(
+    onRefresh = ::reload,
+    onRetryFirstPage = ::retryFirstPage,
+    onRetryAppend = ::retryAppend,
+    onLoadMore = ::loadMore,
+    onSelectTab = ::selectTab,
+    onPressTab = ::pressTab,
+    onPlayTrack = ::playTrack,
+    onPlayAll = ::playAll,
+    onShuffleAll = ::shuffleAll,
+    onToggleLike = onToggleLike,
+)

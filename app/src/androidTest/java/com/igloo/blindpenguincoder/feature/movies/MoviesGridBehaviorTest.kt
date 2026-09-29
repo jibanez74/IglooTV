@@ -29,6 +29,7 @@ import com.igloo.blindpenguincoder.feature.library.LibraryFilter
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testMovieDetails
 import com.igloo.blindpenguincoder.testMovieGridItems
@@ -103,14 +104,14 @@ class MoviesGridBehaviorTest {
                         if (openDetailsOnSelect) {
                             detailsState = MovieDetailsUiState(
                                 openMovieId = movieId,
-                                details = MovieDetailsState.Loaded(testMovieDetails(id = movieId)),
+                                details = DetailsState.Loaded(testMovieDetails(id = movieId)),
                             )
                         }
                     },
                     onCloseDetails = {
                         detailsState = detailsState.copy(
                             openMovieId = null,
-                            details = MovieDetailsState.Loading,
+                            details = DetailsState.Loading,
                         )
                     },
                     details = detailsState,

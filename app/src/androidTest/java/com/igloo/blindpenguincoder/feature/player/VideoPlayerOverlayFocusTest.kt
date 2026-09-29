@@ -36,8 +36,8 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
@@ -45,7 +45,6 @@ import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
 import com.igloo.blindpenguincoder.testContinueItems
-import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testMovieDetails
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Assert.assertEquals
@@ -109,7 +108,7 @@ class VideoPlayerOverlayFocusTest {
         detailsState = if (detailsOpen) {
             MovieDetailsUiState(
                 openMovieId = 1,
-                details = MovieDetailsState.Loaded(testMovieDetails(id = 1)),
+                details = DetailsState.Loaded(testMovieDetails(id = 1)),
             )
         } else {
             MovieDetailsUiState()
@@ -155,7 +154,7 @@ class VideoPlayerOverlayFocusTest {
                     onCloseDetails = {
                         detailsState = detailsState.copy(
                             openMovieId = null,
-                            details = MovieDetailsState.Loading,
+                            details = DetailsState.Loading,
                         )
                     },
                     trailerEngineFactory = { _, _ ->
@@ -323,7 +322,7 @@ class VideoPlayerOverlayFocusTest {
         composeRule.runOnIdle {
             detailsState = MovieDetailsUiState(
                 openMovieId = 1,
-                details = MovieDetailsState.Loaded(testMovieDetails(id = 1)),
+                details = DetailsState.Loaded(testMovieDetails(id = 1)),
             )
         }
         composeRule.waitForIdle()

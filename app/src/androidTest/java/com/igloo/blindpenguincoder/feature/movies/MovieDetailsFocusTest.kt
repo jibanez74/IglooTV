@@ -36,6 +36,7 @@ import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.testAuthUser
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -102,13 +103,13 @@ class MovieDetailsFocusTest {
                         opened += movieId
                         detailsState = MovieDetailsUiState(
                             openMovieId = movieId,
-                            details = MovieDetailsState.Loaded(testMovieDetails(id = movieId)),
+                            details = DetailsState.Loaded(testMovieDetails(id = movieId)),
                         )
                     },
                     onCloseDetails = {
                         detailsState = detailsState.copy(
                             openMovieId = null,
-                            details = MovieDetailsState.Loading,
+                            details = DetailsState.Loading,
                         )
                     },
                 )
@@ -128,7 +129,7 @@ class MovieDetailsFocusTest {
 
     private fun loadedState(movie: MovieDetailsUi = testMovieDetails()) = MovieDetailsUiState(
         openMovieId = movie.id,
-        details = MovieDetailsState.Loaded(movie),
+        details = DetailsState.Loaded(movie),
     )
 
     @Test
@@ -220,7 +221,7 @@ class MovieDetailsFocusTest {
 
     @Test
     fun theSkeletonAnchorHandsFocusToPlayWhenTheMovieLoads() {
-        setShellContent(MovieDetailsUiState(openMovieId = 1, details = MovieDetailsState.Loading))
+        setShellContent(MovieDetailsUiState(openMovieId = 1, details = DetailsState.Loading))
 
         composeRule.onNodeWithTag("movie_details").assertExists()
 
@@ -237,7 +238,7 @@ class MovieDetailsFocusTest {
      */
     @Test
     fun theLoadingAnchorNeverEscapesIntoTheShell() {
-        setShellContent(MovieDetailsUiState(openMovieId = 1, details = MovieDetailsState.Loading))
+        setShellContent(MovieDetailsUiState(openMovieId = 1, details = DetailsState.Loading))
 
         val anchor = composeRule.onNodeWithContentDescription("Loading movie details")
         anchor.assertIsFocused()
@@ -253,7 +254,7 @@ class MovieDetailsFocusTest {
         setShellContent(
             MovieDetailsUiState(
                 openMovieId = 1,
-                details = MovieDetailsState.Error("Could not reach the server."),
+                details = DetailsState.Error("Could not reach the server."),
             ),
         )
 

@@ -2,6 +2,8 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
+import com.igloo.blindpenguincoder.images.TmdbImageSize
+import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import com.igloo.blindpenguincoder.images.youtubeThumbnailUrl
 import java.text.NumberFormat
 import java.util.Locale
@@ -25,6 +27,16 @@ internal data class CrewCredit(
     val name: String,
 )
 
+/** A cast credit as [castMembers] reads it, from either source's cast list. */
+internal data class CastCredit(
+    val id: Long,
+    val name: String,
+    val character: String,
+    val profilePath: String?,
+    /** The billing order; the rail shows the top of it. */
+    val order: Long,
+)
+
 /** A video as [youTubeExtraVideos] reads it, from either source's video list. */
 internal data class VideoSource(
     val id: Long,
@@ -33,12 +45,6 @@ internal data class VideoSource(
     val site: String,
     val key: String,
 )
-
-/** A line built from names: blanks dropped, and null rather than an empty line. */
-internal fun joinedNames(names: List<String>, separator: String): String? = names
-    .filter { it.isNotBlank() }
-    .takeIf { it.isNotEmpty() }
-    ?.joinToString(separator)
 
 /** Director(s) first, then up to three writing credits under their actual jobs (web parity). */
 internal fun keyCrew(crew: List<CrewCredit>): List<CrewEntry> {
@@ -52,6 +58,19 @@ internal fun keyCrew(crew: List<CrewCredit>): List<CrewEntry> {
         .take(WRITER_LIMIT)
     return (directors + writers).distinct()
 }
+
+/** The top [CAST_LIMIT] of the billing, a blank character left out. */
+internal fun castMembers(cast: List<CastCredit>, apiBaseUrl: String): List<CastMemberUi> = cast
+    .sortedBy { it.order }
+    .take(CAST_LIMIT)
+    .map {
+        CastMemberUi(
+            id = it.id,
+            name = it.name,
+            character = it.character.takeIf { character -> character.isNotBlank() },
+            photoUrl = tmdbImageUrl(apiBaseUrl, TmdbImageSize.W185, it.profilePath),
+        )
+    }
 
 /**
  * YouTube extras only — the backend has no thumbnail proxy for other sites (web parity) —
@@ -139,5 +158,5 @@ internal fun formatUsd(amount: Double): String =
         .format(amount)
 
 /** Ten cast members, three writing credits: the same caps the web client's sections use. */
-internal const val CAST_LIMIT = 10
+private const val CAST_LIMIT = 10
 private const val WRITER_LIMIT = 3

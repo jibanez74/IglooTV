@@ -15,6 +15,7 @@ import coil3.request.ErrorResult
 import coil3.test.FakeImageLoaderEngine
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.inertDetailsActions
 import com.igloo.blindpenguincoder.testMovieDetails
 import org.junit.After
@@ -72,7 +73,7 @@ class MovieDetailsOverMediaTest {
                     // Pinned: the Shield test device runs TalkBack, and this suite
                     // asserts the focus chain without the reading stops.
                     spokenAccessibilityEnabled = false,
-                    state = MovieDetailsState.Loaded(
+                    state = DetailsState.Loaded(
                         testMovieDetails().copy(backdropUrl = backdropUrl),
                     ),
                     actions = inertDetailsActions,

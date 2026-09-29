@@ -59,6 +59,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooTab
 import com.igloo.blindpenguincoder.core.ui.IglooTabRow
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.countNoun
+import com.igloo.blindpenguincoder.core.ui.formatCount
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.feature.shared.AppendState
@@ -985,7 +986,7 @@ private fun MusicTab.emptyIcon(): ImageVector = when (this) {
     else -> IglooIcons.Music
 }
 
-private fun MusicTab.emptyMessage(): String = when (this) {
+internal fun MusicTab.emptyMessage(): String = when (this) {
     MusicTab.Musicians -> "No musicians in your library yet. Add a music folder on the server and run a scan."
     MusicTab.Albums -> "No albums in your library yet. Add a music folder on the server and run a scan."
     MusicTab.Tracks -> "No tracks in your library yet. Add a music folder on the server and run a scan."

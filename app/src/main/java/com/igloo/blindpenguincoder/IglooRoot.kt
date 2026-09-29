@@ -47,10 +47,10 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
-import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicViewModel
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.TrackLikesViewModel
+import com.igloo.blindpenguincoder.feature.music.actions
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.shows.showLibrarySource
 import com.igloo.blindpenguincoder.playback.media3.VideoPlaybackServices
@@ -335,18 +335,7 @@ fun IglooRoot(container: IglooAppContainer) {
                     val showsActions = remember(showsViewModel) { showsViewModel.actions() }
                     val music by musicViewModel.uiState.collectAsStateWithLifecycle()
                     val musicActions = remember(musicViewModel, trackLikesViewModel) {
-                        MusicActions(
-                            onRefresh = musicViewModel::reload,
-                            onRetryFirstPage = musicViewModel::retryFirstPage,
-                            onRetryAppend = musicViewModel::retryAppend,
-                            onLoadMore = musicViewModel::loadMore,
-                            onSelectTab = musicViewModel::selectTab,
-                            onPressTab = musicViewModel::pressTab,
-                            onPlayTrack = musicViewModel::playTrack,
-                            onPlayAll = musicViewModel::playAll,
-                            onShuffleAll = musicViewModel::shuffleAll,
-                            onToggleLike = trackLikesViewModel::toggle,
-                        )
+                        musicViewModel.actions(onToggleLike = trackLikesViewModel::toggle)
                     }
                     val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()
                     val theaterDetails by theaterDetailsViewModel.uiState

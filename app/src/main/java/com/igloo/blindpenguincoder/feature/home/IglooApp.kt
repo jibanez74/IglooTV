@@ -83,29 +83,30 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsScreen
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.movies.VideoLaunchSite
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsScreen
-import com.igloo.blindpenguincoder.feature.music.AlbumDetailsState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicScreen
+import com.igloo.blindpenguincoder.feature.music.MusicTab
 import com.igloo.blindpenguincoder.feature.music.MusicUiState
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsScreen
-import com.igloo.blindpenguincoder.feature.music.MusicianDetailsState
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.TrackFocusMemory
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
+import com.igloo.blindpenguincoder.feature.music.emptyMessage
 import com.igloo.blindpenguincoder.feature.music.toMusicPlayRequest
-import com.igloo.blindpenguincoder.feature.music.toShuffledMusicPlayRequest
 import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.player.MusicPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.ProgressSyncUiState
 import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.queue.shuffled
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
 import kotlinx.coroutines.flow.Flow
@@ -427,8 +428,8 @@ fun IglooApp(
             musicPlayOrigin = origin
         }
     }
-    val loadedAlbum = (albumDetails.details as? AlbumDetailsState.Loaded)?.album
-    val loadedMusician = (musicianDetails.details as? MusicianDetailsState.Loaded)?.musician
+    val loadedAlbum = (albumDetails.details as? DetailsState.Loaded)?.value
+    val loadedMusician = (musicianDetails.details as? DetailsState.Loaded)?.value
     val closeMusicPlayer: () -> Unit = {
         val origin = musicPlayOrigin
         musicPlayRequest = null
@@ -638,7 +639,7 @@ fun IglooApp(
                     state = musicianDetails.details,
                     onRetry = onRetryMusicianDetails,
                     onPlayAll = { launchMusic(MusicPlayOrigin.MusicianDetails) { loadedMusician?.let(::toMusicPlayRequest) } },
-                    onShuffle = { launchMusic(MusicPlayOrigin.MusicianDetails) { loadedMusician?.let(::toShuffledMusicPlayRequest) } },
+                    onShuffle = { launchMusic(MusicPlayOrigin.MusicianDetails) { loadedMusician?.let { toMusicPlayRequest(it).shuffled() } } },
                     onPlayTrack = { index ->
                         launchMusic(MusicPlayOrigin.MusicianDetails) { loadedMusician?.let { toMusicPlayRequest(it, startIndex = index) } }
                     },
@@ -673,7 +674,7 @@ fun IglooApp(
                     // track list, so the press maps the details already on screen — no
                     // deferred-play flow, unlike the movie's async technical details.
                     onPlayAlbum = { launchMusic(MusicPlayOrigin.AlbumDetails) { loadedAlbum?.let(::toMusicPlayRequest) } },
-                    onShuffle = { launchMusic(MusicPlayOrigin.AlbumDetails) { loadedAlbum?.let(::toShuffledMusicPlayRequest) } },
+                    onShuffle = { launchMusic(MusicPlayOrigin.AlbumDetails) { loadedAlbum?.let { toMusicPlayRequest(it).shuffled() } } },
                     onPlayTrack = { index ->
                         launchMusic(MusicPlayOrigin.AlbumDetails) { loadedAlbum?.let { toMusicPlayRequest(it, startIndex = index) } }
                     },
@@ -1391,14 +1392,14 @@ private fun HomeRails(
             onItemFocused = { lastFocusedByRail[HomeRail.LatestAlbums] = it },
             loadingLabel = "Loading recently added albums",
             emptyIcon = IglooIcons.Music,
-            emptyText = "No albums in your library yet. Add a music folder on the server and run a scan.",
+            emptyText = MusicTab.Albums.emptyMessage(),
             onRetry = { onRetryRail(HomeRail.LatestAlbums) },
             returnRequester = railReturnRequesters.getValue(HomeRail.LatestAlbums),
             cardAspect = IglooTheme.layout.albumAspect,
         ) { album, itemModifier, cardAspect ->
             IglooPosterCard(
                 title = album.title,
-                subtitle = album.musician,
+                subtitle = album.subtitle,
                 imageUrl = album.coverUrl,
                 onClick = openAlbum?.let { open ->
                     { open(DetailsOrigin.Rail(HomeRail.LatestAlbums), album.id) }

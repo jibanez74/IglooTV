@@ -13,6 +13,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 
 /**
@@ -33,7 +34,7 @@ import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
  */
 @Composable
 fun AlbumDetailsScreen(
-    state: AlbumDetailsState,
+    state: DetailsState<AlbumDetailsUi>,
     onRetry: () -> Unit,
     onPlayAlbum: () -> Unit,
     onShuffle: () -> Unit,
@@ -48,11 +49,11 @@ fun AlbumDetailsScreen(
     // and a test device with TalkBack running would otherwise pin the gate open.
     spokenAccessibilityEnabled: Boolean = rememberSpokenAccessibilityEnabled(),
 ) {
-    val loaded = (state as? AlbumDetailsState.Loaded)?.album
+    val loaded = (state as? DetailsState.Loaded)?.value
     MusicDetailsScaffold(
         stateKey = state::class,
         loaded = loaded,
-        errorMessage = (state as? AlbumDetailsState.Error)?.message,
+        errorMessage = (state as? DetailsState.Error)?.message,
         paneTitle = loaded?.title ?: "Album details",
         tag = "album_details",
         trackRows = loaded?.discs?.flatMap { it.tracks }.orEmpty(),

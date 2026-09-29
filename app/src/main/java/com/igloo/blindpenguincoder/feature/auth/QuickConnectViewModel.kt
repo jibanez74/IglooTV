@@ -77,8 +77,7 @@ class QuickConnectViewModel(
     }
 
     private suspend fun initiateWithBackoff(): QuickConnectInitiateData? {
-        var backoffMillis = INITIATE_INITIAL_BACKOFF_MILLIS
-        var attemptsLeft = MAX_INITIATE_ATTEMPTS
+        var retries = 0
         while (true) {
             when (val result = authRepository.initiateQuickConnect()) {
                 is ApiResult.Success -> return result.value
@@ -86,11 +85,15 @@ class QuickConnectViewModel(
                     val error = result.error
                     val retryable = error is AppError.Api && error.status in RETRYABLE_STATUSES
                     // A busy server is worth waiting out, but not silently and not forever.
-                    if (retryable && --attemptsLeft > 0) {
-                        delay(backoffMillis)
-                        backoffMillis = (backoffMillis * 2).coerceAtMost(
-                            MAX_INITIATE_BACKOFF_MILLIS,
+                    if (retryable && retries + 1 < MAX_INITIATE_ATTEMPTS) {
+                        delay(
+                            backoffMillis(
+                                INITIATE_INITIAL_BACKOFF_MILLIS,
+                                retries,
+                                MAX_INITIATE_BACKOFF_MILLIS,
+                            ),
                         )
+                        retries += 1
                     } else {
                         fail(error)
                         return null
@@ -188,11 +191,13 @@ internal fun quickConnectPollDelayMillis(
     consecutiveFailures: Int,
 ): Long {
     if (consecutiveFailures <= 0) return baseIntervalMillis
-    val shift = (consecutiveFailures - 1).coerceAtMost(30)
-    val backoff = (POLL_INITIAL_BACKOFF_MILLIS * (1L shl shift))
-        .coerceAtMost(MAX_POLL_BACKOFF_MILLIS)
-    return baseIntervalMillis + backoff
+    return baseIntervalMillis +
+        backoffMillis(POLL_INITIAL_BACKOFF_MILLIS, consecutiveFailures - 1, MAX_POLL_BACKOFF_MILLIS)
 }
+
+/** [initialMillis] doubled for each of the [retries] already waited out, capped at [maxMillis]. */
+private fun backoffMillis(initialMillis: Long, retries: Int, maxMillis: Long): Long =
+    (initialMillis * (1L shl retries.coerceAtMost(30))).coerceAtMost(maxMillis)
 
 private fun AppError.isRetryableRedeemFailure(): Boolean = when (this) {
     AppError.Network, AppError.Timeout -> true

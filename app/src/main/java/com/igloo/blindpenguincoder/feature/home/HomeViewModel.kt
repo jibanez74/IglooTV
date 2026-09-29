@@ -12,6 +12,7 @@ import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
 import com.igloo.blindpenguincoder.core.ui.orKeepContent
 import com.igloo.blindpenguincoder.core.ui.progressFraction
+import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.ContinueWatchingItem
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.Movie
@@ -22,9 +23,12 @@ import com.igloo.blindpenguincoder.data.model.WatchProgress
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.data.repository.ShowRepository
+import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
 import com.igloo.blindpenguincoder.feature.movies.buildVideoPlayRequest
+import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
+import com.igloo.blindpenguincoder.feature.music.toCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.posterItem
 import com.igloo.blindpenguincoder.images.TmdbImageSize
@@ -33,7 +37,6 @@ import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
-import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelChildren
@@ -81,14 +84,6 @@ sealed interface HomeContinueItem {
     }
 }
 
-/** An album ready to render: nullable wire fields resolved, cover taken as the backend sends it. */
-data class HomeAlbum(
-    val id: Long,
-    val title: String,
-    val musician: String?,
-    val coverUrl: String?,
-)
-
 /** A theater movie ready to render (section 11.3.2) — TMDB content, not library content. */
 data class HomeTheaterMovie(
     val id: Long,
@@ -125,7 +120,7 @@ data class HomeUiState(
     val hero: HomeHeroState = HomeHeroState.Loading,
     val continueWatching: IglooRailState<HomeContinueItem> = IglooRailState.Loading,
     val latestMovies: IglooRailState<PosterItem> = IglooRailState.Loading,
-    val latestAlbums: IglooRailState<HomeAlbum> = IglooRailState.Loading,
+    val latestAlbums: IglooRailState<AlbumCardUi> = IglooRailState.Loading,
     val inTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loading,
     /** Why the last episode press did not reach the player; cleared by the next press. */
     val playbackNotice: String? = null,
@@ -252,8 +247,7 @@ class HomeViewModel(
                 is ApiResult.Success -> playRequestChannel.trySend(prepared.value)
                 is ApiResult.Failure -> _uiState.update {
                     it.copy(
-                        playbackNotice = "Couldn't prepare playback: " +
-                            prepared.error.toLibraryDisplayMessage(),
+                        playbackNotice = prepared.error.toFailureNotice("prepare playback"),
                     )
                 }
             }
@@ -358,20 +352,7 @@ class HomeViewModel(
         launchLoad(HomeRail.LatestAlbums) {
             // Server order is the contract (newest first) — do not re-sort. SimpleAlbum carries
             // no timestamp, so the route's own order is the only recency the client can show.
-            val next = music.latestAlbums().toRailState { albums ->
-                albums.map { album ->
-                    HomeAlbum(
-                        id = album.id,
-                        // The contract requires a title but not a non-blank one; an untagged rip
-                        // must not render an empty title line or a nameless announcement.
-                        title = album.title.ifBlank { "Untitled album" },
-                        musician = album.musician.orNullIfBlank(),
-                        // Used verbatim: the scanner stores an absolute Spotify URL or nothing,
-                        // and there is no music image proxy to route it through.
-                        coverUrl = album.cover.orNullIfBlank(),
-                    )
-                }
-            }
+            val next = music.latestAlbums().toRailState { albums -> albums.map { it.toCardUi() } }
             _uiState.update {
                 it.copy(latestAlbums = next.orKeepContent(it.latestAlbums, keep = !userInitiated))
             }
@@ -485,8 +466,7 @@ class HomeViewModel(
         movie.year?.orNull()?.takeIf { it > 0 }?.toString(),
         movie.certification?.orNullIfBlank(),
         movie.runTime?.orNull()?.takeIf { it > 0 }?.let(::formatRuntime),
-        movie.criticRating?.orNull()?.takeIf { it > 0 }
-            ?.let { String.format(Locale.US, "%.1f", it) },
+        movie.criticRating?.orNull()?.takeIf { it > 0 }?.let { ratingBadgeSpec(it).label },
     )
         .joinToString(" · ")
         .ifEmpty { null }

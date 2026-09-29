@@ -4,6 +4,7 @@ import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.musicianDetailsJson
 import com.igloo.blindpenguincoder.data.repository.musicianJson
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -63,8 +64,8 @@ class MusicianDetailsViewModelTest {
 
         assertEquals(1, requests)
         assertEquals(4L, model.uiState.value.openMusicianId)
-        val loaded = model.uiState.value.details as MusicianDetailsState.Loaded
-        assertEquals("The Beatles", loaded.musician.name)
+        val loaded = model.uiState.value.details as DetailsState.Loaded
+        assertEquals("The Beatles", loaded.value.name)
     }
 
     @Test
@@ -78,12 +79,12 @@ class MusicianDetailsViewModelTest {
         )
 
         model.open(4)
-        val error = model.uiState.value.details as MusicianDetailsState.Error
+        val error = model.uiState.value.details as DetailsState.Error
         assertEquals("musician not found", error.message)
 
         fail = false
         model.retry()
-        assertTrue(model.uiState.value.details is MusicianDetailsState.Loaded)
+        assertTrue(model.uiState.value.details is DetailsState.Loaded)
     }
 
     @Test
@@ -100,7 +101,7 @@ class MusicianDetailsViewModelTest {
         fail = true
         model.refresh()
 
-        assertTrue(model.uiState.value.details is MusicianDetailsState.Loaded)
+        assertTrue(model.uiState.value.details is DetailsState.Loaded)
     }
 
     @Test
@@ -111,7 +112,7 @@ class MusicianDetailsViewModelTest {
         model.close()
 
         assertNull(model.uiState.value.openMusicianId)
-        assertTrue(model.uiState.value.details is MusicianDetailsState.Loading)
+        assertTrue(model.uiState.value.details is DetailsState.Loading)
         model.refresh()
         assertNull(model.uiState.value.openMusicianId)
     }

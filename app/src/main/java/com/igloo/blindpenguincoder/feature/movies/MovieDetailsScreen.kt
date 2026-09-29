@@ -57,6 +57,7 @@ import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 
 /**
  * What the details overlay can do, grouped so the shell that hosts it keeps a readable
@@ -142,7 +143,7 @@ enum class VideoLaunchSite { ExtrasRail, Hero }
  */
 @Composable
 fun MovieDetailsScreen(
-    state: MovieDetailsState,
+    state: DetailsState<MovieDetailsUi>,
     actions: MovieDetailsActions,
     isAdmin: Boolean,
     onPlay: () -> Unit,
@@ -198,7 +199,7 @@ fun MovieDetailsScreen(
                 // The loaded pane announces the movie itself; a pane-title change is spoken, so
                 // arriving on a loaded page (or the load completing) names the film rather than
                 // a generic frame (section 12's pane rule).
-                paneTitle = (state as? MovieDetailsState.Loaded)?.movie?.title ?: "Movie details"
+                paneTitle = (state as? DetailsState.Loaded)?.value?.title ?: "Movie details"
                 isTraversalGroup = true
             }
             .testTag("movie_details"),
@@ -277,9 +278,9 @@ fun MovieDetailsScreen(
         // rather than crash a cast. The host flag then persists until details close, which is
         // the same outcome every stale-overlay flag gets.
         if (playbackSettingsOpen && actions is MovieDetailsActions.Library &&
-            state is MovieDetailsState.Loaded
+            state is DetailsState.Loaded
         ) {
-            state.movie.playbackSettings?.let { settings ->
+            state.value.playbackSettings?.let { settings ->
                 PlaybackSettingsDialog(
                     settings = settings,
                     onSelectMode = actions.onSelectPlaybackMode,
@@ -309,7 +310,7 @@ private fun menuItem(
 
 @Composable
 private fun DetailsBody(
-    state: MovieDetailsState,
+    state: DetailsState<MovieDetailsUi>,
     actions: MovieDetailsActions,
     mutationNotice: String?,
     progressSyncError: String?,
@@ -326,7 +327,7 @@ private fun DetailsBody(
     onMoreAnchorPositioned: (Rect) -> Unit,
 ) {
     when (state) {
-        is MovieDetailsState.Loading -> DetailsSkeleton(
+        is DetailsState.Loading -> DetailsSkeleton(
                 anchorRequester = entryRequester,
             // Geometry-matched to the row it stands in for: the in-theaters hero carries one
             // action and no resume strip, and a stand-in of the wrong shape would move the
@@ -337,7 +338,7 @@ private fun DetailsBody(
 
         // The only region on screen, so Assertive is safe and right: the user just asked
         // for this page and is waiting on it (section 10).
-        is MovieDetailsState.Error -> Box(
+        is DetailsState.Error -> Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(IglooTheme.layout.safeAreaHorizontal),
@@ -358,8 +359,8 @@ private fun DetailsBody(
             )
         }
 
-        is MovieDetailsState.Loaded -> DetailsContent(
-            movie = state.movie,
+        is DetailsState.Loaded -> DetailsContent(
+            movie = state.value,
             mutationNotice = mutationNotice,
             progressSyncError = progressSyncError,
             onRetryProgressSync = onRetryProgressSync,

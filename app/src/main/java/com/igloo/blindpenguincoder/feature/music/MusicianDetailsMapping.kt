@@ -1,17 +1,14 @@
 package com.igloo.blindpenguincoder.feature.music
 
+import com.igloo.blindpenguincoder.core.ui.formatCount
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
+import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.data.model.MusicianDetailsData
 import com.igloo.blindpenguincoder.data.model.MusicianTrack
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
-import com.igloo.blindpenguincoder.feature.shared.trackSpokenInfo
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
-import com.igloo.blindpenguincoder.playback.model.millisToSeconds
-import com.igloo.blindpenguincoder.playback.queue.shuffledQueue
-import kotlin.math.roundToInt
-import kotlin.random.Random
 
 /**
  * Wire-to-render rules for the musician detail screen (docs/design-system.md section 11.5.2),
@@ -39,11 +36,11 @@ data class MusicianDetailsUi(
 
 internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
     val musician = data.musician
-    val name = musician.name.ifBlank { "Unknown artist" }
+    val name = musician.name.ifBlank { UNKNOWN_ARTIST }
     val albumCountText = countLine(data.albums.size.toLong(), "album")
     val trackCountText = countLine(data.tracks.size.toLong(), "track")
     val totalDurationText = formatAlbumDuration(data.totalDuration.toLong())
-    val popularity = musician.spotifyPopularity.orNull()?.roundToInt()?.coerceIn(0, 100)
+    val popularity = spotifyPopularity(musician.spotifyPopularity)
     val followers = musician.spotifyFollowers.orNull()?.takeIf { it > 0 }
     val genresSpoken = joinedLine(data.genres, ", ")
     val facts = buildList {
@@ -67,7 +64,7 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
         albums = data.albums.map {
             AlbumCardUi(
                 id = it.id,
-                title = it.title.ifBlank { "Untitled album" },
+                title = it.title.ifBlank { UNTITLED_ALBUM },
                 subtitle = it.year.orNull()?.toString(),
                 coverUrl = it.cover.orNullIfBlank(),
             )
@@ -86,22 +83,15 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
 }
 
 /** A musician's track: its album is the subtitle and More's one destination. */
-private fun MusicianTrack.toRowUi(): TrackRowUi {
-    val durationSec = millisToSeconds(duration)
-    val album = albumTitle.orNullIfBlank()
-    return TrackRowUi(
-        id = id,
-        title = title,
-        subtitle = album,
-        indexText = null,
-        durationText = formatTrackDuration(duration),
-        durationSec = durationSec,
-        albumId = albumId.orNull(),
-        // The musician is the page; there is nowhere else for More to go.
-        musicianId = null,
-        spokenInfo = trackSpokenInfo(null, title, album, durationSec),
-    )
-}
+private fun MusicianTrack.toRowUi(): TrackRowUi = musicTrackRow(
+    id = id,
+    title = title,
+    subtitle = albumTitle.orNullIfBlank(),
+    durationMs = duration,
+    albumId = albumId.orNull(),
+    // The musician is the page; there is nowhere else for More to go.
+    musicianId = null,
+)
 
 /** Play all, or a row's Play with [startIndex] at that row: the discography in page order. */
 internal fun toMusicPlayRequest(musician: MusicianDetailsUi, startIndex: Int = 0): MusicPlayRequest =
@@ -119,9 +109,3 @@ internal fun toMusicPlayRequest(musician: MusicianDetailsUi, startIndex: Int = 0
             )
         },
     )
-
-/** The Shuffle press: the same queue in a fresh random order (docs/music-shuffle.md). */
-internal fun toShuffledMusicPlayRequest(
-    musician: MusicianDetailsUi,
-    random: Random = Random.Default,
-): MusicPlayRequest = toMusicPlayRequest(musician).let { it.copy(tracks = it.tracks.shuffledQueue(random)) }

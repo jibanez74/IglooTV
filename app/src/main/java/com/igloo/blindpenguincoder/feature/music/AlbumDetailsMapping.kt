@@ -2,18 +2,15 @@ package com.igloo.blindpenguincoder.feature.music
 
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
+import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.data.model.AlbumDetailsData
 import com.igloo.blindpenguincoder.data.model.AlbumTrack
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
-import com.igloo.blindpenguincoder.feature.shared.trackSpokenInfo
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
-import com.igloo.blindpenguincoder.playback.model.millisToSeconds
-import com.igloo.blindpenguincoder.playback.queue.shuffledQueue
 import java.util.Locale
 import kotlin.math.roundToInt
-import kotlin.random.Random
 
 /**
  * Wire-to-[AlbumDetailsUi] rules for the album detail screen (docs/design-system.md section
@@ -67,14 +64,13 @@ data class AlbumFactUi(
 
 internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
     val album = data.album
-    // The contract requires a title but not a non-blank one (the home rail's rule).
-    val title = album.title.ifBlank { "Untitled album" }
+    val title = album.title.ifBlank { UNTITLED_ALBUM }
     val artistName = album.musician.orNullIfBlank()
     val releaseDateText = album.releaseDate.orNullIfBlank()?.let(::formatReleaseDate)
         ?: album.year.orNull()?.toString()
     val trackCountText = countLine(data.tracks.size.toLong(), "track")
     val totalDurationText = formatAlbumDuration(data.totalDuration.toLong())
-    val popularity = album.spotifyPopularity.orNull()?.roundToInt()?.coerceIn(0, 100)
+    val popularity = spotifyPopularity(album.spotifyPopularity)
     val artists = data.artists.filter { it.name.isNotBlank() }.map { AlbumArtistUi(it.id, it.name) }
     // With no credited rows the album's own musician is the one name, and it has no id to open.
     val artistNames = artists.map { it.name }.ifEmpty { listOfNotNull(artistName) }
@@ -145,12 +141,6 @@ internal fun toMusicPlayRequest(album: AlbumDetailsUi, startIndex: Int = 0): Mus
         },
     )
 
-/** The Shuffle press: the same queue in a fresh random order (docs/music-shuffle.md). */
-internal fun toShuffledMusicPlayRequest(
-    album: AlbumDetailsUi,
-    random: Random = Random.Default,
-): MusicPlayRequest = toMusicPlayRequest(album).let { it.copy(tracks = it.tracks.shuffledQueue(random)) }
-
 /**
  * Tracks grouped and ordered by disc, then track index. A disc of 0 or below is disc 1 — the
  * web's `track.disc || 1` for an untagged rip.
@@ -181,28 +171,19 @@ private fun discs(
 
 private fun discNumber(track: AlbumTrack): Long = if (track.disc > 0) track.disc else 1
 
-private fun toTrackUi(track: AlbumTrack, genres: List<String>, discSpoken: Long?): TrackRowUi {
-    val genresLine = joinedLine(genres, ", ")
-    val durationSec = millisToSeconds(track.duration)
-    return TrackRowUi(
+private fun toTrackUi(track: AlbumTrack, genres: List<String>, discSpoken: Long?): TrackRowUi =
+    musicTrackRow(
         id = track.id,
         title = track.title,
-        subtitle = genresLine,
-        indexText = "${track.trackIndex}",
-        durationText = formatTrackDuration(track.duration),
-        durationSec = durationSec,
+        subtitle = joinedLine(genres, ", "),
+        durationMs = track.duration,
         // The row already sits on its album; More can only go to the artist.
         albumId = null,
         musicianId = track.musicianId.orNull(),
-        spokenInfo = trackSpokenInfo(
-            prefix = listOfNotNull(discSpoken?.let { "Disc $it" }, "Track ${track.trackIndex}")
-                .joinToString(". "),
-            title = track.title,
-            subtitle = genresLine,
-            durationSec = durationSec,
-        ),
+        indexText = "${track.trackIndex}",
+        spokenPrefix = listOfNotNull(discSpoken?.let { "Disc $it" }, "Track ${track.trackIndex}")
+            .joinToString(". "),
     )
-}
 
 /**
  * The audio-quality summary, ported from the web page: the dominant codec by track count

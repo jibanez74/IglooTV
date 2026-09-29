@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.shared
 
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
+import com.igloo.blindpenguincoder.core.ui.joinedLine
 
 /**
  * The one render model every track row draws, whichever list it sits in: the Tracks tab, an
@@ -41,9 +42,7 @@ fun spokenLetterHeader(letter: String): String =
 
 /** `"The Beatles · Help!"`, each part dropped when absent, null when both are. */
 fun trackSubtitle(artistName: String?, albumTitle: String?): String? =
-    listOfNotNull(artistName?.takeIf { it.isNotBlank() }, albumTitle?.takeIf { it.isNotBlank() })
-        .takeIf { it.isNotEmpty() }
-        ?.joinToString(" · ")
+    joinedLine(listOfNotNull(artistName, albumTitle), " · ")
 
 /**
  * The Play control's sentence: an optional folded header, the title, the subtitle, and the

@@ -8,6 +8,7 @@ import com.igloo.blindpenguincoder.data.repository.tmdbCountryReleaseDatesJson
 import com.igloo.blindpenguincoder.data.repository.tmdbCrewJson
 import com.igloo.blindpenguincoder.data.repository.tmdbMovieJson
 import com.igloo.blindpenguincoder.data.repository.tmdbVideoJson
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -61,7 +62,7 @@ class TheaterMovieDetailsViewModelTest {
     }
 
     private fun TheaterMovieDetailsViewModel.loaded(): MovieDetailsUi =
-        (uiState.value.details as MovieDetailsState.Loaded).movie
+        (uiState.value.details as DetailsState.Loaded).value
 
     @Test
     fun `nothing loads until a movie is opened`() = runTest {
@@ -366,7 +367,7 @@ class TheaterMovieDetailsViewModelTest {
         testScheduler.advanceUntilIdle()
         assertEquals(
             "TMDB is not configured",
-            (viewModel.uiState.value.details as MovieDetailsState.Error).message,
+            (viewModel.uiState.value.details as DetailsState.Error).message,
         )
 
         fail = false
@@ -411,7 +412,7 @@ class TheaterMovieDetailsViewModelTest {
         viewModel.close()
 
         assertNull(viewModel.uiState.value.openMovieId)
-        assertTrue(viewModel.uiState.value.details is MovieDetailsState.Loading)
+        assertTrue(viewModel.uiState.value.details is DetailsState.Loading)
         // Idempotent: the host closes both detail view models on Back without asking which was up.
         viewModel.close()
         viewModel.refresh()

@@ -5,13 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
 import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.progress.FLUSH_DEDUPE_SEC
 import com.igloo.blindpenguincoder.playback.progress.MAX_TICK_DELTA_SEC
 import com.igloo.blindpenguincoder.playback.progress.ProgressReporter
 import com.igloo.blindpenguincoder.playback.progress.shouldPersistProgress
 import com.igloo.blindpenguincoder.playback.progress.shouldSaveProgress
-import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import kotlin.math.abs
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -103,13 +103,7 @@ class VideoPlayerViewModel(
             return
         }
         playedAtLastSave = playedSec
-        val snapshot = dispatch(positionSec, durationSec)
-        val attempt = beginSave(session)
-        viewModelScope.launch {
-            if (saveSnapshot(attempt, snapshot, refreshAfterSuccess = false)) {
-                onWatchedStateCommitted()
-            }
-        }
+        launchSave(session, positionSec, durationSec, refreshAfterSuccess = false, outlivesOwner = false)
     }
 
     /**
@@ -124,20 +118,7 @@ class VideoPlayerViewModel(
         val lastDispatched = lastDispatchedPositionSec
         if (lastDispatched != null && abs(positionSec - lastDispatched) < FLUSH_DEDUPE_SEC) return
         playedAtLastSave = playedSec
-        val snapshot = dispatch(positionSec, durationSec)
-        val attempt = beginSave(session)
-        viewModelScope.launch {
-            if (
-                saveSnapshot(
-                    attempt = attempt,
-                    snapshot = snapshot,
-                    refreshAfterSuccess = false,
-                    outlivesOwner = true,
-                )
-            ) {
-                onWatchedStateCommitted()
-            }
-        }
+        launchSave(session, positionSec, durationSec, refreshAfterSuccess = false, outlivesOwner = true)
     }
 
     /**
@@ -152,20 +133,7 @@ class VideoPlayerViewModel(
             discardSettledSession(session)
             return
         }
-        val snapshot = dispatch(finalPositionSec, durationSec)
-        val attempt = beginSave(session)
-        viewModelScope.launch {
-            if (
-                saveSnapshot(
-                    attempt = attempt,
-                    snapshot = snapshot,
-                    refreshAfterSuccess = true,
-                    outlivesOwner = true,
-                )
-            ) {
-                onWatchedStateCommitted()
-            }
-        }
+        launchSave(session, finalPositionSec, durationSec, refreshAfterSuccess = true, outlivesOwner = true)
     }
 
     /** Retries every session's latest failed snapshot with its original reporter. */
@@ -191,6 +159,23 @@ class VideoPlayerViewModel(
                 retryInFlight = false
             }
             if (shouldRefresh) onWatchedStateCommitted()
+        }
+    }
+
+    /** Sends one snapshot as [session]'s next save, reporting a watched flip it commits. */
+    private fun launchSave(
+        session: ProgressSaveSession,
+        positionSec: Double,
+        durationSec: Double,
+        refreshAfterSuccess: Boolean,
+        outlivesOwner: Boolean,
+    ) {
+        val snapshot = dispatch(positionSec, durationSec)
+        val attempt = beginSave(session)
+        viewModelScope.launch {
+            if (saveSnapshot(attempt, snapshot, refreshAfterSuccess, outlivesOwner)) {
+                onWatchedStateCommitted()
+            }
         }
     }
 
@@ -233,8 +218,7 @@ class VideoPlayerViewModel(
                 }
                 is ApiResult.Failure -> {
                     session.failedSnapshot = snapshot
-                    session.failureMessage =
-                        "Couldn't save playback progress: ${result.error.toLibraryDisplayMessage()}"
+                    session.failureMessage = result.error.toFailureNotice("save playback progress")
                     session.failureResolutionOrder = ++nextFailureResolutionOrder
                     updateProgressSyncUiState()
                     false

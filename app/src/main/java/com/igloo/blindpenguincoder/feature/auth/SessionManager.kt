@@ -247,30 +247,21 @@ class SessionManager(
 
     /** The server rejected the credential of whoever is signed in right now. */
     suspend fun onActiveSessionRevoked() {
-        val expectedProfileId = when (val current = _state.value) {
-            is AppAuthState.Authenticated -> current.user.id
-            is AppAuthState.NeedsPin -> current.profile.userId
-            else -> return
-        }
-        handleSessionRevoked(expectedProfileId)
+        handleSessionRevoked(_state.value.signedInProfileId() ?: return)
     }
 
     private suspend fun handleSessionRevoked(expectedProfileId: Long) =
         transitionMutex.withLock {
             val current = _state.value
-            val currentProfileId = when (current) {
-                is AppAuthState.Authenticated -> current.user.id
-                is AppAuthState.NeedsPin -> current.profile.userId
-                else -> return@withLock
-            }
             // A slow 401 from an earlier profile must never remove whoever is active now.
-            if (currentProfileId != expectedProfileId) return@withLock
+            if (current.signedInProfileId() != expectedProfileId) return@withLock
             val activeProfileId = profiles.activeProfileId
             if (activeProfileId != null && activeProfileId != expectedProfileId) return@withLock
 
             val name = when (current) {
                 is AppAuthState.Authenticated -> current.user.name
                 is AppAuthState.NeedsPin -> current.profile.name
+                else -> return@withLock
             }
             if (activeProfileId == expectedProfileId) profiles.remove(expectedProfileId)
             gateLocked(notice = revokedNotice(name))
@@ -318,14 +309,9 @@ class SessionManager(
      * token. The next request would 401 and take the profile off this TV, which is the one thing
      * a switch must never do.
      */
-    suspend fun switchProfile() {
-        val operation = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            transitionMutex.withLock {
-                profiles.deactivate()
-                gateLocked()
-            }
-        }
-        operation.join()
+    suspend fun switchProfile() = runDetachedTransition {
+        profiles.deactivate()
+        gateLocked()
     }
 
     /**
@@ -343,16 +329,19 @@ class SessionManager(
     suspend fun logout() {
         val expectedProfileId =
             (_state.value as? AppAuthState.Authenticated)?.user?.id ?: return
+        runDetachedTransition { logoutLocked(expectedProfileId) }
+    }
 
-        // This child belongs to the application, not the Activity or ViewModel waiting below.
-        // UNDISPATCHED makes an uncontended local cleanup begin before another UI transition can
-        // race ahead; join remains cancellable without propagating that cancellation to the work.
-        val operation = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            transitionMutex.withLock {
-                logoutLocked(expectedProfileId)
-            }
-        }
-        operation.join()
+    /**
+     * Runs a transition as a child of the application rather than the Activity or ViewModel
+     * waiting on it. UNDISPATCHED makes an uncontended local cleanup begin before another UI
+     * transition can race ahead; the join remains cancellable without propagating that
+     * cancellation to the work.
+     */
+    private suspend fun runDetachedTransition(block: suspend () -> Unit) {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            transitionMutex.withLock { block() }
+        }.join()
     }
 
     private suspend fun logoutLocked(expectedProfileId: Long) {
@@ -435,6 +424,13 @@ class SessionManager(
     }
 
     private fun revokedNotice(name: String) = "$name's session expired. Sign in again."
+
+    /** Whose session is live: the signed-in profile, or the one waiting on its PIN. */
+    private fun AppAuthState.signedInProfileId(): Long? = when (this) {
+        is AppAuthState.Authenticated -> user.id
+        is AppAuthState.NeedsPin -> profile.userId
+        else -> null
+    }
 
     internal companion object {
         private const val REVALIDATE_INTERVAL_MILLIS = 5 * 60 * 1000L

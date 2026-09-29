@@ -30,3 +30,7 @@ fun AppError.toLibraryDisplayMessage(): String = when (this) {
     AppError.Unauthorized -> "Your session has expired. Sign in again to see your library."
     else -> toDisplayMessage()
 }
+
+/** How an action that failed on a library screen reads: `"Couldn't <action>: <why>"`. */
+fun AppError.toFailureNotice(action: String): String =
+    "Couldn't $action: ${toLibraryDisplayMessage()}"

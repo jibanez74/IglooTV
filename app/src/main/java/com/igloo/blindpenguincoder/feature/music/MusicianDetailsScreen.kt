@@ -31,6 +31,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.SectionHeading
 import com.igloo.blindpenguincoder.feature.shared.TrackRow
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
@@ -51,7 +52,7 @@ import com.igloo.blindpenguincoder.feature.shared.rememberPlainColumnTrackRowFoc
  */
 @Composable
 fun MusicianDetailsScreen(
-    state: MusicianDetailsState,
+    state: DetailsState<MusicianDetailsUi>,
     onRetry: () -> Unit,
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
@@ -64,11 +65,11 @@ fun MusicianDetailsScreen(
     modifier: Modifier = Modifier,
     spokenAccessibilityEnabled: Boolean = rememberSpokenAccessibilityEnabled(),
 ) {
-    val loaded = (state as? MusicianDetailsState.Loaded)?.musician
+    val loaded = (state as? DetailsState.Loaded)?.value
     MusicDetailsScaffold(
         stateKey = state::class,
         loaded = loaded,
-        errorMessage = (state as? MusicianDetailsState.Error)?.message,
+        errorMessage = (state as? DetailsState.Error)?.message,
         paneTitle = loaded?.name ?: "Artist details",
         tag = "musician_details",
         trackRows = loaded?.tracks.orEmpty(),

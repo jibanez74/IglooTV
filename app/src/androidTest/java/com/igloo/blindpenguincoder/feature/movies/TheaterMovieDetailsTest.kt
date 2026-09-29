@@ -24,6 +24,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testTheaterMovieDetails
@@ -78,13 +79,13 @@ class TheaterMovieDetailsTest {
                     onTheaterMovieSelected = {
                         detailsState = MovieDetailsUiState(
                             openMovieId = it,
-                            details = MovieDetailsState.Loaded(movie),
+                            details = DetailsState.Loaded(movie),
                         )
                     },
                     onCloseDetails = {
                         detailsState = detailsState.copy(
                             openMovieId = null,
-                            details = MovieDetailsState.Loading,
+                            details = DetailsState.Loading,
                         )
                     },
                     trailerEngineFactory = { _, _ ->

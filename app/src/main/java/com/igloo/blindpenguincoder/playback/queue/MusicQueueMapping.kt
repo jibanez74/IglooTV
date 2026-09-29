@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.playback.queue
 
 import com.igloo.blindpenguincoder.data.model.TrackListItem
+import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.millisToSeconds
 import kotlin.random.Random
@@ -22,3 +23,7 @@ fun TrackListItem.toMusicPlayTrack(): MusicPlayTrack = MusicPlayTrack(
  */
 fun List<MusicPlayTrack>.shuffledQueue(random: Random = Random.Default): List<MusicPlayTrack> =
     distinctBy { it.id }.shuffled(random)
+
+/** A finite queue's Shuffle press: the same request in a fresh random order. */
+fun MusicPlayRequest.shuffled(random: Random = Random.Default): MusicPlayRequest =
+    copy(tracks = tracks.shuffledQueue(random))
