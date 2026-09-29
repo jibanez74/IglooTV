@@ -13,6 +13,8 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.igloo.blindpenguincoder.playback.media3.ENGINE_EVENT_REPLAY
+import com.igloo.blindpenguincoder.playback.media3.PlaybackTicker
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
@@ -41,9 +43,7 @@ private class YouTubeIFrameEngine(
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // Replay covers the attach race: the page starts loading in the constructor, and an event
-    // that beats the screen's collector must not strand the player in Loading forever.
-    private val _events = MutableSharedFlow<TrailerPlayerEvent>(replay = 64)
+    private val _events = MutableSharedFlow<TrailerPlayerEvent>(replay = ENGINE_EVENT_REPLAY)
     override val events: SharedFlow<TrailerPlayerEvent> = _events
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -180,7 +180,7 @@ private class YouTubeIFrameEngine(
                   if (player && player.getCurrentTime) {
                     $JS_INTERFACE.onTime(player.getCurrentTime(), player.getDuration());
                   }
-                }, 500);
+                }, ${PlaybackTicker.TICK_INTERVAL_MS});
               }
               function stopTicks() {
                 if (timeTimer) { clearInterval(timeTimer); timeTimer = null; }

@@ -87,7 +87,7 @@ internal class ExoVideoPlayerEngine(
     private val services: VideoPlaybackServices,
 ) : VideoPlayerEngine {
 
-    private val _events = MutableSharedFlow<VideoPlayerEvent>(replay = 64)
+    private val _events = MutableSharedFlow<VideoPlayerEvent>(replay = ENGINE_EVENT_REPLAY)
     override val events: SharedFlow<VideoPlayerEvent> = _events.asSharedFlow()
 
     private val handler = Handler(Looper.getMainLooper())
@@ -211,10 +211,7 @@ internal class ExoVideoPlayerEngine(
                 if (player.playbackState == Player.STATE_READY) {
                     settledAbsoluteSec = currentAbsoluteSec()
                 }
-                if (
-                    player.playbackState == Player.STATE_READY ||
-                    player.playbackState == Player.STATE_BUFFERING
-                ) {
+                if (player.isReadyOrBuffering) {
                     emit(VideoPlayerEvent.Time(currentAbsoluteSec(), durationSec()))
                 }
             }
@@ -419,11 +416,9 @@ internal class ExoVideoPlayerEngine(
 
     override fun release() {
         if (!playbackIntent.release()) return
-        restartGeneration++
+        invalidateRestart()
         pendingMode = null
         ticker.stop()
-        restartJob?.cancel()
-        restartJob = null
         controller.releaseAndStop()
         scope.cancel()
         // Media3 requires the session gone before its player.
@@ -446,12 +441,8 @@ internal class ExoVideoPlayerEngine(
         // Recovery, keepalive, and seeks re-enter here with the stored intent; resolving again
         // means no entry point can regress into Direct with a track that needs conversion.
         val mode = resolveModeForAudio(requestedModeArg, audioTypeIndex)
-        restartJob?.cancel()
-        restartJob = null
-        pendingRestart = null
         // Every caller passes where the viewer is headed, so a held rebase is answered here.
-        dropHeldRebase()
-        val generation = ++restartGeneration
+        val generation = invalidateRestart()
         pendingMode = mode
         currentAudioTypeIndex = audioTypeIndex
         // currentSubtitleTypeIndex is deliberately not reassigned: it is the cross-mode memory
@@ -554,12 +545,8 @@ internal class ExoVideoPlayerEngine(
 
     /** Selecting the active row is an explicit cancellation of a different pending switch. */
     private fun cancelPendingModeSwitch() {
-        restartJob?.cancel()
-        restartJob = null
         // Seeks made during the switch went with it; playback stays where the old source is.
-        pendingRestart = null
-        dropHeldRebase()
-        restartGeneration++
+        invalidateRestart()
         val canceledWhileDirect = effectiveMode == PlaybackMode.Direct
         pendingMode = null
         if (canceledWhileDirect) {
@@ -579,6 +566,18 @@ internal class ExoVideoPlayerEngine(
     private fun rollbackPendingMode() {
         pendingMode = null
         emitQualityOptions()
+    }
+
+    /**
+     * Abandons any in-flight restart along with the seek targets it carried, and returns the new
+     * generation every restart coroutine checks before it touches the player.
+     */
+    private fun invalidateRestart(): Long {
+        restartJob?.cancel()
+        restartJob = null
+        pendingRestart = null
+        dropHeldRebase()
+        return ++restartGeneration
     }
 
     private fun isRestartCurrent(generation: Long): Boolean =
@@ -753,12 +752,8 @@ internal class ExoVideoPlayerEngine(
     private fun overrideFor(
         optionId: String,
         tracks: Tracks = player.currentTracks,
-    ): TrackSelectionOverride? {
-        val (groupIndex, trackIndex) = parseTrackOptionId(optionId) ?: return null
-        val group = tracks.groups.getOrNull(groupIndex) ?: return null
-        if (trackIndex >= group.length) return null
-        return TrackSelectionOverride(group.mediaTrackGroup, trackIndex)
-    }
+    ): TrackSelectionOverride? = resolveTrackOption(tracks, optionId)
+        ?.let { (group, trackIndex) -> TrackSelectionOverride(group.mediaTrackGroup, trackIndex) }
 
     private fun currentAbsoluteSec(): Double =
         player.currentPosition / 1000.0 + timelineOffsetSec
@@ -777,7 +772,7 @@ internal class ExoVideoPlayerEngine(
      * without one.
      */
     private fun durationSec(): Double {
-        val playerDuration = player.duration.takeIf { it != C.TIME_UNSET }?.div(1000.0)
+        val playerDuration = player.durationSecOrNull()
         return when {
             isHls -> request.durationSec ?: playerDuration?.plus(timelineOffsetSec) ?: 0.0
             else -> playerDuration ?: 0.0
@@ -785,15 +780,7 @@ internal class ExoVideoPlayerEngine(
     }
 
     private fun errorEvent(error: PlaybackException): VideoPlayerEvent.Error {
-        val http = httpErrorCause(error)
-        val failure = playerFailure(
-            errorCode = error.errorCode,
-            errorCodeName = error.errorCodeName,
-            httpResponseCode = http?.responseCode,
-            isHls = isHls,
-            httpRequestPath = http?.dataSpec?.uri?.path,
-            mediaNoun = request.media.noun,
-        )
+        val failure = error.toPlaybackFailure(isHls = isHls, mediaNoun = request.media.noun)
         return VideoPlayerEvent.Error(failure.message, failure.unauthorized)
     }
 
@@ -813,13 +800,9 @@ internal class ExoVideoPlayerEngine(
      */
     private fun transitionToTerminal(error: VideoPlayerEvent.Error) {
         if (!playbackIntent.failTerminal()) return
-        restartGeneration++
+        invalidateRestart()
         pendingMode = null
-        pendingRestart = null
         ticker.stop()
-        restartJob?.cancel()
-        restartJob = null
-        dropHeldRebase()
         controller.releaseAndStop()
         player.stop()
         player.clearMediaItems()

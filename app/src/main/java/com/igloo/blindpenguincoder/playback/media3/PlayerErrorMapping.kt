@@ -27,6 +27,22 @@ internal fun httpErrorCause(error: Throwable): HttpDataSource.InvalidResponseCod
  */
 internal data class PlaybackFailure(val message: String, val unauthorized: Boolean = false)
 
+/** [playerFailure] over a live exception, the HTTP facts taken from its cause chain. */
+internal fun PlaybackException.toPlaybackFailure(
+    isHls: Boolean,
+    mediaNoun: String,
+): PlaybackFailure {
+    val http = httpErrorCause(this)
+    return playerFailure(
+        errorCode = errorCode,
+        errorCodeName = errorCodeName,
+        httpResponseCode = http?.responseCode,
+        isHls = isHls,
+        httpRequestPath = http?.dataSpec?.uri?.path,
+        mediaNoun = mediaNoun,
+    )
+}
+
 /**
  * A player failure as the error surface's plain sentences, with the codec/container/network
  * detail AGENTS.md asks for. Pure over the exception's already-extracted facts so the whole

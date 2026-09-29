@@ -94,7 +94,7 @@ data class VideoPlayerState(
         else -> copy(
             phase = VideoPlayerPhase.Ended,
             playWhenReady = false,
-            currentTimeSec = durationSec.takeIf { it > 0.0 } ?: currentTimeSec,
+            currentTimeSec = endedPositionSec(currentTimeSec, durationSec),
         )
     }
 
