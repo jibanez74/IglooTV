@@ -268,7 +268,6 @@ private fun testAudioStream(
     id = id,
     streamIndex = id,
     codec = "dts",
-    bitRate = 0,
     channels = channels,
     channelLayout = SqlNullString(channelLayout, valid = true),
     language = SqlNullString(language, valid = true),
