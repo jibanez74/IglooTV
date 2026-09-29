@@ -187,7 +187,7 @@ fun MusicScreen(
                 countTag = "music_count",
                 notice = headerNotice,
                 contentInset = contentInset,
-                noticeModifier = Modifier.testTag("music_notice"),
+                noticeTag = "music_notice",
             ) {
                 PaneRefreshButton(
                     refreshing = state.refreshing,

@@ -9,15 +9,15 @@ import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 
 /**
  * A failed progress save's card: why, and a Retry that re-sends the snapshot. Polite, because the
- * surface around it keeps working and nothing waits on it. [retryModifier] wires the button's
- * focus and tag; [modifier] places the card.
+ * surface around it keeps working and nothing waits on it. [modifier] places the card;
+ * [retryModifier] wires the button's focus and tag.
  */
 @Composable
 internal fun ProgressSyncRetry(
     message: String,
     onRetry: () -> Unit,
-    retryModifier: Modifier,
     modifier: Modifier = Modifier,
+    retryModifier: Modifier = Modifier,
 ) {
     IglooInlineError(
         message = message,

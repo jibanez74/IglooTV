@@ -196,9 +196,9 @@ Worth doing if a fourth appears.
 
 ### 7.6 Lint's `ModifierParameter` on the skeleton anchors
 
-`PaneGridSkeleton` and `TracksListSkeleton` take `anchorModifier: Modifier`; lint wants the
-parameter named `modifier`. It is not the composable's own modifier — it is
-the anchor cell's — so the name is right and the warning is noise. Suppress or rename both
+`PaneGridSkeleton`, `TracksListSkeleton`, `PaneFirstPageError` and `PaneEmpty` take
+`anchorModifier: Modifier`; lint wants the parameter named `modifier`. It is not the composable's own modifier — it is
+the anchor's — so the name is right and the warning is noise. Suppress or rename them
 together.
 
 ---

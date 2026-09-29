@@ -85,7 +85,7 @@ internal fun PaneHeader(
     countTag: String,
     notice: String?,
     contentInset: PaddingValues,
-    noticeModifier: Modifier = Modifier,
+    noticeTag: String? = null,
     actions: @Composable RowScope.() -> Unit,
 ) {
     val colors = IglooTheme.colors
@@ -119,7 +119,10 @@ internal fun PaneHeader(
                     },
             )
             if (notice != null) {
-                IglooNotice(text = notice, modifier = noticeModifier)
+                IglooNotice(
+                    text = notice,
+                    modifier = if (noticeTag != null) Modifier.testTag(noticeTag) else Modifier,
+                )
             }
         }
         actions()
