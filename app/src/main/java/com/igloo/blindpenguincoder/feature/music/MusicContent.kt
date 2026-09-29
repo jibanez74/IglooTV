@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.music
 
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.PaneContent
 
 /**

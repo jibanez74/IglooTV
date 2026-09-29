@@ -65,7 +65,7 @@ class ShowLibraryViewModelTest {
 
         assertEquals(LibraryKind.Shows, state.kind)
         assertEquals(listOf(1L, 2L, 3L), state.gridIds())
-        assertEquals(3L, state.total)
+        assertEquals(3L, state.paged.total)
         assertEquals(
             listOf("/api/shows/stats", "/api/shows/genres", "/api/shows/library"),
             http.paths,
@@ -93,7 +93,7 @@ class ShowLibraryViewModelTest {
             },
         )
 
-        val items = (loaded(http).uiState.value.grid as IglooRailState.Loaded).items
+        val items = (loaded(http).uiState.value.paged.content as IglooRailState.Loaded).items
 
         assertEquals(
             listOf(
@@ -171,7 +171,7 @@ class ShowLibraryViewModelTest {
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L, total = 3)) },
         )
 
-        assertEquals(3L, loaded(http).uiState.value.total)
+        assertEquals(3L, loaded(http).uiState.value.paged.total)
     }
 
     /** The like reconcile is wired for the movie library; here there is no Liked grid. */

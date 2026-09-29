@@ -40,7 +40,6 @@ import com.igloo.blindpenguincoder.feature.music.MusicTab
 import com.igloo.blindpenguincoder.feature.music.MusicUiState
 import com.igloo.blindpenguincoder.feature.music.MusicianCardUi
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsUi
-import com.igloo.blindpenguincoder.feature.music.PagedState
 import com.igloo.blindpenguincoder.feature.music.TracksEntry
 import com.igloo.blindpenguincoder.feature.music.tracksEntries
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUi
@@ -48,6 +47,7 @@ import com.igloo.blindpenguincoder.feature.music.AlbumDiscUi
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.FactUi
+import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
@@ -132,18 +132,20 @@ internal fun testLibraryState(
     } else {
         LibraryTab.entries
     },
-    total = total,
     tab = tab,
     genre = genre,
     genresLoaded = genresLoaded,
     sort = sort,
     genres = genres,
-    grid = grid,
-    append = append,
+    paged = PagedState(
+        content = grid,
+        append = append,
+        total = total,
+        appendGeneration = appendGeneration,
+        contentGeneration = contentGeneration,
+    ),
     refreshing = refreshing,
     notice = notice,
-    appendGeneration = appendGeneration,
-    contentGeneration = contentGeneration,
     silentReconcileGeneration = silentReconcileGeneration,
 )
 

@@ -15,7 +15,9 @@ import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.DUPLICATE_PAGE_BACKOFF_MS
 import com.igloo.blindpenguincoder.feature.shared.FIRST_PAGE
+import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
+import com.igloo.blindpenguincoder.feature.shared.loadedItems
 import com.igloo.blindpenguincoder.feature.shared.pageAppendState
 import com.igloo.blindpenguincoder.feature.shared.resetIfLoading
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
@@ -33,22 +35,6 @@ import kotlinx.coroutines.launch
 
 /** The pane's three sections (docs/design-system.md section 11.5); Playlists waits for its own pass. */
 enum class MusicTab { Musicians, Albums, Tracks }
-
-/**
- * One tab's pages. Each tab keeps its own, so switching back is instant and a switch can never
- * fail: a tab with nothing yet shows its skeleton, one whose page one failed shows an error
- * card with Retry, and only a Refresh replaces what is shown.
- */
-data class PagedState<T>(
-    val content: IglooRailState<T> = IglooRailState.Loading,
-    val append: AppendState = AppendState.Idle,
-    /** The server's count for this list; null until its first page lands. */
-    val total: Long? = null,
-    /** Bumped after every successful append, even when every returned id was already loaded. */
-    val appendGeneration: Int = 0,
-    /** Bumped whenever the list is replaced wholesale (Refresh, Retry), never on an append. */
-    val contentGeneration: Int = 0,
-)
 
 /** Everything the Music pane draws. */
 data class MusicUiState(
@@ -81,9 +67,6 @@ data class MusicUiState(
             MusicTab.Tracks -> tracks.loadedItems()?.count { it is TracksEntry.Track }
         }
 }
-
-/** The tab's rows, or null while it still shows a skeleton or an error card. */
-internal fun <T> PagedState<T>.loadedItems(): List<T>? = (content as? IglooRailState.Loaded)?.items
 
 /**
  * The Music pane's paging machine: one [Pager] per tab — cursor, loaded rows, job and

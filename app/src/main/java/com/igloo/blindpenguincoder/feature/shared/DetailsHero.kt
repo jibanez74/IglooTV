@@ -167,7 +167,7 @@ internal fun BoxScope.heroHeaderModifier(): Modifier {
         )
 }
 
-/** The hero's artwork; decorative — it repeats nothing the text says, so TalkBack skips it. */
+/** The hero's artwork; decorative — it says nothing the text does not, so TalkBack skips it. */
 @Composable
 internal fun HeroArtwork(
     imageUrl: String?,
