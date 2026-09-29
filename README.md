@@ -1,6 +1,6 @@
 # Igloo TV
 
-The official **Android TV client** for [Igloo](../Igloo), a self-hosted media center. Written in
+The official **Android TV client** for [Igloo](https://github.com/jibanez74/Igloo), a self-hosted media center. Written in
 Kotlin with Jetpack Compose for TV, it talks to the Igloo Go backend over HTTP and plays your
 library on a television with a remote control.
 
@@ -41,12 +41,12 @@ All paths below are relative to `app/src/main/java/com/igloo/blindpenguincoder/`
 | Profiles | Multi-profile household picker, per-profile encrypted token vault, per-profile sign-out | `feature/auth/ProfilePickerScreen.kt`, `core/storage/ProfileVault.kt`, `feature/home/SignOutViewModel.kt` |
 | PIN | PIN entry gate for a profile that has one (verify only; setting a PIN is backend/web for now) | `feature/auth/PinEntryScreen.kt` |
 | Navigation shell | Nav spine with seven destinations, brand block, profile footer, overlay host, Back handling | `feature/home/IglooApp.kt`, `NavigationRail.kt` |
-| Home | Cinematic hero plus rails: continue watching, latest movies, latest albums, in theaters | `feature/home/HomeViewModel.kt`, `HomeHero.kt` |
+| Home | Cinematic hero plus rails: continue watching (movies and episodes), latest movies, latest albums, in theaters | `feature/home/HomeViewModel.kt`, `HomeHero.kt` |
 | Movies and TV Shows | One shared library pane per kind: a poster grid with an `All · Genres (· Liked)` tab strip, focus-driven tab switching with a 300 ms debounce, infinite paging, sort toggle, genre picker with memory. Movies has the Liked tab and opens details; TV Shows has two tabs and inert cards until a show details screen exists | `feature/library/LibraryScreen.kt`, `LibraryViewModel.kt`, `LibraryKind.kt`, `feature/movies/MovieLibrarySource.kt`, `feature/shows/ShowLibrarySource.kt` |
 | Movie details | Backdrop hero, metadata, watched/like toggles, playback-mode + audio + subtitle pickers, trailer launch | `feature/movies/MovieDetailsScreen.kt`, `PlaybackSettingsDialog.kt` |
 | In theaters | A separate TMDB-backed details page sharing the one overlay slot | `feature/movies/TheaterMovieDetailsViewModel.kt` |
 | Album details + music player | Album page with track list and facts panel; Play Album opens a full-screen player with one ExoPlayer playlist, auto-advance and a MediaSession | `feature/music/AlbumDetailsScreen.kt`, `feature/player/MusicPlayerScreen.kt` |
-| Movie playback | Media3 over a `SurfaceView`, Direct play and backend-produced HLS, audio/subtitle track selection, chapters, resume prompt, progress reporting | `feature/player/MoviePlayerScreen.kt`, `playback/` |
+| Video playback | Media3 over a `SurfaceView` for movies and episodes resumed from Home; Direct play and backend-produced HLS, audio/subtitle track selection, chapters, resume prompt, progress reporting | `feature/player/VideoPlayerScreen.kt`, `playback/` |
 | Trailers | An isolated YouTube IFrame WebView that never receives Igloo credentials or cookies | `playback/youtube/YouTubeIFrameEngine.kt`, `feature/player/TrailerPlayerScreen.kt` |
 
 ---
@@ -142,7 +142,7 @@ encrypted key and user-scoped caches; the server URL survives by design.
 | `core/navigation/`, `core/error/` | Destination enum; app-level error types |
 | `data/api/`, `data/model/`, `data/repository/` | Endpoint construction, wire models with a shared `Envelope`, repositories with caching |
 | `feature/auth/`, `feature/boot/` | Auth gate state machine (`SessionManager`, `AppAuthState`) and the boot/auth screens |
-| `feature/home/`, `feature/movies/`, `feature/music/` | The shell and the two real panes, plus details overlays |
+| `feature/home/`, `feature/library/`, `feature/movies/`, `feature/shows/`, `feature/music/` | The shell, library panes, and details overlays |
 | `feature/player/`, `feature/shared/` | Player screens and chrome; cross-feature UI |
 | `playback/` | `playback/media3/` engines and sessions, `playback/hls/` session lifecycle, `playback/model/` pure state machines, `playback/progress/` reporting, `playback/youtube/` trailer engine |
 
@@ -174,8 +174,8 @@ linger on a shared TV.
 
 ### Playback
 
-Media3 1.11 behind `MoviePlayerEngine` / `MusicPlayerEngine` interfaces, with
-`ExoMoviePlayerEngine` / `ExoMusicPlayerEngine` implementations and `MediaSession` wrappers that
+Media3 1.11 behind `VideoPlayerEngine` / `MusicPlayerEngine` interfaces, with
+`ExoVideoPlayerEngine` / `ExoMusicPlayerEngine` implementations and `MediaSession` wrappers that
 publish real metadata to the system now-playing surface. `BearerStreamDataSource.kt` injects the
 token into media requests (with a separate HLS variant using a 120s segment read timeout).
 `playback/hls/` owns HLS session start/stop/switch; `PlaybackMode` covers Direct plus the remux
@@ -306,10 +306,10 @@ Instrumented tests use the **v2 Compose test API**:
 ### Commands
 
 ```bash
-# Tier 1 — no device needed (890 @Test across 69 files)
+# Tier 1 — no device needed
 ./gradlew :app:testDebugUnitTest
 
-# Tier 2 — needs a booted TV emulator or device (522 @Test across 51 suites)
+# Tier 2 — needs a booted TV emulator or device
 ./gradlew :app:connectedDebugAndroidTest
 
 # Static + assembly
@@ -354,7 +354,7 @@ Android Lint is stock AGP. There is no ktlint, detekt, spotless, `lint.xml` or l
 | Library pane | `feature/library/LibraryViewModelTest.kt` (the largest suite, over the movie routes), `LibraryKindTest.kt`, `feature/shows/ShowLibraryViewModelTest.kt` | Tab strip, the 300 ms switch debounce, pagination and append states, sort, genre memory, liked view; the per-kind wording and tags; the show routes and the two-tab strip |
 | Details | `feature/movies/MovieDetailsViewModelTest.kt`, `PlaybackSettingsMappingTest.kt` | Details state, playback-mode/audio/subtitle option mapping |
 | Home | `feature/home/HomeViewModelTest.kt`, `PlayerRequestSaversTest.kt` | Rails failing independently, hero state, `Saver` round-trips |
-| Players | `playback/model/{Movie,Music}PlayerStateMachineTest.kt`, `feature/player/MoviePlayerViewModelTest.kt`, `ChaptersTest.kt` | Pure player state machines, chapter math, chrome state |
+| Players | `playback/model/{Video,Music}PlayerStateMachineTest.kt`, `feature/player/VideoPlayerViewModelTest.kt`, `ChaptersTest.kt` | Pure player state machines, chapter math, chrome state |
 | HLS | `playback/hls/HlsSession*Test.kt` | Session lifecycle, policy, timeouts, mode switching |
 | Progress | `playback/progress/ProgressReporterTest.kt` | The 15s / first-save-near-30s cadence, the pause/background/exit eligibility rule |
 | Network core | `core/network/{SafeApiCall,DeviceTokenAuth,BearerTokenProvider}Test.kt` | Envelope handling, bearer injection, the 401 event bus |
@@ -394,7 +394,7 @@ Four kinds of suite:
    `feature/music/AlbumDetails*Test`, `feature/player/*ScreenTest` and the overlay-focus tests.
 3. **Accessibility suites** — `MovieDetailsAccessibilityTest`, `MoviesGridAccessibilityTest`,
    `AlbumDetailsAccessibilityTest`, `PairingCodeAccessibilityTest`, `PinEntryAccessibilityTest`.
-4. **Real-Android suites** — `playback/media3/{ExoMoviePlayerEngine,ExoMusicPlayerEngine,MovieMediaSession,MusicMediaSession,HlsLoadErrorPolicy,TrackOptions}Test`,
+4. **Real-Android suites** — `playback/media3/{ExoVideoPlayerEngine,ExoMusicPlayerEngine,VideoMediaSession,MusicMediaSession,HlsLoadErrorPolicy,TrackOptions}Test`,
    `playback/youtube/YouTubeIFrameEngineTest`, `core/storage/AndroidKeystoreCipherTest`. These need
    a device because they drive a real ExoPlayer, a real MediaSession, a real WebView and the real
    Android Keystore.
@@ -638,8 +638,8 @@ picking one.
 
 ## Contributing
 
-**Branching as practiced.** `master` is the mainline; feature work happens on a local `dev` or a
-`feature/*` branch. There is no remote yet.
+**Branching.** `main` is the GitHub default branch. Feature work can happen on `dev` or a
+`feature/*` branch before merging to `main`.
 
 **Before you change anything:** read the relevant code and its tests. Follow the established
 patterns unless the task is to change them. `docs/openapi.json` before API work,
@@ -705,7 +705,7 @@ devices. Use a browser-style login.
 
 ## License
 
-Copyright (C) 2026 Jose Ibañez
+Copyright (C) 2026 Jose Ibañez. SPDX license identifier: `GPL-3.0-or-later`.
 
 Igloo TV is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
