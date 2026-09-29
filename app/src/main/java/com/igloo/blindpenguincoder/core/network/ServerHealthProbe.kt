@@ -3,14 +3,12 @@ package com.igloo.blindpenguincoder.core.network
 import com.igloo.blindpenguincoder.core.config.ServerAddress
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.data.model.MessageResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
 import io.ktor.utils.io.discard
 import java.net.URI
 import kotlinx.coroutines.CancellationException
@@ -82,12 +80,12 @@ class ServerHealthProbe(
                 continue
             }
 
-            if (response.status.value in 200..299) {
+            if (response.status.isSuccess()) {
                 response.bodyAsChannel().discard()
                 return ApiResult.Success(finalAddress)
             }
 
-            val message = response.safeBackendMessage()
+            val message = response.backendMessage()
                 ?: "Server returned HTTP ${response.status.value} ${response.status.description}."
             return ApiResult.Failure(AppError.Api(message, response.status.value))
         }
@@ -121,20 +119,8 @@ private fun normalizedRedirectKey(uri: URI): String = buildString {
 
 private fun HttpStatusCode.isRedirect(): Boolean = value in REDIRECT_STATUS_CODES
 
-private suspend fun HttpResponse.safeBackendMessage(): String? = try {
-    val body = bodyAsText()
-    val message = IglooJson.decodeFromString<MessageResponse>(body).message ?: return null
-    message.replace(Regex("\\s+"), " ").trim().take(MAX_BACKEND_MESSAGE_LENGTH)
-        .takeIf { it.isNotEmpty() }
-} catch (error: CancellationException) {
-    throw error
-} catch (_: Exception) {
-    null
-}
-
 private fun unsafeRedirect(message: String): ApiResult.Failure =
     ApiResult.Failure(AppError.UnsafeRedirect(message))
 
 private val REDIRECT_STATUS_CODES = setOf(301, 302, 303, 307, 308)
 private const val MAX_REDIRECTS = 5
-private const val MAX_BACKEND_MESSAGE_LENGTH = 240

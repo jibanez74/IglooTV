@@ -14,9 +14,7 @@ import javax.net.ssl.SSLException
  * and [ConnectTimeoutException] are themselves [IOException]s.
  */
 internal fun Throwable.toTransportError(): AppError {
-    val causes = generateSequence<Throwable>(this) { it.cause }
-        .take(MAX_CAUSE_DEPTH)
-        .toList()
+    val causes = causeChain().toList()
     return when {
         causes.any { it.isTimeout() } -> AppError.Timeout
         causes.any { it is SSLException || it is CertificateException } -> AppError.TlsVerification
@@ -24,6 +22,10 @@ internal fun Throwable.toTransportError(): AppError {
         else -> AppError.Unexpected(message)
     }
 }
+
+/** This throwable and its causes, outermost first, bounded so a self-referencing chain ends. */
+internal fun Throwable.causeChain(): Sequence<Throwable> =
+    generateSequence(this) { it.cause }.take(MAX_CAUSE_DEPTH)
 
 private fun Throwable.isTimeout(): Boolean =
     this is HttpRequestTimeoutException ||

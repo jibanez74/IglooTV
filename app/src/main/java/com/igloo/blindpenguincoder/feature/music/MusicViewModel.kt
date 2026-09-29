@@ -6,7 +6,7 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.orKeepContent
-import com.igloo.blindpenguincoder.data.api.MusicApi
+import com.igloo.blindpenguincoder.data.api.MAX_LIBRARY_PER_PAGE
 import com.igloo.blindpenguincoder.data.model.MusicStats
 import com.igloo.blindpenguincoder.data.model.TrackListItem
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
@@ -429,7 +429,7 @@ class MusicViewModel(
     }
 
     private companion object {
-        const val PAGE_SIZE = MusicApi.MAX_PER_PAGE
+        const val PAGE_SIZE = MAX_LIBRARY_PER_PAGE
         const val TRACKS_PAGE_SIZE = 50L
     }
 }

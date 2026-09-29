@@ -8,6 +8,7 @@ import coil3.network.httpHeaders
 import coil3.request.ImageResult
 import com.igloo.blindpenguincoder.core.network.DeviceCredentialSource
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.isIglooServerUrl
 
 /**
  * Attaches the active profile's bearer token to image requests, because the backend's image
@@ -24,7 +25,7 @@ private class BearerImageInterceptor(
 ) : Interceptor {
     override suspend fun intercept(chain: Interceptor.Chain): ImageResult {
         val url = chain.request.data as? String
-        if (!isIglooImageUrl(url, serverUrl.current.value?.origin)) return chain.proceed()
+        if (!isIglooServerUrl(url, serverUrl.current.value?.origin)) return chain.proceed()
         val token = credentials.current()?.token ?: return chain.proceed()
         val request = chain.request.newBuilder()
             .httpHeaders(NetworkHeaders.Builder().set("Authorization", "Bearer $token").build())
@@ -32,14 +33,6 @@ private class BearerImageInterceptor(
         return chain.withRequest(request).proceed()
     }
 }
-
-/**
- * The token goes only to the active Igloo server. Avatars are arbitrary absolute URLs
- * ([com.igloo.blindpenguincoder.core.ui.IglooAvatar]), and a credential sent to a foreign
- * host is a credential leaked.
- */
-internal fun isIglooImageUrl(url: String?, origin: String?): Boolean =
-    url != null && origin != null && url.startsWith("$origin/")
 
 fun createIglooImageLoader(
     context: Context,

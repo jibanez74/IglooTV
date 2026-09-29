@@ -18,16 +18,16 @@ class MusicApi(
     suspend fun latestAlbums(): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/music/albums/latest")
 
-    /** One page of every album, alphabetical; `per_page` is clamped to [MAX_PER_PAGE] server-side. */
+    /** One page of every album, alphabetical; `per_page` is clamped to [MAX_LIBRARY_PER_PAGE]. */
     suspend fun albums(page: Long, perPage: Long): HttpResponse =
-        pagedList("${serverUrl.require().apiBaseUrl}/music/albums", page, perPage)
+        client.pagedList("${serverUrl.require().apiBaseUrl}/music/albums", page, perPage)
 
     suspend fun albumDetails(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/music/albums/details/$id")
 
     /** One page of every musician, alphabetical by the server's sort name. */
     suspend fun musicians(page: Long, perPage: Long): HttpResponse =
-        pagedList("${serverUrl.require().apiBaseUrl}/music/musicians", page, perPage)
+        client.pagedList("${serverUrl.require().apiBaseUrl}/music/musicians", page, perPage)
 
     suspend fun musicianDetails(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/music/musicians/$id")
@@ -71,17 +71,7 @@ class MusicApi(
     fun trackStreamUrl(id: Long): String =
         "${serverUrl.require().apiBaseUrl}/music/tracks/$id/stream"
 
-    /** The album and musician lists speak the same query dialect; spell it once. */
-    private suspend fun pagedList(url: String, page: Long, perPage: Long): HttpResponse =
-        client.get(url) {
-            parameter("page", page)
-            parameter("per_page", perPage)
-        }
-
     companion object {
-        /** The album and musician lists clamp a larger `per_page` to this. */
-        const val MAX_PER_PAGE = 48L
-
         /** Shuffle clamps `limit` to 200 and ignores `exclude` ids past this count. */
         const val SHUFFLE_MAX_EXCLUDE = 200
     }

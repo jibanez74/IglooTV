@@ -1,8 +1,8 @@
 package com.igloo.blindpenguincoder.playback.queue
 
 import com.igloo.blindpenguincoder.data.model.TrackListItem
-import com.igloo.blindpenguincoder.feature.music.millisToSeconds
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
+import com.igloo.blindpenguincoder.playback.model.millisToSeconds
 import kotlin.random.Random
 
 /** A library row as a queue entry: milliseconds to seconds, `Valid`-gated columns to nulls. */

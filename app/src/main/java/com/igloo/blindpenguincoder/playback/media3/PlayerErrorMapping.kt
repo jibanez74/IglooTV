@@ -6,6 +6,7 @@ package com.igloo.blindpenguincoder.playback.media3
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
+import com.igloo.blindpenguincoder.core.network.causeChain
 import com.igloo.blindpenguincoder.playback.hls.isVideoHlsRequestPath
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_BUSY_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_MESSAGE
@@ -15,7 +16,7 @@ import com.igloo.blindpenguincoder.playback.model.playbackServerRefusedMessage
 
 /** The first HTTP status failure in [error]'s cause chain; null for non-HTTP failures. */
 internal fun httpErrorCause(error: Throwable): HttpDataSource.InvalidResponseCodeException? =
-    generateSequence(error) { it.cause }
+    error.causeChain()
         .filterIsInstance<HttpDataSource.InvalidResponseCodeException>()
         .firstOrNull()
 

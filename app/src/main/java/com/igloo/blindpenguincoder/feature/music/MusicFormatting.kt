@@ -22,9 +22,6 @@ internal fun formatAlbumDuration(ms: Long): String {
 internal fun formatTrackDuration(ms: Long): String =
     if (ms > 0) formatTimecode(ms / 1000.0) else ""
 
-/** A wire duration as the play queue's seconds; 0.0 where the wire has no usable value. */
-internal fun millisToSeconds(ms: Long): Double = if (ms > 0) ms / 1000.0 else 0.0
-
 /** `"3 albums"`, `"1 track"`: a count and its noun, as every music surface spells one. */
 internal fun countLine(count: Long, singular: String): String = "$count ${countNoun(count, singular)}"
 

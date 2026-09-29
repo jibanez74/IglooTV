@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.core.network.causeChain
 import com.igloo.blindpenguincoder.core.network.safeApiCall
 import com.igloo.blindpenguincoder.core.network.toTransportError
 import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
@@ -55,9 +56,7 @@ class VideoPlaybackRepository(
     }
 
     private fun Throwable.hasConnectionTimeoutCause(): Boolean =
-        generateSequence<Throwable>(this) { it.cause }
-            .take(HLS_CAUSE_CHAIN_LIMIT)
-            .any { it is ConnectTimeoutException }
+        causeChain().any { it is ConnectTimeoutException }
 
     /** Best-effort session teardown; the server's idle TTL is the real backstop. */
     override suspend fun stopHlsSession(media: PlaybackMediaRef, sessionUuid: String) {
@@ -75,8 +74,4 @@ class VideoPlaybackRepository(
         body: UpdateWatchProgressRequest,
     ): ApiResult<WatchProgressUpdateData> =
         envelopeData("watch progress update") { api.updateWatchProgress(media, body) }
-
-    private companion object {
-        const val HLS_CAUSE_CHAIN_LIMIT = 8
-    }
 }
