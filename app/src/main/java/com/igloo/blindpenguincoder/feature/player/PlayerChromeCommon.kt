@@ -6,18 +6,13 @@ import android.content.ContextWrapper
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,17 +43,20 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.design.overMedia
-import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
-import com.igloo.blindpenguincoder.core.ui.IglooInlineError
+import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
-import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 
 /**
@@ -89,7 +87,7 @@ internal fun TransportButton(
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = null,
                 indication = null,
                 onClick = onClick,
             )
@@ -135,21 +133,12 @@ internal fun PlayerSeekBar(
             },
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
-        // The resume strip's recipe: 4dp track, over-media literal ground, primary fill.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp.scaled())
-                .background(Color.Black.copy(alpha = 0.40f))
-                .testTag(seekTrackTag),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .fillMaxHeight()
-                    .background(colors.primary),
-            )
-        }
+        ProgressTrack(
+            fraction = fraction,
+            ground = OVER_MEDIA_TRACK,
+            fill = colors.primary,
+            modifier = Modifier.testTag(seekTrackTag),
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -170,9 +159,9 @@ internal fun PlayerSeekBar(
 
 /**
  * The chrome's top bar: the scrim that keeps white legible over media, the Back button, and the
- * media's title. Left/right/up are pinned — Back is the row's only control and the top of the
- * vertical route — while [downRequester] is the screen's, because what sits under Back differs
- * (the transport, a reading stop, or a progress-retry action).
+ * media's title over an optional [subtitle]. Left/right/up are pinned — Back is the row's only
+ * control and the top of the vertical route — while [downRequester] is the screen's, because
+ * what sits under Back differs (the transport, a reading stop, or a progress-retry action).
  */
 @Composable
 internal fun PlayerTopBar(
@@ -182,6 +171,8 @@ internal fun PlayerTopBar(
     backTag: String,
     onBack: () -> Unit,
     onFocused: () -> Unit = {},
+    closeLabel: String = "Close player",
+    subtitle: String? = null,
 ) {
     val layout = IglooTheme.layout
     Row(
@@ -200,9 +191,8 @@ internal fun PlayerTopBar(
             icon = IglooIcons.ArrowBack,
             onClick = onBack,
             variant = IglooButtonVariant.Ghost,
-            semanticLabel = "Close player",
-            restingFill = OVER_MEDIA_CONTROL_FILL,
-            contentColor = Color.White,
+            semanticLabel = closeLabel,
+            overMedia = true,
             modifier = Modifier
                 .focusRequester(backRequester)
                 .onFocusChanged { if (it.isFocused) onFocused() }
@@ -214,12 +204,22 @@ internal fun PlayerTopBar(
                 }
                 .testTag(backTag),
         )
-        IglooText(
-            text = title,
-            style = IglooTheme.typography.titleMedium.overMedia(true),
-            color = Color.White,
-            maxLines = 1,
-        )
+        Column {
+            IglooText(
+                text = title,
+                style = IglooTheme.typography.titleMedium.overMedia(true),
+                color = Color.White,
+                maxLines = 1,
+            )
+            if (subtitle != null) {
+                IglooText(
+                    text = subtitle,
+                    style = IglooTheme.typography.label.overMedia(true),
+                    color = OVER_MEDIA_SECONDARY,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }
 
@@ -274,34 +274,6 @@ internal fun PoliteAnnouncement(text: String?) {
                 contentDescription = text
             },
     )
-}
-
-/** The details screen's error recipe: one pinned action, Assertive, Back handled by the host. */
-@Composable
-internal fun PlayerErrorSurface(
-    message: String,
-    actionText: String,
-    actionSemanticLabel: String,
-    actionRequester: FocusRequester,
-    onAction: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(IglooTheme.layout.safeAreaHorizontal),
-        contentAlignment = Alignment.Center,
-    ) {
-        IglooInlineError(
-            message = message,
-            actionText = actionText,
-            actionSemanticLabel = actionSemanticLabel,
-            onAction = onAction,
-            actionModifier = Modifier
-                .focusRequester(actionRequester)
-                .pinnedToScreen(),
-            modifier = Modifier.width(IglooTheme.layout.dialogWidth),
-        )
-    }
 }
 
 /**
@@ -419,7 +391,7 @@ internal fun PlayerFailureSurface(
     onRetry: () -> Unit,
     onClose: () -> Unit,
 ) {
-    PlayerErrorSurface(
+    IglooPinnedError(
         message = message ?: "The $mediaNoun could not be played.",
         actionText = if (unauthorized) "Close" else "Retry",
         actionSemanticLabel = if (unauthorized) "Close player" else "Retry playing $mediaNoun",
@@ -434,12 +406,6 @@ internal tailrec fun Context.findHostActivity(): Activity? = when (this) {
     is ContextWrapper -> baseContext.findHostActivity()
     else -> null
 }
-
-// The section 3.2 over-media literals, which deliberately do not track the theme: the chrome sits
-// on video, not on a surface. The seek track keeps the progress-strip ground (0.40f) instead.
-internal val OVER_MEDIA_CONTROL_FILL = Color.Black.copy(alpha = 0.45f)
-internal val OVER_MEDIA_SECONDARY = Color.White.copy(alpha = 0.85f)
-internal val OVER_MEDIA_TERTIARY = Color.White.copy(alpha = 0.75f)
 
 internal const val SEEK_STEP_SEC = 10.0
 internal const val CHROME_HIDE_MS = 4_000L

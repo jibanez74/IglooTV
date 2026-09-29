@@ -1,7 +1,6 @@
 package com.igloo.blindpenguincoder.core.ui
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -74,7 +73,7 @@ internal fun SelectablePill(
                 onFocusChanged(it.isFocused)
             }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = null,
                 indication = null,
                 onClick = onPress,
             )

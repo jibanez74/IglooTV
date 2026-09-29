@@ -58,21 +58,23 @@ import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
-import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
+import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
+import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
-import com.igloo.blindpenguincoder.feature.shared.SectionHeading
 import com.igloo.blindpenguincoder.feature.shared.TrackRowMenu
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
@@ -124,13 +126,8 @@ internal fun <T : Any> MusicDetailsScaffold(
     // will land. Requested safely because a trackless page anchors elsewhere.
     LaunchedEffect(Unit) { entryRequester.requestFocusSafely() }
 
-    // Whether the screen owned focus going into a state swap, re-landing it on the incoming
-    // state's anchor. Keyed on the state's class — a Loaded republish must not yank focus back.
-    var screenHasFocus by remember { mutableStateOf(false) }
-    val hadFocusAtSwap = remember(stateKey) { screenHasFocus }
-    LaunchedEffect(stateKey) {
-        if (hadFocusAtSwap) entryRequester.requestFocusSafely()
-    }
+    // Keyed on the state's class — a Loaded republish must not yank focus back.
+    val onScreenFocus = rememberRefocusAfterSwap(stateKey) { entryRequester.requestFocusSafely() }
     // The row whose More menu is open, and the requesters its dismissal returns focus through.
     var trackMenu by remember(stateKey) { mutableStateOf<Pair<Int, Rect>?>(null) }
     val trackRequesters = remember(trackRows.size) { List(trackRows.size) { TrackRowRequesters() } }
@@ -139,7 +136,7 @@ internal fun <T : Any> MusicDetailsScaffold(
         modifier = modifier
             .fillMaxSize()
             .background(colors.background)
-            .onFocusChanged { screenHasFocus = it.hasFocus }
+            .onFocusChanged { onScreenFocus(it.hasFocus) }
             .semantics {
                 // The loaded pane announces the record itself; a pane-title change is spoken, so
                 // the load completing names it rather than a generic frame (section 12).
@@ -162,28 +159,13 @@ internal fun <T : Any> MusicDetailsScaffold(
                     trackRequesters,
                 ) { index, bounds -> trackMenu = index to bounds }
 
-                // The only region on screen, so Assertive is safe and right: the user just asked
-                // for this page and is waiting on it (section 10).
-                errorMessage != null -> Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(IglooTheme.layout.safeAreaHorizontal),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    IglooInlineError(
-                        message = errorMessage,
-                        actionText = "Retry",
-                        actionSemanticLabel = retrySemanticLabel,
-                        onAction = onRetry,
-                        // The screen's only focusable, so every direction is pinned: the shell is
-                        // still composed underneath, and a spatial search that escaped would strand
-                        // focus on a card nobody can see, with no way back to Retry.
-                        actionModifier = Modifier
-                            .focusRequester(entryRequester)
-                            .pinnedToScreen(),
-                        modifier = Modifier.width(IglooTheme.layout.dialogWidth),
-                    )
-                }
+                errorMessage != null -> IglooPinnedError(
+                    message = errorMessage,
+                    actionText = "Retry",
+                    actionSemanticLabel = retrySemanticLabel,
+                    actionRequester = entryRequester,
+                    onAction = onRetry,
+                )
 
                 else -> skeleton(entryRequester)
             }
@@ -375,7 +357,7 @@ internal fun MusicHeroReadingStop(
                         radius = IglooTheme.radius.lg,
                         fill = when {
                             !focused -> Color.Transparent
-                            overMedia -> Color.Black.copy(alpha = 0.45f)
+                            overMedia -> OVER_MEDIA_CONTROL_FILL
                             else -> colors.card.copy(alpha = 0.72f)
                         },
                         scaleOnFocus = false,
@@ -475,10 +457,6 @@ internal fun MusicHeroActionRow(
     onShuffle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Section 3.2: a Ghost button's transparent ground and token text are licensed only on a
-    // token canvas; over the backdrop the button carries the same black ground as the chips.
-    val ghostFill = if (overMedia) Color.Black.copy(alpha = 0.45f) else null
-    val ghostContent = if (overMedia) Color.White else null
     val rowFocus = Modifier.focusProperties {
         up = upRequester
         down = downRequester
@@ -515,8 +493,7 @@ internal fun MusicHeroActionRow(
             onClick = onShuffle,
             variant = IglooButtonVariant.Ghost,
             icon = IglooIcons.Shuffle,
-            restingFill = ghostFill,
-            contentColor = ghostContent,
+            overMedia = overMedia,
             semanticLabel = shuffleSemanticLabel,
             modifier = Modifier
                 .testTag(shuffleTag)

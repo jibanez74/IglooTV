@@ -24,15 +24,16 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
-import com.igloo.blindpenguincoder.feature.shared.SectionHeading
 import com.igloo.blindpenguincoder.feature.shared.TrackRow
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.hasMoreActions
@@ -297,7 +298,7 @@ private fun MusicianHeader(
                     IglooText(
                         text = musician.genresLine,
                         style = IglooTheme.typography.label.overMedia(overMedia),
-                        color = if (overMedia) Color.White.copy(alpha = 0.75f) else colors.mutedForeground,
+                        color = if (overMedia) OVER_MEDIA_TERTIARY else colors.mutedForeground,
                         maxLines = 1,
                     )
                 }

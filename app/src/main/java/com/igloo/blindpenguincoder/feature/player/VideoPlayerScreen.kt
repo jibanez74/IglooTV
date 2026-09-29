@@ -6,17 +6,13 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -47,20 +43,25 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
+import com.igloo.blindpenguincoder.core.design.rememberOverlayReveal
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
+import com.igloo.blindpenguincoder.core.ui.IglooRadioListDialog
 import com.igloo.blindpenguincoder.core.ui.IglooRadioRow
 import com.igloo.blindpenguincoder.core.ui.IglooScrim
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
+import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.TrackOption
@@ -287,12 +288,8 @@ fun VideoPlayerScreen(
             FocusAnchor.Modal -> Unit
         }
     }
-    var progressRetryFocused by remember { mutableStateOf(false) }
-    val progressRetryHadFocus = remember(progressSyncError) { progressRetryFocused }
-    LaunchedEffect(progressSyncError) {
-        if (progressSyncError == null && progressRetryHadFocus) {
-            playPauseRequester.requestFocusSafely()
-        }
+    val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError) {
+        if (progressSyncError == null) playPauseRequester.requestFocusSafely()
     }
 
     // The track menus and the resume prompt register their own handlers below this one, so this
@@ -382,7 +379,7 @@ fun VideoPlayerScreen(
                 progressRetryRequester = progressRetryRequester,
                 progressSyncError = progressSyncError,
                 onRetryProgressSync = viewModel::retryFailedSave,
-                onProgressRetryFocusChanged = { progressRetryFocused = it },
+                onProgressRetryFocusChanged = onProgressRetryFocus,
                 onAnyControlFocused = { interactionTick++ },
                 onBack = closeAndRelease,
                 onTogglePlayPause = togglePlayPause,
@@ -574,12 +571,10 @@ private fun VideoPlayerChrome(
                 )
             }
             if (progressSyncError != null) {
-                IglooInlineError(
+                ProgressSyncRetry(
                     message = progressSyncError,
-                    actionText = "Retry",
-                    actionSemanticLabel = "Retry saving playback progress",
-                    onAction = onRetryProgressSync,
-                    actionModifier = Modifier
+                    onRetry = onRetryProgressSync,
+                    retryModifier = Modifier
                         .focusRequester(progressRetryRequester)
                         .focusProperties {
                             up = backRequester
@@ -592,10 +587,8 @@ private fun VideoPlayerChrome(
                             if (it.isFocused) onAnyControlFocused()
                         }
                         .testTag("movie_progress_retry"),
-                    liveRegionMode = LiveRegionMode.Polite,
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .width(IglooTheme.layout.dialogWidth)
                         .testTag("movie_progress_error"),
                 )
             }
@@ -657,60 +650,65 @@ private fun VideoPlayerChrome(
                 // prefers a readable word over a novel symbol at TV distance. Chapters sits
                 // with the seek controls — a chapter jump is a seek — ahead of the track pair,
                 // matching section 11.8's transport order.
-                if (showChapters) {
+                @Composable
+                fun MenuButton(
+                    menu: PlayerMenu,
+                    text: String,
+                    semanticLabel: String,
+                    requester: FocusRequester,
+                    control: LastControl,
+                    tag: String,
+                ) {
                     IglooButton(
-                        text = "Chapters",
-                        onClick = { onOpenMenu(PlayerMenu.Chapters) },
+                        text = text,
+                        onClick = { onOpenMenu(menu) },
                         variant = IglooButtonVariant.Ghost,
-                        semanticLabel = "Chapters",
-                        restingFill = OVER_MEDIA_CONTROL_FILL,
-                        contentColor = Color.White,
+                        semanticLabel = semanticLabel,
+                        overMedia = true,
                         modifier = Modifier
-                            .focusRequester(chaptersButtonRequester)
-                            .transportEdges(isLast = lastControl == LastControl.Chapters)
-                            .testTag("movie_chapters"),
+                            .focusRequester(requester)
+                            .transportEdges(isLast = lastControl == control)
+                            .testTag(tag),
+                    )
+                }
+                if (showChapters) {
+                    MenuButton(
+                        menu = PlayerMenu.Chapters,
+                        text = "Chapters",
+                        semanticLabel = "Chapters",
+                        requester = chaptersButtonRequester,
+                        control = LastControl.Chapters,
+                        tag = "movie_chapters",
                     )
                 }
                 if (showAudio) {
-                    IglooButton(
+                    MenuButton(
+                        menu = PlayerMenu.Audio,
                         text = "Audio",
-                        onClick = { onOpenMenu(PlayerMenu.Audio) },
-                        variant = IglooButtonVariant.Ghost,
                         semanticLabel = "Audio track",
-                        restingFill = OVER_MEDIA_CONTROL_FILL,
-                        contentColor = Color.White,
-                        modifier = Modifier
-                            .focusRequester(audioButtonRequester)
-                            .transportEdges(isLast = lastControl == LastControl.Audio)
-                            .testTag("movie_audio"),
+                        requester = audioButtonRequester,
+                        control = LastControl.Audio,
+                        tag = "movie_audio",
                     )
                 }
                 if (showSubtitles) {
-                    IglooButton(
+                    MenuButton(
+                        menu = PlayerMenu.Subtitles,
                         text = "Subtitles",
-                        onClick = { onOpenMenu(PlayerMenu.Subtitles) },
-                        variant = IglooButtonVariant.Ghost,
                         semanticLabel = "Subtitles",
-                        restingFill = OVER_MEDIA_CONTROL_FILL,
-                        contentColor = Color.White,
-                        modifier = Modifier
-                            .focusRequester(subtitlesButtonRequester)
-                            .transportEdges(isLast = lastControl == LastControl.Subtitles)
-                            .testTag("movie_subtitles"),
+                        requester = subtitlesButtonRequester,
+                        control = LastControl.Subtitles,
+                        tag = "movie_subtitles",
                     )
                 }
                 if (showQuality) {
-                    IglooButton(
+                    MenuButton(
+                        menu = PlayerMenu.Quality,
                         text = "Quality",
-                        onClick = { onOpenMenu(PlayerMenu.Quality) },
-                        variant = IglooButtonVariant.Ghost,
                         semanticLabel = "Playback quality",
-                        restingFill = OVER_MEDIA_CONTROL_FILL,
-                        contentColor = Color.White,
-                        modifier = Modifier
-                            .focusRequester(qualityButtonRequester)
-                            .transportEdges(isLast = lastControl == LastControl.Quality)
-                            .testTag("movie_quality"),
+                        requester = qualityButtonRequester,
+                        control = LastControl.Quality,
+                        tag = "movie_quality",
                     )
                 }
             }
@@ -737,13 +735,7 @@ private fun ResumePrompt(
 ) {
     BackHandler(onBack = onClose)
 
-    var visible by remember { mutableStateOf(false) }
-    val reveal by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = iglooTween(IglooMotion.STANDARD_MS),
-        label = "resumePromptReveal",
-    )
-    LaunchedEffect(Unit) { visible = true }
+    val reveal by rememberOverlayReveal("resumePromptReveal")
 
     val resumeRequester = remember { FocusRequester() }
     val startOverRequester = remember { FocusRequester() }
@@ -807,10 +799,9 @@ private fun ResumePrompt(
 }
 
 /**
- * One in-player track menu, on the [PlaybackSettingsDialog] recipe: scrimmed card, one alpha
- * reveal, flat radio list, focus trapped, Back dismisses. Selection is not dismissal — OK on a
- * row switches the track and keeps focus, so the user can hear the result and keep adjusting;
- * the engine re-emits its tracks and the `selected` marks follow.
+ * One in-player track menu, on the [IglooRadioListDialog] shell. Selection is not dismissal — OK
+ * on a row switches the track and keeps focus, so the user can hear the result and keep
+ * adjusting; the engine re-emits its tracks and the `selected` marks follow.
  *
  * [footerMessage] is a refusal the engine returned for the last pick — shown in place, below the
  * rows, because the row that caused it is still on screen and still the user's to change. It
@@ -825,133 +816,61 @@ private fun TrackMenuDialog(
     onDismiss: () -> Unit,
     footerMessage: String? = null,
 ) {
-    BackHandler(onBack = onDismiss)
-
-    var visible by remember { mutableStateOf(false) }
-    val reveal by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = iglooTween(IglooMotion.STANDARD_MS),
-        label = "trackMenuReveal",
-    )
-    LaunchedEffect(Unit) { visible = true }
-
-    val rowCount = options.size + (if (noneRow != null) 1 else 0)
-    val rowRequesters = remember(rowCount) { List(rowCount) { FocusRequester() } }
-    val doneRequester = remember { FocusRequester() }
     val noneSelected = options.none { it.selected }
-
-    // Entry focus lands on the selected row, matching the pre-play dialog.
-    LaunchedEffect(Unit) {
-        val selectedIndex = if (noneRow != null && noneSelected) {
+    val noneRows = if (noneRow != null) 1 else 0
+    IglooRadioListDialog(
+        title = title,
+        rowCount = options.size + noneRows,
+        // Entry focus lands on the selected row, matching the pre-play dialog.
+        entryIndex = if (noneRow != null && noneSelected) {
             0
         } else {
-            options.indexOfFirst { it.selected }
-                .takeIf { it >= 0 }
-                ?.plus(if (noneRow != null) 1 else 0)
-                ?: 0
-        }
-        rowRequesters.getOrNull(selectedIndex)?.requestFocus()
-    }
-
-    fun Modifier.rowFocus(index: Int): Modifier = this
-        .focusRequester(rowRequesters[index])
-        .focusProperties {
-            left = FocusRequester.Cancel
-            right = FocusRequester.Cancel
-            up = rowRequesters.getOrNull(index - 1) ?: FocusRequester.Cancel
-            down = rowRequesters.getOrNull(index + 1) ?: doneRequester
-        }
-
-    IglooScrim(
-        modifier = Modifier.graphicsLayer { alpha = reveal },
-        contentAlignment = Alignment.Center,
-    ) {
-        BoxWithConstraints {
-            val cardWidth = minOf(IglooTheme.layout.dialogWidth, maxWidth)
-            val cardMaxHeight = maxHeight - IglooTheme.layout.safeAreaVertical * 2
-            Column(
-                modifier = Modifier
-                    .width(cardWidth)
-                    .heightIn(max = cardMaxHeight)
-                    .iglooSurface(radius = IglooTheme.radius.xl, fill = IglooTheme.colors.card)
-                    .padding(IglooTheme.spacing.xl)
-                    .semantics {
-                        paneTitle = title
-                        isTraversalGroup = true
-                    }
-                    .testTag("movie_track_menu"),
-                verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-            ) {
-                IglooText(
-                    text = title,
-                    style = IglooTheme.typography.titleMedium,
-                    color = IglooTheme.colors.cardForeground,
-                    modifier = Modifier.semantics { heading() },
-                )
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
-                ) {
-                    var row = 0
-                    if (noneRow != null) {
-                        IglooRadioRow(
-                            label = noneRow,
-                            selected = noneSelected,
-                            onSelect = { onSelect(null) },
-                            modifier = Modifier
-                                .rowFocus(row++)
-                                .testTag("movie_track_none"),
-                        )
-                    }
-                    options.forEach { option ->
-                        IglooRadioRow(
-                            label = option.label,
-                            selected = option.selected,
-                            // Inert rows (an image-based subtitle under HLS) stay focusable
-                            // and announced but never activate — matching the pre-play dialog.
-                            onSelect = if (option.enabled) ({ onSelect(option.id) }) else null,
-                            modifier = Modifier
-                                .rowFocus(row++)
-                                .testTag("movie_track_${option.id}"),
-                        )
-                    }
-                }
-
-                if (footerMessage != null) {
-                    IglooInlineError(
-                        message = footerMessage,
-                        // Polite: the rows keep focus, and nothing the user did has failed —
-                        // the choice was declined with a reason, mid-adjustment.
-                        liveRegionMode = LiveRegionMode.Polite,
-                        modifier = Modifier.testTag("movie_track_refusal"),
-                    )
-                }
-
-                IglooButton(
-                    text = "Done",
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(doneRequester)
-                        .focusProperties {
-                            left = FocusRequester.Cancel
-                            right = FocusRequester.Cancel
-                            down = FocusRequester.Cancel
-                            up = rowRequesters.lastOrNull() ?: FocusRequester.Cancel
-                        }
-                        .testTag("movie_track_done"),
+            options.indexOfFirst { it.selected }.takeIf { it >= 0 }?.plus(noneRows) ?: 0
+        },
+        onDismiss = onDismiss,
+        testTag = "movie_track_menu",
+        doneTestTag = "movie_track_done",
+        footer = {
+            if (footerMessage != null) {
+                IglooInlineError(
+                    message = footerMessage,
+                    // Polite: the rows keep focus, and nothing the user did has failed — the
+                    // choice was declined with a reason, mid-adjustment.
+                    liveRegionMode = LiveRegionMode.Polite,
+                    modifier = Modifier.testTag("movie_track_refusal"),
                 )
             }
+        },
+    ) { rowFocus ->
+        var row = 0
+        if (noneRow != null) {
+            IglooRadioRow(
+                label = noneRow,
+                selected = noneSelected,
+                onSelect = { onSelect(null) },
+                modifier = Modifier
+                    .rowFocus(row++)
+                    .testTag("movie_track_none"),
+            )
+        }
+        options.forEach { option ->
+            IglooRadioRow(
+                label = option.label,
+                selected = option.selected,
+                // Inert rows (an image-based subtitle under HLS) stay focusable and announced
+                // but never activate — matching the pre-play dialog.
+                onSelect = if (option.enabled) ({ onSelect(option.id) }) else null,
+                modifier = Modifier
+                    .rowFocus(row++)
+                    .testTag("movie_track_${option.id}"),
+            )
         }
     }
 }
 
 /**
- * The chapter menu, on the [TrackMenuDialog] shell. Unlike a track menu, picking a row here is
- * dismissal — a chapter pick is a jump, and its result is the picture hidden behind this scrim,
+ * The chapter menu, on the [IglooRadioListDialog] shell. Unlike a track menu, picking a row here
+ * is dismissal — a chapter pick is a jump, and its result is the picture hidden behind this scrim,
  * not something to keep adjusting. The `selected` mark tracks the playhead live; entry focus
  * lands on the chapter playing when the menu opened and stays put.
  */
@@ -962,96 +881,27 @@ private fun ChapterMenuDialog(
     onSelectChapter: (Double) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    BackHandler(onBack = onDismiss)
-
-    var visible by remember { mutableStateOf(false) }
-    val reveal by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = iglooTween(IglooMotion.STANDARD_MS),
-        label = "chapterMenuReveal",
-    )
-    LaunchedEffect(Unit) { visible = true }
-
-    val rowRequesters = remember(chapters.size) { List(chapters.size) { FocusRequester() } }
-    val doneRequester = remember { FocusRequester() }
     val activeIndex = activeChapterIndex(chapters, currentTimeSec)
-
-    // Before the first chapter begins, no row is marked and focus falls to the first.
-    LaunchedEffect(Unit) {
-        rowRequesters.getOrNull(activeIndex.coerceAtLeast(0))?.requestFocus()
-    }
-
-    fun Modifier.rowFocus(index: Int): Modifier = this
-        .focusRequester(rowRequesters[index])
-        .focusProperties {
-            left = FocusRequester.Cancel
-            right = FocusRequester.Cancel
-            up = rowRequesters.getOrNull(index - 1) ?: FocusRequester.Cancel
-            down = rowRequesters.getOrNull(index + 1) ?: doneRequester
-        }
-
-    IglooScrim(
-        modifier = Modifier.graphicsLayer { alpha = reveal },
-        contentAlignment = Alignment.Center,
-    ) {
-        BoxWithConstraints {
-            val cardWidth = minOf(IglooTheme.layout.dialogWidth, maxWidth)
-            val cardMaxHeight = maxHeight - IglooTheme.layout.safeAreaVertical * 2
-            Column(
+    IglooRadioListDialog(
+        title = "Chapters",
+        rowCount = chapters.size,
+        // Before the first chapter begins, no row is marked and focus falls to the first.
+        entryIndex = activeIndex.coerceAtLeast(0),
+        onDismiss = onDismiss,
+        testTag = "movie_chapter_menu",
+        doneTestTag = "movie_chapter_done",
+    ) { rowFocus ->
+        chapters.forEachIndexed { index, chapter ->
+            IglooRadioRow(
+                label = chapterLabel(chapter, index),
+                detail = formatTimecode(chapter.startTimeSec),
+                selected = index == activeIndex,
+                semanticLabel = chapterSpokenLabel(chapter, index, chapters.size),
+                onSelect = { onSelectChapter(chapter.startTimeSec) },
                 modifier = Modifier
-                    .width(cardWidth)
-                    .heightIn(max = cardMaxHeight)
-                    .iglooSurface(radius = IglooTheme.radius.xl, fill = IglooTheme.colors.card)
-                    .padding(IglooTheme.spacing.xl)
-                    .semantics {
-                        paneTitle = "Chapters"
-                        isTraversalGroup = true
-                    }
-                    .testTag("movie_chapter_menu"),
-                verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-            ) {
-                IglooText(
-                    text = "Chapters",
-                    style = IglooTheme.typography.titleMedium,
-                    color = IglooTheme.colors.cardForeground,
-                    modifier = Modifier.semantics { heading() },
-                )
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
-                ) {
-                    chapters.forEachIndexed { index, chapter ->
-                        IglooRadioRow(
-                            label = chapterLabel(chapter, index),
-                            detail = formatTimecode(chapter.startTimeSec),
-                            selected = index == activeIndex,
-                            semanticLabel = chapterSpokenLabel(chapter, index, chapters.size),
-                            onSelect = { onSelectChapter(chapter.startTimeSec) },
-                            modifier = Modifier
-                                .rowFocus(index)
-                                .testTag("movie_chapter_$index"),
-                        )
-                    }
-                }
-
-                IglooButton(
-                    text = "Done",
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(doneRequester)
-                        .focusProperties {
-                            left = FocusRequester.Cancel
-                            right = FocusRequester.Cancel
-                            down = FocusRequester.Cancel
-                            up = rowRequesters.lastOrNull() ?: FocusRequester.Cancel
-                        }
-                        .testTag("movie_chapter_done"),
-                )
-            }
+                    .rowFocus(index)
+                    .testTag("movie_chapter_$index"),
+            )
         }
     }
 }

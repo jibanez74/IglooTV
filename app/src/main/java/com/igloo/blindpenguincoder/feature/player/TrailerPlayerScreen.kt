@@ -25,7 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.key
@@ -42,11 +41,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
-import com.igloo.blindpenguincoder.core.ui.IglooButton
-import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPhase
@@ -204,7 +203,7 @@ fun TrailerPlayerScreen(
         }
 
         when (state.phase) {
-            TrailerPhase.Error -> PlayerErrorSurface(
+            TrailerPhase.Error -> IglooPinnedError(
                 message = state.errorMessage ?: "The trailer could not be played.",
                 actionText = "Retry",
                 actionSemanticLabel = "Retry playing trailer",
@@ -266,51 +265,16 @@ private fun PlayerChrome(
             .fillMaxSize()
             .graphicsLayer { alpha = chromeAlpha },
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .playerTopScrim()
-                .padding(
-                    horizontal = layout.safeAreaHorizontal,
-                    vertical = layout.safeAreaVertical,
-                ),
-            horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IglooButton(
-                text = "Back",
-                icon = IglooIcons.ArrowBack,
-                onClick = onBack,
-                variant = IglooButtonVariant.Ghost,
-                semanticLabel = "Close trailer",
-                restingFill = OVER_MEDIA_CONTROL_FILL,
-                contentColor = Color.White,
-                modifier = Modifier
-                    .focusRequester(backRequester)
-                    .onFocusChanged { if (it.isFocused) onAnyControlFocused() }
-                    .focusProperties {
-                        left = FocusRequester.Cancel
-                        right = FocusRequester.Cancel
-                        up = FocusRequester.Cancel
-                        down = playPauseRequester
-                    }
-                    .testTag("trailer_back"),
-            )
-            Column {
-                IglooText(
-                    text = title,
-                    style = IglooTheme.typography.titleMedium.overMedia(true),
-                    color = Color.White,
-                    maxLines = 1,
-                )
-                IglooText(
-                    text = typeLabel,
-                    style = IglooTheme.typography.label.overMedia(true),
-                    color = OVER_MEDIA_SECONDARY,
-                    maxLines = 1,
-                )
-            }
-        }
+        PlayerTopBar(
+            title = title,
+            subtitle = typeLabel,
+            backRequester = backRequester,
+            downRequester = playPauseRequester,
+            backTag = "trailer_back",
+            onBack = onBack,
+            onFocused = onAnyControlFocused,
+            closeLabel = "Close trailer",
+        )
 
         Box(modifier = Modifier.weight(1f)) {
             if (state.phase == TrailerPhase.Loading) {

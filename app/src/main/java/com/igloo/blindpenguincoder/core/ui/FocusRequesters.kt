@@ -1,5 +1,9 @@
 package com.igloo.blindpenguincoder.core.ui
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -23,3 +27,21 @@ internal fun Modifier.withRequester(requester: FocusRequester?): Modifier =
  */
 internal fun FocusRequester.requestFocusSafely(): Boolean =
     runCatching { requestFocus() }.isSuccess
+
+/**
+ * Re-lands focus after [key] swaps what a subtree shows, but only if the subtree owned focus going
+ * into the swap; report its focus through the returned setter (`hasFocus` for a container,
+ * `isFocused` for a single control).
+ *
+ * The capture happens in the composition that makes the swap: the outgoing node only detaches —
+ * clearing the reported focus — once that composition applies, so the flag still says whether
+ * focus was here. [refocus] then runs once the incoming state's nodes exist. Without this, a
+ * focused node disposing drops focus on the floor.
+ */
+@Composable
+internal fun rememberRefocusAfterSwap(key: Any?, refocus: () -> Unit): (Boolean) -> Unit {
+    val ownsFocus = remember { mutableStateOf(false) }
+    val ownedFocusAtSwap = remember(key) { ownsFocus.value }
+    LaunchedEffect(key) { if (ownedFocusAtSwap) refocus() }
+    return remember { { focused -> ownsFocus.value = focused } }
+}

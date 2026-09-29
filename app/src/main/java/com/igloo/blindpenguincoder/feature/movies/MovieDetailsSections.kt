@@ -38,8 +38,8 @@ import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.core.ui.focusRing
-import com.igloo.blindpenguincoder.feature.shared.SectionHeading
 import com.igloo.blindpenguincoder.feature.shared.readingStopTarget
 
 /**

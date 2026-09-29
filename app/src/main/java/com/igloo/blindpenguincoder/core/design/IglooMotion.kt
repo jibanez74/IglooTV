@@ -10,12 +10,14 @@ import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -70,6 +72,22 @@ fun <T> iglooTween(
     } else {
         tween(durationMillis = durationMillis, delayMillis = delayMillis, easing = easing)
     }
+
+/**
+ * An overlay's one reveal at `standard` (section 7.2), running from 0 to 1 once it is composed.
+ * There is no exit animation, so the focus ring the host restores is never drawn under a fading
+ * overlay.
+ */
+@Composable
+fun rememberOverlayReveal(label: String): State<Float> {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    return animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = iglooTween(IglooMotion.STANDARD_MS),
+        label = label,
+    )
+}
 
 /**
  * Progress of a decorative ambient loop, in [0, 1). The only way feature code may loop, and only

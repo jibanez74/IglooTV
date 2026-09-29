@@ -1,11 +1,17 @@
 package com.igloo.blindpenguincoder.core.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.liveRegion
@@ -67,5 +73,39 @@ fun IglooInlineError(
                 semanticLabel = actionSemanticLabel,
             )
         }
+    }
+}
+
+/**
+ * A screen's full-screen error: the card centred in the safe area, its one action pinned in every
+ * direction. It is the only thing on screen, so Assertive is safe and right — the user just asked
+ * for this page and is waiting on it (section 10) — and the pinning matters because the host is
+ * still composed underneath: a spatial search that escaped would strand focus on something nobody
+ * can see, with no way back to the action. Back belongs to the host.
+ */
+@Composable
+internal fun IglooPinnedError(
+    message: String,
+    actionText: String,
+    actionSemanticLabel: String,
+    actionRequester: FocusRequester,
+    onAction: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(IglooTheme.layout.safeAreaHorizontal),
+        contentAlignment = Alignment.Center,
+    ) {
+        IglooInlineError(
+            message = message,
+            actionText = actionText,
+            actionSemanticLabel = actionSemanticLabel,
+            onAction = onAction,
+            actionModifier = Modifier
+                .focusRequester(actionRequester)
+                .pinnedToScreen(),
+            modifier = Modifier.width(IglooTheme.layout.dialogWidth),
+        )
     }
 }

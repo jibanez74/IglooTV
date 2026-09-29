@@ -13,22 +13,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
-
-/** The one heading style every detail-screen section shares (section 11.4.1). */
-@Composable
-internal fun SectionHeading(text: String) {
-    IglooText(
-        text = text,
-        style = IglooTheme.typography.titleMedium,
-        color = IglooTheme.colors.foreground,
-        modifier = Modifier.semantics { heading() },
-    )
-}
 
 /**
  * The reading-stop treatment for a prose section while a screen reader runs: the About panel's

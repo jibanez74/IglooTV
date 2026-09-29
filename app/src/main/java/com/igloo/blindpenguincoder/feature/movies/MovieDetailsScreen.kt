@@ -48,12 +48,13 @@ import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
-import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooMenu
 import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
+import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
+import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
@@ -180,21 +181,17 @@ fun MovieDetailsScreen(
     // in-theaters movie with no trailer, no cast, no extras and no about is all prose.
     LaunchedEffect(Unit) { entryRequester.requestFocusSafely() }
 
-    // The IglooMediaRail swap-capture pattern: the outgoing state's focused node only detaches
-    // once the composition applies, so this still sees whether the screen owned focus going in,
-    // and the effect re-lands it on the incoming state's anchor. Keyed on the state's class —
-    // a Loaded republish (a toggle, a badge arriving) must not yank focus back to the action row.
-    var screenHasFocus by remember { mutableStateOf(false) }
-    val hadFocusAtSwap = remember(state::class) { screenHasFocus }
-    LaunchedEffect(state::class) {
-        if (hadFocusAtSwap) entryRequester.requestFocusSafely()
+    // Keyed on the state's class — a Loaded republish (a toggle, a badge arriving) must not yank
+    // focus back to the action row.
+    val onScreenFocus = rememberRefocusAfterSwap(state::class) {
+        entryRequester.requestFocusSafely()
     }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(colors.background)
-            .onFocusChanged { screenHasFocus = it.hasFocus }
+            .onFocusChanged { onScreenFocus(it.hasFocus) }
             .semantics {
                 // The loaded pane announces the movie itself; a pane-title change is spoken, so
                 // arriving on a loaded page (or the load completing) names the film rather than
@@ -336,28 +333,13 @@ private fun DetailsBody(
             reserveResumeSlot = actions is MovieDetailsActions.Library,
         )
 
-        // The only region on screen, so Assertive is safe and right: the user just asked
-        // for this page and is waiting on it (section 10).
-        is DetailsState.Error -> Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(IglooTheme.layout.safeAreaHorizontal),
-            contentAlignment = Alignment.Center,
-        ) {
-            IglooInlineError(
-                message = state.message,
-                actionText = "Retry",
-                actionSemanticLabel = "Retry loading movie details",
-                onAction = actions.onRetry,
-                // The screen's only focusable, so every direction is pinned: the shell is
-                // still composed underneath, and a spatial search that escaped would strand
-                // focus on a card nobody can see, with no way back to Retry.
-                actionModifier = Modifier
-                    .focusRequester(entryRequester)
-                    .pinnedToScreen(),
-                modifier = Modifier.width(IglooTheme.layout.dialogWidth),
-            )
-        }
+        is DetailsState.Error -> IglooPinnedError(
+            message = state.message,
+            actionText = "Retry",
+            actionSemanticLabel = "Retry loading movie details",
+            actionRequester = entryRequester,
+            onAction = actions.onRetry,
+        )
 
         is DetailsState.Loaded -> DetailsContent(
             movie = state.value,
@@ -470,12 +452,8 @@ private fun DetailsContent(
         stops -> heroInfoRequester
         else -> null
     }
-    var progressRetryFocused by remember { mutableStateOf(false) }
-    val retryHadFocusWhenStateChanged = remember(progressSyncError) { progressRetryFocused }
-    LaunchedEffect(progressSyncError) {
-        if (progressSyncError == null && retryHadFocusWhenStateChanged) {
-            lastFocusedAction?.requestFocusSafely()
-        }
+    val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError) {
+        if (progressSyncError == null) lastFocusedAction?.requestFocusSafely()
     }
     // The backdrop fades in on top of the token canvas instead of popping (section 7.2's
     // overlay-reveal case); under reduced motion iglooTween snaps it.
@@ -580,7 +558,7 @@ private fun DetailsContent(
                 progressRetryRequester = progressRetryRequester,
                 progressRetryUpRequester = lastFocusedAction,
                 progressRetryDownRequester = belowProgressError,
-                onProgressRetryFocusChanged = { progressRetryFocused = it },
+                onProgressRetryFocusChanged = onProgressRetryFocus,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()

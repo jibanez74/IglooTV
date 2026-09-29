@@ -42,7 +42,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -62,7 +61,6 @@ import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooConfirmDialog
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
-import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
@@ -72,6 +70,7 @@ import com.igloo.blindpenguincoder.core.ui.PosterCardProgress
 import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
+import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.AuthUser
@@ -101,6 +100,7 @@ import com.igloo.blindpenguincoder.feature.player.MusicPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.ProgressSyncUiState
 import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
@@ -1234,23 +1234,13 @@ private fun HomeRails(
     // The hero's d-pad down target: attached to the Continue rail's entry anchor in every rail
     // state, so down always lands where spine re-entry would.
     val continueEntryRequester = remember { FocusRequester() }
-    var heroHasFocus by remember { mutableStateOf(false) }
-    // Captured during the composition that swaps hero states — the same trap IglooMediaRail
-    // documents: the outgoing node only detaches once the composition applies, so this still
-    // sees whether the hero owned focus going in. By the time the effect runs the requester
-    // already sits on the incoming hero node, or on the Continue rail's anchor if the hero hid.
-    val heroHadFocusAtSwap = remember(home.hero) { heroHasFocus }
-    LaunchedEffect(home.hero) {
-        if (heroHadFocusAtSwap) {
-            contentStartRequester.requestFocus()
-        }
-    }
+    // By the time the refocus runs, the requester already sits on the incoming hero node, or on
+    // the Continue rail's anchor if the hero hid.
+    val onHeroFocus = rememberRefocusAfterSwap(home.hero) { contentStartRequester.requestFocus() }
     // A Retry that clears while focused leaves focus on nothing; it goes back to the card the
     // player closed onto, the same hand-back the details page's Retry makes.
-    var progressRetryFocused by remember { mutableStateOf(false) }
-    val retryHadFocusWhenStateChanged = remember(progressSyncError) { progressRetryFocused }
-    LaunchedEffect(progressSyncError) {
-        if (progressSyncError == null && retryHadFocusWhenStateChanged &&
+    val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError) {
+        if (progressSyncError == null &&
             !railReturnRequesters.getValue(HomeRail.ContinueWatching).requestFocusSafely()
         ) {
             contentStartRequester.requestFocusSafely()
@@ -1286,28 +1276,24 @@ private fun HomeRails(
                 onSelect = openMovie?.let { open ->
                     { movieId -> open(DetailsOrigin.Hero, movieId) }
                 },
-                modifier = Modifier.onFocusChanged { heroHasFocus = it.hasFocus },
+                modifier = Modifier.onFocusChanged { onHeroFocus(it.hasFocus) },
             )
         }
 
         // Directly above the rail whose card launched the player, so Up from that card reaches it.
         if (progressSyncError != null) {
-            IglooInlineError(
+            ProgressSyncRetry(
                 message = progressSyncError,
-                actionText = "Retry",
-                actionSemanticLabel = "Retry saving playback progress",
-                onAction = onRetryProgressSync,
-                actionModifier = Modifier
+                onRetry = onRetryProgressSync,
+                retryModifier = Modifier
                     .focusProperties {
                         left = navigationRequester
                         right = FocusRequester.Cancel
                     }
-                    .onFocusChanged { progressRetryFocused = it.isFocused }
+                    .onFocusChanged { onProgressRetryFocus(it.isFocused) }
                     .testTag("home_progress_retry"),
-                liveRegionMode = LiveRegionMode.Polite,
                 modifier = Modifier
                     .padding(contentInset)
-                    .width(IglooTheme.layout.dialogWidth)
                     .testTag("home_progress_error"),
             )
         }

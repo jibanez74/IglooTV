@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -89,13 +88,7 @@ fun IglooTextField(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = IglooTheme.spacing.md)
-                    .then(
-                        if (focusRequester != null) {
-                            Modifier.focusRequester(focusRequester)
-                        } else {
-                            Modifier
-                        },
-                    )
+                    .withRequester(focusRequester)
                     .focusProperties {
                         upFocusRequester?.let { up = it }
                         downFocusRequester?.let { down = it }

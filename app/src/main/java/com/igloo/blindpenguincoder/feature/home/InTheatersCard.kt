@@ -4,7 +4,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
@@ -34,6 +33,7 @@ import androidx.compose.ui.semantics.role
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
@@ -76,7 +76,7 @@ fun InTheatersCard(
             .then(
                 if (onClick != null) {
                     Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
+                        interactionSource = null,
                         indication = null,
                         onClick = onClick,
                     )
@@ -155,7 +155,7 @@ fun InTheatersCard(
                 IglooText(
                     text = movie.year,
                     style = IglooTheme.typography.label.overMedia(overMedia),
-                    color = if (overMedia) Color.White.copy(alpha = 0.85f) else colors.mutedForeground,
+                    color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
                     maxLines = 1,
                 )
             }

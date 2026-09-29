@@ -3,7 +3,6 @@ package com.igloo.blindpenguincoder.feature.auth
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -257,7 +256,7 @@ private fun KeypadKey(
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = null,
                 indication = null,
                 enabled = enabled,
                 onClick = onClick,

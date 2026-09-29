@@ -13,9 +13,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -28,7 +26,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -115,17 +112,9 @@ fun <T> IglooMediaRail(
         else -> itemKey(items.first())
     }
 
-    var railHasFocus by remember { mutableStateOf(false) }
-    // Captured during the composition that swaps states — the outgoing state's focused node
-    // only detaches (clearing railHasFocus) once that composition applies, so this still sees
-    // whether the rail owned focus going in. The effect then lands focus on the new state's
-    // anchor, which exists by the time effects run. Without this, a focused skeleton disposing
-    // would drop focus on the floor.
-    val hadFocusAtSwap = remember(state) { railHasFocus }
-    LaunchedEffect(state) {
-        if (hadFocusAtSwap) {
-            (entryKey?.let(itemRequesters::getValue) ?: localAnchor).requestFocus()
-        }
+    // A focused skeleton disposing must hand focus to the new state's anchor.
+    val onRailFocus = rememberRefocusAfterSwap(state) {
+        (entryKey?.let(itemRequesters::getValue) ?: localAnchor).requestFocus()
     }
 
     val anchorModifier = Modifier
@@ -145,15 +134,10 @@ fun <T> IglooMediaRail(
     val insetModifier = Modifier.padding(start = insetStart, end = insetEnd)
 
     Column(
-        modifier = modifier.onFocusChanged { railHasFocus = it.hasFocus },
+        modifier = modifier.onFocusChanged { onRailFocus(it.hasFocus) },
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
-        IglooText(
-            text = title,
-            style = IglooTheme.typography.titleMedium,
-            color = IglooTheme.colors.foreground,
-            modifier = insetModifier.semantics { heading() },
-        )
+        SectionHeading(title, insetModifier)
 
         when (state) {
             // The skeleton takes the start inset only: its fixed cells are meant to run off the

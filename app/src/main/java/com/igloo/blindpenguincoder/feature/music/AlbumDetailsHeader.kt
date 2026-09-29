@@ -1,14 +1,10 @@
 package com.igloo.blindpenguincoder.feature.music
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -25,10 +21,15 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
 
 /**
@@ -133,7 +134,7 @@ private fun AlbumHeroInfo(
             IglooText(
                 text = album.artistName,
                 style = IglooTheme.typography.bodyLarge.overMedia(overMedia),
-                color = if (overMedia) Color.White.copy(alpha = 0.85f) else colors.mutedForeground,
+                color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
                 maxLines = 1,
             )
         }
@@ -145,7 +146,7 @@ private fun AlbumHeroInfo(
             IglooText(
                 text = album.genresLine,
                 style = IglooTheme.typography.label.overMedia(overMedia),
-                color = if (overMedia) Color.White.copy(alpha = 0.75f) else colors.mutedForeground,
+                color = if (overMedia) OVER_MEDIA_TERTIARY else colors.mutedForeground,
                 maxLines = 1,
             )
         }
@@ -174,7 +175,7 @@ internal fun AlbumDetailChip(
         modifier = Modifier
             .iglooSurface(
                 radius = IglooTheme.radius.pill,
-                fill = if (overMedia) Color.Black.copy(alpha = 0.45f) else colors.muted,
+                fill = if (overMedia) OVER_MEDIA_CONTROL_FILL else colors.muted,
                 border = if (overMedia) Color.White.copy(alpha = 0.25f) else colors.border,
             )
             .padding(horizontal = 12.dp.scaled(), vertical = IglooTheme.spacing.xs),
@@ -215,7 +216,7 @@ internal fun SpotifyPopularityMeter(
             IglooText(
                 text = "Spotify popularity",
                 style = IglooTheme.typography.label.overMedia(overMedia),
-                color = if (overMedia) Color.White.copy(alpha = 0.85f) else colors.mutedForeground,
+                color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
                 maxLines = 1,
                 modifier = Modifier.weight(1f),
             )
@@ -226,25 +227,12 @@ internal fun SpotifyPopularityMeter(
                 maxLines = 1,
             )
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp.scaled())
-                .iglooSurface(
-                    radius = IglooTheme.radius.pill,
-                    // The resume strip's track literal over media; muted on the fallback.
-                    fill = if (overMedia) Color.Black.copy(alpha = 0.40f) else colors.muted,
-                    border = Color.Transparent,
-                    borderWidth = 0.dp,
-                ),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(score / 100f)
-                    .fillMaxHeight()
-                    .background(SpotifyGreen),
-            )
-        }
+        ProgressTrack(
+            fraction = score / 100f,
+            ground = if (overMedia) OVER_MEDIA_TRACK else colors.muted,
+            fill = SpotifyGreen,
+            rounded = true,
+        )
     }
 }
 

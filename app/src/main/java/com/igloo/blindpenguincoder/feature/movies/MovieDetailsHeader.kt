@@ -1,7 +1,6 @@
 package com.igloo.blindpenguincoder.feature.movies
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,7 +34,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -46,18 +43,23 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIconButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
-import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
+import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 
 /**
  * The hero's content block (docs/design-system.md section 11.4): poster left; title, tagline,
@@ -154,12 +156,10 @@ internal fun MovieDetailsHeader(
                 )
             }
             if (progressSyncError != null) {
-                IglooInlineError(
+                ProgressSyncRetry(
                     message = progressSyncError,
-                    actionText = "Retry",
-                    actionSemanticLabel = "Retry saving playback progress",
-                    onAction = onRetryProgressSync,
-                    actionModifier = Modifier
+                    onRetry = onRetryProgressSync,
+                    retryModifier = Modifier
                         .focusRequester(progressRetryRequester)
                         .focusProperties {
                             up = progressRetryUpRequester ?: Cancel
@@ -169,10 +169,7 @@ internal fun MovieDetailsHeader(
                         }
                         .onFocusChanged { onProgressRetryFocusChanged(it.isFocused) }
                         .testTag("details_progress_retry"),
-                    liveRegionMode = LiveRegionMode.Polite,
-                    modifier = Modifier
-                        .width(IglooTheme.layout.dialogWidth)
-                        .testTag("details_progress_error"),
+                    modifier = Modifier.testTag("details_progress_error"),
                 )
             }
         }
@@ -209,7 +206,7 @@ private fun HeroInfo(
                             radius = IglooTheme.radius.lg,
                             fill = when {
                                 !focused -> Color.Transparent
-                                overMedia -> Color.Black.copy(alpha = 0.45f)
+                                overMedia -> OVER_MEDIA_CONTROL_FILL
                                 else -> colors.card.copy(alpha = 0.72f)
                             },
                             scaleOnFocus = false,
@@ -245,7 +242,7 @@ private fun HeroInfo(
                 style = IglooTheme.typography.bodyLarge
                     .copy(fontStyle = FontStyle.Italic)
                     .overMedia(overMedia),
-                color = if (overMedia) Color.White.copy(alpha = 0.85f) else colors.mutedForeground,
+                color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
                 maxLines = 1,
             )
         }
@@ -254,7 +251,7 @@ private fun HeroInfo(
             IglooText(
                 text = movie.genresLine,
                 style = IglooTheme.typography.label.overMedia(overMedia),
-                color = if (overMedia) Color.White.copy(alpha = 0.75f) else colors.mutedForeground,
+                color = if (overMedia) OVER_MEDIA_TERTIARY else colors.mutedForeground,
                 maxLines = 1,
             )
         }
@@ -330,7 +327,7 @@ private fun MetadataRow(
             IglooText(
                 text = plainLine.joinToString(" · "),
                 style = IglooTheme.typography.label.overMedia(overMedia),
-                color = if (overMedia) Color.White.copy(alpha = 0.85f) else colors.mutedForeground,
+                color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
                 maxLines = 1,
                 modifier = Modifier.padding(start = IglooTheme.spacing.xs),
             )
@@ -357,7 +354,7 @@ private fun DetailChip(
         modifier = Modifier
             .iglooSurface(
                 radius = IglooTheme.radius.pill,
-                fill = if (overMedia) Color.Black.copy(alpha = 0.45f) else colors.muted,
+                fill = if (overMedia) OVER_MEDIA_CONTROL_FILL else colors.muted,
                 border = if (overMedia) Color.White.copy(alpha = 0.25f) else colors.border,
             )
             .padding(horizontal = 12.dp.scaled(), vertical = IglooTheme.spacing.xs),
@@ -426,10 +423,6 @@ private fun LibraryActionRow(
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
-    // Section 3.2: a Ghost button's transparent ground and token text are licensed only on a
-    // token canvas; over the backdrop the buttons carry the same black ground as the chips.
-    val ghostFill = if (overMedia) Color.Black.copy(alpha = 0.45f) else null
-    val ghostContent = if (overMedia) Color.White else null
     val watched = movie.watched == true
     val liked = movie.liked == true
     // Its POST toggles whatever the server holds, so without a known base state there is no
@@ -491,8 +484,7 @@ private fun LibraryActionRow(
             variant = IglooButtonVariant.Ghost,
             icon = IglooIcons.Check,
             iconTint = if (watched) colors.primary else null,
-            restingFill = ghostFill,
-            contentColor = ghostContent,
+            overMedia = overMedia,
             // The announced label is the visible one — "Watch" until watched — because a constant
             // "Watched" against a "Not watched" state read as a contradiction under TalkBack.
             // Null until the status request lands: the button has to look like something in the
@@ -518,8 +510,7 @@ private fun LibraryActionRow(
             variant = IglooButtonVariant.Ghost,
             icon = if (liked) IglooIcons.HeartFilled else IglooIcons.Heart,
             iconTint = if (liked) colors.primary else null,
-            restingFill = ghostFill,
-            contentColor = ghostContent,
+            overMedia = overMedia,
             semanticLabel = "Like",
             stateDescription = movie.liked?.let { if (it) "Liked" else "Not liked" },
             actionLabel = if (liked) "Remove like" else "Like this movie",
@@ -535,8 +526,7 @@ private fun LibraryActionRow(
             icon = IglooIcons.MoreVertical,
             semanticLabel = "More options",
             onClick = onOpenMoreMenu,
-            restingFill = ghostFill,
-            contentColor = ghostContent,
+            overMedia = overMedia,
             modifier = Modifier
                 .testTag("details_more")
                 .focusRequester(moreRequester)
@@ -578,26 +568,13 @@ internal fun ResumeProgress(
             .then(if (visible) Modifier else Modifier.clearAndSetSemantics {}),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
     ) {
-        Box(
-            modifier = Modifier
-                .then(if (visible) Modifier.testTag("details_resume_track") else Modifier)
-                .fillMaxWidth()
-                .height(4.dp.scaled())
-                .iglooSurface(
-                    radius = IglooTheme.radius.pill,
-                    // The PosterCardProgress track literal over media; muted on the fallback.
-                    fill = if (overMedia) Color.Black.copy(alpha = 0.40f) else colors.muted,
-                    border = Color.Transparent,
-                    borderWidth = 0.dp,
-                ),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(progress?.fraction ?: 0f)
-                    .fillMaxHeight()
-                    .background(colors.primary),
-            )
-        }
+        ProgressTrack(
+            fraction = progress?.fraction ?: 0f,
+            ground = if (overMedia) OVER_MEDIA_TRACK else colors.muted,
+            fill = colors.primary,
+            modifier = if (visible) Modifier.testTag("details_resume_track") else Modifier,
+            rounded = true,
+        )
         Box {
             // Keep the longest caption in layout from first paint so a late progress response
             // cannot resize Play's column. Its width remains typography- and locale-derived.
@@ -614,7 +591,7 @@ internal fun ResumeProgress(
                     text = progress.remainingTimeLabel,
                     style = IglooTheme.typography.label.overMedia(overMedia),
                     color = if (overMedia) {
-                        Color.White.copy(alpha = 0.85f)
+                        OVER_MEDIA_SECONDARY
                     } else {
                         colors.mutedForeground
                     },
