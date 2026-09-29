@@ -18,14 +18,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.overMedia
+import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
@@ -33,10 +31,18 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
+import com.igloo.blindpenguincoder.feature.shared.DetailsHero
+import com.igloo.blindpenguincoder.feature.shared.DetailsHeroSkeleton
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.FactsSection
+import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
+import com.igloo.blindpenguincoder.feature.shared.HeroGenresLine
+import com.igloo.blindpenguincoder.feature.shared.HeroReadingStop
+import com.igloo.blindpenguincoder.feature.shared.HeroTitle
 import com.igloo.blindpenguincoder.feature.shared.TrackRow
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.hasMoreActions
+import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 import com.igloo.blindpenguincoder.feature.shared.rememberPlainColumnTrackRowFocus
 
 /**
@@ -80,11 +86,13 @@ fun MusicianDetailsScreen(
         onGoToArtist = null,
         modifier = modifier,
         skeleton = { anchorRequester ->
-            MusicDetailsHeroSkeleton(
+            DetailsHeroSkeleton(
+                artworkAspect = IglooTheme.layout.albumAspect,
                 artworkShape = CircleShape,
-                primaryStubWidth = PLAY_ALL_STUB_WIDTH,
+                anchorWidth = PLAY_ALL_STUB_WIDTH.scaled(),
                 loadingLabel = "Loading artist details",
                 anchorRequester = anchorRequester,
+                trailingStubWidths = listOf(SHUFFLE_STUB_WIDTH.scaled()),
             )
         },
     ) { musician, entryRequester, trackRequesters, onOpenMore ->
@@ -153,7 +161,7 @@ private fun MusicianDetailsContent(
         notice = notice,
         noticeTag = "musician_notice",
         hero = {
-            MusicDetailsHero(imageUrl = musician.thumbUrl, backdropTag = "musician_backdrop") { overMedia ->
+            DetailsHero(imageUrl = musician.thumbUrl, backdropTag = "musician_backdrop") { overMedia ->
                 MusicianHeader(
                     musician = musician,
                     overMedia = overMedia,
@@ -226,7 +234,7 @@ private fun MusicianDetailsContent(
             modifier = Modifier.padding(horizontal = layout.safeAreaHorizontal),
         )
 
-        MusicFactsSection(
+        FactsSection(
             heading = "Artist Details",
             tag = "musician_details_facts",
             facts = musician.facts,
@@ -269,13 +277,18 @@ private fun MusicianHeader(
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xl),
         verticalAlignment = Alignment.Bottom,
     ) {
-        MusicHeroArtwork(imageUrl = musician.thumbUrl, radius = IglooTheme.radius.pill, fallbackIcon = IglooIcons.Person)
+        HeroArtwork(
+            imageUrl = musician.thumbUrl,
+            aspect = IglooTheme.layout.albumAspect,
+            radius = IglooTheme.radius.pill,
+            fallbackIcon = IglooIcons.Person,
+        )
 
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         ) {
-            MusicHeroReadingStop(
+            HeroReadingStop(
                 enabled = spokenAccessibilityEnabled,
                 tag = "musician_hero_info",
                 overMedia = overMedia,
@@ -283,25 +296,12 @@ private fun MusicianHeader(
                 downRequester = primaryRequester,
                 description = musician.heroInfoDescription,
             ) {
-                IglooText(
-                    text = musician.name,
-                    style = IglooTheme.typography.titleLarge.overMedia(overMedia),
-                    color = if (overMedia) Color.White else colors.foreground,
-                    maxLines = 2,
-                    modifier = Modifier.semantics { heading() },
-                )
+                HeroTitle(musician.name, overMedia)
                 MusicMetadataChips(
                     parts = listOf(musician.albumCountText, musician.trackCountText, musician.totalDurationText),
                     overMedia = overMedia,
                 )
-                if (musician.genresLine != null) {
-                    IglooText(
-                        text = musician.genresLine,
-                        style = IglooTheme.typography.label.overMedia(overMedia),
-                        color = if (overMedia) OVER_MEDIA_TERTIARY else colors.mutedForeground,
-                        maxLines = 1,
-                    )
-                }
+                if (musician.genresLine != null) HeroGenresLine(musician.genresLine, overMedia)
                 if (musician.popularity != null) {
                     SpotifyPopularityMeter(score = musician.popularity, overMedia = overMedia)
                 }

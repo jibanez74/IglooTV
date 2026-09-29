@@ -12,9 +12,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
+import com.igloo.blindpenguincoder.feature.shared.DetailsHero
+import com.igloo.blindpenguincoder.feature.shared.DetailsHeroSkeleton
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
+import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 
 /**
  * The album detail screen (docs/design-system.md section 11.5.1): the third occupant of the
@@ -63,11 +67,13 @@ fun AlbumDetailsScreen(
         onGoToArtist = onOpenMusician,
         modifier = modifier,
         skeleton = { anchorRequester ->
-            MusicDetailsHeroSkeleton(
+            DetailsHeroSkeleton(
+                artworkAspect = IglooTheme.layout.albumAspect,
                 artworkShape = RoundedCornerShape(IglooTheme.radius.lg),
-                primaryStubWidth = PLAY_ALBUM_STUB_WIDTH,
+                anchorWidth = PLAY_ALBUM_STUB_WIDTH.scaled(),
                 loadingLabel = "Loading album details",
                 anchorRequester = anchorRequester,
+                trailingStubWidths = listOf(SHUFFLE_STUB_WIDTH.scaled()),
             )
         },
     ) { album, entryRequester, trackRequesters, onOpenMore ->
@@ -144,7 +150,7 @@ private fun AlbumDetailsContent(
         notice = notice,
         noticeTag = "album_notice",
         hero = {
-            MusicDetailsHero(imageUrl = album.coverUrl, backdropTag = "album_backdrop") { overMedia ->
+            DetailsHero(imageUrl = album.coverUrl, backdropTag = "album_backdrop") { overMedia ->
                 AlbumDetailsHeader(
                     album = album,
                     overMedia = overMedia,

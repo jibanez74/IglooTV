@@ -5,6 +5,7 @@ import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.data.model.MusicianDetailsData
 import com.igloo.blindpenguincoder.data.model.MusicianTrack
+import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
@@ -29,7 +30,7 @@ data class MusicianDetailsUi(
     val albums: List<AlbumCardUi>,
     /** Every track across the discography; each row carries its album for More to open. */
     val tracks: List<TrackRowUi>,
-    val facts: List<AlbumFactUi>,
+    val facts: List<FactUi>,
     val factsDescription: String,
     val heroInfoDescription: String,
 )
@@ -44,13 +45,13 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
     val followers = musician.spotifyFollowers.orNull()?.takeIf { it > 0 }
     val genresSpoken = joinedLine(data.genres, ", ")
     val facts = buildList {
-        add(AlbumFactUi("Albums", "${data.albums.size}"))
-        add(AlbumFactUi("Tracks", "${data.tracks.size}"))
-        add(AlbumFactUi("Total duration", totalDurationText))
-        genresSpoken?.let { add(AlbumFactUi("Genres", it)) }
-        popularity?.let { add(AlbumFactUi("Spotify popularity", "$it / 100")) }
-        followers?.let { add(AlbumFactUi("Spotify followers", formatCount(it))) }
-        musician.summary.orNullIfBlank()?.let { add(AlbumFactUi("About", it)) }
+        add(FactUi("Albums", "${data.albums.size}"))
+        add(FactUi("Tracks", "${data.tracks.size}"))
+        add(FactUi("Total duration", totalDurationText))
+        genresSpoken?.let { add(FactUi("Genres", it)) }
+        popularity?.let { add(FactUi("Spotify popularity", "$it / 100")) }
+        followers?.let { add(FactUi("Spotify followers", formatCount(it))) }
+        musician.summary.orNullIfBlank()?.let { add(FactUi("About", it)) }
     }
     return MusicianDetailsUi(
         id = musician.id,

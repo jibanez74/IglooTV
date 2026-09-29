@@ -4,6 +4,7 @@ import com.igloo.blindpenguincoder.core.ui.countNoun
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.core.ui.hms
 import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
+import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.feature.shared.trackSpokenInfo
 import com.igloo.blindpenguincoder.playback.model.millisToSeconds
@@ -68,5 +69,5 @@ internal fun musicTrackRow(
 internal fun countLine(count: Long, singular: String): String = "$count ${countNoun(count, singular)}"
 
 /** The facts panel's one cleared announcement, heading folded in (section 11.4.1 rule). */
-internal fun factsDescription(heading: String, facts: List<AlbumFactUi>): String =
+internal fun factsDescription(heading: String, facts: List<FactUi>): String =
     "$heading. " + facts.joinToString(". ") { "${it.label}: ${it.value}" } + "."

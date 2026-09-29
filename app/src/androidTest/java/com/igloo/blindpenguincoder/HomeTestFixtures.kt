@@ -45,9 +45,9 @@ import com.igloo.blindpenguincoder.feature.music.TracksEntry
 import com.igloo.blindpenguincoder.feature.music.tracksEntries
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUi
 import com.igloo.blindpenguincoder.feature.music.AlbumDiscUi
-import com.igloo.blindpenguincoder.feature.music.AlbumFactUi
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
@@ -427,14 +427,14 @@ internal fun testAlbumDetails(
     ),
     hasMultipleDiscs = true,
     facts = listOf(
-        AlbumFactUi("Release date", "August 6, 1965"),
-        AlbumFactUi("Total tracks", "3"),
-        AlbumFactUi("Total duration", "7m 5s"),
-        AlbumFactUi("Artist", "The Beatles"),
-        AlbumFactUi("Genres", "Rock, Pop"),
-        AlbumFactUi("Discs", "2"),
-        AlbumFactUi("Audio quality", "FLAC · 900 kbps · stereo"),
-        AlbumFactUi("Spotify popularity", "73 / 100"),
+        FactUi("Release date", "August 6, 1965"),
+        FactUi("Total tracks", "3"),
+        FactUi("Total duration", "7m 5s"),
+        FactUi("Artist", "The Beatles"),
+        FactUi("Genres", "Rock, Pop"),
+        FactUi("Discs", "2"),
+        FactUi("Audio quality", "FLAC · 900 kbps · stereo"),
+        FactUi("Spotify popularity", "73 / 100"),
     ),
     factsDescription = "Album details. Release date: August 6, 1965. Total tracks: 3. " +
         "Total duration: 7m 5s. Artist: The Beatles. Genres: Rock, Pop. Discs: 2. " +
@@ -625,13 +625,13 @@ internal fun testMusicianDetails(
         ),
     ),
     facts = listOf(
-        AlbumFactUi("Albums", "2"),
-        AlbumFactUi("Tracks", "3"),
-        AlbumFactUi("Total duration", "7m 5s"),
-        AlbumFactUi("Genres", "Rock, Pop"),
-        AlbumFactUi("Spotify popularity", "88 / 100"),
-        AlbumFactUi("Spotify followers", "25,000,000"),
-        AlbumFactUi("About", "Liverpool, 1960."),
+        FactUi("Albums", "2"),
+        FactUi("Tracks", "3"),
+        FactUi("Total duration", "7m 5s"),
+        FactUi("Genres", "Rock, Pop"),
+        FactUi("Spotify popularity", "88 / 100"),
+        FactUi("Spotify followers", "25,000,000"),
+        FactUi("About", "Liverpool, 1960."),
     ),
     factsDescription = "Artist details. Albums: 2. Tracks: 3. Total duration: 7m 5s. " +
         "Genres: Rock, Pop. Spotify popularity: 88 / 100. Spotify followers: 25,000,000. " +

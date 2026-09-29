@@ -1,18 +1,14 @@
 package com.igloo.blindpenguincoder.feature.movies
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,26 +25,16 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.design.overMedia
-import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIconButton
@@ -57,8 +43,11 @@ import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
-import com.igloo.blindpenguincoder.core.ui.focusRing
-import com.igloo.blindpenguincoder.core.ui.iglooSurface
+import com.igloo.blindpenguincoder.feature.shared.DetailChip
+import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
+import com.igloo.blindpenguincoder.feature.shared.HeroGenresLine
+import com.igloo.blindpenguincoder.feature.shared.HeroReadingStop
+import com.igloo.blindpenguincoder.feature.shared.HeroTitle
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 
 /**
@@ -104,7 +93,12 @@ internal fun MovieDetailsHeader(
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xl),
         verticalAlignment = Alignment.Bottom,
     ) {
-        HeaderPoster(posterUrl = movie.posterUrl)
+        HeroArtwork(
+            imageUrl = movie.posterUrl,
+            aspect = IglooTheme.layout.posterAspect,
+            radius = IglooTheme.radius.lg,
+            fallbackIcon = IglooIcons.Movies,
+        )
 
         Column(
             modifier = Modifier.weight(1f),
@@ -191,51 +185,15 @@ private fun HeroInfo(
     downRequester: FocusRequester,
 ) {
     val colors = IglooTheme.colors
-    var focused by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier
-            .then(
-                if (readingStop) {
-                    Modifier
-                        .testTag("details_hero_info")
-                        // The About panel's focus treatment: a fill and ring, no scale, because
-                        // this is a focus target only and carries no action to promise. Over the
-                        // backdrop the fill is the section 3.2 black ground, not the token card.
-                        .focusRing(
-                            focused = focused,
-                            radius = IglooTheme.radius.lg,
-                            fill = when {
-                                !focused -> Color.Transparent
-                                overMedia -> OVER_MEDIA_CONTROL_FILL
-                                else -> colors.card.copy(alpha = 0.72f)
-                            },
-                            scaleOnFocus = false,
-                        )
-                        .focusRequester(requester)
-                        .focusProperties {
-                            up = Cancel
-                            left = Cancel
-                            right = Cancel
-                            down = downRequester
-                        }
-                        .onFocusChanged { focused = it.isFocused }
-                        .focusable()
-                        .clearAndSetSemantics {
-                            contentDescription = movie.heroInfoDescription
-                        }
-                } else {
-                    Modifier
-                },
-            ),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+    HeroReadingStop(
+        enabled = readingStop,
+        tag = "details_hero_info",
+        overMedia = overMedia,
+        requester = requester,
+        downRequester = downRequester,
+        description = movie.heroInfoDescription,
     ) {
-        IglooText(
-            text = movie.title,
-            style = IglooTheme.typography.titleLarge.overMedia(overMedia),
-            color = if (overMedia) Color.White else colors.foreground,
-            maxLines = 2,
-            modifier = Modifier.semantics { heading() },
-        )
+        HeroTitle(movie.title, overMedia)
         if (movie.tagline != null) {
             IglooText(
                 text = "“${movie.tagline}”",
@@ -247,47 +205,7 @@ private fun HeroInfo(
             )
         }
         MetadataRow(movie = movie, overMedia = overMedia)
-        if (movie.genresLine != null) {
-            IglooText(
-                text = movie.genresLine,
-                style = IglooTheme.typography.label.overMedia(overMedia),
-                color = if (overMedia) OVER_MEDIA_TERTIARY else colors.mutedForeground,
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-/** Decorative — the artwork repeats nothing the text does not say, so TalkBack skips it. */
-@Composable
-private fun HeaderPoster(posterUrl: String?) {
-    val colors = IglooTheme.colors
-    var imageFailed by remember(posterUrl) { mutableStateOf(false) }
-    Box(
-        modifier = Modifier
-            .width(IglooTheme.layout.posterWidth)
-            .aspectRatio(IglooTheme.layout.posterAspect)
-            .iglooSurface(radius = IglooTheme.radius.lg, fill = colors.muted),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (posterUrl != null && !imageFailed) {
-            AsyncImage(
-                model = posterUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                onState = { state ->
-                    if (state is AsyncImagePainter.State.Error) imageFailed = true
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Image(
-                imageVector = IglooIcons.Movies,
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(colors.mutedForeground),
-                modifier = Modifier.size(IglooTheme.icons.lg),
-            )
-        }
+        if (movie.genresLine != null) HeroGenresLine(movie.genresLine, overMedia)
     }
 }
 
@@ -333,32 +251,6 @@ private fun MetadataRow(
             )
         }
     }
-}
-
-/**
- * The pill ground is the section 3.2 over-media chip literal — black with a translucent white
- * hairline, deliberately theme-blind because a backdrop is behind it. The fallback is the token
- * pair the badge alphas of section 3.1 prescribe for chrome on a plain canvas.
- */
-@Composable
-private fun DetailChip(
-    text: String,
-    overMedia: Boolean,
-) {
-    val colors = IglooTheme.colors
-    IglooText(
-        text = text,
-        style = IglooTheme.typography.label,
-        color = if (overMedia) Color.White.copy(alpha = 0.90f) else colors.foreground,
-        maxLines = 1,
-        modifier = Modifier
-            .iglooSurface(
-                radius = IglooTheme.radius.pill,
-                fill = if (overMedia) OVER_MEDIA_CONTROL_FILL else colors.muted,
-                border = if (overMedia) Color.White.copy(alpha = 0.25f) else colors.border,
-            )
-            .padding(horizontal = 12.dp.scaled(), vertical = IglooTheme.spacing.xs),
-    )
 }
 
 /**

@@ -5,6 +5,7 @@ import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.data.model.AlbumDetailsData
 import com.igloo.blindpenguincoder.data.model.AlbumTrack
+import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
@@ -38,7 +39,7 @@ data class AlbumDetailsUi(
     val artists: List<AlbumArtistUi>,
     val discs: List<AlbumDiscUi>,
     val hasMultipleDiscs: Boolean,
-    val facts: List<AlbumFactUi>,
+    val facts: List<FactUi>,
     /** The facts panel's one cleared announcement, heading folded in (section 11.4.1 rule). */
     val factsDescription: String,
     /** The hero reading stop's one sentence (web `pageAnnouncement` parity, plus popularity). */
@@ -54,12 +55,6 @@ data class AlbumArtistUi(
 data class AlbumDiscUi(
     val disc: Long,
     val tracks: List<TrackRowUi>,
-)
-
-/** One facts-panel row; absent values never become rows, so the panel renders what it holds. */
-data class AlbumFactUi(
-    val label: String,
-    val value: String,
 )
 
 internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
@@ -82,14 +77,14 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
         // Web parity: the facts row wants the full date and shows nothing for a bare year;
         // the hero's date-or-year fallback is the year's one home.
         album.releaseDate.orNullIfBlank()?.let(::formatReleaseDate)
-            ?.let { add(AlbumFactUi("Release date", it)) }
-        add(AlbumFactUi("Total tracks", "${data.tracks.size}"))
-        add(AlbumFactUi("Total duration", totalDurationText))
-        artistNamesLine?.let { add(AlbumFactUi("Artist", it)) }
-        joinedLine(data.albumGenres, ", ")?.let { add(AlbumFactUi("Genres", it)) }
-        if (hasMultipleDiscs) add(AlbumFactUi("Discs", "${discs.size}"))
-        audioQuality?.let { add(AlbumFactUi("Audio quality", it)) }
-        popularity?.let { add(AlbumFactUi("Spotify popularity", "$it / 100")) }
+            ?.let { add(FactUi("Release date", it)) }
+        add(FactUi("Total tracks", "${data.tracks.size}"))
+        add(FactUi("Total duration", totalDurationText))
+        artistNamesLine?.let { add(FactUi("Artist", it)) }
+        joinedLine(data.albumGenres, ", ")?.let { add(FactUi("Genres", it)) }
+        if (hasMultipleDiscs) add(FactUi("Discs", "${discs.size}"))
+        audioQuality?.let { add(FactUi("Audio quality", it)) }
+        popularity?.let { add(FactUi("Spotify popularity", "$it / 100")) }
     }
     return AlbumDetailsUi(
         id = album.id,

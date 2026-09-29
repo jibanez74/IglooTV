@@ -17,20 +17,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.ProgressTrack
-import com.igloo.blindpenguincoder.core.ui.iglooSurface
+import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
+import com.igloo.blindpenguincoder.feature.shared.HeroGenresLine
+import com.igloo.blindpenguincoder.feature.shared.HeroReadingStop
+import com.igloo.blindpenguincoder.feature.shared.HeroTitle
 
 /**
  * The album hero's content block (docs/design-system.md section 11.5.1): square cover left;
@@ -65,7 +64,12 @@ internal fun AlbumDetailsHeader(
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xl),
         verticalAlignment = Alignment.Bottom,
     ) {
-        MusicHeroArtwork(imageUrl = album.coverUrl, radius = IglooTheme.radius.lg, fallbackIcon = IglooIcons.Music)
+        HeroArtwork(
+            imageUrl = album.coverUrl,
+            aspect = IglooTheme.layout.albumAspect,
+            radius = IglooTheme.radius.lg,
+            fallbackIcon = IglooIcons.Music,
+        )
 
         Column(
             modifier = Modifier.weight(1f),
@@ -104,7 +108,7 @@ internal fun AlbumDetailsHeader(
 
 /**
  * The hero's prose: title, artist, metadata chips, genres, and the popularity meter — one
- * reading stop under a screen reader ([MusicHeroReadingStop]).
+ * reading stop under a screen reader ([HeroReadingStop]).
  */
 @Composable
 private fun AlbumHeroInfo(
@@ -115,7 +119,7 @@ private fun AlbumHeroInfo(
     downRequester: FocusRequester,
 ) {
     val colors = IglooTheme.colors
-    MusicHeroReadingStop(
+    HeroReadingStop(
         enabled = readingStop,
         tag = "album_hero_info",
         overMedia = overMedia,
@@ -123,13 +127,7 @@ private fun AlbumHeroInfo(
         downRequester = downRequester,
         description = album.heroInfoDescription,
     ) {
-        IglooText(
-            text = album.title,
-            style = IglooTheme.typography.titleLarge.overMedia(overMedia),
-            color = if (overMedia) Color.White else colors.foreground,
-            maxLines = 2,
-            modifier = Modifier.semantics { heading() },
-        )
+        HeroTitle(album.title, overMedia)
         if (album.artistName != null) {
             IglooText(
                 text = album.artistName,
@@ -142,44 +140,11 @@ private fun AlbumHeroInfo(
             parts = listOfNotNull(album.releaseDateText, album.trackCountText, album.totalDurationText),
             overMedia = overMedia,
         )
-        if (album.genresLine != null) {
-            IglooText(
-                text = album.genresLine,
-                style = IglooTheme.typography.label.overMedia(overMedia),
-                color = if (overMedia) OVER_MEDIA_TERTIARY else colors.mutedForeground,
-                maxLines = 1,
-            )
-        }
+        if (album.genresLine != null) HeroGenresLine(album.genresLine, overMedia)
         if (album.popularity != null) {
             SpotifyPopularityMeter(score = album.popularity, overMedia = overMedia)
         }
     }
-}
-
-/**
- * The pill ground is the section 3.2 over-media chip literal — black with a translucent white
- * hairline, deliberately theme-blind because a backdrop is behind it. The fallback is the token
- * pair the badge alphas of section 3.1 prescribe for chrome on a plain canvas.
- */
-@Composable
-internal fun AlbumDetailChip(
-    text: String,
-    overMedia: Boolean,
-) {
-    val colors = IglooTheme.colors
-    IglooText(
-        text = text,
-        style = IglooTheme.typography.label,
-        color = if (overMedia) Color.White.copy(alpha = 0.90f) else colors.foreground,
-        maxLines = 1,
-        modifier = Modifier
-            .iglooSurface(
-                radius = IglooTheme.radius.pill,
-                fill = if (overMedia) OVER_MEDIA_CONTROL_FILL else colors.muted,
-                border = if (overMedia) Color.White.copy(alpha = 0.25f) else colors.border,
-            )
-            .padding(horizontal = 12.dp.scaled(), vertical = IglooTheme.spacing.xs),
-    )
 }
 
 /**

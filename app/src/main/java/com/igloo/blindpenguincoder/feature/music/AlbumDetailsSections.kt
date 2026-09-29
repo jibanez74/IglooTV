@@ -26,6 +26,8 @@ import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
+import com.igloo.blindpenguincoder.feature.shared.DetailChip
+import com.igloo.blindpenguincoder.feature.shared.FactsSection
 import com.igloo.blindpenguincoder.feature.shared.TrackRow
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.hasMoreActions
@@ -92,7 +94,7 @@ internal fun AlbumDetailsSections(
         onOpenMore = onOpenMore,
         modifier = Modifier.padding(contentInset),
     )
-    MusicFactsSection(
+    FactsSection(
         heading = "Album Details",
         tag = "album_details_facts",
         facts = album.facts,
@@ -158,7 +160,7 @@ private fun ArtistsSection(
                             .onFocusChanged { if (it.isFocused) onArtistFocused(requesters[index]) },
                     )
                 } else {
-                    AlbumDetailChip(text = artist.name, overMedia = false)
+                    DetailChip(text = artist.name, overMedia = false)
                 }
             }
         }
