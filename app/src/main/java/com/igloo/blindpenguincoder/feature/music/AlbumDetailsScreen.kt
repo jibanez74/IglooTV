@@ -32,9 +32,9 @@ import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
  * the album's queue — in order, freshly shuffled, or in order from that row; [playReturnRequester]
  * is parked on whichever of those controls launched it so closing that player restores focus
  * there (section 6.3), the movie details screen's pairing. [likes] and [onToggleLike] are the
- * shared like state every track row reads; [notice] is its last failed write. [onOpenMusician]
- * replaces this overlay with a credited artist's — from a chip or a row's More — and is null
- * only where no musician screen can be reached, which leaves the chips display-only.
+ * shared like state every track row reads; its last failed write is the page's notice.
+ * [onOpenMusician] replaces this overlay with a credited artist's — from a chip or a row's More —
+ * and is null only where no musician screen can be reached, which leaves the chips display-only.
  */
 @Composable
 fun AlbumDetailsScreen(
@@ -45,7 +45,6 @@ fun AlbumDetailsScreen(
     onPlayTrack: (Int) -> Unit,
     likes: TrackLikesUiState,
     onToggleLike: (Long) -> Unit,
-    notice: String?,
     onOpenMusician: ((Long) -> Unit)?,
     playReturnRequester: FocusRequester,
     modifier: Modifier = Modifier,
@@ -80,7 +79,6 @@ fun AlbumDetailsScreen(
         AlbumDetailsContent(
             album = album,
             likes = likes,
-            notice = notice,
             spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             entryRequester = entryRequester,
             playReturnRequester = playReturnRequester,
@@ -99,7 +97,6 @@ fun AlbumDetailsScreen(
 private fun AlbumDetailsContent(
     album: AlbumDetailsUi,
     likes: TrackLikesUiState,
-    notice: String?,
     spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
     playReturnRequester: FocusRequester,
@@ -147,7 +144,7 @@ private fun AlbumDetailsContent(
     }
 
     MusicDetailsBody(
-        notice = notice,
+        notice = likes.notice,
         noticeTag = "album_notice",
         hero = {
             DetailsHero(imageUrl = album.coverUrl, backdropTag = "album_backdrop") { overMedia ->

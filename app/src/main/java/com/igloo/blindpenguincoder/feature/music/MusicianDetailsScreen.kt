@@ -66,7 +66,6 @@ fun MusicianDetailsScreen(
     onPlayTrack: (Int) -> Unit,
     likes: TrackLikesUiState,
     onToggleLike: (Long) -> Unit,
-    notice: String?,
     onOpenAlbum: (Long) -> Unit,
     playReturnRequester: FocusRequester,
     modifier: Modifier = Modifier,
@@ -99,7 +98,6 @@ fun MusicianDetailsScreen(
         MusicianDetailsContent(
             musician = musician,
             likes = likes,
-            notice = notice,
             spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             entryRequester = entryRequester,
             playReturnRequester = playReturnRequester,
@@ -118,7 +116,6 @@ fun MusicianDetailsScreen(
 private fun MusicianDetailsContent(
     musician: MusicianDetailsUi,
     likes: TrackLikesUiState,
-    notice: String?,
     spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
     playReturnRequester: FocusRequester,
@@ -158,7 +155,7 @@ private fun MusicianDetailsContent(
     val playReturnRow = playLaunchSite.rowIn(musician.tracks)
 
     MusicDetailsBody(
-        notice = notice,
+        notice = likes.notice,
         noticeTag = "musician_notice",
         hero = {
             DetailsHero(imageUrl = musician.thumbUrl, backdropTag = "musician_backdrop") { overMedia ->
