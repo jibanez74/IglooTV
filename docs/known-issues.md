@@ -8,185 +8,46 @@ Smaller things — duplication, organisation, coverage gaps and polish — live 
 
 ---
 
-## Wire models drift from `docs/openapi.json` with nothing to catch it
+## With TalkBack on, d-pad Down into an off-screen grid row moves sideways
 
-**Found:** 2026-08-13, resolving the home-screen review's two contract comments.
-**Status:** open. The known instances are fixed; the mechanism that produced them is not.
-**Files:** `app/src/main/java/com/igloo/blindpenguincoder/data/model/`
+**Found:** 2026-09-29, in the DRY pass's Shield check. **Cause confirmed:** 2026-09-30, on the
+Shield, with an accessibility-event trace.
+**Status:** open, to be fixed in its own branch. Home's horizontal rails probably have the same
+problem when Right reaches a card that isn't on screen yet, but that hasn't been checked.
+**Files:** `app/src/main/java/com/igloo/blindpenguincoder/feature/shared/PaneGrid.kt`
 
-### The gap
+In Movies → Genres → Action (149 movies in five columns), 38 Down presses from the Genres tab end
+on the last row's fourth card, Zack Snyder's Justice League, instead of its first, X2. With
+TalkBack off, the same presses at the same pace end on X2. So the grid's own focus wiring is
+correct, and the fault only appears with TalkBack on.
 
-The models were generated once (`05ec605`, "Add API models generated from docs/openapi.json").
-`docs/openapi.json` has since been re-synced **seven times** — `9852401`, `047499e`, `de5d43a`,
-`647001a`, `fa906c2`, `5e3a176`, `b8dc4c2` — with no regeneration and no check. A reviewer spotting two
-dropped fields by eye is what surfaced this; a full manual sweep then found three more, and the
-`AuthUser.avatar` decode bug (fixed 2026-08-14) was a sixth that a presence-only sweep still
-misses, because the field was present and only its *type* was wrong.
+The trace, taken by logging every focus and accessibility event from the activity's content
+view, shows the same sequence on almost every press:
 
-A second full sweep on 2026-08-14 found a seventh, `PlaylistCollaboratorMutationData` (fixed the
-same day), which misses in a third direction again: the field was present *and* correctly named,
-and only the schema it referenced was wrong. `PlaylistCollaboratorMutationEnvelope.data
-.collaborator` refs `PlaylistCollaboratorMutation` — the row without the user join, so no
-`username` and no `email` — while the model reused the list-shaped `PlaylistCollaborator`, whose
-copies of both are non-nullable. Worth noting because it is the first instance that *cannot*
-decode at all rather than being absorbed by `ignoreUnknownKeys`.
+1. Down from a card on the bottom visible row. Compose's focus search places the next row and
+   focuses its first card in the same frame, for example index 105, row 21, column 0.
+2. Compose sends no `TYPE_VIEW_FOCUSED` for that card. It only announces a node that its last
+   accessibility snapshot saw unfocused, which is the same rule behind the rail fix in
+   design-system §6.3. TalkBack's cursor stays on the previous card.
+3. The grid scrolls and sends `TYPE_VIEW_SCROLLED`. About 120–160ms later, with no key pressed,
+   input focus moves to the last card of the new row (index 109, column 4). TalkBack for TV moves
+   its cursor after a scroll and, on TV, moves input focus with it. Only this card gets a
+   `TYPE_VIEW_FOCUSED`, followed by TalkBack's `TYPE_VIEW_ACCESSIBILITY_FOCUSED`.
 
-A model with no call site is drift waiting to happen: nothing exercises it until a screen wires
-the endpoint and it fails at runtime. Until 2026-09-20 roughly two thirds of the wire surface
-sat in that state, kept in sync by hand. **Since 2026-09-21 the rule is the other way round: a
-model exists only once production calls its route.** The Music review pass deleted every
-uncalled model in the files it had touched — the playlist, search, user-stats, settings,
-notification and admin-user files whole, plus `Track`, `TrackDetailsData`, `LikedTracksData`,
-`ClearedData`, `IdentifyMovieRequest`, `UpdateMovieMetadataRequest` and `DeleteMovieRequest` —
-and their serialization cases with them. The 2026-09-29 DRY pass finished the sweep:
-`WatchRooms.kt` went whole and `Metadata.kt` lost its provider-status and TMDB/Spotify search
-classes, and every live model was trimmed to the fields production reads — 56 fields, found by
-compiling with each property marked deprecated so every read, nested ones included, was
-reported. A required field nothing reads is the decode failure the `b8dc4c2` sync produced
-twice, so **a model now carries only the fields its screen reads**, the rest left to
-`ignoreUnknownKeys`.
+After the first jump, every later Down starts from the last column, so the walk down the grid
+runs through column 4 and ends on the final card.
 
-The consequence is that most spec schemas have **no model at all** — every `Show*` schema and
-`/api/shows/*` route except the five the TV Shows index calls (`ShowLibraryItem`,
-`ShowsLibraryData`, `ShowGenreWithCount`, `ShowGenresData`, `ShowsStatsData` in `Shows.kt`,
-added 2026-09-26), the playlist, search, stats, settings, notification and admin routes, the
-scan-status routes, the devices list, the profile updates, `LoginRequest`,
-`WatchRoomClientEvent` — and that is expected. `ContinueWatchingEpisodeItem`'s episode keys
-(`show_id`, `season_number`, `episode_number`, `episode_name`) are the one partial case: the
-Home rail drops `kind: episode` entries until an episode has a screen to open.
+What a fix has to do: make sure the card focus lands on already existed, unfocused, in an
+earlier accessibility snapshot. Options considered on 2026-09-30:
 
-### What the fix looks like
+- While a screen reader runs, the grid handles Up and Down itself. It scrolls the next row on
+  screen, waits one accessibility batch, then focuses the card in the same column. This is the
+  row-level version of `requestFocusAnnounced`.
+- A layout in which the next row always shows at the edge of the viewport. At 960x540dp there is
+  barely room for that.
 
-Either regenerate the models from the spec as part of each sync, or add a test that walks
-`components.schemas` and asserts each model's required fields match — presence *and* type. The
-serialization tests pin the contract shape for the models touched so far, but only those, and
-only by hand-written fixture.
-
-Three things a check has to handle before it is worth having, all learned from doing the sweep
-by hand:
-
-- **`docs/openapi.json` is not on the JVM test classpath.** `app/build.gradle.kts` has no
-  `sourceSets` or `testOptions` block and `app/src/test/` has no `resources/` directory, so the
-  check needs a `sourceSets["test"].resources.srcDir(...)` entry pointing at `docs/` (or a copy
-  task). Reading it via a relative `File(...)` path would depend on Gradle's working directory.
-- **`allOf` has to be flattened.** Every `*Envelope` and `AdminUser` compose with `allOf` and
-  have an empty top-level `properties`; `ContinueWatchingItem` is a discriminated `oneOf`. A
-  naive walk reports every one of their fields as missing.
-- **OpenAPI 3.1 type unions have to be understood.** `"type": ["string", "null"]` is exactly the
-  shape the `AuthUser.avatar` bug hid in, so a checker that reads `type` as a string misses the
-  whole class of bug it exists to catch.
-- **The spec itself can be the wrong side of the drift.** An eighth instance, found 2026-08-15
-  wiring the movie detail screen: `Chapter.movie_id` is declared `SqlNullInt64` and the server
-  sends a plain number. So a checker that trusts `openapi.json` as truth would have called the
-  correct-looking model correct, and a spec-shaped fixture did — the hand-written serialization
-  test passed against the object shape while the real payload could not decode at all. Whatever
-  the check ends up being, it has to run against a live response, not only the document.
-- **A sync can break a model that used to decode.** Instances nine and ten, found 2026-09-19
-  wiring the Music screen, both came from the `b8dc4c2` sync: `TrackListItem` had lost
-  `file_path` and gained five nullable album/musician columns while `duration` became an
-  integer of milliseconds, and `SimpleMusician` had lost `sort_name`. Both Kotlin models kept
-  the removed field as a required non-nullable property, so `ignoreUnknownKeys` could not save
-  them — every list under `/music/tracks` and `/music/musicians` failed to decode outright.
-  Confirmed against the server's own row structs (`GetTracksAlphabeticalRow`,
-  `GetMusiciansAlphabeticalRow` in the main repository) rather than a populated live response,
-  because the local dev library is empty and the tailnet server needs its own credentials; the
-  same sync also typed `MusicianDetailsData`'s three `JsonObject` fields, now modelled.
-- **The same sync broke the two movie screens a day later.** Instances eleven to fourteen,
-  found 2026-09-19/20 on Home and movie details, all from `b8dc4c2` as well: `Movie` lost its
-  seven file columns (`file_path`, `file_name`, `size`, `container`, `mime_type`, `created_at`,
-  `updated_at`), so `GET /movies/details/{id}` failed to decode and playback lost its mime type
-  (now read from the typed `MovieTechnicalFile` on the technical-details route);
-  `VideoStream`/`AudioStream`/`Subtitle` lost `created_at`/`updated_at`;
-  `GET /movies/continue-watching` moved to `GET /continue-watching` with a `kind`-discriminated
-  movie/episode item under `data.items`; and the uncalled `PlaybackSettings` kept a required
-  `is_admin` the schema dropped. The five `MovieDetailsData` lists are typed in the spec since
-  this sync too. Every model in `data/model/` was re-checked against the spec on 2026-09-20; the
-  uncalled ones were deleted the next day (above), and the ones below are the only deliberate
-  gaps among those that remain.
-
-### Related, smaller
-
-- Models omit response fields their schema marks required, by the rule above: a field is
-  modelled only once production reads it. Harmless under `ignoreUnknownKeys = true` — recorded
-  so the next sweep does not re-flag the omissions as drift.
-- Some Kotlin class names lag the spec's: `MovieWatchProgress`/`UpdateMovieWatchProgressRequest`/
-  `SetMovieWatchedRequest` for `WatchProgress`/`UpdateWatchProgressRequest`/`SetWatchedRequest`,
-  `MovieCastMember`/`MovieCrewMember`/`MovieExtraVideo` for `MovieCastCredit`/`MovieCrewCredit`/
-  `ExtraVideo`, `TrackGenre` for `AlbumTrackGenre`. The fields are the schemas' own, less the
-  ones nothing reads; only the names differ. Not a bug, but it will trip any check that matches
-  models to schemas by name.
-
----
-
-## TalkBack stays on the rail after a rail press opens another pane
-
-**Found:** 2026-09-29, on the Nvidia Shield with TalkBack on, during the DRY pass's device check.
-**Status:** open. Also happens on a `main` build, so no recent change caused it.
-**Files:** `app/src/main/java/com/igloo/blindpenguincoder/feature/home/IglooApp.kt`
-(`ContentPane`'s cross-branch `LaunchedEffect`)
-
-Pressing a rail item that switches branch, Home → Movies for example, moves input focus to the
-new pane's first card. TalkBack's cursor, though, stays on the rail icon that was pressed. The
-card is never announced, and only the first d-pad press brings the cursor back to where focus is.
-This was seen on Movies; TV Shows and Music go through the same handoff.
-
-On a cross-branch switch the shell leaves focus on the rail row on purpose. `ContentPane` then
-requests `contentStartRequester` once the incoming branch is composed. That looks like the
-mechanism design-system §9.3 describes for anchored menus:
-
-- the anchor is focused in the same frame it first appears;
-- Compose emits `TYPE_VIEW_FOCUSED` only for a node it has seen unfocused, so no event goes out;
-- TalkBack for TV keeps its cursor on the rail row, which is still in the tree.
-
-This is inferred from the behaviour and has not been confirmed with an accessibility event trace.
-
----
-
-## TalkBack stays on the player's menu button when a track or quality menu opens
-
-**Found:** 2026-09-29, in the same Shield check.
-**Status:** open. The dialog shell and the player controls' semantics are the same as `main`'s.
-This one was not re-run on a `main` build.
-**Files:** `app/src/main/java/com/igloo/blindpenguincoder/feature/player/VideoPlayerScreen.kt`
-(`VideoPlayerChrome` stays composed under `playerMenu`),
-`app/src/main/java/com/igloo/blindpenguincoder/core/ui/IglooRadioListDialog.kt`
-
-Opening Subtitles or Quality from the paused player moves input focus to the menu's selected row.
-TalkBack's cursor stays on the Subtitles or Quality button behind the scrim, so the menu is never
-announced. The first d-pad press moves the cursor into the menu.
-
-It doesn't happen every time: in one try, the Chapters menu, opened the same way, did take the
-cursor. Audio goes through the same path but wasn't tested, because the test title had only one
-audio track.
-
-The player composes `VideoPlayerChrome` next to the menu with its semantics intact. Movie details
-has solved the same problem for its anchored menus: it wraps the covered content in an empty
-`clearAndSetSemantics { }` and keeps the `testTag` outside it. The comment in
-`MovieDetailsScreen.kt` and design-system §9.3 explain why. The menu's `IglooScrim` fills the
-screen, yet §9.3's exemption for full-screen overlays doesn't seem to apply to it. The likely fix is
-the same clear on the controls while `playerMenu != null`, with their test tags kept outside.
-
----
-
-## D-pad Down sometimes moves sideways in a pane grid with TalkBack on
-
-**Found:** 2026-09-29, in the same Shield check.
-**Status:** open; cause unknown. The same key sequence gives the same result on a `main` build.
-**Files:** `app/src/main/java/com/igloo/blindpenguincoder/feature/shared/PaneGrid.kt` (the cards'
-`focusProperties`)
-
-In Movies → Genres → Action (149 movies in five columns), a Down press sometimes moved focus along
-the row instead of down it:
-
-- From the Genres tab, 38 Down presses ended on the last row's fourth card (Zack Snyder's Justice
-  League) instead of its first (X2). `main` ended on the same card.
-- From V for Vendetta (row 28, first column), one Down moved focus to X-Men: Days of Future Past
-  (row 28, fourth column). The next Down reached X2.
-
-The grid overrides only `left` on the first column, `up` on the first row, `right` on the last
-column and the final card, and `down` on the last row. Every other Down is Compose's own focus
-search. During these presses TalkBack's cursor visibly lagged behind input focus, which makes
-TalkBack for TV's key handling the first suspect. The grid has not been tested with TalkBack off.
+`LazyLayoutCacheWindow` only precomposes items and doesn't place them, and it is experimental,
+so it is not expected to help.
 
 ---
 

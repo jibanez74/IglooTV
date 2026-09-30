@@ -349,6 +349,7 @@ Android Lint is stock AGP. There is no ktlint, detekt, spotless, `lint.xml` or l
 | --- | --- | --- |
 | Repositories | `data/repository/{Auth,Movie,Music,Profile,Server,Show}RepositoryTest.kt` | Request shape, decode, error mapping, caching, profile ordering — over the **real** HTTP client on a `MockEngine` |
 | Wire models | `data/model/ApiModelsSerializationTest.kt` | Serialization round-trips against `docs/openapi.json` |
+| API contract | `data/model/OpenApiContractTest.kt` | Every called route exists in `docs/openapi.json`; every model field it decodes or encodes matches the schema in kind, nullability and required-ness; every model is reached from a called route |
 | Auth gate | `feature/auth/SessionManagerTest.kt` | The six-state gate: Loading, NeedsServer, ChooseProfile, NeedsPin, NeedsLogin, Authenticated |
 | Pairing | `feature/auth/QuickConnectViewModelTest.kt`, `QuickConnectApprovalTest.kt` | Code initiation, polling, redeem, failure paths |
 | Library pane | `feature/library/LibraryViewModelTest.kt` (the largest suite, over the movie routes), `LibraryKindTest.kt`, `feature/shows/ShowLibraryViewModelTest.kt` | Tab strip, the 300 ms switch debounce, pagination and append states, sort, genre memory, liked view; the per-kind wording and tags; the show routes and the two-tab strip |
@@ -619,7 +620,7 @@ Open coverage gaps are tracked in `docs/cleanup-backlog.md` §4 rather than left
 | --- | --- |
 | `AGENTS.md` | The contributor contract: TV-only product rules, architecture, networking/auth/playback/image policy, dependency policy, definition of done. **Authoritative.** |
 | `docs/design-system.md` | The 12-section design system: scale model, color, typography, spacing, the single focus treatment, motion, shell, components, UI states, per-screen UX, accessibility. Appendix B maps tokens to files. **Authoritative for UI.** |
-| `docs/openapi.json` | The backend API contract (Igloo API 0.1.0, 129 paths). Read before API work; do not invent routes or payloads. Known stale for `AuthUser.avatar`. |
+| `docs/openapi.json` | The backend API contract (Igloo API 0.1.0, 129 paths). Read before API work; do not invent routes or payloads. `OpenApiContractTest` checks the models against it. |
 | `docs/known-issues.md` | Contract and behavior gaps deliberately not fixed yet, with enough detail to act on |
 | `docs/cleanup-backlog.md` | Duplication, small correctness edges, coverage gaps and polish, each actionable |
 | `docs/movies-screen-status.md` | Plain-language state of the Movies screen after the tab-strip pass |
@@ -671,9 +672,9 @@ report of what you ran, on what, what you verified, and what you could not.
 manifest requires `android.software.leanback`. Use a Google TV / Android TV image or a real TV
 device — connected tests need one too.
 
-**"Something went wrong" right after sign-in.** `/api/auth/user` serializes `avatar` as a Go
-`sql.NullString` (`{"String":…,"Valid":…}`) and `docs/openapi.json` is stale there. `curl` the real
-backend before trusting the spec on a decode failure.
+**A decode failure the contract test did not predict.** `OpenApiContractTest` trusts
+`docs/openapi.json`, and the spec has been wrong about the server before. `curl` the real backend
+before trusting the spec on a decode failure.
 
 **The app cannot reach the server from an emulator.** Use `10.0.2.2`, not `localhost` or
 `127.0.0.1`. For a Tailscale-style host, see the networking caveat in
