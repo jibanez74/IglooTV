@@ -2,17 +2,16 @@ package com.igloo.blindpenguincoder.feature.music
 
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
+import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.data.model.AlbumDetailsData
 import com.igloo.blindpenguincoder.data.model.AlbumTrack
+import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
-import com.igloo.blindpenguincoder.feature.shared.trackSpokenInfo
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
-import com.igloo.blindpenguincoder.playback.queue.shuffledQueue
 import java.util.Locale
 import kotlin.math.roundToInt
-import kotlin.random.Random
 
 /**
  * Wire-to-[AlbumDetailsUi] rules for the album detail screen (docs/design-system.md section
@@ -40,7 +39,7 @@ data class AlbumDetailsUi(
     val artists: List<AlbumArtistUi>,
     val discs: List<AlbumDiscUi>,
     val hasMultipleDiscs: Boolean,
-    val facts: List<AlbumFactUi>,
+    val facts: List<FactUi>,
     /** The facts panel's one cleared announcement, heading folded in (section 11.4.1 rule). */
     val factsDescription: String,
     /** The hero reading stop's one sentence (web `pageAnnouncement` parity, plus popularity). */
@@ -58,40 +57,34 @@ data class AlbumDiscUi(
     val tracks: List<TrackRowUi>,
 )
 
-/** One facts-panel row; absent values never become rows, so the panel renders what it holds. */
-data class AlbumFactUi(
-    val label: String,
-    val value: String,
-)
-
 internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
     val album = data.album
-    // The contract requires a title but not a non-blank one (the home rail's rule).
-    val title = album.title.ifBlank { "Untitled album" }
+    val title = album.title.ifBlank { UNTITLED_ALBUM }
     val artistName = album.musician.orNullIfBlank()
     val releaseDateText = album.releaseDate.orNullIfBlank()?.let(::formatReleaseDate)
         ?: album.year.orNull()?.toString()
     val trackCountText = countLine(data.tracks.size.toLong(), "track")
     val totalDurationText = formatAlbumDuration(data.totalDuration.toLong())
-    val popularity = album.spotifyPopularity.orNull()?.roundToInt()?.coerceIn(0, 100)
+    val popularity = spotifyPopularity(album.spotifyPopularity)
     val artists = data.artists.filter { it.name.isNotBlank() }.map { AlbumArtistUi(it.id, it.name) }
     // With no credited rows the album's own musician is the one name, and it has no id to open.
     val artistNames = artists.map { it.name }.ifEmpty { listOfNotNull(artistName) }
     val artistNamesLine = joinedLine(artistNames, ", ")
     val discs = discs(data.tracks, trackGenres = data.trackGenres.groupBy({ it.trackId }, { it.tag }))
+    val hasMultipleDiscs = discs.size > 1
     val audioQuality = audioQualitySummary(data.tracks)
     val facts = buildList {
         // Web parity: the facts row wants the full date and shows nothing for a bare year;
         // the hero's date-or-year fallback is the year's one home.
         album.releaseDate.orNullIfBlank()?.let(::formatReleaseDate)
-            ?.let { add(AlbumFactUi("Release date", it)) }
-        add(AlbumFactUi("Total tracks", "${data.tracks.size}"))
-        add(AlbumFactUi("Total duration", totalDurationText))
-        artistNamesLine?.let { add(AlbumFactUi("Artist", it)) }
-        joinedLine(data.albumGenres, ", ")?.let { add(AlbumFactUi("Genres", it)) }
-        if (discs.size > 1) add(AlbumFactUi("Discs", "${discs.size}"))
-        audioQuality?.let { add(AlbumFactUi("Audio quality", it)) }
-        popularity?.let { add(AlbumFactUi("Spotify popularity", "$it / 100")) }
+            ?.let { add(FactUi("Release date", it)) }
+        add(FactUi("Total tracks", "${data.tracks.size}"))
+        add(FactUi("Total duration", totalDurationText))
+        artistNamesLine?.let { add(FactUi("Artist", it)) }
+        joinedLine(data.albumGenres, ", ")?.let { add(FactUi("Genres", it)) }
+        if (hasMultipleDiscs) add(FactUi("Discs", "${discs.size}"))
+        audioQuality?.let { add(FactUi("Audio quality", it)) }
+        popularity?.let { add(FactUi("Spotify popularity", "$it / 100")) }
     }
     return AlbumDetailsUi(
         id = album.id,
@@ -105,7 +98,7 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
         popularity = popularity,
         artists = artists.ifEmpty { listOfNotNull(artistName?.let { AlbumArtistUi(id = null, name = it) }) },
         discs = discs,
-        hasMultipleDiscs = discs.size > 1,
+        hasMultipleDiscs = hasMultipleDiscs,
         facts = facts,
         factsDescription = factsDescription("Album details", facts),
         heroInfoDescription = heroInfoDescription(
@@ -143,12 +136,6 @@ internal fun toMusicPlayRequest(album: AlbumDetailsUi, startIndex: Int = 0): Mus
         },
     )
 
-/** The Shuffle press: the same queue in a fresh random order (docs/music-shuffle.md). */
-internal fun toShuffledMusicPlayRequest(
-    album: AlbumDetailsUi,
-    random: Random = Random.Default,
-): MusicPlayRequest = toMusicPlayRequest(album).let { it.copy(tracks = it.tracks.shuffledQueue(random)) }
-
 /**
  * Tracks grouped and ordered by disc, then track index. A disc of 0 or below is disc 1 — the
  * web's `track.disc || 1` for an untagged rip.
@@ -157,52 +144,41 @@ private fun discs(
     tracks: List<AlbumTrack>,
     trackGenres: Map<Long, List<String>>,
 ): List<AlbumDiscUi> {
-    val hasMultipleDiscs = tracks.map { discNumber(it) }.distinct().size > 1
-    return tracks
-        .groupBy { discNumber(it) }
-        .toSortedMap()
-        .map { (disc, discTracks) ->
-            AlbumDiscUi(
-                disc = disc,
-                tracks = discTracks
-                    .sortedWith(compareBy({ it.trackIndex }, { it.id }))
-                    .mapIndexed { indexInDisc, track ->
-                        toTrackUi(
-                            track = track,
-                            genres = trackGenres[track.id].orEmpty(),
-                            // The header is plain text a TV screen reader never reaches, so the
-                            // disc is folded into its first row's sentence (section 11.5.1).
-                            discSpoken = disc.takeIf { hasMultipleDiscs && indexInDisc == 0 },
-                        )
-                    },
-            )
-        }
+    val byDisc = tracks.groupBy { discNumber(it) }.toSortedMap()
+    val hasMultipleDiscs = byDisc.size > 1
+    return byDisc.map { (disc, discTracks) ->
+        AlbumDiscUi(
+            disc = disc,
+            tracks = discTracks
+                .sortedWith(compareBy({ it.trackIndex }, { it.id }))
+                .mapIndexed { indexInDisc, track ->
+                    toTrackUi(
+                        track = track,
+                        genres = trackGenres[track.id].orEmpty(),
+                        // The header is plain text a TV screen reader never reaches, so the
+                        // disc is folded into its first row's sentence (section 11.5.1).
+                        discSpoken = disc.takeIf { hasMultipleDiscs && indexInDisc == 0 },
+                    )
+                },
+        )
+    }
 }
 
 private fun discNumber(track: AlbumTrack): Long = if (track.disc > 0) track.disc else 1
 
-private fun toTrackUi(track: AlbumTrack, genres: List<String>, discSpoken: Long?): TrackRowUi {
-    val genresLine = joinedLine(genres, ", ")
-    val durationSec = millisToSeconds(track.duration)
-    return TrackRowUi(
+private fun toTrackUi(track: AlbumTrack, genres: List<String>, discSpoken: Long?): TrackRowUi =
+    musicTrackRow(
         id = track.id,
         title = track.title,
-        subtitle = genresLine,
-        indexText = "${track.trackIndex}",
-        durationText = formatTrackDuration(track.duration),
-        durationSec = durationSec,
+        subtitle = joinedLine(genres, ", "),
+        durationMs = track.duration,
         // The row already sits on its album; More can only go to the artist.
         albumId = null,
         musicianId = track.musicianId.orNull(),
-        spokenInfo = trackSpokenInfo(
-            prefix = listOfNotNull(discSpoken?.let { "Disc $it" }, "Track ${track.trackIndex}")
-                .joinToString(". "),
-            title = track.title,
-            subtitle = genresLine,
-            durationSec = durationSec,
-        ),
+        indexText = "${track.trackIndex}",
+        spokenPrefix = listOfNotNull(discSpoken?.let { "Disc $it" }, "Track ${track.trackIndex}")
+            .joinToString(". "),
     )
-}
 
 /**
  * The audio-quality summary, ported from the web page: the dominant codec by track count

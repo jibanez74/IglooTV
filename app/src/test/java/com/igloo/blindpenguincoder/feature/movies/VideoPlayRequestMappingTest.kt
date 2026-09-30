@@ -213,8 +213,8 @@ class VideoPlayRequestMappingTest {
             posterUrl = null,
             technical = technical(
                 video = listOf(
-                    videoStream(streamIndex = 0, codec = "msmpeg4v3", width = 640, height = 480),
-                    videoStream(streamIndex = 3, codec = "mjpeg", width = 320, height = 240),
+                    videoStream(codec = "msmpeg4v3", width = 640, height = 480),
+                    videoStream(codec = "mjpeg", width = 320, height = 240),
                 ),
             ),
             progress = null,
@@ -259,9 +259,9 @@ class VideoPlayRequestMappingTest {
     fun `chapters ride sorted by start time with raw titles and seconds as doubles`() {
         val tech = technical(
             chapters = listOf(
-                chapter(id = 3, title = "", startTime = 1800),
-                chapter(id = 1, title = "Opening Credits", startTime = 0),
-                chapter(id = 2, title = "The Heist", startTime = 600),
+                chapter(title = "", startTime = 1800),
+                chapter(title = "Opening Credits", startTime = 0),
+                chapter(title = "The Heist", startTime = 600),
             ),
         )
 
@@ -390,7 +390,6 @@ class VideoPlayRequestMappingTest {
     ) = Movie(
         id = id,
         title = title,
-        adult = false,
         duration = durationSec?.let { SqlNullFloat64(it, valid = true) },
     )
 
@@ -408,21 +407,16 @@ class VideoPlayRequestMappingTest {
         chapters = chapters,
     )
 
-    private fun chapter(id: Long, title: String, startTime: Long) = Chapter(
-        id = id,
+    private fun chapter(title: String, startTime: Long) = Chapter(
         title = title,
         startTime = startTime,
     )
 
-    private fun videoStream(streamIndex: Long, codec: String, width: Long, height: Long) =
+    private fun videoStream(codec: String, width: Long, height: Long) =
         VideoStream(
-            id = streamIndex,
-            streamIndex = streamIndex,
             codec = codec,
-            bitRate = 0,
             width = width,
             height = height,
-            frameRate = 23.976,
         )
 
     private fun audioStream(
@@ -439,7 +433,6 @@ class VideoPlayRequestMappingTest {
         streamIndex = streamIndex,
         codec = codec,
         codecProfile = codecProfile?.let { SqlNullString(it, valid = true) },
-        bitRate = 0,
         channels = channels,
         channelLayout = channelLayout?.let { SqlNullString(it, valid = true) },
         language = language?.let { SqlNullString(it, valid = true) },
@@ -463,6 +456,5 @@ class VideoPlayRequestMappingTest {
         progressSec = progressSec,
         durationSec = durationSec,
         watched = false,
-        updatedAt = null,
     )
 }

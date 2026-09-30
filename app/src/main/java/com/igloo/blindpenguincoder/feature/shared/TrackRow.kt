@@ -277,14 +277,13 @@ private fun Modifier.trackColumn(
 /**
  * A row-shaped loading stand-in of the real row's height and column layout (section 10), so
  * content arriving under focus moves nothing. The Play slot of one row can be the surface's
- * anchor — focusable, announcing [loadingLabel] politely — through [anchorModifier]; every
+ * anchor — focusable, announcing "Loading tracks" politely — through [anchorModifier]; every
  * other skeleton row is texture, invisible to focus and TalkBack.
  */
 @Composable
 fun TrackRowSkeleton(
     modifier: Modifier = Modifier,
     anchorModifier: Modifier? = null,
-    loadingLabel: String = "Loading tracks",
 ) {
     val colors = IglooTheme.colors
     val stubShape = RoundedCornerShape(IglooTheme.radius.sm)
@@ -308,7 +307,7 @@ fun TrackRowSkeleton(
                             .onFocusChanged { focused = it.isFocused }
                             .focusable()
                             .semantics {
-                                contentDescription = loadingLabel
+                                contentDescription = "Loading tracks"
                                 liveRegion = LiveRegionMode.Polite
                             }
                     } else {

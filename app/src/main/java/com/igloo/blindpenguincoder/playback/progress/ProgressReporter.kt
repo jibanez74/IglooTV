@@ -5,6 +5,7 @@ import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
 import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.clampSecondsToDuration
 import java.util.UUID
 
 /**
@@ -63,7 +64,7 @@ internal class ProgressReporter(
             return ApiResult.Failure(AppError.Validation("Playback duration is not available."))
         }
         val request = UpdateWatchProgressRequest(
-            progressSec = positionSec.coerceIn(0.0, durationSec),
+            progressSec = clampSecondsToDuration(positionSec, durationSec),
             durationSec = durationSec,
             saveSessionId = sessionId,
             saveSequence = ++sequence,

@@ -1,5 +1,7 @@
 package com.igloo.blindpenguincoder.feature.shared
 
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
+
 /**
  * What sits below the last loaded row of an infinite list (docs/design-system.md section
  * 11.4); the tail is the only place the user ever sees paging.
@@ -41,3 +43,27 @@ internal fun AppendState.resetIfLoading(): AppendState =
  */
 internal fun pageAppendState(page: Long, totalPages: Long, empty: Boolean): AppendState =
     if (page >= totalPages || empty) AppendState.End else AppendState.Idle
+
+/**
+ * One infinite list's pages: what the pane shows, its tail, and the server's count. A Music tab
+ * keeps one each, so switching back is instant and can never fail; a library pane keeps one for
+ * whichever list its tab and genre name.
+ */
+data class PagedState<T>(
+    val content: IglooRailState<T> = IglooRailState.Loading,
+    val append: AppendState = AppendState.Idle,
+    /** The server's count for this list; null until it is known. */
+    val total: Long? = null,
+    /** Bumped after every successful append, even when every returned id was already loaded. */
+    val appendGeneration: Int = 0,
+    /**
+     * Bumped whenever the list is replaced wholesale rather than appended to. The screen scrolls
+     * to top and re-anchors focus on a change; an append never bumps it, so a prefetch never
+     * moves the user. A state field rather than a one-shot event because scrolling to the top is
+     * idempotent and must survive a recomposition mid-refresh, where an event would be lost.
+     */
+    val contentGeneration: Int = 0,
+)
+
+/** The loaded rows, or null while the list still shows a skeleton or an error card. */
+internal fun <T> PagedState<T>.loadedItems(): List<T>? = (content as? IglooRailState.Loaded)?.items

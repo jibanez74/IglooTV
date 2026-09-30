@@ -17,6 +17,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.testMusicState
 import org.junit.Assert.assertEquals
 import org.junit.Rule

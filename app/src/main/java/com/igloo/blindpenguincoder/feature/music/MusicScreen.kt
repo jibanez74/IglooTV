@@ -5,17 +5,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -27,7 +22,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -35,39 +29,32 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
-import com.igloo.blindpenguincoder.core.ui.IglooFocusableEmpty
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
-import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
-import com.igloo.blindpenguincoder.core.ui.IglooSkeletonAnchorCell
-import com.igloo.blindpenguincoder.core.ui.IglooSkeletonTextureCell
-import com.igloo.blindpenguincoder.core.ui.IglooTab
-import com.igloo.blindpenguincoder.core.ui.IglooTabRow
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.countNoun
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
-import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.feature.shared.AppendState
-import com.igloo.blindpenguincoder.feature.shared.GRID_PREFETCH_ROWS
+import com.igloo.blindpenguincoder.feature.shared.PagedState
+import com.igloo.blindpenguincoder.feature.shared.PaneEmpty
+import com.igloo.blindpenguincoder.feature.shared.PaneFirstPageError
 import com.igloo.blindpenguincoder.feature.shared.PaneFocusHandoffCoordinator
 import com.igloo.blindpenguincoder.feature.shared.PaneFocusOwnership
-import com.igloo.blindpenguincoder.feature.shared.REFRESHING_LABEL
-import com.igloo.blindpenguincoder.feature.shared.REFRESH_LABEL
-import com.igloo.blindpenguincoder.feature.shared.SKELETON_ROWS
+import com.igloo.blindpenguincoder.feature.shared.PaneGrid
+import com.igloo.blindpenguincoder.feature.shared.PaneGridSkeleton
+import com.igloo.blindpenguincoder.feature.shared.PaneHeader
+import com.igloo.blindpenguincoder.feature.shared.PaneRefreshButton
+import com.igloo.blindpenguincoder.feature.shared.PaneTabRow
 import com.igloo.blindpenguincoder.feature.shared.TabPresentation
 import com.igloo.blindpenguincoder.feature.shared.asScrollPadding
 import com.igloo.blindpenguincoder.feature.shared.TrackRow
@@ -78,6 +65,10 @@ import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.TrackRowSkeleton
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.feature.shared.hasMoreActions
+import com.igloo.blindpenguincoder.feature.shared.loadedItems
+import com.igloo.blindpenguincoder.feature.shared.paneCardlessAnchor
+import com.igloo.blindpenguincoder.feature.shared.paneCountLine
+import com.igloo.blindpenguincoder.feature.shared.showingCountLine
 
 /** What the Music pane needs from its view model, bundled rather than threaded as ten lambdas. */
 data class MusicActions(
@@ -184,23 +175,44 @@ fun MusicScreen(
                 .then(if (trackMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
-            MusicHeader(
-                tab = tab,
-                total = state.selectedTotal,
-                loadedCount = state.selectedLoadedCount,
-                append = paged.append,
-                refreshing = state.refreshing,
+            PaneHeader(
+                title = "Music",
+                countText = paneCountLine(state.selectedTotal, tab::noun),
+                countDescription = spokenCount(
+                    tab,
+                    state.selectedTotal,
+                    state.selectedLoadedCount,
+                    paged.append,
+                ),
+                countTag = "music_count",
                 notice = headerNotice,
                 contentInset = contentInset,
-                navigationRequester = navigationRequester,
-                refreshRequester = refreshRequester,
-                tabRowRequester = tabRowRequester,
-                onRefresh = actions.onRefresh,
-                onFocusChanged = focusOwnership::onChromeFocusChanged,
-            )
+                noticeTag = "music_notice",
+            ) {
+                PaneRefreshButton(
+                    refreshing = state.refreshing,
+                    semanticLabel = "Refresh the music library",
+                    onRefresh = actions.onRefresh,
+                    modifier = Modifier
+                        .focusRequester(refreshRequester)
+                        .onFocusChanged {
+                            focusOwnership.onChromeFocusChanged(REFRESH_FOCUS_KEY, it.isFocused)
+                        }
+                        // Down is wired to the *selected* tab: tabs select on focus, and a spatial
+                        // search would land on whichever tab happens to sit beneath and switch
+                        // to it.
+                        .focusProperties {
+                            left = navigationRequester
+                            down = tabRowRequester
+                        },
+                )
+            }
 
-            MusicTabRow(
+            PaneTabRow(
+                tabs = MusicTab.entries,
                 selected = tab,
+                presentation = { it.presentation },
+                testTag = "music_tabs",
                 contentInset = contentInset,
                 tabRowRequester = tabRowRequester,
                 navigationRequester = navigationRequester,
@@ -227,18 +239,14 @@ fun MusicScreen(
                 )
             }
 
-            // The cardless states' one anchor carries every requester the pane hands out, for
-            // the reason the Movies pane documents: a detached return requester no-ops.
-            val cardlessAnchor = Modifier
-                .withRequester(contentStartRequester)
-                .withRequester(returnRequester)
-                .withRequester(cardlessHandoffRequester)
-                .focusProperties {
-                    left = navigationRequester
-                    up = contentUp
-                    right = FocusRequester.Cancel
-                }
-                .onFocusChanged { focusOwnership.onCardlessFocusChanged(it.isFocused) }
+            val cardlessAnchor = Modifier.paneCardlessAnchor(
+                contentStartRequester = contentStartRequester,
+                returnRequester = returnRequester,
+                cardlessHandoffRequester = cardlessHandoffRequester,
+                navigationRequester = navigationRequester,
+                upRequester = contentUp,
+                focusOwnership = focusOwnership,
+            )
 
             PaneFocusHandoffCoordinator(
                 resetKey = tab,
@@ -263,37 +271,33 @@ fun MusicScreen(
                         anchorModifier = cardlessAnchor,
                     )
 
-                    else -> MusicGridSkeleton(
+                    else -> PaneGridSkeleton(
                         columns = columns,
-                        artworkRadius = tab.artworkRadius(),
                         contentInset = contentInset,
                         loadingLabel = "Loading ${tab.presentation.semanticLabel.lowercase()}",
                         anchorModifier = cardlessAnchor,
+                        cardAspect = IglooTheme.layout.albumAspect,
+                        artworkRadius = tab.artworkRadius(),
                     )
                 }
 
-                is MusicContent.Error -> IglooInlineError(
+                is MusicContent.Error -> PaneFirstPageError(
                     message = content.message,
-                    actionText = "Retry",
-                    actionSemanticLabel = "Retry loading ${tab.presentation.semanticLabel.lowercase()}",
-                    onAction = actions.onRetryFirstPage,
-                    actionModifier = cardlessAnchor,
-                    modifier = Modifier.padding(contentInset),
+                    retryLabel = "Retry loading ${tab.presentation.semanticLabel.lowercase()}",
+                    onRetry = actions.onRetryFirstPage,
+                    anchorModifier = cardlessAnchor,
+                    contentInset = contentInset,
                 )
 
-                MusicContent.Empty -> IglooFocusableEmpty(
-                    anchorModifier = cardlessAnchor,
+                MusicContent.Empty -> PaneEmpty(
                     icon = tab.emptyIcon(),
                     message = tab.emptyMessage(),
-                    contentPadding = IglooTheme.spacing.lg,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(contentInset),
-                    contentAlignment = Alignment.Center,
+                    anchorModifier = cardlessAnchor,
+                    contentInset = contentInset,
                 )
 
                 is MusicContent.Populated -> when (tab) {
-                    MusicTab.Musicians -> MusicGrid(
+                    MusicTab.Musicians -> PaneGrid(
                         items = state.musicians.loadedItems().orEmpty(),
                         itemId = { it.id },
                         testTag = "musicians_grid",
@@ -314,6 +318,7 @@ fun MusicScreen(
                         onLoadMore = actions.onLoadMore,
                         onRetryAppend = actions.onRetryAppend,
                         retryLabel = "Retry loading more musicians",
+                        cardAspect = IglooTheme.layout.albumAspect,
                         artworkRadius = IglooTheme.radius.pill,
                     ) { musician, modifier ->
                         IglooPosterCard(
@@ -331,7 +336,7 @@ fun MusicScreen(
                         )
                     }
 
-                    MusicTab.Albums -> MusicGrid(
+                    MusicTab.Albums -> PaneGrid(
                         items = state.albums.loadedItems().orEmpty(),
                         itemId = { it.id },
                         testTag = "albums_grid",
@@ -352,7 +357,7 @@ fun MusicScreen(
                         onLoadMore = actions.onLoadMore,
                         onRetryAppend = actions.onRetryAppend,
                         retryLabel = "Retry loading more albums",
-                        artworkRadius = IglooTheme.radius.lg,
+                        cardAspect = IglooTheme.layout.albumAspect,
                     ) { album, modifier ->
                         IglooPosterCard(
                             title = album.title,
@@ -407,125 +412,6 @@ fun MusicScreen(
                     trackMenu = null
                     menuReturnRequester.requestFocusSafely()
                 },
-            )
-        }
-    }
-}
-
-@Composable
-private fun MusicHeader(
-    tab: MusicTab,
-    total: Long?,
-    loadedCount: Int?,
-    append: AppendState,
-    refreshing: Boolean,
-    notice: String?,
-    contentInset: PaddingValues,
-    navigationRequester: FocusRequester,
-    refreshRequester: FocusRequester,
-    tabRowRequester: FocusRequester,
-    onRefresh: () -> Unit,
-    onFocusChanged: (String, Boolean) -> Unit,
-) {
-    val colors = IglooTheme.colors
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(contentInset)
-            .padding(top = IglooTheme.layout.safeAreaVertical),
-        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
-        ) {
-            IglooText(
-                text = "Music",
-                style = IglooTheme.typography.titleLarge,
-                color = colors.foreground,
-                modifier = Modifier.semantics { heading() },
-            )
-            // Counts only, never the titles: this region re-announces whenever the loaded count
-            // changes, and a TalkBack user must not have the whole list read back (section 12).
-            IglooText(
-                text = countLine(tab, total),
-                style = IglooTheme.typography.bodyMedium,
-                color = colors.mutedForeground,
-                modifier = Modifier
-                    .testTag("music_count")
-                    .semantics {
-                        contentDescription = spokenCount(tab, total, loadedCount, append)
-                        liveRegion = LiveRegionMode.Polite
-                    },
-            )
-            if (notice != null) {
-                IglooNotice(text = notice, modifier = Modifier.testTag("music_notice"))
-            }
-        }
-        IglooButton(
-            text = if (refreshing) REFRESHING_LABEL else REFRESH_LABEL,
-            labelVariants = listOf(REFRESH_LABEL, REFRESHING_LABEL),
-            onClick = onRefresh,
-            variant = IglooButtonVariant.Ghost,
-            // Never disabled: IglooButton is focusable only through its clickable branch, and
-            // the view model guards the repeat press (the Movies rule).
-            enabled = true,
-            semanticLabel = "Refresh the music library",
-            stateDescription = "Refreshing".takeIf { refreshing },
-            modifier = Modifier
-                .focusRequester(refreshRequester)
-                .onFocusChanged { onFocusChanged(REFRESH_FOCUS_KEY, it.isFocused) }
-                // Down is wired to the *selected* tab: tabs select on focus, and a spatial
-                // search would land on whichever tab happens to sit beneath and switch to it.
-                .focusProperties {
-                    left = navigationRequester
-                    down = tabRowRequester
-                },
-        )
-    }
-}
-
-@Composable
-private fun MusicTabRow(
-    selected: MusicTab,
-    contentInset: PaddingValues,
-    tabRowRequester: FocusRequester,
-    navigationRequester: FocusRequester,
-    refreshRequester: FocusRequester,
-    downRequester: FocusRequester,
-    onSelectTab: (MusicTab) -> Unit,
-    onPressTab: (MusicTab) -> Unit,
-    onFocusChanged: (String, Boolean) -> Unit,
-) {
-    val direction = LocalLayoutDirection.current
-    IglooTabRow(
-        modifier = Modifier
-            .padding(
-                start = contentInset.calculateStartPadding(direction),
-                end = contentInset.calculateEndPadding(direction),
-            )
-            .testTag("music_tabs"),
-    ) {
-        MusicTab.entries.forEachIndexed { index, tab ->
-            val spec = tab.presentation
-            IglooTab(
-                text = spec.label,
-                selected = tab == selected,
-                onSelect = { onSelectTab(tab) },
-                onPress = { onPressTab(tab) },
-                semanticLabel = spec.semanticLabel,
-                actionLabel = "Show ${spec.semanticLabel.lowercase()}",
-                modifier = Modifier
-                    .withRequester(tabRowRequester.takeIf { tab == selected })
-                    .onFocusChanged { onFocusChanged(spec.key, it.isFocused) }
-                    .focusProperties {
-                        up = refreshRequester
-                        down = downRequester
-                        if (index == 0) left = navigationRequester
-                        if (index == MusicTab.entries.lastIndex) right = FocusRequester.Cancel
-                    }
-                    .testTag(spec.key),
             )
         }
     }
@@ -619,133 +505,6 @@ private fun TrackActionsRow(
  * The paged grid both card tabs share: the Movies grid's paging trigger, tail, edge pinning
  * and focus memory, with the card itself handed in.
  */
-@Composable
-private fun <T> MusicGrid(
-    items: List<T>,
-    itemId: (T) -> Long,
-    testTag: String,
-    cardTag: (T) -> String,
-    paged: PagedState<T>,
-    refreshing: Boolean,
-    columns: Int,
-    gridState: LazyGridState,
-    contentInset: PaddingValues,
-    contentStartRequester: FocusRequester,
-    navigationRequester: FocusRequester,
-    returnRequester: FocusRequester,
-    firstItemRequester: FocusRequester,
-    upRequester: FocusRequester,
-    lastFocusedId: Long?,
-    onItemFocused: (Long) -> Unit,
-    focusOwnership: PaneFocusOwnership,
-    onLoadMore: () -> Unit,
-    onRetryAppend: () -> Unit,
-    retryLabel: String,
-    artworkRadius: Dp,
-    card: @Composable (T, Modifier) -> Unit,
-) {
-    val entryId = remember(items, lastFocusedId) {
-        lastFocusedId?.takeIf { id -> items.any { itemId(it) == id } } ?: itemId(items.first())
-    }
-    val appendRetryReturnRequester = remember { FocusRequester() }
-    var appendRetryFocused by remember { mutableStateOf(false) }
-    var appendRetryHandoffPending by remember { mutableStateOf(false) }
-    val appendRetryReturnId = lastFocusedId?.takeIf { id -> items.any { itemId(it) == id } }
-    val append = paged.append
-
-    val loadedCount = items.size
-    val shouldPrefetch by remember(gridState, columns, loadedCount) {
-        derivedStateOf {
-            val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-                ?: return@derivedStateOf false
-            last >= loadedCount - columns * GRID_PREFETCH_ROWS
-        }
-    }
-    LaunchedEffect(shouldPrefetch, append, paged.appendGeneration, paged.contentGeneration, refreshing) {
-        if (shouldPrefetch && append == AppendState.Idle && !refreshing) onLoadMore()
-    }
-    LaunchedEffect(append, appendRetryHandoffPending, appendRetryReturnId) {
-        if (append == AppendState.Loading && appendRetryHandoffPending && appendRetryReturnId != null) {
-            appendRetryReturnRequester.requestFocusSafely()
-            appendRetryHandoffPending = false
-        }
-    }
-
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(columns),
-        state = gridState,
-        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-        contentPadding = contentInset.asScrollPadding(),
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(testTag),
-    ) {
-        val lastRowIsTheEdge = append !is AppendState.Error
-        val lastRow = items.lastIndex / columns
-
-        itemsIndexed(items, key = { _, item -> "item_${itemId(item)}" }) { index, item ->
-            val id = itemId(item)
-            card(
-                item,
-                Modifier
-                    .withRequester(firstItemRequester.takeIf { index == 0 })
-                    .withRequester(contentStartRequester.takeIf { id == entryId })
-                    .withRequester(returnRequester.takeIf { id == entryId })
-                    .withRequester(appendRetryReturnRequester.takeIf { id == appendRetryReturnId })
-                    .focusProperties {
-                        if (index % columns == 0) left = navigationRequester
-                        if (index < columns) up = upRequester
-                        if (lastRowIsTheEdge && index / columns == lastRow) down = FocusRequester.Cancel
-                        if (index % columns == columns - 1 || index == items.lastIndex) {
-                            right = FocusRequester.Cancel
-                        }
-                    }
-                    .onFocusChanged {
-                        focusOwnership.onItemFocusChanged(id, it.isFocused)
-                        if (it.isFocused) onItemFocused(id)
-                    }
-                    .testTag(cardTag(item)),
-            )
-        }
-
-        when (append) {
-            AppendState.Idle, AppendState.Loading -> items(
-                count = columns * GRID_PREFETCH_ROWS,
-                key = { "tail_skeleton_$it" },
-            ) { index ->
-                IglooSkeletonTextureCell(
-                    cardAspect = IglooTheme.layout.albumAspect,
-                    cardWidth = Dp.Unspecified,
-                    artworkRadius = artworkRadius,
-                    modifier = Modifier.testTag("tail_skeleton_$index"),
-                )
-            }
-
-            is AppendState.Error -> item(key = "tail_error", span = { GridItemSpan(maxLineSpan) }) {
-                IglooInlineError(
-                    message = append.message,
-                    actionText = "Retry",
-                    actionSemanticLabel = retryLabel,
-                    onAction = {
-                        appendRetryHandoffPending = appendRetryFocused
-                        onRetryAppend()
-                    },
-                    actionModifier = Modifier
-                        .onFocusChanged { appendRetryFocused = it.isFocused }
-                        .focusProperties {
-                            left = navigationRequester
-                            right = FocusRequester.Cancel
-                        },
-                    liveRegionMode = LiveRegionMode.Polite,
-                )
-            }
-
-            AppendState.End -> Unit
-        }
-    }
-}
-
 /**
  * The Tracks tab's flat list: letter headers the eye reads, rows with three actions each, and
  * the paging tail. Row-to-row focus moves are spatial and keep their column; only the edges are
@@ -912,42 +671,6 @@ private fun TracksList(
     }
 }
 
-/** Card-geometry placeholders for the two grids, circles for musicians and squares for albums. */
-@Composable
-private fun MusicGridSkeleton(
-    columns: Int,
-    artworkRadius: Dp,
-    contentInset: PaddingValues,
-    loadingLabel: String,
-    anchorModifier: Modifier,
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(columns),
-        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-        contentPadding = contentInset.asScrollPadding(),
-        userScrollEnabled = false,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        item(key = "skeleton_anchor") {
-            IglooSkeletonAnchorCell(
-                anchorModifier = anchorModifier,
-                loadingLabel = loadingLabel,
-                cardAspect = IglooTheme.layout.albumAspect,
-                cardWidth = Dp.Unspecified,
-                artworkRadius = artworkRadius,
-            )
-        }
-        items(count = columns * SKELETON_ROWS - 1, key = { "skeleton_$it" }) {
-            IglooSkeletonTextureCell(
-                cardAspect = IglooTheme.layout.albumAspect,
-                cardWidth = Dp.Unspecified,
-                artworkRadius = artworkRadius,
-            )
-        }
-    }
-}
-
 /** Row-shaped placeholders under a stub action row, the first Play slot being the anchor. */
 @Composable
 private fun TracksListSkeleton(
@@ -985,23 +708,17 @@ private fun MusicTab.emptyIcon(): ImageVector = when (this) {
     else -> IglooIcons.Music
 }
 
-private fun MusicTab.emptyMessage(): String = when (this) {
+internal fun MusicTab.emptyMessage(): String = when (this) {
     MusicTab.Musicians -> "No musicians in your library yet. Add a music folder on the server and run a scan."
     MusicTab.Albums -> "No albums in your library yet. Add a music folder on the server and run a scan."
     MusicTab.Tracks -> "No tracks in your library yet. Add a music folder on the server and run a scan."
 }
 
-private fun countLine(tab: MusicTab, total: Long?): String =
-    if (total == null) "—" else "${formatCount(total)} ${tab.noun(total)}"
-
 private fun spokenCount(tab: MusicTab, total: Long?, loadedCount: Int?, append: AppendState): String =
     when {
         total == null -> "Loading the music library"
-        loadedCount == null -> countLine(tab, total)
-        else -> buildString {
-            append("Showing $loadedCount of ${formatCount(total)} ${tab.noun(total)}")
-            if (append == AppendState.Loading) append(". Loading more ${tab.noun(2)}.")
-        }
+        loadedCount == null -> paneCountLine(total, tab::noun)
+        else -> showingCountLine(loadedCount, total, tab.noun(total), tab.noun(2), append)
     }
 
 private const val SHUFFLE_ALL_LABEL = "Shuffle all"

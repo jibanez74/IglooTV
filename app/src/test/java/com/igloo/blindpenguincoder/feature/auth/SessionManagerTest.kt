@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.feature.auth
 
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.image.ImageCache
+import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
@@ -52,7 +53,7 @@ class SessionManagerTest {
         storedServerUrl: String?,
         scope: CoroutineScope,
         engineDispatcher: CoroutineDispatcher?,
-        imageCache: ImageCache = ImageCache.None,
+        imageCache: ImageCache = NoOpImageCache,
         handler: MockRequestHandler,
     ): Fixture {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
@@ -545,7 +546,7 @@ class SessionManagerTest {
     private suspend fun signedInWithASecondProfile(
         scope: CoroutineScope,
         engineDispatcher: CoroutineDispatcher? = null,
-        imageCache: ImageCache = ImageCache.None,
+        imageCache: ImageCache = NoOpImageCache,
         logout: MockRequestHandler,
     ): Fixture {
         val fixture = fixture(

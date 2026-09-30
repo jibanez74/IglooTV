@@ -1,18 +1,12 @@
 package com.igloo.blindpenguincoder.core.ui
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -23,10 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -34,11 +25,8 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 
 /**
  * Watch progress shown on a poster card. The description joins the card's one TalkBack
@@ -93,7 +81,6 @@ fun IglooPosterCard(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
-    var imageFailed by remember(imageUrl) { mutableStateOf(false) }
 
     Column(
         horizontalAlignment = if (centerText) Alignment.CenterHorizontally else Alignment.Start,
@@ -103,7 +90,7 @@ fun IglooPosterCard(
             .then(
                 if (onClick != null) {
                     Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
+                        interactionSource = null,
                         indication = null,
                         onClick = onClick,
                     )
@@ -137,40 +124,15 @@ fun IglooPosterCard(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            if (imageUrl != null && !imageFailed) {
-                AsyncImage(
-                    model = imageUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    onState = { state ->
-                        if (state is AsyncImagePainter.State.Error) imageFailed = true
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Image(
-                    imageVector = fallbackIcon,
-                    contentDescription = null,
-                    colorFilter = ColorFilter.tint(colors.mutedForeground),
-                    modifier = Modifier.size(IglooTheme.icons.lg),
-                )
-            }
+            ArtworkOrGlyph(imageUrl, fallbackIcon)
             if (progress != null) {
-                // Over-media literal per design system section 3.2; focusRing clips the corners.
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(4.dp.scaled())
-                        .background(Color.Black.copy(alpha = 0.40f)),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progress.fraction.coerceIn(0f, 1f))
-                            .fillMaxHeight()
-                            .background(colors.primary),
-                    )
-                }
+                // focusRing clips the corners.
+                ProgressTrack(
+                    fraction = progress.fraction,
+                    ground = OVER_MEDIA_TRACK,
+                    fill = colors.primary,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
             }
         }
         val textAlign = if (centerText) TextAlign.Center else TextAlign.Start

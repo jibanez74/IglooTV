@@ -11,6 +11,7 @@ import com.igloo.blindpenguincoder.core.ui.formatRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTimeThroughSeconds
+import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
@@ -18,7 +19,10 @@ import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.WatchProgress
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
+import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.errorOrKeep
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
@@ -138,31 +142,10 @@ data class MovieDetailsUi(
         ).joinToString(". ") { it.trimEnd('.', ' ') }
 }
 
-sealed interface MovieDetailsState {
-    data object Loading : MovieDetailsState
-    data class Loaded(val movie: MovieDetailsUi) : MovieDetailsState
-    data class Error(val message: String) : MovieDetailsState
-}
-
-/**
- * A failed read becomes the screen's error — unless it was a background refresh over content
- * already on screen: a TV waking from standby must not swap a readable page for an error card the
- * user never asked for. The rule is the same whichever source the page came from.
- */
-internal fun MovieDetailsState.errorOrKeep(
-    message: String,
-    userInitiated: Boolean,
-): MovieDetailsState =
-    if (!userInitiated && this is MovieDetailsState.Loaded) {
-        this
-    } else {
-        MovieDetailsState.Error(message)
-    }
-
 /** [openMovieId] is the overlay's existence: null means closed and [details] is meaningless. */
 data class MovieDetailsUiState(
     val openMovieId: Long? = null,
-    val details: MovieDetailsState = MovieDetailsState.Loading,
+    val details: DetailsState<MovieDetailsUi> = DetailsState.Loading,
     val mutationNotice: String? = null,
 )
 
@@ -187,8 +170,6 @@ private data class PlaybackRead<T>(
         is ApiResult.Failure -> copy(readiness = PlaybackReadiness.Failed)
     }
 
-    fun renderableValueOrNull(): T? = value
-
     fun freshValueOrNull(): T? = value.takeIf { readiness == PlaybackReadiness.Ready }
 }
 
@@ -211,9 +192,9 @@ class MovieDetailsViewModel(
     private enum class Read { Details, Technical, Progress, Like }
 
     /** Every per-type difference lives here, so a third toggle cannot half-land. */
-    private enum class MutationType(val failurePrefix: String) {
-        Watched("Couldn't update watched status: "),
-        Like("Couldn't update like status: "),
+    private enum class MutationType(val action: String) {
+        Watched("update watched status"),
+        Like("update like status"),
     }
 
     private data class MutationIntent(
@@ -266,11 +247,7 @@ class MovieDetailsViewModel(
         clearFragments()
         playbackSelection = PlaybackSelection()
         pruneSettledMutations(keep = movieId)
-        _uiState.value = MovieDetailsUiState(
-            openMovieId = movieId,
-            details = MovieDetailsState.Loading,
-            mutationNotice = null,
-        )
+        _uiState.value = MovieDetailsUiState(openMovieId = movieId)
         loadAll(movieId, userInitiated = true)
     }
 
@@ -286,7 +263,7 @@ class MovieDetailsViewModel(
         playbackSelection = PlaybackSelection()
         pruneSettledMutations(keep = null)
         _uiState.update {
-            it.copy(openMovieId = null, details = MovieDetailsState.Loading)
+            it.copy(openMovieId = null, details = DetailsState.Loading)
         }
     }
 
@@ -295,7 +272,7 @@ class MovieDetailsViewModel(
         val movieId = _uiState.value.openMovieId ?: return
         cancelReads()
         clearFragments()
-        _uiState.update { it.copy(details = MovieDetailsState.Loading) }
+        _uiState.update { it.copy(details = DetailsState.Loading) }
         loadAll(movieId, userInitiated = true)
     }
 
@@ -459,8 +436,7 @@ class MovieDetailsViewModel(
                 playIntentPending = false
                 _uiState.update {
                     it.copy(
-                        mutationNotice = "Couldn't prepare playback: " +
-                            result.error.toLibraryDisplayMessage() +
+                        mutationNotice = result.error.toFailureNotice("prepare playback") +
                             " Press Play to retry preparation.",
                     )
                 }
@@ -571,8 +547,7 @@ class MovieDetailsViewModel(
                     is ApiResult.Failure -> {
                         _uiState.update {
                             it.copy(
-                                mutationNotice = type.failurePrefix +
-                                    result.error.toLibraryDisplayMessage(),
+                                mutationNotice = result.error.toFailureNotice(type.action),
                             )
                         }
                         settle(type, intent) { reconcileAfterDrain = true }
@@ -644,7 +619,7 @@ class MovieDetailsViewModel(
     /** Composes the Loaded state from whatever fragments have arrived. No details yet, no-op. */
     private fun publishLoaded() {
         val details = wireDetails ?: return
-        _uiState.update { it.copy(details = MovieDetailsState.Loaded(toUi(details))) }
+        _uiState.update { it.copy(details = DetailsState.Loaded(toUi(details))) }
     }
 
     private fun toUi(details: MovieDetailsData): MovieDetailsUi {
@@ -653,7 +628,7 @@ class MovieDetailsViewModel(
         // Zero-guarded like the Home hero: the scraper writes TMDB's "no data" as a valid 0.
         val ratingBadge = movie.criticRating?.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
         val certification = movie.certification?.orNullIfBlank()
-        val technical = technicalRead.renderableValueOrNull()
+        val technical = technicalRead.value
         val badges = technical?.let(::mediaBadges).orEmpty()
         val runtimeMinutes = movie.runTime?.orNull()?.takeIf { it > 0 }
         val releaseDateText = movie.releaseDate?.orNullIfBlank()?.let(::formatReleaseDate)
@@ -668,26 +643,23 @@ class MovieDetailsViewModel(
             mediaBadges = badges,
             runtimeText = runtimeMinutes?.let(::formatRuntime),
             releaseDateText = releaseDateText,
-            genresLine = joinedNames(details.genres.map { it.tag }, " · "),
+            genresLine = joinedLine(details.genres.map { it.tag }, " · "),
             overview = movie.overview?.orNullIfBlank(),
             keyCrew = keyCrew(
                 details.crew.map { CrewCredit(it.job, it.department, it.artistName) },
             ),
-            cast = details.cast
-                .sortedBy { it.castOrder }
-                .take(CAST_LIMIT)
-                .map { member ->
-                    CastMemberUi(
-                        id = member.id,
-                        name = member.artistName,
-                        character = member.character.takeIf { it.isNotBlank() },
-                        photoUrl = tmdbImageUrl(
-                            apiBaseUrl,
-                            TmdbImageSize.W185,
-                            member.artistProfile?.orNull(),
-                        ),
+            cast = castMembers(
+                details.cast.map {
+                    CastCredit(
+                        id = it.id,
+                        name = it.artistName,
+                        character = it.character,
+                        profilePath = it.artistProfile?.orNull(),
+                        order = it.castOrder,
                     )
                 },
+                apiBaseUrl,
+            ),
             extraVideos = youTubeExtraVideos(
                 details.extraVideos.map {
                     VideoSource(
@@ -701,7 +673,7 @@ class MovieDetailsViewModel(
                 apiBaseUrl,
             ),
             about = AboutUi(
-                production = joinedNames(details.productionCompanies.map { it.name }, ", "),
+                production = joinedLine(details.productionCompanies.map { it.name }, ", "),
                 language = languageDisplayName(movie.language?.orNullIfBlank()),
                 budget = movie.budget?.orNull()?.takeIf { it > 0 }?.let(::formatUsd),
                 revenue = movie.revenue?.orNull()?.takeIf { it > 0 }?.let(::formatUsd),
@@ -733,7 +705,7 @@ class MovieDetailsViewModel(
      */
     private fun progressUi(movieId: Long): ProgressUi? {
         if (mutationState(MutationType.Watched, movieId).displayed == true) return null
-        val progress = progressRead.renderableValueOrNull()
+        val progress = progressRead.value
         val progressSec = resumePositionSec(progress) ?: return null
         val durationSec = progress?.durationSec ?: return null
         return ProgressUi(

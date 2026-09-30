@@ -16,8 +16,6 @@ data class LoginUiState(
     val password: String = "",
     val isSubmitting: Boolean = false,
     val error: String? = null,
-    /** A token was issued but the user fetch failed; resubmitting resumes it, not a second login. */
-    val awaitingUser: Boolean = false,
     /**
      * How many submissions have finished. Every control is disabled while one is in flight, so
      * focus is cleared and has to be handed back; see [ServerSetupUiState.completedAttempts] for
@@ -34,6 +32,9 @@ class LoginViewModel(
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
+    /** A token was issued but the user fetch failed; resubmitting resumes it, not a second login. */
+    private var awaitingUser = false
+
     fun onEmailChange(value: String) {
         updateCredentials { it.copy(email = value) }
     }
@@ -45,7 +46,7 @@ class LoginViewModel(
     fun submit() {
         val current = _uiState.value
         if (current.isSubmitting) return
-        if (!current.awaitingUser && (current.email.isBlank() || current.password.isBlank())) {
+        if (!awaitingUser && (current.email.isBlank() || current.password.isBlank())) {
             _uiState.update {
                 it.copy(
                     error = "Enter your email and password.",
@@ -58,7 +59,7 @@ class LoginViewModel(
         viewModelScope.launch {
             // Logging in again would mint a second device token for the same user, so a retry
             // after a failed user fetch resumes with the token already stored.
-            if (!current.awaitingUser) {
+            if (!awaitingUser) {
                 val login = authRepository.deviceLogin(current.email.trim(), current.password)
                 if (login is ApiResult.Failure) {
                     _uiState.update {
@@ -72,34 +73,37 @@ class LoginViewModel(
                 }
                 // The password is no longer needed once the token has been minted. From this
                 // point, retrying resumes that token instead of submitting credentials again.
-                _uiState.update { it.copy(password = "", awaitingUser = true) }
+                awaitingUser = true
+                _uiState.update { it.copy(password = "") }
             }
             when (val result = sessionManager.completeSignIn()) {
                 // Either way the session has moved off this screen. Logging in with a password
                 // proves who you are, so completeSignIn does not gate on the PIN and
                 // PinRequired cannot actually arrive here.
-                SignInResult.Authenticated, SignInResult.PinRequired ->
+                SignInResult.Authenticated, SignInResult.PinRequired -> {
+                    awaitingUser = false
                     _uiState.update {
                         it.copy(
                             isSubmitting = false,
                             password = "",
-                            awaitingUser = false,
                             completedAttempts = it.completedAttempts + 1,
                         )
                     }
-                SignInResult.Revoked -> _uiState.update {
-                    it.copy(
-                        isSubmitting = false,
-                        error = AppError.Unauthorized.toDisplayMessage(),
-                        awaitingUser = false,
-                        completedAttempts = it.completedAttempts + 1,
-                    )
+                }
+                SignInResult.Revoked -> {
+                    awaitingUser = false
+                    _uiState.update {
+                        it.copy(
+                            isSubmitting = false,
+                            error = AppError.Unauthorized.toDisplayMessage(),
+                            completedAttempts = it.completedAttempts + 1,
+                        )
+                    }
                 }
                 is SignInResult.Failed -> _uiState.update {
                     it.copy(
                         isSubmitting = false,
                         error = result.error.toDisplayMessage(),
-                        awaitingUser = true,
                         completedAttempts = it.completedAttempts + 1,
                     )
                 }
@@ -108,7 +112,8 @@ class LoginViewModel(
     }
 
     private fun updateCredentials(transform: (LoginUiState) -> LoginUiState) {
-        _uiState.update { transform(it).copy(error = null, awaitingUser = false) }
+        awaitingUser = false
+        _uiState.update { transform(it).copy(error = null) }
     }
 
     fun clearPassword() {

@@ -25,8 +25,8 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testMovieDetails
@@ -57,7 +57,7 @@ class TrailerOverlayFocusTest {
     private fun setShellContent() {
         detailsState = MovieDetailsUiState(
             openMovieId = 1,
-            details = MovieDetailsState.Loaded(testMovieDetails(id = 1)),
+            details = DetailsState.Loaded(testMovieDetails(id = 1)),
         )
         engines.clear()
         composeRule.setContent {
@@ -75,7 +75,7 @@ class TrailerOverlayFocusTest {
                     onCloseDetails = {
                         detailsState = detailsState.copy(
                             openMovieId = null,
-                            details = MovieDetailsState.Loading,
+                            details = DetailsState.Loading,
                         )
                     },
                     trailerEngineFactory = { _, _ ->

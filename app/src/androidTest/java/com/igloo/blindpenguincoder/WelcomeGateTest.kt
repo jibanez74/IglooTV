@@ -130,11 +130,8 @@ class WelcomeGateTest {
     private fun testUser(id: Long, name: String) = AuthUser(
         id = id,
         name = name,
-        email = "${name.lowercase()}@example.com",
         isAdmin = false,
         avatar = null,
         hasPin = false,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
     )
 }

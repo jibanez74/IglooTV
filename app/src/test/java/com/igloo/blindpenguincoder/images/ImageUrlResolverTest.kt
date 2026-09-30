@@ -1,6 +1,6 @@
 package com.igloo.blindpenguincoder.images
 
-import com.igloo.blindpenguincoder.core.image.isIglooImageUrl
+import com.igloo.blindpenguincoder.core.network.isIglooServerUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -37,12 +37,12 @@ class ImageUrlResolverTest {
     @Test
     fun `each size maps to its route segment`() {
         assertEquals(
-            listOf("w92", "w185", "w500", "w1280", "original"),
+            listOf("w185", "w500", "w1280"),
             TmdbImageSize.entries.map { it.segment },
         )
         assertEquals(
-            "http://igloo.test:8080/api/tmdb/images/original/abc.jpg",
-            tmdbImageUrl(apiBase, TmdbImageSize.Original, "abc.jpg"),
+            "http://igloo.test:8080/api/tmdb/images/w1280/abc.jpg",
+            tmdbImageUrl(apiBase, TmdbImageSize.W1280, "abc.jpg"),
         )
     }
 
@@ -51,7 +51,7 @@ class ImageUrlResolverTest {
         val url = youtubeThumbnailUrl(apiBase, "0xbkYZbdIVw")
 
         assertEquals("http://igloo.test:8080/api/youtube/thumbnails/0xbkYZbdIVw", url)
-        assertTrue(isIglooImageUrl(url, origin))
+        assertTrue(isIglooServerUrl(url, origin))
     }
 
     @Test
@@ -77,7 +77,7 @@ class ImageUrlResolverTest {
     fun `a resolved avatar is same-origin, so the bearer is attached`() {
         val url = avatarImageUrl(origin, "/api/static/avatars/7.jpg")
 
-        assertTrue(isIglooImageUrl(url, origin))
+        assertTrue(isIglooServerUrl(url, origin))
     }
 
     @Test

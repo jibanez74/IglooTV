@@ -3,9 +3,10 @@ package com.igloo.blindpenguincoder.core.network
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.MessageResponse
-import io.ktor.client.call.body
-import io.ktor.http.HttpStatusCode
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -43,12 +44,20 @@ suspend fun <T> safeApiCall(
     }
 }
 
-private fun HttpStatusCode.isSuccess(): Boolean = value in 200..299
-
-private suspend fun HttpResponse.backendMessage(): String? = try {
-    body<MessageResponse>().message?.takeIf { it.isNotBlank() }
+/**
+ * The envelope's `message` from an error response, on one line and capped so a verbose server
+ * cannot flood the screen that shows it; null when the body carries none.
+ */
+internal suspend fun HttpResponse.backendMessage(): String? = try {
+    IglooJson.decodeFromString<MessageResponse>(bodyAsText()).message
+        ?.replace(Regex("\\s+"), " ")
+        ?.trim()
+        ?.take(MAX_BACKEND_MESSAGE_LENGTH)
+        ?.takeIf { it.isNotEmpty() }
 } catch (e: CancellationException) {
     throw e
 } catch (_: Exception) {
     null
 }
+
+private const val MAX_BACKEND_MESSAGE_LENGTH = 240

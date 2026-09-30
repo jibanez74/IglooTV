@@ -94,6 +94,6 @@ internal fun TestScope.landOn(model: LibraryViewModel, tab: LibraryTab) {
 }
 
 internal fun LibraryUiState.gridIds(): List<Long> =
-    (grid as IglooRailState.Loaded).items.map { it.id }
+    (paged.content as IglooRailState.Loaded).items.map { it.id }
 
 internal fun HttpRequestData.page(): String = url.parameters["page"].orEmpty()

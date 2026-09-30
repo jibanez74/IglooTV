@@ -80,7 +80,7 @@ class IglooAppContainer(context: Context) {
     }
     private val serverProbeHttpClient by lazy { createServerProbeHttpClient() }
     private val serverHealthProbe by lazy { ServerHealthProbe(serverProbeHttpClient) }
-    val authApi by lazy { AuthApi(httpClient, serverUrlProvider) }
+    private val authApi by lazy { AuthApi(httpClient, serverUrlProvider) }
     private val userApi by lazy { UserApi(httpClient, serverUrlProvider) }
     private val movieApi by lazy { MovieApi(httpClient, serverUrlProvider) }
     val movieRepository by lazy { MovieRepository(movieApi) }

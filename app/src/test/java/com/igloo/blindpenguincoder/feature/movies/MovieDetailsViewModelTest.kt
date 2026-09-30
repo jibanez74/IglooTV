@@ -19,6 +19,7 @@ import com.igloo.blindpenguincoder.data.repository.technicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.videoStreamJson
 import com.igloo.blindpenguincoder.data.repository.watchProgressJson
 import com.igloo.blindpenguincoder.data.repository.watchedUpdateJson
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
@@ -110,11 +111,11 @@ class MovieDetailsViewModelTest {
     }
 
     private suspend fun MovieDetailsViewModel.awaitLoaded(): MovieDetailsUi =
-        (uiState.first { it.details is MovieDetailsState.Loaded }.details as MovieDetailsState.Loaded)
-            .movie
+        (uiState.first { it.details is DetailsState.Loaded }.details as DetailsState.Loaded)
+            .value
 
-    private suspend fun MovieDetailsViewModel.awaitError(): MovieDetailsState.Error =
-        uiState.first { it.details is MovieDetailsState.Error }.details as MovieDetailsState.Error
+    private suspend fun MovieDetailsViewModel.awaitError(): DetailsState.Error =
+        uiState.first { it.details is DetailsState.Error }.details as DetailsState.Error
 
     @Test
     fun `nothing loads until a movie is opened`() = runTest {
@@ -151,7 +152,7 @@ class MovieDetailsViewModelTest {
         viewModel.open(5)
         testScheduler.advanceUntilIdle()
         // The four responses land in any order; the final publication composes every fragment.
-        val movie = (viewModel.uiState.value.details as MovieDetailsState.Loaded).movie
+        val movie = (viewModel.uiState.value.details as DetailsState.Loaded).value
 
         assertEquals(
             setOf(
@@ -273,9 +274,9 @@ class MovieDetailsViewModelTest {
             return viewModel.uiState
                 .first {
                     val details = it.details
-                    details is MovieDetailsState.Loaded && details.movie.mediaBadges.isNotEmpty()
+                    details is DetailsState.Loaded && details.value.mediaBadges.isNotEmpty()
                 }
-                .let { (it.details as MovieDetailsState.Loaded).movie.mediaBadges }
+                .let { (it.details as DetailsState.Loaded).value.mediaBadges }
         }
 
         // Scope 4K by width; height alone under the bar.
@@ -344,9 +345,9 @@ class MovieDetailsViewModelTest {
             return viewModel.uiState
                 .first {
                     val details = it.details
-                    details is MovieDetailsState.Loaded && details.movie.mediaBadges.isNotEmpty()
+                    details is DetailsState.Loaded && details.value.mediaBadges.isNotEmpty()
                 }
-                .let { (it.details as MovieDetailsState.Loaded).movie.mediaBadges }
+                .let { (it.details as DetailsState.Loaded).value.mediaBadges }
         }
 
         assertEquals(listOf("4K", "CC"), badgesFor(width = 3200, height = 100))
@@ -369,9 +370,9 @@ class MovieDetailsViewModelTest {
             return viewModel.uiState
                 .first {
                     val details = it.details
-                    details is MovieDetailsState.Loaded && details.movie.watched != null
+                    details is DetailsState.Loaded && details.value.watched != null
                 }
-                .let { (it.details as MovieDetailsState.Loaded).movie.progress }
+                .let { (it.details as DetailsState.Loaded).value.progress }
         }
 
         assertNull(progressFor(29.0, 7200.0))
@@ -639,8 +640,8 @@ class MovieDetailsViewModelTest {
     /** Waits past the details publish for the one carrying resolved playback audio. */
     private suspend fun MovieDetailsViewModel.awaitPlaybackSettings(): PlaybackSettingsUi =
         uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.playbackSettings?.selectedAudioId != null
-        }.let { (it.details as MovieDetailsState.Loaded).movie.playbackSettings!! }
+            (it.details as? DetailsState.Loaded)?.value?.playbackSettings?.selectedAudioId != null
+        }.let { (it.details as DetailsState.Loaded).value.playbackSettings!! }
 
     @Test
     fun `playback settings default to direct, the default audio track, and subtitles off`() =
@@ -771,13 +772,13 @@ class MovieDetailsViewModelTest {
         val viewModel = viewModel(http)
         viewModel.open(1)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+            (it.details as? DetailsState.Loaded)?.value?.watched == false
         }
 
         viewModel.toggleWatched()
         val movie = viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == true
-        }.let { (it.details as MovieDetailsState.Loaded).movie }
+            (it.details as? DetailsState.Loaded)?.value?.watched == true
+        }.let { (it.details as DetailsState.Loaded).value }
 
         assertEquals(true, movie.watched)
         // Marking watched hides the strip even though a position is still stored.
@@ -795,14 +796,14 @@ class MovieDetailsViewModelTest {
         val viewModel = viewModel(http)
         viewModel.open(1)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+            (it.details as? DetailsState.Loaded)?.value?.watched == false
         }
 
         viewModel.toggleWatched()
 
         // Optimistically true first; the failure response flips it back.
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+            (it.details as? DetailsState.Loaded)?.value?.watched == false
         }
     }
 
@@ -818,14 +819,14 @@ class MovieDetailsViewModelTest {
         val viewModel = viewModel(http)
         viewModel.open(1)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.liked == false
+            (it.details as? DetailsState.Loaded)?.value?.liked == false
         }
 
         viewModel.toggleLike()
 
         // Optimistically true first; the failure response flips it back.
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.liked == false
+            (it.details as? DetailsState.Loaded)?.value?.liked == false
         }
     }
 
@@ -854,7 +855,7 @@ class MovieDetailsViewModelTest {
 
         releaseStatus.complete(Unit)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.liked == false
+            (it.details as? DetailsState.Loaded)?.value?.liked == false
         }
         viewModel.toggleLike()
 
@@ -876,7 +877,7 @@ class MovieDetailsViewModelTest {
         )
         viewModel.open(1)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.liked == false
+            (it.details as? DetailsState.Loaded)?.value?.liked == false
         }
 
         viewModel.toggleLike()
@@ -901,7 +902,7 @@ class MovieDetailsViewModelTest {
             )
             viewModel.open(1)
             viewModel.uiState.first {
-                (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+                (it.details as? DetailsState.Loaded)?.value?.watched == false
             }
 
             viewModel.toggleWatched()
@@ -935,7 +936,7 @@ class MovieDetailsViewModelTest {
             val viewModel = viewModel(http)
             viewModel.open(1)
             viewModel.uiState.first {
-                (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+                (it.details as? DetailsState.Loaded)?.value?.watched == false
             }
 
             viewModel.toggleWatched()
@@ -1019,14 +1020,14 @@ class MovieDetailsViewModelTest {
 
         val viewModel = viewModel(http)
         viewModel.open(1)
-        viewModel.uiState.first { (it.details as? MovieDetailsState.Loaded)?.movie?.liked == true }
+        viewModel.uiState.first { (it.details as? DetailsState.Loaded)?.value?.liked == true }
 
         // Opening another movie retires the entry of the one left behind...
         viewModel.open(2)
         viewModel.open(1)
         assertNull(viewModel.awaitLoaded().liked)
         holdReopenAfterOpen.complete(Unit)
-        viewModel.uiState.first { (it.details as? MovieDetailsState.Loaded)?.movie?.liked == true }
+        viewModel.uiState.first { (it.details as? DetailsState.Loaded)?.value?.liked == true }
 
         // ...and so does closing the overlay.
         viewModel.close()
@@ -1068,7 +1069,7 @@ class MovieDetailsViewModelTest {
         val viewModel = viewModel(http)
         viewModel.open(1)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+            (it.details as? DetailsState.Loaded)?.value?.watched == false
         }
         viewModel.toggleWatched()
         writeReached.await()
@@ -1108,7 +1109,7 @@ class MovieDetailsViewModelTest {
         val viewModel = viewModel(http)
         viewModel.open(1)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.liked == false
+            (it.details as? DetailsState.Loaded)?.value?.liked == false
         }
 
         viewModel.toggleLike()
@@ -1156,7 +1157,7 @@ class MovieDetailsViewModelTest {
         val viewModel = viewModel(http)
         viewModel.open(1)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+            (it.details as? DetailsState.Loaded)?.value?.watched == false
         }
         viewModel.toggleWatched()
         writeReached.await()
@@ -1169,8 +1170,8 @@ class MovieDetailsViewModelTest {
 
         val movieB = viewModel.uiState.first {
             it.openMovieId == 2L &&
-                (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
-        }.let { (it.details as MovieDetailsState.Loaded).movie }
+                (it.details as? DetailsState.Loaded)?.value?.watched == false
+        }.let { (it.details as DetailsState.Loaded).value }
         assertEquals(2L, movieB.id)
         assertEquals(false, movieB.watched)
     }
@@ -1197,7 +1198,7 @@ class MovieDetailsViewModelTest {
         val viewModel = viewModel(http)
         viewModel.open(1)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+            (it.details as? DetailsState.Loaded)?.value?.watched == false
         }
         viewModel.toggleWatched()
         writeReached.await()
@@ -1238,13 +1239,13 @@ class MovieDetailsViewModelTest {
         val viewModel = viewModel(http)
         viewModel.open(1)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.liked == false
+            (it.details as? DetailsState.Loaded)?.value?.liked == false
         }
         viewModel.toggleLike()
 
         val failed = viewModel.uiState.first { it.mutationNotice != null }
         assertEquals(2, statusReads)
-        assertEquals(false, (failed.details as MovieDetailsState.Loaded).movie.liked)
+        assertEquals(false, (failed.details as DetailsState.Loaded).value.liked)
         assertTrue(requireNotNull(failed.mutationNotice).contains("likes are locked"))
 
         viewModel.toggleLike()
@@ -1292,7 +1293,7 @@ class MovieDetailsViewModelTest {
         val viewModel = viewModel(http, onWatchedStateCommitted = { commits += 1 })
         viewModel.open(1)
         viewModel.uiState.first {
-            val movie = (it.details as? MovieDetailsState.Loaded)?.movie
+            val movie = (it.details as? DetailsState.Loaded)?.value
             movie?.watched == false && movie.liked == false
         }
         viewModel.toggleWatched()
@@ -1311,7 +1312,7 @@ class MovieDetailsViewModelTest {
 
         viewModel.open(2)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+            (it.details as? DetailsState.Loaded)?.value?.watched == false
         }
         viewModel.toggleWatched()
         testScheduler.advanceUntilIdle()
@@ -1423,7 +1424,7 @@ class MovieDetailsViewModelTest {
         val viewModel = viewModel(http)
         viewModel.open(1)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+            (it.details as? DetailsState.Loaded)?.value?.watched == false
         }
 
         viewModel.toggleWatched()
@@ -1470,7 +1471,7 @@ class MovieDetailsViewModelTest {
         val viewModel = viewModel(http)
         viewModel.open(1)
         viewModel.uiState.first {
-            (it.details as? MovieDetailsState.Loaded)?.movie?.watched == false
+            (it.details as? DetailsState.Loaded)?.value?.watched == false
         }
 
         viewModel.toggleWatched()
@@ -1497,7 +1498,7 @@ class MovieDetailsViewModelTest {
         viewModel.close()
 
         assertNull(viewModel.uiState.value.openMovieId)
-        assertEquals(MovieDetailsState.Loading, viewModel.uiState.value.details)
+        assertEquals(DetailsState.Loading, viewModel.uiState.value.details)
     }
 
     private companion object {

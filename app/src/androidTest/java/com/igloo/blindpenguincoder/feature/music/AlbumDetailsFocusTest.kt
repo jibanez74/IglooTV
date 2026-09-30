@@ -24,6 +24,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueMovies
@@ -58,8 +59,8 @@ class AlbumDetailsFocusTest {
         // Explicit, never the ambient default: the Shield test device runs TalkBack, and this
         // suite pins the chain without the reading stops.
         spokenAccessibilityEnabled: Boolean = false,
-        openLoads: (Long) -> AlbumDetailsState = { id ->
-            AlbumDetailsState.Loaded(testAlbumDetails(id = id))
+        openLoads: (Long) -> DetailsState<AlbumDetailsUi> = { id ->
+            DetailsState.Loaded(testAlbumDetails(id = id))
         },
         withMusicianScreen: Boolean = false,
     ) {
@@ -113,7 +114,7 @@ class AlbumDetailsFocusTest {
 
     private fun loadedState(album: AlbumDetailsUi = testAlbumDetails()) = AlbumDetailsUiState(
         openAlbumId = album.id,
-        details = AlbumDetailsState.Loaded(album),
+        details = DetailsState.Loaded(album),
     )
 
     private fun openAlbumCard(id: Long) {
@@ -136,7 +137,7 @@ class AlbumDetailsFocusTest {
 
     @Test
     fun theSkeletonHoldsTheAnchorThroughTheLoadedSwap() {
-        setShellContent(openLoads = { AlbumDetailsState.Loading })
+        setShellContent(openLoads = { DetailsState.Loading })
 
         openAlbumCard(11)
 
@@ -144,7 +145,7 @@ class AlbumDetailsFocusTest {
         composeRule.onNodeWithContentDescription("Loading album details").assertIsFocused()
 
         albumDetailsState = albumDetailsState.copy(
-            details = AlbumDetailsState.Loaded(testAlbumDetails(id = 11)),
+            details = DetailsState.Loaded(testAlbumDetails(id = 11)),
         )
         composeRule.waitForIdle()
 
@@ -333,7 +334,7 @@ class AlbumDetailsFocusTest {
         setShellContent(
             AlbumDetailsUiState(
                 openAlbumId = 11,
-                details = AlbumDetailsState.Error("Couldn't load this album."),
+                details = DetailsState.Error("Couldn't load this album."),
             ),
         )
 

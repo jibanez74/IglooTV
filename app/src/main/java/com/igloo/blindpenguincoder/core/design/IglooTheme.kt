@@ -50,9 +50,6 @@ object IglooTheme {
 
     val layout: IglooLayout
         @Composable @ReadOnlyComposable get() = LocalIglooDimens.current.layout
-
-    val reducedMotion: Boolean
-        @Composable @ReadOnlyComposable get() = LocalIglooReducedMotion.current
 }
 
 @Composable

@@ -79,90 +79,73 @@ fun evaluatePlaybackGate(
     )
 }
 
+/** An ffprobe codec name as the codec tables key it. */
+internal fun normalizedCodec(codec: String): String = codec.trim().lowercase(Locale.US)
+
+/** A codec's Media3 MIME type, and its name as a person would say it in a refusal. */
+private class CodecNames(val mimeType: String, val displayName: String)
+
 /**
  * ffprobe video codec names → Media3 video MIME types, as string constants so this file stays
  * JVM-pure. Only codecs whose support genuinely varies by device matter here — every TV decodes
  * H.264. The MS-MPEG-4 variants are what old DivX 3 AVI files carry: Media3 extracts them, yet
  * no Android device ships a decoder for them.
  */
+private val VIDEO_CODECS = mapOf(
+    "hevc" to CodecNames("video/hevc", "HEVC"),
+    "vp9" to CodecNames("video/x-vnd.on2.vp9", "VP9"),
+    "av1" to CodecNames("video/av01", "AV1"),
+    "mpeg2video" to CodecNames("video/mpeg2", "MPEG-2"),
+    "mpeg4" to CodecNames("video/mp4v-es", "MPEG-4 Part 2"),
+    "msmpeg4v2" to CodecNames("video/mp42", "DivX 2 (MS-MPEG-4)"),
+    "msmpeg4v3" to CodecNames("video/mp43", "DivX 3 (MS-MPEG-4)"),
+    "vc1" to CodecNames("video/wvc1", "VC-1"),
+)
+
 internal fun videoCodecToMimeType(codec: String): String? =
-    when (codec.trim().lowercase(Locale.US)) {
-        "hevc" -> "video/hevc"
-        "vp9" -> "video/x-vnd.on2.vp9"
-        "av1" -> "video/av01"
-        "mpeg2video" -> "video/mpeg2"
-        "mpeg4" -> "video/mp4v-es"
-        "msmpeg4v2" -> "video/mp42"
-        "msmpeg4v3" -> "video/mp43"
-        "vc1" -> "video/wvc1"
-        else -> null
-    }
+    VIDEO_CODECS[normalizedCodec(codec)]?.mimeType
 
 /** The video codec as a person would name it, for the gate's refusal. */
-internal fun videoCodecDisplayName(codec: String): String =
-    when (val name = codec.trim().lowercase(Locale.US)) {
-        "hevc" -> "HEVC"
-        "vp9" -> "VP9"
-        "av1" -> "AV1"
-        "mpeg2video" -> "MPEG-2"
-        "mpeg4" -> "MPEG-4 Part 2"
-        "msmpeg4v2" -> "DivX 2 (MS-MPEG-4)"
-        "msmpeg4v3" -> "DivX 3 (MS-MPEG-4)"
-        "vc1" -> "VC-1"
-        else -> name.uppercase(Locale.US)
-    }
+internal fun videoCodecDisplayName(codec: String): String {
+    val name = normalizedCodec(codec)
+    return VIDEO_CODECS[name]?.displayName ?: name.uppercase(Locale.US)
+}
 
 /**
- * ffprobe codec names → Media3 audio MIME types, as string constants so this file stays
+ * ffprobe audio codec names → Media3 audio MIME types, as string constants so this file stays
  * JVM-pure. Only codecs whose support genuinely varies by device matter here; an unmapped
  * codec returns null and the gate lets it through.
  */
-internal fun audioCodecToMimeType(codec: String, profile: String?): String? {
-    val name = codec.trim().lowercase(Locale.US)
+private fun audioCodecNames(codec: String, profile: String?): CodecNames? {
     val profileName = profile?.lowercase(Locale.US).orEmpty()
-    return when {
-        name == "truehd" -> "audio/true-hd"
-        name == "ac3" -> "audio/ac3"
-        name == "eac3" ->
+    return when (val name = normalizedCodec(codec)) {
+        "truehd" -> CodecNames("audio/true-hd", "Dolby TrueHD")
+        "ac3" -> CodecNames("audio/ac3", "Dolby Digital")
+        "eac3" ->
             if (profileName.contains("joc") || profileName.contains("atmos")) {
-                "audio/eac3-joc"
+                CodecNames("audio/eac3-joc", "Dolby Digital Plus with Atmos")
             } else {
-                "audio/eac3"
+                CodecNames("audio/eac3", "Dolby Digital Plus")
             }
-        name == "dts" -> when {
-            profileName.contains("dts:x") -> "audio/vnd.dts.uhd;profile=p2"
-            profileName.contains("hd") -> "audio/vnd.dts.hd"
-            else -> "audio/vnd.dts"
+        "dts" -> when {
+            profileName.contains("dts:x") -> CodecNames("audio/vnd.dts.uhd;profile=p2", "DTS:X")
+            profileName.contains("hd") -> CodecNames("audio/vnd.dts.hd", "DTS-HD")
+            else -> CodecNames("audio/vnd.dts", "DTS")
         }
-        name == "aac" -> "audio/mp4a-latm"
-        name == "mp3" -> "audio/mpeg"
-        name == "mp2" -> "audio/mpeg-L2"
-        name == "flac" -> "audio/flac"
-        name == "opus" -> "audio/opus"
-        name == "vorbis" -> "audio/vorbis"
-        name.startsWith("pcm_") -> "audio/raw"
-        else -> null
+        "aac" -> CodecNames("audio/mp4a-latm", "AAC")
+        "mp3" -> CodecNames("audio/mpeg", "MP3")
+        "mp2" -> CodecNames("audio/mpeg-L2", "MP2")
+        "flac" -> CodecNames("audio/flac", "FLAC")
+        "opus" -> CodecNames("audio/opus", "OPUS")
+        "vorbis" -> CodecNames("audio/vorbis", "VORBIS")
+        else -> name.takeIf { it.startsWith("pcm_") }
+            ?.let { CodecNames("audio/raw", it.uppercase(Locale.US)) }
     }
 }
 
+internal fun audioCodecToMimeType(codec: String, profile: String?): String? =
+    audioCodecNames(codec, profile)?.mimeType
+
 /** The codec as a person would name it — the gate's refusal must read, not decode. */
-internal fun audioCodecDisplayName(codec: String, profile: String?): String {
-    val name = codec.trim().lowercase(Locale.US)
-    val profileName = profile?.lowercase(Locale.US).orEmpty()
-    return when {
-        name == "truehd" -> "Dolby TrueHD"
-        name == "ac3" -> "Dolby Digital"
-        name == "eac3" ->
-            if (profileName.contains("joc") || profileName.contains("atmos")) {
-                "Dolby Digital Plus with Atmos"
-            } else {
-                "Dolby Digital Plus"
-            }
-        name == "dts" -> when {
-            profileName.contains("dts:x") -> "DTS:X"
-            profileName.contains("hd") -> "DTS-HD"
-            else -> "DTS"
-        }
-        else -> codec.trim().uppercase(Locale.US)
-    }
-}
+internal fun audioCodecDisplayName(codec: String, profile: String?): String =
+    audioCodecNames(codec, profile)?.displayName ?: normalizedCodec(codec).uppercase(Locale.US)

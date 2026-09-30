@@ -1,19 +1,12 @@
 package com.igloo.blindpenguincoder.feature.movies
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -23,40 +16,30 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.isTraversalGroup
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.compose.AsyncImagePainter
-import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
-import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooMenu
 import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
-import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
-import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
+import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.feature.shared.DetailsHero
+import com.igloo.blindpenguincoder.feature.shared.DetailsHeroSkeleton
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 
 /**
  * What the details overlay can do, grouped so the shell that hosts it keeps a readable
@@ -142,7 +125,7 @@ enum class VideoLaunchSite { ExtrasRail, Hero }
  */
 @Composable
 fun MovieDetailsScreen(
-    state: MovieDetailsState,
+    state: DetailsState<MovieDetailsUi>,
     actions: MovieDetailsActions,
     isAdmin: Boolean,
     onPlay: () -> Unit,
@@ -179,26 +162,22 @@ fun MovieDetailsScreen(
     // in-theaters movie with no trailer, no cast, no extras and no about is all prose.
     LaunchedEffect(Unit) { entryRequester.requestFocusSafely() }
 
-    // The IglooMediaRail swap-capture pattern: the outgoing state's focused node only detaches
-    // once the composition applies, so this still sees whether the screen owned focus going in,
-    // and the effect re-lands it on the incoming state's anchor. Keyed on the state's class —
-    // a Loaded republish (a toggle, a badge arriving) must not yank focus back to the action row.
-    var screenHasFocus by remember { mutableStateOf(false) }
-    val hadFocusAtSwap = remember(state::class) { screenHasFocus }
-    LaunchedEffect(state::class) {
-        if (hadFocusAtSwap) entryRequester.requestFocusSafely()
+    // Keyed on the state's class — a Loaded republish (a toggle, a badge arriving) must not yank
+    // focus back to the action row.
+    val onScreenFocus = rememberRefocusAfterSwap(state::class) {
+        entryRequester.requestFocusSafely()
     }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(colors.background)
-            .onFocusChanged { screenHasFocus = it.hasFocus }
+            .onFocusChanged { onScreenFocus(it.hasFocus) }
             .semantics {
                 // The loaded pane announces the movie itself; a pane-title change is spoken, so
                 // arriving on a loaded page (or the load completing) names the film rather than
                 // a generic frame (section 12's pane rule).
-                paneTitle = (state as? MovieDetailsState.Loaded)?.movie?.title ?: "Movie details"
+                paneTitle = (state as? DetailsState.Loaded)?.value?.title ?: "Movie details"
                 isTraversalGroup = true
             }
             .testTag("movie_details"),
@@ -277,9 +256,9 @@ fun MovieDetailsScreen(
         // rather than crash a cast. The host flag then persists until details close, which is
         // the same outcome every stale-overlay flag gets.
         if (playbackSettingsOpen && actions is MovieDetailsActions.Library &&
-            state is MovieDetailsState.Loaded
+            state is DetailsState.Loaded
         ) {
-            state.movie.playbackSettings?.let { settings ->
+            state.value.playbackSettings?.let { settings ->
                 PlaybackSettingsDialog(
                     settings = settings,
                     onSelectMode = actions.onSelectPlaybackMode,
@@ -309,7 +288,7 @@ private fun menuItem(
 
 @Composable
 private fun DetailsBody(
-    state: MovieDetailsState,
+    state: DetailsState<MovieDetailsUi>,
     actions: MovieDetailsActions,
     mutationNotice: String?,
     progressSyncError: String?,
@@ -326,40 +305,38 @@ private fun DetailsBody(
     onMoreAnchorPositioned: (Rect) -> Unit,
 ) {
     when (state) {
-        is MovieDetailsState.Loading -> DetailsSkeleton(
+        // Geometry-matched to the row it stands in for: the in-theaters hero carries one action
+        // and no resume strip; the library hero's Play sits over the resume strip, followed by
+        // Watched, Like and the square More trigger. A stand-in of the wrong shape would move
+        // the anchor focus is sitting on when the real row lands.
+        is DetailsState.Loading -> {
+            val library = actions is MovieDetailsActions.Library
+            val playStub = PLAY_STUB_WIDTH.scaled()
+            DetailsHeroSkeleton(
+                artworkAspect = IglooTheme.layout.posterAspect,
+                artworkShape = RoundedCornerShape(IglooTheme.radius.lg),
+                anchorWidth = playStub,
+                loadingLabel = "Loading movie details",
                 anchorRequester = entryRequester,
-            // Geometry-matched to the row it stands in for: the in-theaters hero carries one
-            // action and no resume strip, and a stand-in of the wrong shape would move the
-            // anchor focus is sitting on when the real row lands.
-            actionStubs = if (actions is MovieDetailsActions.Theater) 1 else LIBRARY_ACTIONS,
-            reserveResumeSlot = actions is MovieDetailsActions.Library,
-        )
-
-        // The only region on screen, so Assertive is safe and right: the user just asked
-        // for this page and is waiting on it (section 10).
-        is MovieDetailsState.Error -> Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(IglooTheme.layout.safeAreaHorizontal),
-            contentAlignment = Alignment.Center,
-        ) {
-            IglooInlineError(
-                message = state.message,
-                actionText = "Retry",
-                actionSemanticLabel = "Retry loading movie details",
-                onAction = actions.onRetry,
-                // The screen's only focusable, so every direction is pinned: the shell is
-                // still composed underneath, and a spatial search that escaped would strand
-                // focus on a card nobody can see, with no way back to Retry.
-                actionModifier = Modifier
-                    .focusRequester(entryRequester)
-                    .pinnedToScreen(),
-                modifier = Modifier.width(IglooTheme.layout.dialogWidth),
+                trailingStubWidths = if (library) {
+                    listOf(playStub, playStub, IglooTheme.sizes.controlHeight)
+                } else {
+                    emptyList()
+                },
+                belowAnchor = { if (library) ResumeProgress(progress = null, overMedia = false) },
             )
         }
 
-        is MovieDetailsState.Loaded -> DetailsContent(
-            movie = state.movie,
+        is DetailsState.Error -> IglooPinnedError(
+            message = state.message,
+            actionText = "Retry",
+            actionSemanticLabel = "Retry loading movie details",
+            actionRequester = entryRequester,
+            onAction = actions.onRetry,
+        )
+
+        is DetailsState.Loaded -> DetailsContent(
+            movie = state.value,
             mutationNotice = mutationNotice,
             progressSyncError = progressSyncError,
             onRetryProgressSync = onRetryProgressSync,
@@ -398,13 +375,6 @@ private fun DetailsContent(
 ) {
     val colors = IglooTheme.colors
     val layout = IglooTheme.layout
-    var imageFailed by remember(movie.backdropUrl) { mutableStateOf(false) }
-    var imageLoaded by remember(movie.backdropUrl) { mutableStateOf(false) }
-    val showBackdrop = movie.backdropUrl != null && !imageFailed
-    // Section 3.2's literals are licensed only by media actually behind them, so the white
-    // treatment waits for the decode — a non-null URL alone would paint white text over the
-    // bare token canvas for the whole load window.
-    val overMedia = imageLoaded
     // What the hero's action row is: the library page always has Play, while the in-theaters page
     // has Play Trailer only for as long as TMDB lists one (section 11.4.2).
     val onPlayTrailer: (() -> Unit)? = movie.heroTrailer
@@ -469,20 +439,9 @@ private fun DetailsContent(
         stops -> heroInfoRequester
         else -> null
     }
-    var progressRetryFocused by remember { mutableStateOf(false) }
-    val retryHadFocusWhenStateChanged = remember(progressSyncError) { progressRetryFocused }
-    LaunchedEffect(progressSyncError) {
-        if (progressSyncError == null && retryHadFocusWhenStateChanged) {
-            lastFocusedAction?.requestFocusSafely()
-        }
+    val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError) {
+        if (progressSyncError == null) lastFocusedAction?.requestFocusSafely()
     }
-    // The backdrop fades in on top of the token canvas instead of popping (section 7.2's
-    // overlay-reveal case); under reduced motion iglooTween snaps it.
-    val backdropAlpha by animateFloatAsState(
-        targetValue = if (imageLoaded) 1f else 0f,
-        animationSpec = iglooTween(IglooMotion.PAGE_MS),
-        label = "detailsBackdrop",
-    )
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
 
@@ -491,70 +450,7 @@ private fun DetailsContent(
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
     ) {
-        // The hero region. Full-bleed: the backdrop reaches the physical edges and scrolls
-        // away with the header, so everything below it reads on the plain token canvas.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = HERO_MIN_HEIGHT.scaled()),
-        ) {
-            if (showBackdrop) {
-                AsyncImage(
-                    model = movie.backdropUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    onState = { state ->
-                        when (state) {
-                            is AsyncImagePainter.State.Success -> imageLoaded = true
-                            is AsyncImagePainter.State.Error -> imageFailed = true
-                            else -> Unit
-                        }
-                    },
-                    modifier = Modifier
-                        .testTag("details_backdrop")
-                        .matchParentSize()
-                        .graphicsLayer { alpha = backdropAlpha },
-                )
-                // Two scrims with two jobs (sections 3.2 and 11.4): the black side gradient is
-                // the over-media literal that licenses the white text column against busy art;
-                // the vertical fade is the token gradient that blends the backdrop into the
-                // canvas the sections sit on. Alpha-zero stops come from the color itself —
-                // Color.Transparent is black at zero and would gray the token fade.
-                //
-                // The stops are the detail hero's own, not section 3.2's home-hero ramp. That one
-                // is written for a clipped card about 752dp wide; stretched across a full-bleed
-                // panel it has decayed to alpha 0.14 by the time the metadata line ends, and the
-                // backdrop's highlights come back through the text column.
-                Box(
-                    modifier = Modifier
-                        // Tagged only once the decode lands: the tag's presence is what a test
-                        // reads as "the section 3.2 treatment is on", the same way the resume
-                        // track's tag exists only while the strip is visible.
-                        .then(
-                            if (overMedia) Modifier.testTag("details_backdrop_scrim") else Modifier,
-                        )
-                        .matchParentSize()
-                        .graphicsLayer { alpha = backdropAlpha }
-                        .background(
-                            Brush.horizontalGradient(
-                                0f to Color.Black.copy(alpha = 0.80f),
-                                0.65f to Color.Black.copy(alpha = 0.55f),
-                                1f to Color.Black.copy(alpha = 0f),
-                            ),
-                        ),
-                )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(
-                            Brush.verticalGradient(
-                                0.45f to colors.background.copy(alpha = 0f),
-                                1f to colors.background,
-                            ),
-                        ),
-                )
-            }
-
+        DetailsHero(imageUrl = movie.backdropUrl, backdropTag = "details_backdrop") { overMedia ->
             MovieDetailsHeader(
                 movie = movie,
                 overMedia = overMedia,
@@ -579,21 +475,8 @@ private fun DetailsContent(
                 progressRetryRequester = progressRetryRequester,
                 progressRetryUpRequester = lastFocusedAction,
                 progressRetryDownRequester = belowProgressError,
-                onProgressRetryFocusChanged = { progressRetryFocused = it },
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .padding(
-                        start = layout.safeAreaHorizontal,
-                        end = layout.safeAreaHorizontal,
-                        top = layout.safeAreaVertical,
-                        bottom = IglooTheme.spacing.lg,
-                    ),
-                // Deliberately not staggered: the header holds the entry focus, and the rise
-                // moves the focused button's visual bounds while the scroll container is
-                // bringing it into view — the column ends up parked 12dp down, with the hero
-                // pushed into the overscan margin. The backdrop's fade carries the entrance
-                // here; the sections below animate because nothing there has focus yet.
+                onProgressRetryFocusChanged = onProgressRetryFocus,
+                modifier = heroHeaderModifier(),
             )
         }
 
@@ -620,117 +503,6 @@ private fun DetailsContent(
     }
 }
 
-/**
- * Static geometry-matched stand-ins (section 10): poster and text stubs where the hero lands,
- * and an action row of [actionStubs] whose first slot is the screen's one focusable anchor, so
- * entry focus taken during the load sits exactly where the real primary button appears.
- * [reserveResumeSlot] reserves the strip only the library hero can grow.
- */
-@Composable
-private fun DetailsSkeleton(
-    anchorRequester: FocusRequester,
-    actionStubs: Int,
-    reserveResumeSlot: Boolean,
-) {
-    val colors = IglooTheme.colors
-    val layout = IglooTheme.layout
-    val stubShape = RoundedCornerShape(IglooTheme.radius.sm)
-    var focused by remember { mutableStateOf(false) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = HERO_MIN_HEIGHT.scaled()),
-    ) {
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .padding(
-                    start = layout.safeAreaHorizontal,
-                    end = layout.safeAreaHorizontal,
-                    top = layout.safeAreaVertical,
-                    bottom = IglooTheme.spacing.lg,
-                ),
-            horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xl),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(layout.posterWidth)
-                    .aspectRatio(layout.posterAspect)
-                    .background(colors.muted, RoundedCornerShape(IglooTheme.radius.lg)),
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md)) {
-                Box(
-                    modifier = Modifier
-                        .width(320.dp.scaled())
-                        .heightIn(min = 30.dp.scaled())
-                        .background(colors.muted, stubShape),
-                )
-                Box(
-                    modifier = Modifier
-                        .width(220.dp.scaled())
-                        .heightIn(min = 16.dp.scaled())
-                        .background(colors.muted, stubShape),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md)) {
-                    // The stub carries the same reserved resume slot as the real Play column,
-                    // so the loading -> loaded swap does not move the anchor the focus sits on.
-                    Column {
-                        Box(
-                            modifier = Modifier
-                                .width(PLAY_STUB_WIDTH.scaled())
-                                .heightIn(min = IglooTheme.sizes.controlHeight)
-                                .focusRing(
-                                    focused = focused,
-                                    radius = IglooTheme.radius.lg,
-                                    fill = colors.muted,
-                                )
-                                .focusRequester(anchorRequester)
-                                // The screen's only focusable while loading, and the shell is still
-                                // composed underneath: without this, Left or Down pressed before the
-                                // movie lands walks focus onto an invisible card.
-                                .pinnedToScreen()
-                                .onFocusChanged { focused = it.isFocused }
-                                .focusable()
-                                .clearAndSetSemantics {
-                                    contentDescription = "Loading movie details"
-                                    liveRegion = LiveRegionMode.Polite
-                                },
-                        )
-                        if (reserveResumeSlot) {
-                            ResumeProgress(progress = null, overMedia = false)
-                        }
-                    }
-                    repeat(actionStubs - 1) { index ->
-                        // The library row ends in the square More trigger; a wide stub there
-                        // would shift the row's geometry when the real row lands.
-                        val squareStub = reserveResumeSlot && index == actionStubs - 2
-                        Box(
-                            modifier = Modifier
-                                .width(
-                                    if (squareStub) {
-                                        IglooTheme.sizes.controlHeight
-                                    } else {
-                                        PLAY_STUB_WIDTH.scaled()
-                                    },
-                                )
-                                .heightIn(min = IglooTheme.sizes.controlHeight)
-                                .background(colors.muted, RoundedCornerShape(IglooTheme.radius.lg)),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** About 60% of the reference viewport's height (section 8.1); contains text, so a minimum. */
-private val HERO_MIN_HEIGHT = 320.dp
-
 /** The Play button's approximate footprint, so focus taken while loading does not jump. */
 private val PLAY_STUB_WIDTH = 120.dp
 
-/** Play, Watched, Like, More — what the library hero's skeleton has to stand in for. */
-private const val LIBRARY_ACTIONS = 4

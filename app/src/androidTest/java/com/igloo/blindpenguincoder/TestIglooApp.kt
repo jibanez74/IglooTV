@@ -33,12 +33,9 @@ import kotlinx.coroutines.flow.emptyFlow
 internal val testAuthUser = AuthUser(
     id = 1,
     name = "Jose",
-    email = "jose@example.com",
     isAdmin = false,
     avatar = null,
     hasPin = false,
-    createdAt = "2026-01-01T00:00:00Z",
-    updatedAt = "2026-01-01T00:00:00Z",
 )
 
 internal const val TEST_SERVER_ORIGIN = "http://igloo.test:8080"

@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
-import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
+import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -92,8 +92,7 @@ class TrackLikesViewModel(
                         reseedAfterDrain += id
                         _uiState.update {
                             it.copy(
-                                notice = "Couldn't update like: " +
-                                    result.error.toLibraryDisplayMessage(),
+                                notice = result.error.toFailureNotice("update like"),
                             )
                         }
                     }

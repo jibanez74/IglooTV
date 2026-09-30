@@ -12,8 +12,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
+import com.igloo.blindpenguincoder.feature.shared.DetailsHero
+import com.igloo.blindpenguincoder.feature.shared.DetailsHeroSkeleton
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
+import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 
 /**
  * The album detail screen (docs/design-system.md section 11.5.1): the third occupant of the
@@ -27,20 +32,19 @@ import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
  * the album's queue — in order, freshly shuffled, or in order from that row; [playReturnRequester]
  * is parked on whichever of those controls launched it so closing that player restores focus
  * there (section 6.3), the movie details screen's pairing. [likes] and [onToggleLike] are the
- * shared like state every track row reads; [notice] is its last failed write. [onOpenMusician]
- * replaces this overlay with a credited artist's — from a chip or a row's More — and is null
- * only where no musician screen can be reached, which leaves the chips display-only.
+ * shared like state every track row reads; its last failed write is the page's notice.
+ * [onOpenMusician] replaces this overlay with a credited artist's — from a chip or a row's More —
+ * and is null only where no musician screen can be reached, which leaves the chips display-only.
  */
 @Composable
 fun AlbumDetailsScreen(
-    state: AlbumDetailsState,
+    state: DetailsState<AlbumDetailsUi>,
     onRetry: () -> Unit,
     onPlayAlbum: () -> Unit,
     onShuffle: () -> Unit,
     onPlayTrack: (Int) -> Unit,
     likes: TrackLikesUiState,
     onToggleLike: (Long) -> Unit,
-    notice: String?,
     onOpenMusician: ((Long) -> Unit)?,
     playReturnRequester: FocusRequester,
     modifier: Modifier = Modifier,
@@ -48,11 +52,11 @@ fun AlbumDetailsScreen(
     // and a test device with TalkBack running would otherwise pin the gate open.
     spokenAccessibilityEnabled: Boolean = rememberSpokenAccessibilityEnabled(),
 ) {
-    val loaded = (state as? AlbumDetailsState.Loaded)?.album
+    val loaded = (state as? DetailsState.Loaded)?.value
     MusicDetailsScaffold(
         stateKey = state::class,
         loaded = loaded,
-        errorMessage = (state as? AlbumDetailsState.Error)?.message,
+        errorMessage = (state as? DetailsState.Error)?.message,
         paneTitle = loaded?.title ?: "Album details",
         tag = "album_details",
         trackRows = loaded?.discs?.flatMap { it.tracks }.orEmpty(),
@@ -62,18 +66,19 @@ fun AlbumDetailsScreen(
         onGoToArtist = onOpenMusician,
         modifier = modifier,
         skeleton = { anchorRequester ->
-            MusicDetailsHeroSkeleton(
+            DetailsHeroSkeleton(
+                artworkAspect = IglooTheme.layout.albumAspect,
                 artworkShape = RoundedCornerShape(IglooTheme.radius.lg),
-                primaryStubWidth = PLAY_ALBUM_STUB_WIDTH,
+                anchorWidth = PLAY_ALBUM_STUB_WIDTH.scaled(),
                 loadingLabel = "Loading album details",
                 anchorRequester = anchorRequester,
+                trailingStubWidths = listOf(SHUFFLE_STUB_WIDTH.scaled()),
             )
         },
     ) { album, entryRequester, trackRequesters, onOpenMore ->
         AlbumDetailsContent(
             album = album,
             likes = likes,
-            notice = notice,
             spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             entryRequester = entryRequester,
             playReturnRequester = playReturnRequester,
@@ -92,7 +97,6 @@ fun AlbumDetailsScreen(
 private fun AlbumDetailsContent(
     album: AlbumDetailsUi,
     likes: TrackLikesUiState,
-    notice: String?,
     spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
     playReturnRequester: FocusRequester,
@@ -140,10 +144,10 @@ private fun AlbumDetailsContent(
     }
 
     MusicDetailsBody(
-        notice = notice,
+        notice = likes.notice,
         noticeTag = "album_notice",
         hero = {
-            MusicDetailsHero(imageUrl = album.coverUrl, backdropTag = "album_backdrop") { overMedia ->
+            DetailsHero(imageUrl = album.coverUrl, backdropTag = "album_backdrop") { overMedia ->
                 AlbumDetailsHeader(
                     album = album,
                     overMedia = overMedia,

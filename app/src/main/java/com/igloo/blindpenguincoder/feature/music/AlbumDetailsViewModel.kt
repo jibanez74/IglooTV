@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.errorOrKeep
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,10 +33,7 @@ class AlbumDetailsViewModel(
     /** Opens the overlay on album [id] and starts its one load. */
     fun open(id: Long) {
         loadJob?.cancel()
-        _uiState.value = AlbumDetailsUiState(
-            openAlbumId = id,
-            details = AlbumDetailsState.Loading,
-        )
+        _uiState.value = AlbumDetailsUiState(openAlbumId = id)
         load(id, userInitiated = true)
     }
 
@@ -53,7 +52,7 @@ class AlbumDetailsViewModel(
     fun retry() {
         val id = _uiState.value.openAlbumId ?: return
         loadJob?.cancel()
-        _uiState.update { it.copy(details = AlbumDetailsState.Loading) }
+        _uiState.update { it.copy(details = DetailsState.Loading) }
         load(id, userInitiated = true)
     }
 
@@ -73,7 +72,7 @@ class AlbumDetailsViewModel(
             if (_uiState.value.openAlbumId != id) return@launch
             when (result) {
                 is ApiResult.Success -> _uiState.update {
-                    it.copy(details = AlbumDetailsState.Loaded(toAlbumDetailsUi(result.value)))
+                    it.copy(details = DetailsState.Loaded(toAlbumDetailsUi(result.value)))
                 }
 
                 is ApiResult.Failure -> _uiState.update {
@@ -89,27 +88,7 @@ class AlbumDetailsViewModel(
     }
 }
 
-sealed interface AlbumDetailsState {
-    data object Loading : AlbumDetailsState
-    data class Loaded(val album: AlbumDetailsUi) : AlbumDetailsState
-    data class Error(val message: String) : AlbumDetailsState
-}
-
-/**
- * A background refresh failure never replaces readable content; only a user-initiated read
- * (open, Retry) may surface as the full-screen error.
- */
-internal fun AlbumDetailsState.errorOrKeep(
-    message: String,
-    userInitiated: Boolean,
-): AlbumDetailsState =
-    if (!userInitiated && this is AlbumDetailsState.Loaded) {
-        this
-    } else {
-        AlbumDetailsState.Error(message)
-    }
-
 data class AlbumDetailsUiState(
     val openAlbumId: Long? = null,
-    val details: AlbumDetailsState = AlbumDetailsState.Loading,
+    val details: DetailsState<AlbumDetailsUi> = DetailsState.Loading,
 )

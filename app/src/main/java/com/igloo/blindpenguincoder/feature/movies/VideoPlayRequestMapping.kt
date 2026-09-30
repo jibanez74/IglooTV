@@ -115,5 +115,5 @@ internal fun resumePositionSec(progress: WatchProgress?): Double? {
     return progressSec
 }
 
-internal const val RESUME_MIN_SEC = 30.0
-internal const val RESUME_MAX_RATIO = 0.95
+private const val RESUME_MIN_SEC = 30.0
+private const val RESUME_MAX_RATIO = 0.95

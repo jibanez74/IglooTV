@@ -6,6 +6,7 @@ import com.igloo.blindpenguincoder.data.model.SimpleMusician
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.TrackListItem
+import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -84,7 +85,6 @@ class MusicMappingTest {
             title = "",
             cover = SqlNullString("", valid = true),
             musician = SqlNullString(" ", valid = true),
-            year = SqlNullInt64(0, valid = false),
         ).toCardUi()
 
         assertEquals("Untitled album", card.title)

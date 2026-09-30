@@ -256,9 +256,7 @@ class MoviesGridAccessibilityTest {
     fun theGenresTabWithoutGenresAnnouncesThePlaceholder() {
         setContent(testLibraryState(tab = LibraryTab.Genres, genre = null, genres = emptyList()))
 
-        composeRule.onNodeWithContentDescription(
-            "Genres aren't available right now. Refresh to try again.",
-        ).assertIsFocused()
+        composeRule.onNodeWithContentDescription(NO_GENRES_MESSAGE).assertIsFocused()
         composeRule.onNodeWithTag("movies_count")
             .assertContentDescriptionEquals("Genres unavailable")
     }

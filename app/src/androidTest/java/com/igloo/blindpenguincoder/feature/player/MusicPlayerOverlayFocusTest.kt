@@ -25,8 +25,8 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
-import com.igloo.blindpenguincoder.feature.music.AlbumDetailsState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
@@ -80,7 +80,7 @@ class MusicPlayerOverlayFocusTest {
                     onAlbumSelected = { albumId ->
                         albumDetailsState = AlbumDetailsUiState(
                             openAlbumId = albumId,
-                            details = AlbumDetailsState.Loaded(testAlbumDetails(id = albumId)),
+                            details = DetailsState.Loaded(testAlbumDetails(id = albumId)),
                         )
                     },
                     onCloseDetails = {

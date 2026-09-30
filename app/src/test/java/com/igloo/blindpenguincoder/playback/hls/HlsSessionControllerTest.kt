@@ -47,6 +47,7 @@ class HlsSessionControllerTest {
     }
 
     private val movie = PlaybackMediaRef.Movie(7)
+    private val firstUuid = "11111111-1111-4111-8111-111111111111"
 
     @Test
     fun `a ready manifest returns the session start and clears the status`() = runTest {
@@ -64,38 +65,35 @@ class HlsSessionControllerTest {
 
         assertEquals("1080p_8mbps", start.effectiveProfileId)
         assertEquals(87.4, start.actualStartSec, 0.0)
-        assertEquals(90, start.spec.startSec)
-        assertEquals(1, start.spec.audioTypeIndex)
+        assertEquals(90, api.fetchedSpecs.single().startSec)
+        assertEquals(1, api.fetchedSpecs.single().audioTypeIndex)
         assertEquals(listOf<String?>(null), statuses)
     }
 
     @Test
     fun `the session uuid is reused across uninterrupted hls restarts`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
+        val controller =
+            HlsSessionController(movie, api, backgroundScope, backgroundScope, sessionUuid = firstUuid)
 
         controller.start("remux", 0, null, 0)
         controller.start("1080p_8mbps", 1, null, 500)
 
-        assertEquals(1, api.fetchedSpecs.map { it.sessionUuid }.distinct().size)
-        assertEquals(controller.sessionUuid, api.fetchedSpecs.first().sessionUuid)
+        assertEquals(listOf(firstUuid), api.fetchedSpecs.map { it.sessionUuid }.distinct())
     }
 
     @Test
     fun `stop rotates the uuid before a later start`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(movie, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this, sessionUuid = firstUuid)
         controller.start("remux", 0, null, 0)
-        val stoppedUuid = controller.sessionUuid
 
         controller.releaseAndStop()
-        val nextUuid = controller.sessionUuid
         controller.start("1080p_8mbps", 0, null, 60)
         runCurrent()
 
-        assertTrue(stoppedUuid != nextUuid)
-        assertEquals(stoppedUuid, api.stops.single().second)
-        assertEquals(nextUuid, api.fetchedSpecs.last().sessionUuid)
+        assertEquals(firstUuid, api.stops.single().second)
+        assertTrue(api.fetchedSpecs.last().sessionUuid != firstUuid)
     }
 
     @Test
@@ -111,20 +109,23 @@ class HlsSessionControllerTest {
                 api.stopHlsSession(media, sessionUuid)
             }
         }
-        val controller = HlsSessionController(movie, delayingApi, backgroundScope, backgroundScope)
+        val controller = HlsSessionController(
+            movie,
+            delayingApi,
+            backgroundScope,
+            backgroundScope,
+            sessionUuid = firstUuid,
+        )
         controller.start("remux", 0, null, 0)
-        val oldUuid = controller.sessionUuid
 
         controller.releaseAndStop()
-        val newUuid = controller.sessionUuid
         controller.start("1080p_8mbps", 0, null, 60)
-        assertEquals(oldUuid, stopEntered.await())
-        assertTrue(oldUuid != newUuid)
-        assertEquals(newUuid, api.fetchedSpecs.last().sessionUuid)
+        assertEquals(firstUuid, stopEntered.await())
+        assertTrue(api.fetchedSpecs.last().sessionUuid != firstUuid)
 
         allowStop.complete(Unit)
         runCurrent()
-        assertEquals(listOf(movie to oldUuid), api.stops)
+        assertEquals(listOf(movie to firstUuid), api.stops)
     }
 
     @Test
@@ -148,7 +149,10 @@ class HlsSessionControllerTest {
         runCurrent()
 
         assertTrue(result.await().exceptionOrNull() is CancellationException)
-        assertNull(controller.currentSpec())
+        // Nothing was published: a keepalive started now has no spec to refresh.
+        controller.startKeepalive { }
+        advanceTimeBy(HLS_KEEPALIVE_INTERVAL_MS + 1)
+        assertEquals(1, api.fetchedSpecs.size)
     }
 
     @Test
@@ -262,13 +266,12 @@ class HlsSessionControllerTest {
         api.queuedResults += HlsManifestResult.Ready("remux", 0.0)
         val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
 
-        val start = controller.start("remux", 0, HlsAudioProfile.DolbyDigitalPlus, 0)
+        controller.start("remux", 0, HlsAudioProfile.DolbyDigitalPlus, 0)
         controller.startKeepalive { }
         advanceTimeBy(HLS_KEEPALIVE_INTERVAL_MS + 1)
 
         assertEquals(4, api.fetchedSpecs.size)
         assertTrue(api.fetchedSpecs.all { it.audioProfile == HlsAudioProfile.DolbyDigitalPlus })
-        assertEquals(HlsAudioProfile.DolbyDigitalPlus, start.spec.audioProfile)
         // The lost retry still bumped reload alongside the profile.
         assertEquals(1, api.fetchedSpecs.last().reload)
     }
@@ -284,11 +287,10 @@ class HlsSessionControllerTest {
         val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
         val statuses = mutableListOf<String?>()
 
-        val start = controller.start("remux", 0, HlsAudioProfile.DolbyDigital, 0) { statuses += it }
+        controller.start("remux", 0, HlsAudioProfile.DolbyDigital, 0) { statuses += it }
 
         assertEquals(HlsAudioProfile.DolbyDigital, api.fetchedSpecs.first().audioProfile)
         assertNull(api.fetchedSpecs.last().audioProfile)
-        assertNull(start.spec.audioProfile)
         assertEquals(listOf(HLS_AUDIO_CONVERSION_UNAVAILABLE_MESSAGE, null), statuses)
     }
 
@@ -391,14 +393,13 @@ class HlsSessionControllerTest {
     @Test
     fun `release stops the started session on the surviving scope`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(movie, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this, sessionUuid = firstUuid)
         controller.start("remux", 0, null, 0)
 
-        val stoppedUuid = controller.sessionUuid
         controller.releaseAndStop()
         runCurrent()
 
-        assertEquals(listOf(movie to stoppedUuid), api.stops)
+        assertEquals(listOf(movie to firstUuid), api.stops)
     }
 
     @Test
@@ -410,30 +411,28 @@ class HlsSessionControllerTest {
             fetchStarted.complete(Unit)
             manifest.await()
         }
-        val controller = HlsSessionController(movie, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this, sessionUuid = firstUuid)
         val startup = backgroundScope.launch { controller.start("remux", 0, null, 0) }
         fetchStarted.await()
 
         startup.cancelAndJoin()
-        val stoppedUuid = controller.sessionUuid
         controller.releaseAndStop()
         runCurrent()
 
-        assertEquals(listOf(movie to stoppedUuid), api.stops)
+        assertEquals(listOf(movie to firstUuid), api.stops)
     }
 
     @Test
     fun `release stops a session whose startup failed after issuing a manifest`() = runTest {
         val api = FakeHlsApi()
         api.queuedResults += HlsManifestResult.Failed("No stream.")
-        val controller = HlsSessionController(movie, api, backgroundScope, this)
+        val controller = HlsSessionController(movie, api, backgroundScope, this, sessionUuid = firstUuid)
         runCatching { controller.start("remux", 0, null, 0) }
 
-        val stoppedUuid = controller.sessionUuid
         controller.releaseAndStop()
         runCurrent()
 
-        assertEquals(listOf(movie to stoppedUuid), api.stops)
+        assertEquals(listOf(movie to firstUuid), api.stops)
     }
 
     @Test
@@ -450,14 +449,14 @@ class HlsSessionControllerTest {
     @Test
     fun `a reserved generation rotates even before its manifest is issued`() = runTest {
         val api = FakeHlsApi()
-        val controller = HlsSessionController(movie, api, backgroundScope, this)
-        val reservedUuid = controller.sessionUuid
+        val controller = HlsSessionController(movie, api, backgroundScope, this, sessionUuid = firstUuid)
         controller.reserveGeneration()
 
         controller.releaseAndStop()
         runCurrent()
+        controller.start("remux", 0, null, 0)
 
-        assertTrue(reservedUuid != controller.sessionUuid)
+        assertTrue(api.fetchedSpecs.single().sessionUuid != firstUuid)
         assertTrue(api.stops.isEmpty())
     }
 
@@ -481,14 +480,13 @@ class HlsSessionControllerTest {
     fun `an episode's session is keyed and stopped by the episode ref`() = runTest {
         val api = FakeHlsApi()
         val episode = PlaybackMediaRef.Episode(900)
-        val controller = HlsSessionController(episode, api, backgroundScope, this)
+        val controller = HlsSessionController(episode, api, backgroundScope, this, sessionUuid = firstUuid)
 
         controller.start("remux", 0, null, 0)
-        val stoppedUuid = controller.sessionUuid
         controller.releaseAndStop()
         runCurrent()
 
         assertEquals(episode, api.fetchedSpecs.single().media)
-        assertEquals(listOf(episode to stoppedUuid), api.stops)
+        assertEquals(listOf(episode to firstUuid), api.stops)
     }
 }

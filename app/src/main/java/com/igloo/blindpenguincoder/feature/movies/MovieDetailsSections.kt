@@ -19,15 +19,12 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -38,8 +35,9 @@ import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooText
-import com.igloo.blindpenguincoder.core.ui.focusRing
-import com.igloo.blindpenguincoder.feature.shared.SectionHeading
+import com.igloo.blindpenguincoder.core.ui.SectionHeading
+import com.igloo.blindpenguincoder.feature.shared.FactUi
+import com.igloo.blindpenguincoder.feature.shared.FactsSection
 import com.igloo.blindpenguincoder.feature.shared.readingStopTarget
 
 /**
@@ -411,13 +409,7 @@ private fun ExtraVideosSection(
     }
 }
 
-/**
- * The fine print. The heading lives outside the focusable panel, so it lines up with the other
- * section headings despite the panel's inner padding. The rows are one focus stop and one
- * TalkBack node: four two-word rows would be four announcements of nothing much, and the block
- * carries no action to gate. The announcement folds the heading in — TV TalkBack follows input
- * focus, so the heading's own text node above is never reached.
- */
+/** The fine print, on the [FactsSection] treatment every details page shares. */
 @Composable
 private fun AboutSection(
     title: String,
@@ -426,68 +418,23 @@ private fun AboutSection(
     upRequester: FocusRequester?,
     modifier: Modifier = Modifier,
 ) {
-    val colors = IglooTheme.colors
-    var focused by remember { mutableStateOf(false) }
-    val rows = listOfNotNull(
-        about.production?.let { "Production" to it },
-        about.status?.let { "Status" to it },
-        about.language?.let { "Original language" to it },
-        about.budget?.let { "Budget" to it },
-        about.revenue?.let { "Revenue" to it },
+    val facts = listOfNotNull(
+        about.production?.let { FactUi("Production", it) },
+        about.status?.let { FactUi("Status", it) },
+        about.language?.let { FactUi("Original language", it) },
+        about.budget?.let { FactUi("Budget", it) },
+        about.revenue?.let { FactUi("Revenue", it) },
     )
-
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
-        SectionHeading("About $title")
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                // Before the cleared semantics, which wipe everything below them in the chain.
-                .testTag("details_about")
-                // Panel radius, not the button radius the rest of the app's focusables use, and
-                // the focused fill instead of a bare ring: this is a focus target only so a d-pad
-                // can scroll to it (section 11.4.1), and it carries no action to promise.
-                .focusRing(
-                    focused = focused,
-                    radius = IglooTheme.radius.xl,
-                    fill = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
-                    scaleOnFocus = false,
-                )
-                .focusRequester(requester)
-                .focusProperties {
-                    up = upRequester ?: Cancel
-                    down = Cancel
-                    left = Cancel
-                    right = Cancel
-                }
-                .onFocusChanged { focused = it.isFocused }
-                .focusable()
-                // The heading is folded into the announcement: its text node sits directly above
-                // for the eye, but TV TalkBack follows input focus and never lands on it.
-                .clearAndSetSemantics {
-                    contentDescription = "About $title. " +
-                        rows.joinToString(". ") { "${it.first}: ${it.second}" }
-                }
-                .padding(IglooTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
-        ) {
-            rows.forEach { (label, value) ->
-                Row(horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm)) {
-                    IglooText(
-                        text = "$label:",
-                        style = IglooTheme.typography.label,
-                        color = colors.mutedForeground,
-                        maxLines = 1,
-                    )
-                    IglooText(
-                        text = value,
-                        style = IglooTheme.typography.bodyMedium,
-                        color = colors.foreground,
-                        maxLines = 2,
-                    )
-                }
-            }
-        }
-    }
+    FactsSection(
+        heading = "About $title",
+        tag = "details_about",
+        facts = facts,
+        description = "About $title. " + facts.joinToString(". ") { "${it.label}: ${it.value}" },
+        requester = requester,
+        upRequester = upRequester,
+        valueMaxLines = 2,
+        modifier = modifier,
+    )
 }
 
 /** Readable measure for bodyMedium prose — roughly 70 characters a line. */

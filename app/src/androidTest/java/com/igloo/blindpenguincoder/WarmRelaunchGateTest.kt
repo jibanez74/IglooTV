@@ -137,12 +137,9 @@ class WarmRelaunchGateTest {
                 AuthUser(
                     id = 1,
                     name = "Jose",
-                    email = "jose@example.com",
                     isAdmin = false,
                     avatar = null,
                     hasPin = true,
-                    createdAt = "2026-01-01T00:00:00Z",
-                    updatedAt = "2026-01-01T00:00:00Z",
                 ),
             )
             app.container.profileRepository.deactivate()

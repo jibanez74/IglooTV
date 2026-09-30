@@ -26,6 +26,7 @@ import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.testMusicState
 import com.igloo.blindpenguincoder.testTrackEntries
 import org.junit.Rule

@@ -33,6 +33,12 @@ data class MusicPlayTrack(
 )
 
 /**
+ * A music route's millisecond duration as a queue entry's seconds; 0.0 where the wire has no
+ * usable value.
+ */
+internal fun millisToSeconds(ms: Long): Double = if (ms > 0) ms / 1000.0 else 0.0
+
+/**
  * Where a queue came from. It decides the player's title, the media session id, and whether
  * the queue refills as it plays: the three library sources are the endless ones, the album
  * and musician queues are finite and fully known at launch.

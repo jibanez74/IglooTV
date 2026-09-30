@@ -12,6 +12,7 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import com.igloo.blindpenguincoder.core.network.DeviceCredentialSource
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.isIglooServerUrl
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -32,8 +33,8 @@ private class BearerResolver(
     var attachedProfileId: Long? = null
 
     override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
-        val origin = serverUrl.current.value?.origin ?: return dataSpec
-        if (!dataSpec.uri.toString().startsWith("$origin/")) return dataSpec
+        val origin = serverUrl.current.value?.origin
+        if (!isIglooServerUrl(dataSpec.uri.toString(), origin)) return dataSpec
         val credential = runBlocking { credentials.current() } ?: return dataSpec
         attachedProfileId = credential.profileId
         return dataSpec.buildUpon()

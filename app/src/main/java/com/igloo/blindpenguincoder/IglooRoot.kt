@@ -17,8 +17,11 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -47,10 +50,10 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
-import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicViewModel
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.TrackLikesViewModel
+import com.igloo.blindpenguincoder.feature.music.actions
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.shows.showLibrarySource
 import com.igloo.blindpenguincoder.playback.media3.VideoPlaybackServices
@@ -190,10 +193,7 @@ fun IglooRoot(container: IglooAppContainer) {
                     val canPlayAudioMime: (String, Int?) -> Boolean = { mimeType, channels ->
                         deviceCanPlayAudioMime(appContext, mimeType, channels)
                     }
-                    val homeViewModel = viewModel(
-                        viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "home",
-                    ) {
+                    val homeViewModel = sessionViewModel(authenticatedSessionOwner, "home") {
                         HomeViewModel(
                             container.movieRepository,
                             container.showRepository,
@@ -207,89 +207,69 @@ fun IglooRoot(container: IglooAppContainer) {
                     // pages and scroll position alive across a Movies -> Home -> Movies trip.
                     // Created before the details view model, which reports committed like
                     // toggles into it so a shown Liked grid never goes stale.
-                    val moviesViewModel = viewModel(
-                        viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "movies",
-                    ) {
+                    val moviesViewModel = sessionViewModel(authenticatedSessionOwner, "movies") {
                         LibraryViewModel(
                             movieLibrarySource(container.movieRepository),
                             container.serverUrlProvider,
                         )
                     }
                     // The same pane over the show routes; session-scoped for the same reason.
-                    val showsViewModel = viewModel(
-                        viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "shows",
-                    ) {
+                    val showsViewModel = sessionViewModel(authenticatedSessionOwner, "shows") {
                         LibraryViewModel(
                             showLibrarySource(container.showRepository),
                             container.serverUrlProvider,
                         )
                     }
-                    val detailsViewModel = viewModel(
-                        viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "movie-details",
-                    ) {
-                        MovieDetailsViewModel(
-                            container.movieRepository,
-                            container.serverUrlProvider,
-                            onWatchedStateCommitted = homeViewModel::refreshContinueWatching,
-                            onLikeStateCommitted = moviesViewModel::onLikeCommitted,
-                            canPlayVideoMime = ::deviceCanDecodeVideoMime,
-                            canPlayAudioMime = canPlayAudioMime,
-                        )
-                    }
-                    val videoPlayerViewModel = viewModel(
-                        viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "video-player",
-                    ) {
-                        VideoPlayerViewModel(
-                            saveProgress = container.videoPlaybackRepository::updateWatchProgress,
-                            onWatchedStateCommitted = {
-                                homeViewModel.refreshContinueWatching()
-                                // The resume strip and watched pill are current on return to
-                                // the details page; a no-op while the overlay is closed.
-                                detailsViewModel.refresh()
-                            },
-                        )
-                    }
-                    val theaterDetailsViewModel = viewModel(
-                        viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "theater-movie-details",
-                    ) {
-                        TheaterMovieDetailsViewModel(
-                            container.movieRepository,
-                            container.serverUrlProvider,
-                        )
-                    }
-                    val albumDetailsViewModel = viewModel(
-                        viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "album-details",
-                    ) {
-                        AlbumDetailsViewModel(container.musicRepository)
-                    }
+                    val detailsViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "movie-details") {
+                            MovieDetailsViewModel(
+                                container.movieRepository,
+                                container.serverUrlProvider,
+                                onWatchedStateCommitted = homeViewModel::refreshContinueWatching,
+                                onLikeStateCommitted = moviesViewModel::onLikeCommitted,
+                                canPlayVideoMime = ::deviceCanDecodeVideoMime,
+                                canPlayAudioMime = canPlayAudioMime,
+                            )
+                        }
+                    val videoPlayerViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "video-player") {
+                            VideoPlayerViewModel(
+                                saveProgress =
+                                    container.videoPlaybackRepository::updateWatchProgress,
+                                onWatchedStateCommitted = {
+                                    homeViewModel.refreshContinueWatching()
+                                    // The resume strip and watched pill are current on return to
+                                    // the details page; a no-op while the overlay is closed.
+                                    detailsViewModel.refresh()
+                                },
+                            )
+                        }
+                    val theaterDetailsViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "theater-movie-details") {
+                            TheaterMovieDetailsViewModel(
+                                container.movieRepository,
+                                container.serverUrlProvider,
+                            )
+                        }
+                    val albumDetailsViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "album-details") {
+                            AlbumDetailsViewModel(container.musicRepository)
+                        }
                     // Session-scoped like the Movies grid: the three tabs' pages and scroll
                     // positions survive a Music -> Home -> Music trip.
-                    val musicViewModel = viewModel(
-                        viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "music",
-                    ) {
+                    val musicViewModel = sessionViewModel(authenticatedSessionOwner, "music") {
                         MusicViewModel(container.musicRepository)
                     }
-                    val musicianDetailsViewModel = viewModel(
-                        viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "musician-details",
-                    ) {
-                        MusicianDetailsViewModel(container.musicRepository)
-                    }
+                    val musicianDetailsViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "musician-details") {
+                            MusicianDetailsViewModel(container.musicRepository)
+                        }
                     // One liked-id set for every track row in the session, so no two surfaces
                     // can disagree about a heart; cleared with the rest on sign-out.
-                    val trackLikesViewModel = viewModel(
-                        viewModelStoreOwner = authenticatedSessionOwner,
-                        key = "track-likes",
-                    ) {
-                        TrackLikesViewModel(container.musicRepository)
-                    }
+                    val trackLikesViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "track-likes") {
+                            TrackLikesViewModel(container.musicRepository)
+                        }
                     // The one details slot is single-path: opening any page closes the other
                     // three first, and each close is idempotent on an already-closed page.
                     val closeAllDetails: () -> Unit = {
@@ -297,6 +277,12 @@ fun IglooRoot(container: IglooAppContainer) {
                         theaterDetailsViewModel.close()
                         albumDetailsViewModel.close()
                         musicianDetailsViewModel.close()
+                    }
+                    val openDetails: ((Long) -> Unit) -> (Long) -> Unit = { open ->
+                        { id ->
+                            closeAllDetails()
+                            open(id)
+                        }
                     }
                     // Device tokens are revoked server-side after long disuse, so a session
                     // resumed from the background is re-checked before it is trusted — and the
@@ -335,18 +321,7 @@ fun IglooRoot(container: IglooAppContainer) {
                     val showsActions = remember(showsViewModel) { showsViewModel.actions() }
                     val music by musicViewModel.uiState.collectAsStateWithLifecycle()
                     val musicActions = remember(musicViewModel, trackLikesViewModel) {
-                        MusicActions(
-                            onRefresh = musicViewModel::reload,
-                            onRetryFirstPage = musicViewModel::retryFirstPage,
-                            onRetryAppend = musicViewModel::retryAppend,
-                            onLoadMore = musicViewModel::loadMore,
-                            onSelectTab = musicViewModel::selectTab,
-                            onPressTab = musicViewModel::pressTab,
-                            onPlayTrack = musicViewModel::playTrack,
-                            onPlayAll = musicViewModel::playAll,
-                            onShuffleAll = musicViewModel::shuffleAll,
-                            onToggleLike = trackLikesViewModel::toggle,
-                        )
+                        musicViewModel.actions(onToggleLike = trackLikesViewModel::toggle)
                     }
                     val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()
                     val theaterDetails by theaterDetailsViewModel.uiState
@@ -426,27 +401,15 @@ fun IglooRoot(container: IglooAppContainer) {
                         onRetryAlbumDetails = albumDetailsViewModel::retry,
                         musicianDetails = musicianDetails,
                         onRetryMusicianDetails = musicianDetailsViewModel::retry,
-                        onMusicianSelected = { musicianId ->
-                            closeAllDetails()
-                            musicianDetailsViewModel.open(musicianId)
-                        },
+                        onMusicianSelected = openDetails(musicianDetailsViewModel::open),
                         trackLikes = trackLikes,
                         onToggleTrackLike = trackLikesViewModel::toggle,
                         onRetryRail = homeViewModel::retry,
                         homePlayRequests = homeViewModel.playRequests,
                         onResumeEpisode = homeViewModel::resumeEpisode,
-                        onMovieSelected = { movieId ->
-                            closeAllDetails()
-                            detailsViewModel.open(movieId)
-                        },
-                        onTheaterMovieSelected = { tmdbId ->
-                            closeAllDetails()
-                            theaterDetailsViewModel.open(tmdbId)
-                        },
-                        onAlbumSelected = { albumId ->
-                            closeAllDetails()
-                            albumDetailsViewModel.open(albumId)
-                        },
+                        onMovieSelected = openDetails(detailsViewModel::open),
+                        onTheaterMovieSelected = openDetails(theaterDetailsViewModel::open),
+                        onAlbumSelected = openDetails(albumDetailsViewModel::open),
                         // Back does not ask which one was up: closing a closed page is a no-op.
                         onCloseDetails = closeAllDetails,
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },
@@ -484,3 +447,11 @@ private val CONFIRM_KEYS = setOf(
     Key.Spacebar,
     Key.ButtonA,
 )
+
+/** A view model scoped to the signed-in session: cleared with the rest on sign-out. */
+@Composable
+private inline fun <reified VM : ViewModel> sessionViewModel(
+    owner: ViewModelStoreOwner,
+    key: String,
+    noinline initializer: CreationExtras.() -> VM,
+): VM = viewModel(viewModelStoreOwner = owner, key = key, initializer = initializer)

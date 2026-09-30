@@ -5,9 +5,16 @@
 package com.igloo.blindpenguincoder.playback.media3
 
 import android.os.Handler
+import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+
+/**
+ * How many events every engine's flow replays: an engine starts working in its constructor, and
+ * an event that beats the screen's collector must not strand the player in Loading.
+ */
+internal const val ENGINE_EVENT_REPLAY = 64
 
 /**
  * The position pump every engine runs while it holds media: ExoPlayer has no position callback,
@@ -40,6 +47,14 @@ internal class PlaybackTicker(
         const val TICK_INTERVAL_MS = 500L
     }
 }
+
+/** Whether the player holds a position worth reporting: playing, paused, or refilling. */
+internal val Player.isReadyOrBuffering: Boolean
+    get() = playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING
+
+/** The current item's length in seconds; null while ExoPlayer still reports `TIME_UNSET`. */
+internal fun Player.durationSecOrNull(): Double? =
+    duration.takeIf { it != C.TIME_UNSET }?.div(1000.0)
 
 /**
  * The MediaSession's view of a player, with transport routed back through the engine so

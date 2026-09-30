@@ -15,8 +15,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
@@ -54,11 +52,6 @@ class TrailerPlayerScreenTest {
      * playback in standby, and the host activity's own lifecycle cannot be moved from a test
      * without tearing the composition down with it.
      */
-    private class TestLifecycleOwner : LifecycleOwner {
-        val registry = LifecycleRegistry.createUnsafe(this)
-        override val lifecycle: Lifecycle get() = registry
-    }
-
     private lateinit var lifecycleOwner: TestLifecycleOwner
 
     private fun setContent() {

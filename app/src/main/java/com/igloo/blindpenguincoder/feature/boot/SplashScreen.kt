@@ -56,8 +56,6 @@ fun SplashScreen(modifier: Modifier = Modifier, announce: Boolean = true) {
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
 
-    val markSize = MARK_SIZE
-
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -70,13 +68,13 @@ fun SplashScreen(modifier: Modifier = Modifier, announce: Boolean = true) {
         // already has this mark at exactly this size and place. Letting the wordmark push it
         // upward, or fading it in, would re-open the seam the system layer exists to close.
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            IglooBrandMark(size = markSize, textStyle = IglooTheme.typography.display)
+            IglooBrandMark(size = MARK_SIZE, textStyle = IglooTheme.typography.display)
         }
 
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = maxHeight / 2 + markSize / 2 + IglooTheme.spacing.lg),
+                .padding(top = maxHeight / 2 + MARK_SIZE / 2 + IglooTheme.spacing.lg),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             IglooText(

@@ -23,7 +23,7 @@ internal fun audioTrackOptions(tracks: Tracks): List<TrackOption> =
             ?.let { " · ${describeChannelLayout(null, it.toLong())}" }
             .orEmpty()
         TrackOption(
-            id = "$groupIndex:0",
+            id = groupOptionId(groupIndex),
             label = "$language$layout",
             selected = group.isTrackSelected(0),
         )
@@ -41,7 +41,7 @@ internal fun subtitleTrackOptions(tracks: Tracks): List<TrackOption> =
             if (format.selectionFlags and C.SELECTION_FLAG_DEFAULT != 0) add("Default")
         }
         TrackOption(
-            id = "$groupIndex:0",
+            id = groupOptionId(groupIndex),
             label = if (parts.isNotEmpty()) parts.joinToString(" · ") else "Track ${ordinal + 1}",
             selected = group.isTrackSelected(0),
         )
@@ -95,13 +95,10 @@ internal fun hlsSubtitleTrackOptions(
             enabled = false,
         )
     } else {
-        typeGroups(tracks, C.TRACK_TYPE_TEXT)
-            .firstOrNull { (_, group) ->
-                group.getTrackFormat(0).id == "$SIDELOADED_SUBTITLE_ID_PREFIX$index"
-            }
+        groupWithFormatId(tracks, C.TRACK_TYPE_TEXT, "$SIDELOADED_SUBTITLE_ID_PREFIX$index")
             ?.let { (groupIndex, group) ->
                 TrackOption(
-                    id = "$groupIndex:0",
+                    id = groupOptionId(groupIndex),
                     label = track.label,
                     selected = group.isTrackSelected(0),
                 )
@@ -121,7 +118,8 @@ internal const val IMAGE_BASED_OPTION_PREFIX = "image:"
  * order. Null when the file has fewer tracks than the index promises.
  */
 internal fun trackOptionId(tracks: Tracks, trackType: Int, typeIndex: Int): String? =
-    typeGroups(tracks, trackType).getOrNull(typeIndex)?.let { (groupIndex, _) -> "$groupIndex:0" }
+    typeGroups(tracks, trackType).getOrNull(typeIndex)
+        ?.let { (groupIndex, _) -> groupOptionId(groupIndex) }
 
 /**
  * The option id of the group carrying [formatId]. Sideloaded subtitle groups are matched this
@@ -129,16 +127,19 @@ internal fun trackOptionId(tracks: Tracks, trackType: Int, typeIndex: Int): Stri
  * never sideloaded, so group position and wire ordinal disagree whenever the file mixes both.
  */
 internal fun trackOptionIdForFormatId(tracks: Tracks, trackType: Int, formatId: String): String? =
-    typeGroups(tracks, trackType)
-        .firstOrNull { (_, group) -> group.getTrackFormat(0).id == formatId }
-        ?.let { (groupIndex, _) -> "$groupIndex:0" }
+    groupWithFormatId(tracks, trackType, formatId)
+        ?.let { (groupIndex, _) -> groupOptionId(groupIndex) }
 
 /** The format id behind a menu option, for mapping a selection back to its wire ordinal. */
-internal fun formatIdForOptionId(tracks: Tracks, optionId: String): String? {
+internal fun formatIdForOptionId(tracks: Tracks, optionId: String): String? =
+    resolveTrackOption(tracks, optionId)
+        ?.let { (group, trackIndex) -> group.getTrackFormat(trackIndex).id }
+
+/** The group and track a "group:track" option names; null when malformed or out of range. */
+internal fun resolveTrackOption(tracks: Tracks, optionId: String): Pair<Tracks.Group, Int>? {
     val (groupIndex, trackIndex) = parseTrackOptionId(optionId) ?: return null
     val group = tracks.groups.getOrNull(groupIndex) ?: return null
-    if (trackIndex >= group.length) return null
-    return group.getTrackFormat(trackIndex).id
+    return (group to trackIndex).takeIf { trackIndex < group.length }
 }
 
 /**
@@ -157,6 +158,17 @@ internal fun parseTrackOptionId(id: String): Pair<Int, Int>? {
     val (group, track) = id.split(':').takeIf { it.size == 2 } ?: return null
     return (group.toIntOrNull() ?: return null) to (track.toIntOrNull() ?: return null)
 }
+
+/** The option id for a group's first track, the only one a menu row ever names. */
+private fun groupOptionId(groupIndex: Int): String = "$groupIndex:0"
+
+private fun groupWithFormatId(
+    tracks: Tracks,
+    trackType: Int,
+    formatId: String,
+): Pair<Int, Tracks.Group>? =
+    typeGroups(tracks, trackType)
+        .firstOrNull { (_, group) -> group.getTrackFormat(0).id == formatId }
 
 private fun typeGroups(tracks: Tracks, trackType: Int): List<Pair<Int, Tracks.Group>> =
     tracks.groups.withIndex()

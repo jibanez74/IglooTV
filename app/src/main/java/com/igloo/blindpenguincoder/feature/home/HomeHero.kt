@@ -3,7 +3,6 @@ package com.igloo.blindpenguincoder.feature.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooText
@@ -107,7 +107,7 @@ fun HomeHero(
         .then(
             if (openHero != null) {
                 Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
+                    interactionSource = null,
                     indication = null,
                     onClick = openHero,
                 )
@@ -263,7 +263,7 @@ private fun Modifier.heroTextPlate(
             radius = IglooTheme.radius.lg,
             // Section 3.2's chip-and-control ground: the plate has to read as a surface for the
             // ring to have anything to contract against, and it sits over media.
-            fill = Color.Black.copy(alpha = 0.45f),
+            fill = OVER_MEDIA_CONTROL_FILL,
             scaleOnFocus = false,
         )
         .padding(IglooTheme.spacing.lg)

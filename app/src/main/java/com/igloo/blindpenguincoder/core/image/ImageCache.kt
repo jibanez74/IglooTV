@@ -15,11 +15,6 @@ import kotlinx.coroutines.withContext
  */
 interface ImageCache {
     suspend fun clear()
-
-    /** For unit tests and any wiring with no image loader behind it. */
-    object None : ImageCache {
-        override suspend fun clear() = Unit
-    }
 }
 
 /** Clears the process-wide loader that [coil3.compose.AsyncImage] resolves by default. */

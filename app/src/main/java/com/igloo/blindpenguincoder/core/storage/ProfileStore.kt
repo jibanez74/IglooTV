@@ -40,9 +40,6 @@ class DataStoreProfileStore(
         withContext(dispatcher) {
             var result = ProfileVault()
             dataStore.edit { preferences ->
-                preferences.remove(LEGACY_SESSION_COOKIE)
-                preferences.remove(LEGACY_DEVICE_TOKEN)
-
                 val blob = preferences[PROFILES]
                 val stored = blob?.let(::decodeVault)
                 result = transform(stored ?: ProfileVault())
@@ -80,7 +77,5 @@ class DataStoreProfileStore(
     private companion object {
         val EMPTY = ProfileVault()
         val PROFILES = stringPreferencesKey("profiles")
-        val LEGACY_DEVICE_TOKEN = stringPreferencesKey("device_token")
-        val LEGACY_SESSION_COOKIE = stringPreferencesKey("session_cookie")
     }
 }

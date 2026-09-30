@@ -27,12 +27,9 @@ class ProfileRepositoryTest {
     ) = AuthUser(
         id = id,
         name = name,
-        email = "$name@example.com",
         isAdmin = false,
         avatar = avatar,
         hasPin = hasPin,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
     )
 
     @Test

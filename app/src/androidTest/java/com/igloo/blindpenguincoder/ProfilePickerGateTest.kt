@@ -124,12 +124,9 @@ class ProfilePickerGateTest {
     private fun testUser(id: Long, name: String, hasPin: Boolean) = AuthUser(
         id = id,
         name = name,
-        email = "${name.lowercase()}@example.com",
         isAdmin = false,
         avatar = null,
         hasPin = hasPin,
-        createdAt = "2026-01-01T00:00:00Z",
-        updatedAt = "2026-01-01T00:00:00Z",
     )
 
     private fun SemanticsNodeInteraction.assertFullyOnscreen(): SemanticsNodeInteraction {

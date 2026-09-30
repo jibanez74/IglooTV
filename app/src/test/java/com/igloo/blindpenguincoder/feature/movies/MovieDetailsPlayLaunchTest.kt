@@ -9,6 +9,7 @@ import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
 import com.igloo.blindpenguincoder.data.repository.technicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.videoStreamJson
 import com.igloo.blindpenguincoder.data.repository.watchProgressJson
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -85,8 +86,8 @@ class MovieDetailsPlayLaunchTest {
 
     private suspend fun MovieDetailsViewModel.awaitTracksResolved() {
         uiState.first {
-            (it.details as? MovieDetailsState.Loaded)
-                ?.movie?.playbackSettings?.selectedAudioId != null
+            (it.details as? DetailsState.Loaded)
+                ?.value?.playbackSettings?.selectedAudioId != null
         }
     }
 

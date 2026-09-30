@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.feature.player
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,15 +20,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import coil3.compose.AsyncImage
-import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.overMedia
+import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooText
@@ -244,7 +243,6 @@ internal fun musicPositionLine(
 /** Decorative — the artwork repeats nothing the track block does not say, so TalkBack skips it. */
 @Composable
 private fun MusicPlayerCover(coverUrl: String?) {
-    var imageFailed by remember(coverUrl) { mutableStateOf(false) }
     Box(
         modifier = Modifier
             .fillMaxHeight()
@@ -254,23 +252,6 @@ private fun MusicPlayerCover(coverUrl: String?) {
             .iglooSurface(radius = IglooTheme.radius.lg, fill = OVER_MEDIA_CONTROL_FILL),
         contentAlignment = Alignment.Center,
     ) {
-        if (coverUrl != null && !imageFailed) {
-            AsyncImage(
-                model = coverUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                onState = { state ->
-                    if (state is AsyncImagePainter.State.Error) imageFailed = true
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Image(
-                imageVector = IglooIcons.Music,
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(OVER_MEDIA_TERTIARY),
-                modifier = Modifier.size(IglooTheme.icons.lg),
-            )
-        }
+        ArtworkOrGlyph(coverUrl, IglooIcons.Music, fallbackTint = OVER_MEDIA_TERTIARY)
     }
 }

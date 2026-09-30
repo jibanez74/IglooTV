@@ -6,7 +6,6 @@ import com.igloo.blindpenguincoder.data.model.TrackListItem
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.feature.shared.letterBucket
 import com.igloo.blindpenguincoder.feature.shared.spokenLetterHeader
-import com.igloo.blindpenguincoder.feature.shared.trackSpokenInfo
 import com.igloo.blindpenguincoder.feature.shared.trackSubtitle
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
@@ -47,7 +46,7 @@ sealed interface TracksEntry {
 internal fun SimpleMusician.toCardUi(): MusicianCardUi {
     val albums = countLine(albumCount, "album")
     val tracks = countLine(trackCount, "track")
-    val cardName = name.ifBlank { "Unknown artist" }
+    val cardName = name.ifBlank { UNKNOWN_ARTIST }
     return MusicianCardUi(
         id = id,
         name = cardName,
@@ -59,8 +58,10 @@ internal fun SimpleMusician.toCardUi(): MusicianCardUi {
 
 internal fun SimpleAlbum.toCardUi(): AlbumCardUi = AlbumCardUi(
     id = id,
-    title = title.ifBlank { "Untitled album" },
+    title = title.ifBlank { UNTITLED_ALBUM },
     subtitle = musician.orNullIfBlank(),
+    // Used verbatim: the scanner stores an absolute Spotify URL or nothing, and there is no
+    // music image proxy to route it through.
     coverUrl = cover.orNullIfBlank(),
 )
 
@@ -85,21 +86,15 @@ internal fun tracksEntries(tracks: List<TrackListItem>): List<TracksEntry> {
     return entries
 }
 
-private fun TrackListItem.toRowUi(prefix: String?): TrackRowUi {
-    val play = toMusicPlayTrack()
-    val subtitle = trackSubtitle(play.artistName, play.albumTitle)
-    return TrackRowUi(
-        id = id,
-        title = title,
-        subtitle = subtitle,
-        indexText = null,
-        durationText = formatTrackDuration(duration),
-        durationSec = play.durationSec,
-        albumId = albumId.orNull(),
-        musicianId = musicianId.orNull(),
-        spokenInfo = trackSpokenInfo(prefix, title, subtitle, play.durationSec),
-    )
-}
+private fun TrackListItem.toRowUi(prefix: String?): TrackRowUi = musicTrackRow(
+    id = id,
+    title = title,
+    subtitle = trackSubtitle(musicianName.orNull(), albumTitle.orNull()),
+    durationMs = duration,
+    albumId = albumId.orNull(),
+    musicianId = musicianId.orNull(),
+    spokenPrefix = prefix,
+)
 
 /** A row's Play: every track loaded so far, starting at the pressed one (web parity). */
 internal fun trackListPlayRequest(loaded: List<TrackListItem>, trackId: Long): MusicPlayRequest? {

@@ -1,7 +1,5 @@
 package com.igloo.blindpenguincoder.playback.model
 
-import java.util.Locale
-
 /**
  * The server-side audio conversions the backend offers on personal HLS sessions, as the
  * `audio_codec`/`audio_channels` manifest query pair. The two values only exist together —
@@ -25,7 +23,7 @@ enum class HlsAudioProfile(val audioCodec: String, val audioChannels: Int) {
  * reach.
  */
 fun isUnreliableHlsAudio(codec: String?, channels: Int?): Boolean {
-    val name = codec?.trim()?.lowercase(Locale.US) ?: return false
+    val name = codec?.let(::normalizedCodec) ?: return false
     return name == "dts" || (name == "aac" && channels != null && channels > 2)
 }
 
@@ -36,7 +34,7 @@ fun isUnreliableHlsAudio(codec: String?, channels: Int?): Boolean {
  */
 fun hlsAudioConversionFor(track: PlayableAudioTrack?): HlsAudioProfile? {
     if (track == null || !isUnreliableHlsAudio(track.codec, track.channels)) return null
-    return when (track.codec.trim().lowercase(Locale.US)) {
+    return when (normalizedCodec(track.codec)) {
         "dts" -> HlsAudioProfile.DolbyDigitalPlus
         else -> HlsAudioProfile.DolbyDigital
     }

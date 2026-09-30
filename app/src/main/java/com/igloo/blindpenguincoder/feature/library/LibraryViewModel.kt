@@ -12,6 +12,7 @@ import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.DUPLICATE_PAGE_BACKOFF_MS
 import com.igloo.blindpenguincoder.feature.shared.FIRST_PAGE
+import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import com.igloo.blindpenguincoder.feature.shared.pageAppendState
@@ -29,7 +30,7 @@ import kotlinx.coroutines.launch
  * The library grid's paging machine, one instance per kind (Movies, TV Shows) over the
  * [LibrarySource] that names its routes.
  *
- * Pages accumulate in [LibraryUiState.grid]; the cursor itself stays private because the screen
+ * Pages accumulate in [LibraryUiState.paged]; the cursor itself stays private because the screen
  * only ever needs to know whether more exist, never which page it is on. The backend clamps
  * `per_page` at [MAX_LIBRARY_PER_PAGE] and offers no sort field, so page size is fixed and
  * [LibraryUiState.sort] is only a direction. All three sources — library, one genre, liked —
@@ -89,7 +90,9 @@ class LibraryViewModel(
     fun refresh() {
         loadStats()
         loadGenres()
-        if (_uiState.value.grid !is IglooRailState.Loaded) loadFirstPage(userInitiated = false)
+        if (_uiState.value.paged.content !is IglooRailState.Loaded) {
+            loadFirstPage(userInitiated = false)
+        }
     }
 
     /**
@@ -188,7 +191,7 @@ class LibraryViewModel(
     fun onLikeCommitted() {
         val state = _uiState.value
         if (state.tab != LibraryTab.Liked) return
-        if (state.grid !is IglooRailState.Loaded) return
+        if (state.paged.content !is IglooRailState.Loaded) return
         loadFirstPage(userInitiated = false, silent = true)
     }
 
@@ -205,21 +208,22 @@ class LibraryViewModel(
      */
     fun loadMore() {
         if (pageJob?.isActive == true) return
-        if (_uiState.value.grid !is IglooRailState.Loaded) return
-        if (_uiState.value.append != AppendState.Idle) return
+        val paged = _uiState.value.paged
+        if (paged.content !is IglooRailState.Loaded) return
+        if (paged.append != AppendState.Idle) return
         appendNextPage()
     }
 
     /** The Retry on a failed tail; re-requests the same page that failed. */
     fun retryAppend() {
         if (pageJob?.isActive == true) return
-        if (_uiState.value.append !is AppendState.Error) return
+        if (_uiState.value.paged.append !is AppendState.Error) return
         appendNextPage()
     }
 
     /**
      * [silent] is the Liked reconcile under the details overlay: no refreshing label, no
-     * notice, and — critically — no [LibraryUiState.contentGeneration] bump, because the shell
+     * notice, and — critically — no [PagedState.contentGeneration] bump, because the shell
      * stays composed beneath the overlay. Its separate silent generation lets the screen repair
      * focus only if the overlay has already closed and the focused item disappears. A silent
      * failure keeps the existing content and messaging.
@@ -243,9 +247,7 @@ class LibraryViewModel(
         // The Genres tab with no genre to show has no endpoint: nothing is requested, so the
         // last committed list stays intact under the placeholder and no request is outstanding.
         val filter = requested.filter ?: run {
-            _uiState.update {
-                it.copy(append = it.append.resetIfLoading(), refreshing = false)
-            }
+            _uiState.update { it.withTailSettled().copy(refreshing = false) }
             return
         }
         // A delayed switch holds the chrome back with the request: the Refreshing label must not
@@ -273,16 +275,18 @@ class LibraryViewModel(
                     committedSort = sort
                     _uiState.update {
                         it.copy(
-                            total = result.value.total,
-                            grid = IglooRailState.Loaded(items),
-                            append = result.value.appendStateFor(FIRST_PAGE),
+                            paged = it.paged.copy(
+                                total = result.value.total,
+                                content = IglooRailState.Loaded(items),
+                                append = result.value.appendStateFor(FIRST_PAGE),
+                                contentGeneration = if (silent) {
+                                    it.paged.contentGeneration
+                                } else {
+                                    it.paged.contentGeneration + 1
+                                },
+                            ),
                             refreshing = false,
                             notice = if (silent) it.notice else null,
-                            contentGeneration = if (silent) {
-                                it.contentGeneration
-                            } else {
-                                it.contentGeneration + 1
-                            },
                             silentReconcileGeneration = if (silent) {
                                 it.silentReconcileGeneration + 1
                             } else {
@@ -295,7 +299,7 @@ class LibraryViewModel(
                     if (silent) return@launch
                     val message = result.error.toLibraryDisplayMessage()
                     _uiState.update {
-                        val hadContent = it.grid is IglooRailState.Loaded
+                        val hadContent = it.paged.content is IglooRailState.Loaded
                         it.copy(
                             // The grid still shows the committed list, so the selection snaps
                             // back to it — a tab must never claim a list the grid isn't in.
@@ -312,8 +316,11 @@ class LibraryViewModel(
                                 else -> committedGenre
                             },
                             sort = committedSort,
-                            grid = IglooRailState.Error(message).orKeepContent(it.grid),
-                            append = it.append.resetIfLoading(),
+                            paged = it.paged.copy(
+                                content = IglooRailState.Error(message)
+                                    .orKeepContent(it.paged.content),
+                                append = it.paged.append.resetIfLoading(),
+                            ),
                             refreshing = false,
                             // With content still on screen the failure is over and Refresh is one
                             // press away, so a notice rather than an error card promising a
@@ -329,11 +336,9 @@ class LibraryViewModel(
     /** The chrome a first-page request puts up, raised with the request rather than before it. */
     private fun applyFirstPageRequestState(userInitiated: Boolean, silent: Boolean) {
         when {
-            silent -> _uiState.update {
-                it.copy(append = it.append.resetIfLoading(), refreshing = false)
-            }
+            silent -> _uiState.update { it.withTailSettled().copy(refreshing = false) }
             userInitiated -> _uiState.update {
-                it.copy(append = it.append.resetIfLoading(), refreshing = true, notice = null)
+                it.withTailSettled().copy(refreshing = true, notice = null)
             }
         }
     }
@@ -345,7 +350,7 @@ class LibraryViewModel(
         // requested one, which may belong to a switch that hasn't landed. Null only before any
         // page has landed, when there is no append to make anyway.
         val filter = filterFor(committedTab, committedGenre) ?: return
-        _uiState.update { it.copy(append = AppendState.Loading) }
+        _uiState.update { it.copy(paged = it.paged.copy(append = AppendState.Loading)) }
         pageJob = viewModelScope.launch {
             val result = fetchPage(filter, committedSort, page)
             // A refresh can land between the request and its response; appending then would
@@ -366,23 +371,27 @@ class LibraryViewModel(
                         delay(DUPLICATE_PAGE_BACKOFF_MS)
                         if (startedIn != generation) return@launch
                     }
-                    val loaded = _uiState.value.grid as? IglooRailState.Loaded ?: return@launch
+                    val loaded = _uiState.value.paged.content as? IglooRailState.Loaded
+                        ?: return@launch
                     // The cursor moves only once the write below is guaranteed; advanced any
                     // earlier, a dropped page would be unrecoverable without a full reload.
                     nextPage = page + 1
                     seenIds += fresh.map { it.id }
                     _uiState.update {
                         it.copy(
-                            total = result.value.total,
-                            grid = IglooRailState.Loaded(loaded.items + fresh),
-                            append = tail,
-                            appendGeneration = it.appendGeneration + 1,
+                            paged = it.paged.copy(
+                                total = result.value.total,
+                                content = IglooRailState.Loaded(loaded.items + fresh),
+                                append = tail,
+                                appendGeneration = it.paged.appendGeneration + 1,
+                            ),
                         )
                     }
                 }
                 // Never a wipe: the loaded pages stay on screen and the tail becomes a Retry.
                 is ApiResult.Failure -> _uiState.update {
-                    it.copy(append = AppendState.Error(result.error.toLibraryDisplayMessage()))
+                    val failed = AppendState.Error(result.error.toLibraryDisplayMessage())
+                    it.copy(paged = it.paged.copy(append = failed))
                 }
             }
         }
@@ -417,7 +426,7 @@ class LibraryViewModel(
             if (result is ApiResult.Success) {
                 _uiState.update {
                     if (it.tab == LibraryTab.All) {
-                        it.copy(total = result.value)
+                        it.copy(paged = it.paged.copy(total = result.value))
                     } else {
                         it
                     }
@@ -491,6 +500,10 @@ class LibraryViewModel(
      * rather than crashing the scope on [ServerUrlProvider.require].
      */
     private fun apiBaseUrlOrNull(): String? = serverUrl.current.value?.apiBaseUrl
+
+    /** A superseded request's Loading tail must not outlive the request it belonged to. */
+    private fun LibraryUiState.withTailSettled(): LibraryUiState =
+        copy(paged = paged.copy(append = paged.append.resetIfLoading()))
 
     private fun LibraryPage.appendStateFor(page: Long): AppendState =
         pageAppendState(page, totalPages, rows.isEmpty())

@@ -29,6 +29,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHomeMovies
 import com.igloo.blindpenguincoder.testMovieDetails
@@ -67,7 +68,7 @@ class PlaybackSettingsDialogTest {
 
     private fun loadedState() = MovieDetailsUiState(
         openMovieId = 1,
-        details = MovieDetailsState.Loaded(
+        details = DetailsState.Loaded(
             testMovieDetails(playbackSettings = testPlaybackSettings(selection)),
         ),
     )
@@ -111,7 +112,7 @@ class PlaybackSettingsDialogTest {
                     onCloseDetails = {
                         detailsState = detailsState.copy(
                             openMovieId = null,
-                            details = MovieDetailsState.Loading,
+                            details = DetailsState.Loading,
                         )
                     },
                 )

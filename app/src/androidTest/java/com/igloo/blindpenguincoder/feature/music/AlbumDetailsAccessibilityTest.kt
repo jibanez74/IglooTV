@@ -28,6 +28,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueMovies
@@ -78,13 +79,13 @@ class AlbumDetailsAccessibilityTest {
 
     private fun loadedState(album: AlbumDetailsUi = testAlbumDetails()) = AlbumDetailsUiState(
         openAlbumId = album.id,
-        details = AlbumDetailsState.Loaded(album),
+        details = DetailsState.Loaded(album),
     )
 
     @Test
     fun thePaneAnnouncesTheAlbumOnceLoaded() {
         setContent(
-            AlbumDetailsUiState(openAlbumId = 11, details = AlbumDetailsState.Loading),
+            AlbumDetailsUiState(openAlbumId = 11, details = DetailsState.Loading),
         )
 
         val pane = composeRule.onNodeWithTag("album_details")
@@ -109,7 +110,7 @@ class AlbumDetailsAccessibilityTest {
     @Test
     fun theLoadingStateAnnouncesItselfPolitely() {
         setContent(
-            AlbumDetailsUiState(openAlbumId = 11, details = AlbumDetailsState.Loading),
+            AlbumDetailsUiState(openAlbumId = 11, details = DetailsState.Loading),
         )
 
         composeRule.onNodeWithContentDescription("Loading album details")

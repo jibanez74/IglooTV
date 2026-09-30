@@ -54,8 +54,8 @@ class LibraryViewModelTest {
         val model = loaded(http)
 
         assertEquals((1L..48L).toList(), model.uiState.value.gridIds())
-        assertEquals(96L, model.uiState.value.total)
-        assertEquals(AppendState.Idle, model.uiState.value.append)
+        assertEquals(96L, model.uiState.value.paged.total)
+        assertEquals(AppendState.Idle, model.uiState.value.paged.append)
         assertEquals(listOf("1"), http.libraryPages)
     }
 
@@ -80,9 +80,9 @@ class LibraryViewModelTest {
 
         val state = loaded(http).uiState.value
 
-        assertTrue(state.grid is IglooRailState.Loaded)
+        assertTrue(state.paged.content is IglooRailState.Loaded)
         assertEquals(emptyList<Long>(), state.gridIds())
-        assertEquals(AppendState.End, state.append)
+        assertEquals(AppendState.End, state.paged.append)
     }
 
     @Test
@@ -95,7 +95,7 @@ class LibraryViewModelTest {
             },
         )
         val model = loaded(http)
-        assertTrue(model.uiState.value.grid is IglooRailState.Error)
+        assertTrue(model.uiState.value.paged.content is IglooRailState.Error)
         // Nothing was on screen to protect, so there is no notice — the card owns the message.
         assertNull(model.uiState.value.notice)
 
@@ -122,7 +122,7 @@ class LibraryViewModelTest {
         model.loadMore()
 
         assertEquals((1L..96L).toList(), model.uiState.value.gridIds())
-        assertEquals(AppendState.Idle, model.uiState.value.append)
+        assertEquals(AppendState.Idle, model.uiState.value.paged.append)
         assertEquals(listOf("1", "2"), http.libraryPages)
     }
 
@@ -140,7 +140,7 @@ class LibraryViewModelTest {
 
         model.loadMore()
 
-        assertEquals(97L, model.uiState.value.total)
+        assertEquals(97L, model.uiState.value.paged.total)
     }
 
     @Test
@@ -172,7 +172,7 @@ class LibraryViewModelTest {
         val model = loaded(http)
 
         model.loadMore()
-        assertEquals(AppendState.End, model.uiState.value.append)
+        assertEquals(AppendState.End, model.uiState.value.paged.append)
         model.loadMore()
 
         assertEquals(listOf("1", "2"), http.libraryPages)
@@ -193,7 +193,7 @@ class LibraryViewModelTest {
 
         model.loadMore()
 
-        assertEquals(AppendState.End, model.uiState.value.append)
+        assertEquals(AppendState.End, model.uiState.value.paged.append)
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
     }
 
@@ -232,20 +232,20 @@ class LibraryViewModelTest {
             },
         )
         val model = loaded(http)
-        val generationBefore = model.uiState.value.appendGeneration
+        val generationBefore = model.uiState.value.paged.appendGeneration
 
         model.loadMore()
 
         // The page landed all-duplicates, so the walk holds: an immediate generation bump
         // would re-arm the prefetch effect and chase every remaining page at line rate.
-        assertEquals(generationBefore, model.uiState.value.appendGeneration)
-        assertEquals(AppendState.Loading, model.uiState.value.append)
+        assertEquals(generationBefore, model.uiState.value.paged.appendGeneration)
+        assertEquals(AppendState.Loading, model.uiState.value.paged.append)
 
         advanceUntilIdle()
 
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
-        assertEquals(generationBefore + 1, model.uiState.value.appendGeneration)
-        assertEquals(AppendState.Idle, model.uiState.value.append)
+        assertEquals(generationBefore + 1, model.uiState.value.paged.appendGeneration)
+        assertEquals(AppendState.Idle, model.uiState.value.paged.append)
     }
 
     @Test
@@ -256,7 +256,7 @@ class LibraryViewModelTest {
         model.loadMore()
 
         assertEquals((1L..48L).toList(), model.uiState.value.gridIds())
-        assertTrue(model.uiState.value.append is AppendState.Error)
+        assertTrue(model.uiState.value.paged.append is AppendState.Error)
     }
 
     @Test
@@ -279,7 +279,7 @@ class LibraryViewModelTest {
 
         assertEquals(listOf("1", "2", "2"), http.libraryPages)
         assertEquals((1L..6L).toList(), model.uiState.value.gridIds())
-        assertEquals(AppendState.End, model.uiState.value.append)
+        assertEquals(AppendState.End, model.uiState.value.paged.append)
     }
 
     /** Only retryAppend clears an error tail; the scroll trigger must not hammer a down server. */
@@ -324,14 +324,14 @@ class LibraryViewModelTest {
         )
         val model = loaded(http)
         model.loadMore()
-        val generationBefore = model.uiState.value.contentGeneration
+        val generationBefore = model.uiState.value.paged.contentGeneration
 
         model.reload()
 
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
         assertEquals(listOf("1", "2", "1"), http.libraryPages)
         // The screen scrolls to top and re-anchors focus off this change.
-        assertTrue(model.uiState.value.contentGeneration > generationBefore)
+        assertTrue(model.uiState.value.paged.contentGeneration > generationBefore)
     }
 
     /** Blanking the grid mid-request would dispose the focused cell and drop focus. */
@@ -423,11 +423,11 @@ class LibraryViewModelTest {
         val model = loaded(http)
 
         model.loadMore()
-        assertEquals(AppendState.Loading, model.uiState.value.append)
+        assertEquals(AppendState.Loading, model.uiState.value.paged.append)
         model.reload()
 
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
-        assertEquals(AppendState.Idle, model.uiState.value.append)
+        assertEquals(AppendState.Idle, model.uiState.value.paged.append)
         assertTrue(!model.uiState.value.refreshing)
 
         model.loadMore()
@@ -484,7 +484,7 @@ class LibraryViewModelTest {
 
         val state = loaded(http).uiState.value
 
-        assertEquals(73L, state.total)
+        assertEquals(73L, state.paged.total)
         assertEquals(listOf(1L, 2L, 3L), state.gridIds())
     }
 
@@ -511,7 +511,7 @@ class LibraryViewModelTest {
         model.refresh()
         gate.complete(Unit)
 
-        assertEquals(96L, model.uiState.value.total)
+        assertEquals(96L, model.uiState.value.paged.total)
     }
 
     @Test
@@ -552,7 +552,7 @@ class LibraryViewModelTest {
         fail = true
         model.refresh()
 
-        assertEquals(96L, model.uiState.value.total)
+        assertEquals(96L, model.uiState.value.paged.total)
     }
 
     // --- filters and sort -------------------------------------------------------------------
@@ -569,7 +569,7 @@ class LibraryViewModelTest {
         assertEquals(listOf("1"), http.likedPages)
         assertEquals(LibraryFilter.Liked, model.uiState.value.filter)
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
-        assertEquals(3L, model.uiState.value.total)
+        assertEquals(3L, model.uiState.value.paged.total)
     }
 
     @Test
@@ -583,7 +583,7 @@ class LibraryViewModelTest {
 
         assertEquals(listOf("7:1"), http.genrePages)
         assertEquals(listOf("48", "48"), http.perPages)
-        assertEquals(26L, model.uiState.value.total)
+        assertEquals(26L, model.uiState.value.paged.total)
         assertEquals(LibraryTab.Genres, model.uiState.value.tab)
     }
 
@@ -698,7 +698,7 @@ class LibraryViewModelTest {
 
             assertEquals(LibraryFilter.Genre(id = 9, tag = "Drama"), model.uiState.value.genre)
             assertEquals(listOf(10L, 11L, 12L), model.uiState.value.gridIds())
-            assertEquals(6L, model.uiState.value.total)
+            assertEquals(6L, model.uiState.value.paged.total)
             assertEquals(listOf("7:1", "9:1"), http.genrePages)
             assertTrue(!model.uiState.value.refreshing)
 
@@ -782,7 +782,7 @@ class LibraryViewModelTest {
         )
         val model = loaded(http)
         landOn(model, LibraryTab.Genres)
-        val generationBefore = model.uiState.value.contentGeneration
+        val generationBefore = model.uiState.value.paged.contentGeneration
 
         fail = false
         model.reload()
@@ -790,7 +790,7 @@ class LibraryViewModelTest {
         assertEquals(listOf("7:1"), http.genrePages)
         assertEquals(LibraryFilter.Genre(id = 7, tag = "Action"), model.uiState.value.filter)
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
-        assertEquals(generationBefore + 1, model.uiState.value.contentGeneration)
+        assertEquals(generationBefore + 1, model.uiState.value.paged.contentGeneration)
         assertTrue(!model.uiState.value.refreshing)
     }
 
@@ -927,7 +927,7 @@ class LibraryViewModelTest {
         )
         val model = loaded(http)
         model.reload()
-        val generationBefore = model.uiState.value.contentGeneration
+        val generationBefore = model.uiState.value.paged.contentGeneration
 
         landOn(model, LibraryTab.Genres)
         gate.complete(Unit)
@@ -936,7 +936,7 @@ class LibraryViewModelTest {
         assertEquals(LibraryTab.Genres, model.uiState.value.tab)
         assertEquals(LibraryContent.NoGenres, model.uiState.value.toLibraryContent())
         assertNull(model.uiState.value.notice)
-        assertEquals(generationBefore, model.uiState.value.contentGeneration)
+        assertEquals(generationBefore, model.uiState.value.paged.contentGeneration)
         assertTrue(!model.uiState.value.refreshing)
     }
 
@@ -955,7 +955,7 @@ class LibraryViewModelTest {
 
         landOn(model, LibraryTab.Liked)
 
-        assertEquals(before.contentGeneration, model.uiState.value.contentGeneration)
+        assertEquals(before.paged.contentGeneration, model.uiState.value.paged.contentGeneration)
         assertEquals(
             before.silentReconcileGeneration,
             model.uiState.value.silentReconcileGeneration,
@@ -1286,7 +1286,7 @@ class LibraryViewModelTest {
         // The start effect re-fires on every return to the foreground and re-reads stats.
         model.refresh()
 
-        assertEquals(26L, model.uiState.value.total)
+        assertEquals(26L, model.uiState.value.paged.total)
     }
 
     @Test
@@ -1359,7 +1359,7 @@ class LibraryViewModelTest {
         )
         val model = loaded(http)
         landOn(model, LibraryTab.Liked)
-        val generationBefore = model.uiState.value.contentGeneration
+        val generationBefore = model.uiState.value.paged.contentGeneration
         val silentGenerationBefore = model.uiState.value.silentReconcileGeneration
 
         unliked = true
@@ -1370,7 +1370,7 @@ class LibraryViewModelTest {
         // Silent: the reconcile happens under the open details overlay, where a refreshing
         // label or a generation bump would scroll and steal focus from it.
         assertTrue(!model.uiState.value.refreshing)
-        assertEquals(generationBefore, model.uiState.value.contentGeneration)
+        assertEquals(generationBefore, model.uiState.value.paged.contentGeneration)
         assertEquals(
             silentGenerationBefore + 1,
             model.uiState.value.silentReconcileGeneration,
@@ -1402,7 +1402,7 @@ class LibraryViewModelTest {
         assertEquals(before.gridIds(), after.gridIds())
         assertEquals(before.filter, after.filter)
         assertEquals(before.notice, after.notice)
-        assertEquals(before.contentGeneration, after.contentGeneration)
+        assertEquals(before.paged.contentGeneration, after.paged.contentGeneration)
         assertEquals(before.silentReconcileGeneration, after.silentReconcileGeneration)
         assertTrue(!after.refreshing)
     }

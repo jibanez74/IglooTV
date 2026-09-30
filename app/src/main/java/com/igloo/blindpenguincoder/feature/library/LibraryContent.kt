@@ -40,7 +40,7 @@ internal fun LibraryUiState.toLibraryContent(): LibraryContent {
     // request still in flight from a library with no genres, and only one of those is a failure.
     val filter = filter
         ?: return if (genresLoaded) LibraryContent.NoGenres else LibraryContent.GenresLoading
-    return when (val grid = grid) {
+    return when (val grid = paged.content) {
         IglooRailState.Loading -> LibraryContent.Loading
         is IglooRailState.Error -> LibraryContent.Error(grid.message)
         is IglooRailState.Loaded -> if (grid.items.isEmpty()) {

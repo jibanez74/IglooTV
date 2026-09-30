@@ -29,7 +29,6 @@ data class HlsSessionSpec(
  * start — and is the offset that maps session time to absolute movie time.
  */
 data class HlsSessionStart(
-    val spec: HlsSessionSpec,
     val effectiveProfileId: String,
     val actualStartSec: Double,
     val playlistUrl: String,

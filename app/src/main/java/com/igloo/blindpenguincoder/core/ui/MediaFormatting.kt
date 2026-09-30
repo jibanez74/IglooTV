@@ -7,12 +7,20 @@ import java.time.format.FormatStyle
 import java.util.Locale
 import kotlin.math.ceil
 
-/** Grouped integer format for on-screen counts: `1234` → `"1,234"`. */
-val integerCountFormat: NumberFormat = NumberFormat.getIntegerInstance()
+private val integerCountFormat: NumberFormat = NumberFormat.getIntegerInstance()
 
-/** The noun beside a count: the [singular] for exactly one, otherwise [plural]. */
-fun countNoun(count: Long, singular: String, plural: String = singular + "s"): String =
-    if (count == 1L) singular else plural
+/** Grouped integer text for on-screen counts: `1234` → `"1,234"`. */
+fun formatCount(count: Long): String = integerCountFormat.format(count)
+
+/** The noun beside a count: the [singular] for exactly one, otherwise its plural. */
+fun countNoun(count: Long, singular: String): String =
+    if (count == 1L) singular else singular + "s"
+
+/** A line built from [values]: blanks dropped, and null rather than an empty line. */
+fun joinedLine(values: List<String>, separator: String): String? = values
+    .filter { it.isNotBlank() }
+    .takeIf { it.isNotEmpty() }
+    ?.joinToString(separator)
 
 /** `170` → `"2h 50m"`; whole hours and sub-hour runtimes drop the empty part. */
 fun formatRuntime(minutes: Long): String {
@@ -34,7 +42,7 @@ fun formatReleaseDate(isoDate: String): String? = runCatching {
 }.getOrNull()
 
 /** Whole hours, minutes, and seconds of a non-negative duration. */
-private fun hms(seconds: Double): Triple<Long, Long, Long> {
+internal fun hms(seconds: Double): Triple<Long, Long, Long> {
     val total = seconds.toLong().coerceAtLeast(0)
     return Triple(total / 3600, (total % 3600) / 60, total % 60)
 }
@@ -69,9 +77,7 @@ private fun formatSpokenTime(seconds: Double, throughSeconds: Boolean): String {
             if (throughSeconds) index >= firstRelevantUnit else unit.first > 0
         }
         .ifEmpty { listOf(units.last()) }
-        .map { (value, unit) ->
-            if (value == 1L) "1 $unit" else "$value ${unit}s"
-        }
+        .map { (value, unit) -> "$value ${countNoun(value, unit)}" }
     return when (parts.size) {
         1 -> parts.first()
         2 -> parts.joinToString(" and ")
@@ -108,8 +114,8 @@ fun formatSpokenRemainingTime(progressSec: Double, durationSec: Double): String 
     val hours = minutesLeft / 60
     val minutes = minutesLeft % 60
     val parts = buildList {
-        if (hours > 0) add(if (hours == 1L) "1 hour" else "$hours hours")
-        if (minutes > 0) add(if (minutes == 1L) "1 minute" else "$minutes minutes")
+        if (hours > 0) add("$hours ${countNoun(hours, "hour")}")
+        if (minutes > 0) add("$minutes ${countNoun(minutes, "minute")}")
     }
     return "${parts.joinToString(" and ")} remaining"
 }

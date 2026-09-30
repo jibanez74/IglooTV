@@ -43,8 +43,8 @@ class MusicQueueControllerTest {
     private class Scripted : MusicQueueFetcher {
         val pageOffsets = mutableListOf<Long>()
         val excludes = mutableListOf<List<Long>>()
-        var pages: (Long) -> ApiResult<TracksData> = { offset ->
-            ApiResult.Success(TracksData(emptyList(), total = 0, offset = offset, limit = 50, hasMore = false))
+        var pages: (Long) -> ApiResult<TracksData> = {
+            ApiResult.Success(TracksData(emptyList(), total = 0, hasMore = false))
         }
         var shuffle: suspend (List<Long>) -> ApiResult<ShuffleTracksData> = {
             ApiResult.Success(ShuffleTracksData(emptyList()))
@@ -80,8 +80,8 @@ class MusicQueueControllerTest {
     private fun inOrderQueue(ids: LongRange = 1L..20L, total: Long = 100) =
         MusicPlayRequest(MusicQueueSource.LibraryInOrder(nextOffset = ids.count().toLong(), total = total), 0, tracks(ids))
 
-    private fun page(ids: LongRange, total: Long, hasMore: Boolean) = { offset: Long ->
-        ApiResult.Success(TracksData(ids.map(::row), total = total, offset = offset, limit = 50, hasMore = hasMore))
+    private fun page(ids: LongRange, total: Long, hasMore: Boolean) = { _: Long ->
+        ApiResult.Success(TracksData(ids.map(::row), total = total, hasMore = hasMore))
     }
 
     /** The loop under test, on the unconfined dispatcher so an index change is handled inline. */

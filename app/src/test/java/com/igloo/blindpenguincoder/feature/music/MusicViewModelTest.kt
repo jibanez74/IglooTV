@@ -11,6 +11,7 @@ import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
 import com.igloo.blindpenguincoder.data.repository.simpleMusicianJson
 import com.igloo.blindpenguincoder.data.repository.trackListItemJson
 import com.igloo.blindpenguincoder.data.repository.tracksJson
+import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
@@ -132,6 +133,57 @@ class MusicViewModelTest {
         val requests = mutableListOf<MusicPlayRequest>()
         val job = launch(UnconfinedTestDispatcher(testScheduler)) { model.playRequests.collect { requests += it } }
         return requests to job
+    }
+
+    // --- wiring ---
+
+    /**
+     * The host wires the pane through `actions()`; a lambda bound to the wrong method would
+     * pass every other suite.
+     */
+    @Test
+    fun `the pane's actions are bound to the view model's methods`() = runTest {
+        val http = routedHttp(
+            albums = { request ->
+                val page = request.url.parameters["page"]!!.toLong()
+                jsonResponse(albumsPage(page, totalPages = 2, ids = (page * 10)..(page * 10 + 2)))
+            },
+        )
+        val model = loaded(http)
+        val liked = mutableListOf<Long>()
+        val actions = model.actions(onToggleLike = { liked += it })
+        val (requests, job) = collectPlayRequests(model)
+
+        actions.onRefresh()
+        assertEquals(listOf("1", "1"), http.musicianPages)
+        assertEquals(2, http.statsCalls)
+
+        actions.onRetryFirstPage()
+        assertEquals(listOf("1", "1", "1"), http.musicianPages)
+
+        actions.onPressTab(MusicTab.Albums)
+        assertEquals(listOf("1"), http.albumPages)
+
+        actions.onLoadMore()
+        assertEquals(listOf("1", "2"), http.albumPages)
+
+        actions.onSelectTab(MusicTab.Tracks)
+        advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS + 1)
+        assertEquals(listOf("0"), http.trackOffsets)
+
+        actions.onPlayTrack(2)
+        assertEquals(2L, requests.single().let { it.tracks[it.startIndex].id })
+
+        actions.onPlayAll()
+        assertEquals(0, requests.last().startIndex)
+        assertEquals(2, requests.size)
+
+        actions.onShuffleAll()
+        assertEquals(1, http.shuffleCalls)
+
+        actions.onToggleLike(5)
+        assertEquals(listOf(5L), liked)
+        job.cancel()
     }
 
     // --- first load ---

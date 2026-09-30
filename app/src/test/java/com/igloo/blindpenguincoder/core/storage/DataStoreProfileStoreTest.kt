@@ -15,8 +15,6 @@ import org.junit.Test
 class DataStoreProfileStoreTest {
 
     private val profilesKey = stringPreferencesKey("profiles")
-    private val legacyTokenKey = stringPreferencesKey("device_token")
-    private val legacyCookieKey = stringPreferencesKey("session_cookie")
 
     private fun store(
         dataStore: InMemoryPreferencesDataStore,
@@ -92,21 +90,6 @@ class DataStoreProfileStoreTest {
         store(data).update { ProfileVault() }
 
         assertNull(data.data.first()[profilesKey])
-    }
-
-    @Test
-    fun `single-token era keys are purged`() = runTest {
-        val data = InMemoryPreferencesDataStore()
-        data.edit {
-            it[legacyTokenKey] = "igd_from_the_old_scheme"
-            it[legacyCookieKey] = "session=abc"
-        }
-
-        store(data).read()
-
-        val stored = data.data.first()
-        assertNull(stored[legacyTokenKey])
-        assertNull(stored[legacyCookieKey])
     }
 
     @Test

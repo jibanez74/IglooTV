@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.auth
 
+import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
@@ -75,6 +76,7 @@ class ServerSetupViewModelTest {
             settings = settings,
             serverUrl = http.serverUrl,
             authEvents = http.authEvents,
+            imageCache = NoOpImageCache,
             elapsed = { 0L },
             scope = newScope(),
         )

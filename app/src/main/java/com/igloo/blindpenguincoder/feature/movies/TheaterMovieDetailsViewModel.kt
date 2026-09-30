@@ -6,10 +6,13 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
+import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.TmdbMovie
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.errorOrKeep
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import com.igloo.blindpenguincoder.playback.model.languageDisplayName
@@ -44,10 +47,7 @@ class TheaterMovieDetailsViewModel(
     /** Opens the overlay on the TMDB movie [tmdbId] and starts its one load. */
     fun open(tmdbId: Long) {
         loadJob?.cancel()
-        _uiState.value = MovieDetailsUiState(
-            openMovieId = tmdbId,
-            details = MovieDetailsState.Loading,
-        )
+        _uiState.value = MovieDetailsUiState(openMovieId = tmdbId)
         load(tmdbId, userInitiated = true)
     }
 
@@ -66,7 +66,7 @@ class TheaterMovieDetailsViewModel(
     fun retry() {
         val tmdbId = _uiState.value.openMovieId ?: return
         loadJob?.cancel()
-        _uiState.update { it.copy(details = MovieDetailsState.Loading) }
+        _uiState.update { it.copy(details = DetailsState.Loading) }
         load(tmdbId, userInitiated = true)
     }
 
@@ -86,7 +86,7 @@ class TheaterMovieDetailsViewModel(
             if (_uiState.value.openMovieId != tmdbId) return@launch
             when (result) {
                 is ApiResult.Success -> _uiState.update {
-                    it.copy(details = MovieDetailsState.Loaded(toUi(result.value)))
+                    it.copy(details = DetailsState.Loaded(toUi(result.value)))
                 }
 
                 is ApiResult.Failure -> _uiState.update {
@@ -121,29 +121,26 @@ class TheaterMovieDetailsViewModel(
             mediaBadges = emptyList(),
             runtimeText = runtimeMinutes?.let(::formatRuntime),
             releaseDateText = releaseDateText,
-            genresLine = joinedNames(movie.genres.orEmpty().map { it.name }, " · "),
+            genresLine = joinedLine(movie.genres.orEmpty().map { it.name }, " · "),
             overview = movie.overview.orNullIfBlank(),
             keyCrew = keyCrew(
                 movie.credits.crew.orEmpty().map { CrewCredit(it.job, it.department, it.name) },
             ),
-            cast = movie.credits.cast.orEmpty()
-                .sortedBy { it.order }
-                .take(CAST_LIMIT)
-                .map { member ->
-                    CastMemberUi(
-                        id = member.id.toLong(),
-                        name = member.name,
-                        character = member.character.takeIf { it.isNotBlank() },
-                        photoUrl = tmdbImageUrl(
-                            apiBaseUrl,
-                            TmdbImageSize.W185,
-                            member.profilePath,
-                        ),
+            cast = castMembers(
+                movie.credits.cast.orEmpty().map {
+                    CastCredit(
+                        id = it.id.toLong(),
+                        name = it.name,
+                        character = it.character,
+                        profilePath = it.profilePath,
+                        order = it.order.toLong(),
                     )
                 },
+                apiBaseUrl,
+            ),
             extraVideos = extraVideos,
             about = AboutUi(
-                production = joinedNames(movie.productionCompanies.orEmpty().map { it.name }, ", "),
+                production = joinedLine(movie.productionCompanies.orEmpty().map { it.name }, ", "),
                 language = languageDisplayName(movie.originalLanguage.orNullIfBlank()),
                 budget = movie.budget.takeIf { it > 0 }?.toDouble()?.let(::formatUsd),
                 revenue = movie.revenue.takeIf { it > 0 }?.toDouble()?.let(::formatUsd),

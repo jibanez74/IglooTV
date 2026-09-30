@@ -7,7 +7,6 @@ package com.igloo.blindpenguincoder.playback.media3
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -37,7 +36,7 @@ internal class ExoMusicPlayerEngine(
     private val trackStreamUrl: (Long) -> String,
 ) : MusicPlayerEngine {
 
-    private val _events = MutableSharedFlow<MusicPlayerEvent>(replay = 64)
+    private val _events = MutableSharedFlow<MusicPlayerEvent>(replay = ENGINE_EVENT_REPLAY)
     override val events: SharedFlow<MusicPlayerEvent> = _events.asSharedFlow()
 
     private val handler = Handler(Looper.getMainLooper())
@@ -102,9 +101,7 @@ internal class ExoMusicPlayerEngine(
         if (!playbackIntent.acceptsCommands) {
             false
         } else {
-            if (player.playbackState == Player.STATE_READY ||
-                player.playbackState == Player.STATE_BUFFERING
-            ) {
+            if (player.isReadyOrBuffering) {
                 emit(MusicPlayerEvent.Time(player.currentPosition / 1000.0, durationSec()))
             }
             true
@@ -199,20 +196,12 @@ internal class ExoMusicPlayerEngine(
      * bar never collapses between tracks.
      */
     private fun durationSec(): Double =
-        player.duration.takeIf { it != C.TIME_UNSET }?.div(1000.0)
+        player.durationSecOrNull()
             ?: tracks.getOrNull(player.currentMediaItemIndex)?.durationSec
             ?: 0.0
 
     private fun errorEvent(error: PlaybackException): MusicPlayerEvent.Error {
-        val http = httpErrorCause(error)
-        val failure = playerFailure(
-            errorCode = error.errorCode,
-            errorCodeName = error.errorCodeName,
-            httpResponseCode = http?.responseCode,
-            isHls = false,
-            httpRequestPath = http?.dataSpec?.uri?.path,
-            mediaNoun = "track",
-        )
+        val failure = error.toPlaybackFailure(isHls = false, mediaNoun = "track")
         return MusicPlayerEvent.Error(failure.message, failure.unauthorized)
     }
 

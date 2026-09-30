@@ -19,7 +19,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooFilterChip
-import com.igloo.blindpenguincoder.core.ui.integerCountFormat
+import com.igloo.blindpenguincoder.core.ui.formatCount
 import com.igloo.blindpenguincoder.core.ui.withRequester
 
 /**
@@ -55,7 +55,7 @@ internal fun LibraryGenreRow(
     val direction = LocalLayoutDirection.current
     val chips = remember(kind, genres) {
         genres.map { genre ->
-            val count = integerCountFormat.format(genre.count)
+            val count = formatCount(genre.count)
             GenreChipSpec(
                 genre = LibraryFilter.Genre(genre.id, genre.tag),
                 text = "${genre.tag} · $count",

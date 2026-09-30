@@ -9,6 +9,7 @@ import com.igloo.blindpenguincoder.data.repository.albumJson
 import com.igloo.blindpenguincoder.data.repository.albumTrackJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.trackGenreJson
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -61,7 +62,7 @@ class AlbumDetailsViewModelTest {
     }
 
     private fun AlbumDetailsViewModel.loaded(): AlbumDetailsUi =
-        (uiState.value.details as AlbumDetailsState.Loaded).album
+        (uiState.value.details as DetailsState.Loaded).value
 
     private fun track(
         id: Long = 1,
@@ -417,7 +418,7 @@ class AlbumDetailsViewModelTest {
         testScheduler.advanceUntilIdle()
         assertEquals(
             "music scan in progress",
-            (viewModel.uiState.value.details as AlbumDetailsState.Error).message,
+            (viewModel.uiState.value.details as DetailsState.Error).message,
         )
 
         fail = false
@@ -462,7 +463,7 @@ class AlbumDetailsViewModelTest {
         viewModel.close()
 
         assertNull(viewModel.uiState.value.openAlbumId)
-        assertTrue(viewModel.uiState.value.details is AlbumDetailsState.Loading)
+        assertTrue(viewModel.uiState.value.details is DetailsState.Loading)
         // Idempotent: the host closes every detail view model on Back without asking which was up.
         viewModel.close()
         viewModel.refresh()

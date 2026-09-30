@@ -19,8 +19,8 @@ import com.igloo.blindpenguincoder.data.repository.theaterMovieJson
 import com.igloo.blindpenguincoder.data.repository.theaterMoviesJson
 import com.igloo.blindpenguincoder.data.repository.videoStreamJson
 import com.igloo.blindpenguincoder.data.repository.watchProgressJson
+import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
-import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
@@ -140,7 +140,7 @@ class HomeViewModelTest {
         uiState.first { it.continueWatching is IglooRailState.Error }
             .continueWatching as IglooRailState.Error
 
-    private suspend fun HomeViewModel.awaitAlbums(): IglooRailState.Loaded<HomeAlbum> =
+    private suspend fun HomeViewModel.awaitAlbums(): IglooRailState.Loaded<AlbumCardUi> =
         uiState.first { it.latestAlbums is IglooRailState.Loaded }
             .latestAlbums as IglooRailState.Loaded
 
@@ -1011,7 +1011,7 @@ class HomeViewModelTest {
 
         assertEquals(211L, album.id)
         assertEquals("The Foundation", album.title)
-        assertEquals("Zac Brown Band", album.musician)
+        assertEquals("Zac Brown Band", album.subtitle)
         // Verbatim: there is no music image proxy to rewrite a Spotify URL through.
         assertEquals("https://i.scdn.co/image/foundation.jpg", album.coverUrl)
     }
@@ -1025,7 +1025,7 @@ class HomeViewModelTest {
         val album = viewModel(http).awaitAlbums().items.single()
 
         assertNull(album.coverUrl)
-        assertNull(album.musician)
+        assertNull(album.subtitle)
     }
 
     @Test
@@ -1037,7 +1037,7 @@ class HomeViewModelTest {
         val album = viewModel(http).awaitAlbums().items.single()
 
         assertNull(album.coverUrl)
-        assertNull(album.musician)
+        assertNull(album.subtitle)
     }
 
     @Test

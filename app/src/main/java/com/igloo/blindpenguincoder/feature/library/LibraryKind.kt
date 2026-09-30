@@ -39,7 +39,7 @@ enum class LibraryKind(
     val plural: String get() = singular + "s"
 
     /** The noun beside a count — one "movie", otherwise "movies". */
-    fun noun(count: Long): String = countNoun(count, singular, plural)
+    fun noun(count: Long): String = countNoun(count, singular)
 
     fun cardTag(id: Long): String = "${cardTagPrefix}_$id"
 

@@ -1,7 +1,6 @@
 package com.igloo.blindpenguincoder.core.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -31,9 +30,8 @@ import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
-import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.iglooTween
+import com.igloo.blindpenguincoder.core.design.rememberOverlayReveal
 
 /**
  * The confirmation modal — see docs/design-system.md section 9.3, which is authoritative for
@@ -72,16 +70,8 @@ fun IglooConfirmDialog(
     // abandon it. A remote dead for the length of a network timeout is the worse trade.
     BackHandler(onBack = onDismiss)
 
-    // One overlay reveal at `standard` (section 7.2); no exit animation, so the focus ring the
-    // host restores is never drawn under a fading scrim. The focus requests below do not wait
-    // on it.
-    var visible by remember { mutableStateOf(false) }
-    val reveal by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = iglooTween(IglooMotion.STANDARD_MS),
-        label = "dialogReveal",
-    )
-    LaunchedEffect(Unit) { visible = true }
+    // The focus requests below do not wait on the reveal.
+    val reveal by rememberOverlayReveal("dialogReveal")
 
     IglooScrim(
         modifier = modifier.graphicsLayer { alpha = reveal },
@@ -183,12 +173,7 @@ private fun PendingRow(
             .fillMaxWidth()
             .focusRing(focused = focused, radius = IglooTheme.radius.lg, scaleOnFocus = false)
             .focusRequester(focusRequester)
-            .focusProperties {
-                left = FocusRequester.Cancel
-                right = FocusRequester.Cancel
-                up = FocusRequester.Cancel
-                down = FocusRequester.Cancel
-            }
+            .pinnedToScreen()
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .padding(IglooTheme.spacing.md)

@@ -14,35 +14,21 @@ This is the small stuff. Contract and behaviour gaps with real product consequen
 
 ## 1. DRY
 
-### 1.1 Five copies of the selectable-control recipe
+### 1.1 Twelve copies of the selectable-control recipe — a shared modifier was declined
 
-**Files:** `core/ui/SelectablePill.kt`, `core/ui/IglooRadioRow.kt:45`,
-`feature/home/NavigationRail.kt:235`, `core/ui/IglooButton.kt:59`
+**Files:** `core/ui/IglooButton.kt` (twice), `SelectablePill.kt`, `IglooRadioRow.kt`,
+`IglooMenu.kt`, `IglooPosterCard.kt`, `feature/home/NavigationRail.kt`, `InTheatersCard.kt`,
+`HomeHero.kt`, `feature/player/PlayerChromeCommon.kt`, `feature/auth/PinEntryScreen.kt`,
+`ProfilePickerScreen.kt`
 
-The tab-strip review folded `IglooFilterChip` and `IglooTab` onto one `SelectablePill`, and
-deliberately stopped there. Three more copies of the same body remain — `var focused by
-remember`, `focusRing`, `.onFocusChanged`, the identical five-line `clickable(interactionSource
-= remember { MutableInteractionSource() }, indication = null, onClick = …)`, and a
-`clearAndSetSemantics` block. `NavigationRail.RailRow` even re-derives the "never set `selected
-= false`, TalkBack would say *not selected* on every other row" rule with its own copy of the
-comment (`NavigationRail.kt:267-268`).
-
-They are not trivially mergeable: `RailRow` is a `Row` with an icon and a fading label,
-`IglooRadioRow` has an inert non-clickable variant, and `IglooButton` carries variants,
-recession and `labelVariants`. The shared part is the *modifier chain*, not the layout — so the
-fix is probably a `Modifier.iglooSelectable(focused, onFocusChanged, onClick, semantics)` rather
-than another composable. Worth doing only if a sixth control appears, or if the clickable
-configuration ever needs to change in one place.
-
-### 1.3 The no-genres copy is a literal in three places
-
-**Files:** `feature/library/LibraryScreen.kt`,
-`androidTest/…/MoviesGridBehaviorTest.kt:37`, `androidTest/…/MoviesGridAccessibilityTest.kt`
-
-`"Genres aren't available right now. Refresh to try again."` is a private const in the screen and
-retyped in both instrumented suites (once as a const, once inline). Test duplication of user copy
-is normal in this repo, but three copies of one sentence is one more than it needs; the
-accessibility suite should at least use its own file's const rather than the inline string.
+Each control repeats `var focused`, `focusRing`, `onFocusChanged`, a `clickable` with no
+indication and a `clearAndSetSemantics` block. The 2026-09-29 DRY pass took only the light
+touch — every site now passes `interactionSource = null` instead of remembering one nothing
+reads — and deliberately stopped short of a `Modifier.iglooSelectable(...)`: the sites differ in
+where the ring sits (the node itself, or a child such as the poster or avatar), in the disabled
+fallback (`focusable()`, nothing, or `clickable(enabled =)`), and in the semantics, so one
+modifier would need a flag for each. Revisit only if the clickable configuration must change in
+one place.
 
 ### 1.4 `IglooTabRow` hand-rolls what `iglooSurface` does
 
@@ -158,7 +144,7 @@ Each is its own small pass; none is a defect.
 3. **`total` is not cleared across a switch**, so the header shows the previous view's count
    until the new page lands, then snaps.
 4. **The strip has no motion.** The selected fill hard-swaps; a sliding indicator pill is the
-   conventional premium treatment. Gate it on `IglooTheme.reducedMotion`.
+   conventional premium treatment. Animate it with `iglooTween`, which snaps under reduced motion.
 5. **The Genres tab could carry its active genre** ("Genres · Action"), so the section is legible
    without entering it.
 6. **The count's polite live region re-announces on every tab landing.** The 300 ms debounce made
@@ -191,50 +177,63 @@ was up and opens the other; Back then lands on the Music pane node that opened t
 The web goes musician → album → back → musician. A two-deep stack touches every host gate that
 reads the open flags and the `DetailsOrigin` machinery; deferred, and recorded in §11.5.1.
 
-### 7.2 The Music pane still draws its own grid, header, tab row and skeleton
-
-**Files:** `feature/library/LibraryScreen.kt`, `feature/music/MusicScreen.kt`
-
-The TV Shows pass (2026-09-26) merged the Movies pane into a kind-parameterised library pane that
-Movies and TV Shows both draw, so the duplication left is between that pane and Music:
-`LibraryGrid`/`MusicGrid` (the library grid carries the silent Liked reconcile and a
-`Populated(items)` model, the Music grid is generic over its card), `LibraryHeader`/`MusicHeader`
-(the library header has the sort control and the genre count line), `LibraryTabRow`/`MusicTabRow`
-(identical modulo the enum — a generic `PaneTabRow<T>` in `PaneChrome.kt` would take both), and
-the two grid skeletons. Merging them is a Music-side change that needs the Music instrumented
-suites re-run; `LibraryUiState`'s loose paging fields could move onto `PagedState` in the same pass.
-
-### 7.3 §1.1's trigger has fired
-
-The Music pane's tab strip and the album page's artist buttons reuse existing controls, so no
-sixth copy of the selectable recipe was added — but the count of controls sharing that modifier
-chain is now high enough that `Modifier.iglooSelectable(...)` is worth doing.
-
 ### 7.4 The Liked-tracks view waits for Playlists
 
 Every track row has a heart, but there is no list of liked tracks: on the web it lives inside
 the Playlists tab, which is deferred. `GET /music/tracks/liked` is not wired for that reason.
 
-### 7.5 The `MusicActions` wiring is untested
-
-`IglooRoot.kt` binds ten lambdas to `MusicViewModel`; a lambda bound to the wrong method would
-pass every suite. The library pane closed its half with `LibraryViewModel.actions()` and a unit
-test over it (§4); a `MusicViewModel.actions()` on the same pattern would close this one.
-
-### 7.7 Three single-read details view models with one shape
+### 7.7 Three single-read details view models with one shape — only the state is shared
 
 **Files:** `feature/music/AlbumDetailsViewModel.kt`, `feature/music/MusicianDetailsViewModel.kt`,
 `feature/movies/TheaterMovieDetailsViewModel.kt`
 
 `open(id)` / `close()` / `retry()` / `refresh()` / `load(id, userInitiated)` with the same
-stale-id guard and the same keep-on-background-failure rule, each over its own
-`Loading/Loaded/Error` triple. About 60 lines apiece; a generic base or a shared
-`DetailsLoad<T>` state would touch `IglooApp`, the fixtures and every details test for less
-than it saves, which is why the 2026-09-21 review left them. Worth doing if a fourth appears.
+stale-id guard. The 2026-09-29 DRY pass shared the state — `DetailsState<T>` and one
+`errorOrKeep` in `feature/shared/DetailsState.kt`, also used by `MovieDetailsViewModel` — and
+deliberately left the three view models as separate classes: a base class or loader would save
+about forty lines apiece for an abstraction every details test would then have to understand.
+Worth doing if a fourth appears.
 
 ### 7.6 Lint's `ModifierParameter` on the skeleton anchors
 
-`MusicGridSkeleton` / `TracksListSkeleton` take `anchorModifier: Modifier`, as `LibraryGridSkeleton`
-does; lint wants the parameter named `modifier`. It is not the composable's own modifier — it is
-the anchor cell's — so the name is right and the warning is noise. Suppress or rename together
-with the library one.
+`PaneGridSkeleton`, `TracksListSkeleton`, `PaneFirstPageError` and `PaneEmpty` take
+`anchorModifier: Modifier`; lint wants the parameter named `modifier`. It is not the composable's own modifier — it is
+the anchor's — so the name is right and the warning is noise. Suppress or rename them
+together.
+
+---
+
+## 8. Recorded by the DRY pass (2026-09-29)
+
+### 8.1 Two dimensions still repeat across files
+
+`Dp.scaled()`'s own rule sends a dimension used in two or more files to `IglooDimens` and the
+§5 tables. Two remain: the 64dp brand mark on the auth screens (`feature/auth/AuthLayout.kt`,
+`WelcomeScreen.kt`), and the 14dp / 10dp skeleton text stubs (`core/ui/IglooSkeletonCell.kt`,
+`feature/shared/TrackRow.kt`, `feature/home/HomeHero.kt`). Each is a new token to name and
+document, a design-system call rather than a cleanup, so it was left for one.
+
+### 8.2 The start effect names nine view models twice
+
+**Files:** `IglooRoot.kt`
+
+`LifecycleStartEffect` keys on the nine session view models it then refreshes one by one. The
+list can only be written once behind a shared `refresh()` interface the view models do not have;
+adding one for this is not worth it.
+
+### 8.3 Copy that says the same thing differently
+
+- Session expiry is worded three ways: `feature/auth/ErrorMessages.kt`
+  (`toLibraryDisplayMessage`), `SessionManager.revokedNotice`, and
+  `playback/model/PlaybackMessages.kt`.
+- A failed like reads "Couldn't update like status: …" on a movie and "Couldn't update like: …"
+  on a track (both through `AppError.toFailureNotice` now, so aligning them is one word).
+- "Rated … out of 10" opens a sentence in `MovieDetailsMapping.kt` and sits mid-sentence in
+  `InTheatersCard.kt`, so the two spell it with different capitals.
+
+### 8.4 Track rows repeat their like wiring
+
+`AlbumDetailsSections.kt`, `MusicianDetailsScreen.kt` and `MusicScreen.kt` each derive
+`liked = likes.isLiked(id)` and `likePending = id in likes.pendingIds` for `TrackRow`. Two lines
+per site; a wrapper would add a composable to save them.
+

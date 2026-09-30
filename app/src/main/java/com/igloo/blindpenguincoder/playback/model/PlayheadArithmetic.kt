@@ -1,7 +1,7 @@
 package com.igloo.blindpenguincoder.playback.model
 
 /**
- * The two numeric rules every player reducer shares (design-system.md section 11.8). They are
+ * The numeric rules every player reducer shares (design-system.md section 11.8). They are
  * arithmetic, not policy: each machine still decides *when* to apply them, which is where the
  * movie's resume prompt, the music queue's per-track reset, and the trailer's embed states
  * genuinely differ. Named distinctly from the reducers' own one-argument helpers so neither
@@ -20,3 +20,7 @@ internal fun clampSecondsToDuration(seconds: Double, durationSec: Double): Doubl
  */
 internal fun nonShrinkingDuration(incoming: Double, known: Double): Double =
     if (incoming > 0.0) incoming else known
+
+/** Where a finished playhead rests: the end of a known duration, else wherever it stopped. */
+internal fun endedPositionSec(currentSec: Double, durationSec: Double): Double =
+    durationSec.takeIf { it > 0.0 } ?: currentSec

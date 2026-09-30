@@ -21,6 +21,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.feature.home.findActivity
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
@@ -58,8 +59,8 @@ class MusicianDetailsFocusTest {
     private fun setShellContent(
         initial: MusicianDetailsUiState = MusicianDetailsUiState(),
         spokenAccessibilityEnabled: Boolean = false,
-        openLoads: (Long) -> MusicianDetailsState = { id ->
-            MusicianDetailsState.Loaded(testMusicianDetails(id = id))
+        openLoads: (Long) -> DetailsState<MusicianDetailsUi> = { id ->
+            DetailsState.Loaded(testMusicianDetails(id = id))
         },
     ) {
         musicianState = initial
@@ -86,7 +87,7 @@ class MusicianDetailsFocusTest {
                         musicianState = MusicianDetailsUiState()
                         albumState = AlbumDetailsUiState(
                             openAlbumId = id,
-                            details = AlbumDetailsState.Loaded(testAlbumDetails(id = id)),
+                            details = DetailsState.Loaded(testAlbumDetails(id = id)),
                         )
                     },
                     onCloseDetails = {
@@ -133,12 +134,12 @@ class MusicianDetailsFocusTest {
 
     @Test
     fun theSkeletonHoldsTheAnchorThroughTheLoadedSwap() {
-        setShellContent(openLoads = { MusicianDetailsState.Loading })
+        setShellContent(openLoads = { DetailsState.Loading })
 
         openMusicianCard(2)
         composeRule.onNodeWithContentDescription("Loading artist details").assertIsFocused()
 
-        musicianState = musicianState.copy(details = MusicianDetailsState.Loaded(testMusicianDetails(id = 2)))
+        musicianState = musicianState.copy(details = DetailsState.Loaded(testMusicianDetails(id = 2)))
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("musician_play_all").assertIsFocused()
@@ -273,7 +274,7 @@ class MusicianDetailsFocusTest {
 
     @Test
     fun theErrorStateOffersAPinnedFocusedRetry() {
-        setShellContent(openLoads = { MusicianDetailsState.Error("Couldn't load this artist.") })
+        setShellContent(openLoads = { DetailsState.Error("Couldn't load this artist.") })
         openMusicianCard(2)
 
         val retry = composeRule.onNodeWithContentDescription("Retry loading artist details")

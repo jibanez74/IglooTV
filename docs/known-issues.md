@@ -38,9 +38,13 @@ model exists only once production calls its route.** The Music review pass delet
 uncalled model in the files it had touched — the playlist, search, user-stats, settings,
 notification and admin-user files whole, plus `Track`, `TrackDetailsData`, `LikedTracksData`,
 `ClearedData`, `IdentifyMovieRequest`, `UpdateMovieMetadataRequest` and `DeleteMovieRequest` —
-and their serialization cases with them. Files that pass did not touch (`WatchRooms.kt`,
-`Devices.kt`, `Metadata.kt`, `Profile.kt`, `UserPin.kt`) still hold uncalled models and fall
-under the same rule the next time they are opened.
+and their serialization cases with them. The 2026-09-29 DRY pass finished the sweep:
+`WatchRooms.kt` went whole and `Metadata.kt` lost its provider-status and TMDB/Spotify search
+classes, and every live model was trimmed to the fields production reads — 56 fields, found by
+compiling with each property marked deprecated so every read, nested ones included, was
+reported. A required field nothing reads is the decode failure the `b8dc4c2` sync produced
+twice, so **a model now carries only the fields its screen reads**, the rest left to
+`ignoreUnknownKeys`.
 
 The consequence is that most spec schemas have **no model at all** — every `Show*` schema and
 `/api/shows/*` route except the five the TV Shows index calls (`ShowLibraryItem`,
@@ -102,20 +106,15 @@ by hand:
 
 ### Related, smaller
 
-- `TheaterMovie` (7 fields), `TmdbMovie` and its nested genre/company/crew/video items,
-  `MovieTechnicalFile` (5 fields), `MovieLibraryItem` and `ShowLibraryItem` (`certification`),
-  `MoviesLibraryData` and `ShowsLibraryData` (`page`, `per_page`, `sort`), `AlbumTrack`
-  (`mime_type`), `TrackListItem` (`codec`, `bit_rate`), `Musician` (`sort_name`, `spotify_id`,
-  `created_at`, `updated_at`), `MusicianAlbum` (`release_date`, `track_count`), `MusicianTrack`
-  (`codec`, `bit_rate`, `album_cover`), `DeviceTokenData` and `QuickConnectRedeemData`
-  (`device`) each omit response fields their schema marks required. Harmless under
-  `ignoreUnknownKeys = true` and left alone deliberately — recorded so the next sweep does not
-  re-flag them as new. Confirmed still the case on 2026-09-21.
+- Models omit response fields their schema marks required, by the rule above: a field is
+  modelled only once production reads it. Harmless under `ignoreUnknownKeys = true` — recorded
+  so the next sweep does not re-flag the omissions as drift.
 - Some Kotlin class names lag the spec's: `MovieWatchProgress`/`UpdateMovieWatchProgressRequest`/
   `SetMovieWatchedRequest` for `WatchProgress`/`UpdateWatchProgressRequest`/`SetWatchedRequest`,
   `MovieCastMember`/`MovieCrewMember`/`MovieExtraVideo` for `MovieCastCredit`/`MovieCrewCredit`/
-  `ExtraVideo`, `TrackGenre` for `AlbumTrackGenre`. The fields match exactly; only the names
-  differ. Not a bug, but it will trip any check that matches models to schemas by name.
+  `ExtraVideo`, `TrackGenre` for `AlbumTrackGenre`. The fields are the schemas' own, less the
+  ones nothing reads; only the names differ. Not a bug, but it will trip any check that matches
+  models to schemas by name.
 
 ---
 

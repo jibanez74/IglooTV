@@ -46,8 +46,7 @@ class HlsSessionController(
     private val stopScope: CoroutineScope,
     sessionUuid: String = UUID.randomUUID().toString(),
 ) {
-    var sessionUuid: String = sessionUuid
-        private set
+    private var sessionUuid: String = sessionUuid
     private var currentSpec: HlsSessionSpec? = null
     private var manifestRequestIssued = false
     private var reload = 0
@@ -122,7 +121,6 @@ class HlsSessionController(
                     currentSpec = spec
                     onStatus(null)
                     return HlsSessionStart(
-                        spec = spec,
                         effectiveProfileId = result.effectiveProfileId,
                         actualStartSec = result.actualStartSec,
                         playlistUrl = api.hlsPlaylistUrl(spec),
@@ -157,9 +155,6 @@ class HlsSessionController(
             }
         }
     }
-
-    /** The last successfully started spec; null before the first [start] completes. */
-    fun currentSpec(): HlsSessionSpec? = currentSpec
 
     /** Marks the current session dead so the next [start] busts caches with a fresh reload. */
     fun noteSessionLost() {

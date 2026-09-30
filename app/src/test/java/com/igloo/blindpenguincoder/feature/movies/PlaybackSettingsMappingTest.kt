@@ -19,18 +19,15 @@ class PlaybackSettingsMappingTest {
         channels: Long = 6,
         channelLayout: String? = "5.1(side)",
         language: String? = "eng",
-        title: String? = null,
         isDefault: Boolean = false,
         codec: String = "dts",
     ) = AudioStream(
         id = id,
         streamIndex = streamIndex,
         codec = codec,
-        bitRate = 0,
         channels = channels,
         channelLayout = sqlString(channelLayout),
         language = sqlString(language),
-        title = sqlString(title),
         isDefault = isDefault,
     )
 

@@ -1,10 +1,8 @@
 package com.igloo.blindpenguincoder.core.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,9 +38,8 @@ import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.iglooTween
+import com.igloo.blindpenguincoder.core.design.rememberOverlayReveal
 import com.igloo.blindpenguincoder.core.design.scaled
 import kotlin.math.roundToInt
 
@@ -83,15 +80,7 @@ fun IglooMenu(
 
     BackHandler(onBack = onDismiss)
 
-    // The overlay reveal at `standard` (section 7.2); no exit animation, so the focus ring the
-    // host restores is never drawn under a fading card.
-    var visible by remember { mutableStateOf(false) }
-    val reveal by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = iglooTween(IglooMotion.STANDARD_MS),
-        label = "menuReveal",
-    )
-    LaunchedEffect(Unit) { visible = true }
+    val reveal by rememberOverlayReveal("menuReveal")
 
     val requesters = remember(items.size) { List(items.size) { FocusRequester() } }
     LaunchedEffect(Unit) { requesters.first().requestFocus() }
@@ -194,7 +183,7 @@ private fun MenuRow(
             .then(modifier)
             .onFocusChanged { focused = it.isFocused }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = null,
                 indication = null,
                 onClick = item.onSelect,
             )

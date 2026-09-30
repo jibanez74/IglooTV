@@ -19,10 +19,10 @@ val IglooJson = Json {
 }
 
 /** Marks a credential-issuing request, which must never carry a stale token. */
-val NoDeviceAuthAttribute = AttributeKey<Unit>("IglooNoDeviceAuth")
+private val NoDeviceAuthAttribute = AttributeKey<Unit>("IglooNoDeviceAuth")
 
 /** Sends a specific token instead of the active one, to revoke a superseded session. */
-val BearerOverrideAttribute = AttributeKey<String>("IglooBearerOverride")
+private val BearerOverrideAttribute = AttributeKey<String>("IglooBearerOverride")
 
 /**
  * Marks a request whose own 401 is not a lost session: it is discarding the very credential it

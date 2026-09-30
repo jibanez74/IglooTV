@@ -1,8 +1,7 @@
 package com.igloo.blindpenguincoder.feature.library
 
-import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.SortOrder
-import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 
 /**
@@ -44,8 +43,6 @@ data class LibraryUiState(
      * likes.
      */
     val tabs: List<LibraryTab>,
-    /** Count for the current [filter]: library-wide stats for All, the pages' `total` otherwise. */
-    val total: Long? = null,
     /**
      * The requested tab — it highlights the moment focus lands on it. It snaps back to the last
      * committed one if the switch's first page fails, so a selected tab never lies about the
@@ -71,21 +68,15 @@ data class LibraryUiState(
      * failure the user never had.
      */
     val genresLoaded: Boolean = false,
-    val grid: IglooRailState<PosterItem> = IglooRailState.Loading,
-    val append: AppendState = AppendState.Idle,
+    /**
+     * The grid's pages. Their `total` counts the current [filter]: library-wide stats for All,
+     * the pages' own `total` otherwise.
+     */
+    val paged: PagedState<PosterItem> = PagedState(),
     /** True from a Refresh press until page 1 resolves; swaps the button's label. */
     val refreshing: Boolean = false,
     /** A refresh that failed with content still on screen — a notice, not an error card. */
     val notice: String? = null,
-    /** Bumped after every successful append, even when every returned id was already loaded. */
-    val appendGeneration: Int = 0,
-    /**
-     * Bumped whenever the list is replaced wholesale rather than appended to. The screen scrolls
-     * to top and re-anchors focus on a change; an append never bumps it, so a prefetch never
-     * moves the user. A state field rather than a one-shot event because scrolling to the top is
-     * idempotent and must survive a recomposition mid-refresh, where an event would be lost.
-     */
-    val contentGeneration: Int = 0,
     /**
      * Bumped after a successful silent replacement of the shown Liked grid. Only a library with
      * a Liked tab ever bumps it.
