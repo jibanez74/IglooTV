@@ -4,9 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import kotlinx.coroutines.delay
 
 /**
  * Attaches [requester] when there is one. Several requesters may ride the same node — a rail's
@@ -27,6 +29,35 @@ internal fun Modifier.withRequester(requester: FocusRequester?): Modifier =
  */
 internal fun FocusRequester.requestFocusSafely(): Boolean =
     runCatching { requestFocus() }.isSuccess
+
+/**
+ * Focuses a node that has only just been composed so that a screen reader hears about it.
+ *
+ * Two things can swallow the focus announcement. First, Compose sends `TYPE_VIEW_FOCUSED` only
+ * when a node that was already in its previous accessibility snapshot becomes focused, and those
+ * snapshots are taken in batches about 100ms apart, so a node focused in the frame it first
+ * appears is never announced. Second, TalkBack for TV ignores focus events for a while after a
+ * pane-title change, which it handles as a window transition. Measured on a Shield, a request
+ * 150ms after the new pane appeared was dropped, and one about 700ms after was followed. Either way
+ * TalkBack's cursor stays on whatever it was reading before.
+ *
+ * With [screenReader] on, this waits one frame and [ANNOUNCED_FOCUS_WAIT_MS], then requests focus.
+ * With it off, focus moves at once. [shouldFocus] is checked after the wait, so a caller can skip
+ * the request if the user has already moved focus somewhere else.
+ */
+internal suspend fun FocusRequester.requestFocusAnnounced(
+    screenReader: Boolean,
+    shouldFocus: () -> Boolean = { true },
+) {
+    if (screenReader) {
+        withFrameNanos { }
+        delay(ANNOUNCED_FOCUS_WAIT_MS)
+    }
+    if (shouldFocus()) requestFocusSafely()
+}
+
+/** Outlasts both Compose's accessibility batch and TalkBack for TV's pane-change window. */
+internal const val ANNOUNCED_FOCUS_WAIT_MS = 700L
 
 /**
  * Re-lands focus after [key] swaps what a subtree shows, but only if the subtree owned focus going

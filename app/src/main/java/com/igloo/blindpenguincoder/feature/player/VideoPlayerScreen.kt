@@ -36,6 +36,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
@@ -385,6 +386,12 @@ fun VideoPlayerScreen(
                 onTogglePlayPause = togglePlayPause,
                 onSeekBy = seekBy,
                 onOpenMenu = { playerMenu = it },
+                // A menu is a partial overlay, so the controls it covers leave the semantics tree
+                // rather than being flagged: otherwise TalkBack stays parked on the button that
+                // opened it (design system section 9.3). The tag sits outside the clear.
+                modifier = Modifier
+                    .testTag("movie_chrome")
+                    .then(if (playerMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
             )
         }
 
@@ -507,6 +514,7 @@ private fun VideoPlayerChrome(
     onTogglePlayPause: () -> Unit,
     onSeekBy: (Double) -> Unit,
     onOpenMenu: (PlayerMenu) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val layout = IglooTheme.layout
     // Always composed, alpha-hidden: dismissal must not detach the focused control or reshuffle
@@ -536,7 +544,7 @@ private fun VideoPlayerChrome(
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .graphicsLayer { alpha = chromeAlpha },
     ) {

@@ -14,7 +14,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertWidthIsEqualTo
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -29,10 +31,12 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
 import com.igloo.blindpenguincoder.testHomeMovies
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -58,7 +62,10 @@ class NavigationRailBehaviorTest {
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
 
-    private fun setShellContent(initialSignOut: SignOutUiState = SignOutUiState()) {
+    private fun setShellContent(
+        initialSignOut: SignOutUiState = SignOutUiState(),
+        spokenAccessibilityEnabled: Boolean = false,
+    ) {
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
@@ -79,6 +86,7 @@ class NavigationRailBehaviorTest {
                     onSignOut = { signOut = SignOutUiState(confirming = true) },
                     onSignOutConfirm = { signOut = SignOutUiState() },
                     onSignOutDismiss = { signOut = SignOutUiState() },
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
         }
@@ -176,6 +184,98 @@ class NavigationRailBehaviorTest {
         )
     }
 
+    /**
+     * The incoming pane's anchor is brand new, and TalkBack for TV drops a focus event that lands
+     * on it too soon (see requestFocusAnnounced). So under a screen reader the handoff waits, and
+     * the pressed rail row keeps focus until then; TalkBack would otherwise stay on the row and
+     * never read the card.
+     */
+    @Test
+    fun underAScreenReaderACrossBranchPressHandsFocusOverAfterTheWait() {
+        setShellContent(spokenAccessibilityEnabled = true)
+        contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+        rail().performKeyInput { pressKey(Key.DirectionDown) }
+        val moviesRow = composeRule.onNodeWithContentDescription("Movies")
+        moviesRow.assertIsFocused()
+
+        composeRule.mainClock.autoAdvance = false
+        moviesRow.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.mainClock.advanceTimeByFrame()
+
+        composeRule.onNodeWithTag("poster_card_1").assertExists()
+        moviesRow.assertIsFocused()
+
+        composeRule.mainClock.advanceTimeBy(ANNOUNCE_WAIT_MS)
+        composeRule.mainClock.autoAdvance = true
+        composeRule.onNodeWithTag("poster_card_1").assertIsFocused()
+        rail().assertWidthIsEqualTo(collapsedWidth)
+    }
+
+    /**
+     * A user who moves on during that wait keeps the focus they chose. Right from a rail row
+     * lands on the anchor itself, so the case that matters is going further before the wait ends
+     * — on Home, whose anchor is always the hero rather than the last card focused.
+     */
+    @Test
+    fun aMoveIntoThePaneDuringTheWaitIsNotOverridden() {
+        setShellContent(spokenAccessibilityEnabled = true)
+        contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+        rail().performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithContentDescription("Movies")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        // waitForIdle does not fast-forward the deferred request's delay; the clock has to.
+        composeRule.mainClock.advanceTimeBy(ANNOUNCE_WAIT_MS)
+        composeRule.onNodeWithTag("poster_card_1").assertIsFocused()
+        composeRule.onNodeWithTag("poster_card_1").performKeyInput { pressKey(Key.DirectionLeft) }
+        rail().performKeyInput { pressKey(Key.DirectionUp) }
+        val homeRow = composeRule.onNodeWithContentDescription("Home")
+        homeRow.assertIsFocused()
+
+        composeRule.mainClock.autoAdvance = false
+        homeRow.performKeyInput { pressKey(Key.DirectionCenter) }
+        repeat(4) { composeRule.mainClock.advanceTimeByFrame() }
+        contentStartCard().assertExists()
+        homeRow.performKeyInput { pressKey(Key.DirectionRight) }
+        contentStartCard().assertIsFocused()
+        contentStartCard().performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.mainClock.advanceTimeByFrame()
+        val chosen = composeRule.onNode(isFocused()).fetchSemanticsNode().id
+        contentStartCard().assertIsNotFocused()
+
+        composeRule.mainClock.advanceTimeBy(ANNOUNCE_WAIT_MS)
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
+        assertEquals(chosen, composeRule.onNode(isFocused()).fetchSemanticsNode().id)
+    }
+
+    /** A dialog opened during that wait keeps its focus; the handoff must not land behind it. */
+    @Test
+    fun signOutOpenedDuringTheWaitKeepsFocusInTheDialog() {
+        setShellContent(spokenAccessibilityEnabled = true)
+        contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+        rail().performKeyInput { pressKey(Key.DirectionDown) }
+
+        composeRule.mainClock.autoAdvance = false
+        composeRule.onNodeWithContentDescription("Movies")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.mainClock.advanceTimeByFrame()
+        // Movies -> TV Shows -> Music -> Photos -> Settings -> Switch profile -> Sign out
+        repeat(6) { rail().performKeyInput { pressKey(Key.DirectionDown) } }
+        composeRule.onNodeWithContentDescription("Sign out")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        repeat(2) { composeRule.mainClock.advanceTimeByFrame() }
+        val cancel = composeRule.onNodeWithContentDescription("Cancel")
+        cancel.assertIsFocused()
+
+        composeRule.mainClock.advanceTimeBy(ANNOUNCE_WAIT_MS)
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
+        cancel.assertIsFocused()
+        composeRule.onNodeWithTag("poster_card_1").assertIsNotFocused()
+    }
+
     @Test
     fun searchIsReachableFromTheRail() {
         setShellContent()
@@ -239,6 +339,9 @@ class NavigationRailBehaviorTest {
         rail().assertWidthIsEqualTo(expandedWidth)
     }
 }
+
+/** Longer than the helper's wait, so the deferred request has certainly run. */
+private const val ANNOUNCE_WAIT_MS = ANNOUNCED_FOCUS_WAIT_MS + 100L
 
 internal tailrec fun Context.findActivity(): Activity = when (this) {
     is Activity -> this

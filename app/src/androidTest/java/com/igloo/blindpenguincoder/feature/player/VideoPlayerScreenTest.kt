@@ -620,6 +620,33 @@ class VideoPlayerScreenTest {
         composeRule.onNodeWithTag("movie_audio").assertIsFocused()
     }
 
+    /**
+     * Gone, not merely flagged: a covered control left in the semantics tree keeps TalkBack for
+     * TV's cursor parked on the button that opened the menu, because the menu's entry row is
+     * composed already focused and Compose sends no TYPE_VIEW_FOCUSED for a node it never saw
+     * unfocused (design system section 9.3).
+     */
+    @Test
+    fun theControlsBehindAMenuLeaveTheSemanticsTree() {
+        setContent()
+        startPlaying()
+        emitTracks()
+
+        openPlayerMenu("movie_subtitles")
+
+        // The chrome keeps its own tag, outside the clear, but nothing under it survives.
+        composeRule.onNodeWithTag("movie_chrome").assertExists()
+        composeRule.onNodeWithTag("movie_subtitles").assertDoesNotExist()
+        composeRule.onNodeWithTag("movie_play_pause").assertDoesNotExist()
+        composeRule.onNodeWithTag("movie_track_none").assertIsFocused()
+
+        pressBack()
+
+        composeRule.onNodeWithTag("movie_track_menu").assertDoesNotExist()
+        composeRule.onNodeWithTag("movie_subtitles").assertIsFocused()
+        composeRule.onNodeWithTag("movie_play_pause").assertExists()
+    }
+
     @Test
     fun subtitleNoneRowTurnsSubtitlesOff() {
         setContent()

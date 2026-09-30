@@ -555,6 +555,18 @@ it for a ≤1.5:1 effect.
 - **No traps.** Every focusable region has a reachable exit in every direction that looks like
   it should work.
 - **Skeletons are grid-matched** (§10) so focus does not jump when content arrives.
+- **Focus a new node only once TalkBack can hear it.** Compose sends `TYPE_VIEW_FOCUSED` only
+  when a node that was already in its last accessibility snapshot becomes focused, and it takes
+  those snapshots in batches about 100ms apart. So a node focused in the frame it first appears
+  is never announced. TalkBack for TV also ignores focus events for a while after a pane-title
+  change, which it treats as a window transition: on a Shield, a request 150ms after the new
+  pane appeared was dropped and one about 700ms after was followed. Either way TalkBack keeps its
+  cursor on whatever it was on before. A handoff to a freshly composed node therefore goes
+  through `requestFocusAnnounced` (`core/ui/FocusRequesters.kt`). While a screen reader runs, it
+  waits one frame and 700ms before requesting focus, and skips the request if the user has
+  already moved. With no screen reader, focus moves at once. The rail's cross-branch switch
+  (Home → Movies) uses it (§11.2). Overlays that cover part of the screen solve the same problem
+  another way (§9.3).
 - Order matters: `Modifier.clickable` and `Modifier.onFocusChanged` are order-sensitive. Put
   focus observation *outside* the clickable so it sees the same focus state the indication does.
 
@@ -882,6 +894,9 @@ tree. The reader goes silent, the remote looks dead, and Back is the only way ou
 `clearAndSetSemantics { }` on the content it covers, taking those controls out of the tree
 entirely — with the covered node's own `testTag` left *outside* the clear so it survives, the same
 ordering rule the reading stops follow (§12).
+This applies to the movie details page under its More menu and Playback Settings dialog, and to
+the video player's controls (`movie_chrome`) under its chapter, audio, subtitle and quality
+menus.
 
 **Motion.** One `standard` alpha reveal via `graphicsLayer` (§7.2), and **no exit animation** — the
 overlay leaves at once so the restored focus ring is never drawn under a fading scrim. The focus
@@ -1239,7 +1254,9 @@ Active destination uses `primary @ 0.18` fill plus a `sidebarPrimary` icon; the 
 The rail rests collapsed and expands on focus (§8.1). **Back is three-state**: Back from the
 content pane opens the rail on the current destination's row (§6.3); Back again exits the app; a
 rail entered by d-pad left instead returns focus to the content. Activating a destination hands
-focus to the content pane — that focus move is also what collapses the rail.
+focus to the content pane — that focus move is also what collapses the rail. When the switch
+composes a different pane and a screen reader is running, the handoff waits 700ms so that
+TalkBack announces the incoming card after the pane title (§6.3).
 
 TalkBack: the rail and the content pane are separate traversal groups. The brand lockup is
 decorative and silent; the footer's avatar and name read as one node, "Signed in as {name}"; the
@@ -2336,6 +2353,14 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-09-30 — TalkBack follows focus into new panes and player menus (§6.3, §9.3).**
+
+- A rail press that switches branch waits 700ms before focusing the incoming pane, but only
+  while a screen reader runs, so TalkBack says the destination and then reads the first card
+  instead of staying on the rail (`requestFocusAnnounced`).
+- The video player's controls leave the semantics tree while one of its menus is open, the
+  way the details page's do, so TalkBack moves into the menu.
 
 **2026-09-29 — Shared pieces, no visual change.**
 

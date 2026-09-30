@@ -42,6 +42,15 @@ android {
     }
 }
 
+// OpenApiContractTest checks the wire models against the API contract. The path is absolute so
+// the test does not depend on Gradle's working directory, and the spec is an input so editing it
+// re-runs the unit tests.
+val openApiSpec = rootProject.layout.projectDirectory.file("docs/openapi.json")
+tasks.withType<Test>().configureEach {
+    inputs.file(openApiSpec).withPropertyName("openApiSpec").withPathSensitivity(PathSensitivity.RELATIVE)
+    systemProperty("igloo.openapi", openApiSpec.asFile.absolutePath)
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(platform(libs.androidx.compose.bom))

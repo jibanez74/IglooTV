@@ -72,6 +72,7 @@ import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
+import com.igloo.blindpenguincoder.core.ui.requestFocusAnnounced
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.library.LibraryActions
@@ -591,6 +592,7 @@ fun IglooApp(
             contentStartRequester = contentStartRequester,
             signOutRequester = signOutRequester,
             navigationRequesters = navigationRequesters,
+            spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             onDestinationSelected = { currentDestinationName = it.name },
             onSwitchProfile = onSwitchProfile,
             onSignOut = onSignOut,
@@ -815,6 +817,7 @@ private fun IglooShell(
     contentStartRequester: FocusRequester,
     signOutRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
+    spokenAccessibilityEnabled: Boolean,
     onDestinationSelected: (IglooDestination) -> Unit,
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
@@ -881,6 +884,8 @@ private fun IglooShell(
                 musicReturnRequester = musicReturnRequester,
                 contentStartRequester = contentStartRequester,
                 navigationRequesters = navigationRequesters,
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                signOutConfirming = signOut.confirming,
                 // The pane fills the panel and applies no gutter of its own. It used to box every
                 // screen into 752x486dp, which is where the dead margins came from. The gutter is
                 // handed down as contentInset instead, so each section applies the inset it owes
@@ -967,6 +972,8 @@ private fun ContentPane(
     musicReturnRequester: FocusRequester,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
+    spokenAccessibilityEnabled: Boolean,
+    signOutConfirming: Boolean,
     modifier: Modifier = Modifier,
 ) {
     // Hoisted above the destination branch so a Home -> Movies -> Home round trip still knows
@@ -1016,21 +1023,25 @@ private fun ContentPane(
         end = IglooTheme.layout.safeAreaHorizontal,
     )
 
+    var paneHasFocus by remember { mutableStateOf(false) }
     Box(
-        modifier = modifier.testTag("content_pane").semantics {
-            // Rail and content are each a traversal group, so TalkBack reads one block at a
-            // time instead of geometrically interleaving rows that share a y position.
-            isTraversalGroup = true
-            // The pane header that used to carry the destination name went with the boxed layout
-            // — Home's hero is full-bleed now and starts at the top edge, so no text node holds
-            // it any more. Activating a nav row swaps the pane without moving focus, so this is
-            // the only thing left that can tell TalkBack the destination changed at all. A pane
-            // title rather than a live region on a hidden node: the platform fires
-            // CONTENT_CHANGE_TYPE_PANE_TITLE on the value change, it is the mechanism the menu,
-            // both dialogs and both overlays already use, and it does not put a second node
-            // carrying the destination's name into the tree to collide with the rail's own row.
-            paneTitle = currentDestination.label
-        },
+        modifier = modifier
+            .testTag("content_pane")
+            .onFocusChanged { paneHasFocus = it.hasFocus }
+            .semantics {
+                // Rail and content are each a traversal group, so TalkBack reads one block at a
+                // time instead of geometrically interleaving rows that share a y position.
+                isTraversalGroup = true
+                // The pane header that used to carry the destination name went with the boxed
+                // layout — Home's hero is full-bleed now and starts at the top edge, so no text
+                // node holds it any more, and this is what tells TalkBack the destination
+                // changed. A pane title rather than a live region on a hidden node: the platform
+                // fires CONTENT_CHANGE_TYPE_PANE_TITLE on the value change, it is the mechanism
+                // the menu, both dialogs and both overlays already use, and it does not put a
+                // second node carrying the destination's name into the tree to collide with the
+                // rail's own row.
+                paneTitle = currentDestination.label
+            },
     ) {
         when (currentDestination) {
             IglooDestination.Home -> HomeRails(
@@ -1124,13 +1135,21 @@ private fun ContentPane(
     // the shell leaves focus on the rail row (see IglooShell) and the pane claims the anchor
     // here, once the incoming branch's node exists. Deliberately keyed on the branch and not
     // the destination: within the placeholder branch the anchor persists, and activating a card
-    // there must keep focus where the user put it.
+    // there must keep focus where the user put it. The anchor is brand new and paneTitle has
+    // just changed, so under TalkBack the request waits until it can be announced; if the user
+    // has moved into the pane in the meantime, their focus stands. Keyed on the sign-out dialog
+    // too: opening it during the wait cancels the handoff, which would otherwise pull focus out
+    // of the modal, and closing it finds the branch already recorded and requests nothing.
     var paneBranch by remember { mutableStateOf(paneBranchOf(currentDestination)) }
-    LaunchedEffect(currentDestination) {
+    LaunchedEffect(currentDestination, signOutConfirming) {
+        if (signOutConfirming) return@LaunchedEffect
         val branch = paneBranchOf(currentDestination)
         if (branch != paneBranch) {
             paneBranch = branch
-            contentStartRequester.requestFocus()
+            contentStartRequester.requestFocusAnnounced(
+                screenReader = spokenAccessibilityEnabled,
+                shouldFocus = { !paneHasFocus },
+            )
         }
     }
 }
