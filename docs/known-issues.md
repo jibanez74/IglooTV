@@ -118,6 +118,78 @@ by hand:
 
 ---
 
+## TalkBack stays on the rail after a rail press opens another pane
+
+**Found:** 2026-09-29, on the Nvidia Shield with TalkBack on, during the DRY pass's device check.
+**Status:** open. Also happens on a `main` build, so no recent change caused it.
+**Files:** `app/src/main/java/com/igloo/blindpenguincoder/feature/home/IglooApp.kt`
+(`ContentPane`'s cross-branch `LaunchedEffect`)
+
+Pressing a rail item that switches branch, Home → Movies for example, moves input focus to the
+new pane's first card. TalkBack's cursor, though, stays on the rail icon that was pressed. The
+card is never announced, and only the first d-pad press brings the cursor back to where focus is.
+This was seen on Movies; TV Shows and Music go through the same handoff.
+
+On a cross-branch switch the shell leaves focus on the rail row on purpose. `ContentPane` then
+requests `contentStartRequester` once the incoming branch is composed. That looks like the
+mechanism design-system §9.3 describes for anchored menus:
+
+- the anchor is focused in the same frame it first appears;
+- Compose emits `TYPE_VIEW_FOCUSED` only for a node it has seen unfocused, so no event goes out;
+- TalkBack for TV keeps its cursor on the rail row, which is still in the tree.
+
+This is inferred from the behaviour and has not been confirmed with an accessibility event trace.
+
+---
+
+## TalkBack stays on the player's menu button when a track or quality menu opens
+
+**Found:** 2026-09-29, in the same Shield check.
+**Status:** open. The dialog shell and the player controls' semantics are the same as `main`'s.
+This one was not re-run on a `main` build.
+**Files:** `app/src/main/java/com/igloo/blindpenguincoder/feature/player/VideoPlayerScreen.kt`
+(`VideoPlayerChrome` stays composed under `playerMenu`),
+`app/src/main/java/com/igloo/blindpenguincoder/core/ui/IglooRadioListDialog.kt`
+
+Opening Subtitles or Quality from the paused player moves input focus to the menu's selected row.
+TalkBack's cursor stays on the Subtitles or Quality button behind the scrim, so the menu is never
+announced. The first d-pad press moves the cursor into the menu.
+
+It doesn't happen every time: in one try, the Chapters menu, opened the same way, did take the
+cursor. Audio goes through the same path but wasn't tested, because the test title had only one
+audio track.
+
+The player composes `VideoPlayerChrome` next to the menu with its semantics intact. Movie details
+has solved the same problem for its anchored menus: it wraps the covered content in an empty
+`clearAndSetSemantics { }` and keeps the `testTag` outside it. The comment in
+`MovieDetailsScreen.kt` and design-system §9.3 explain why. The menu's `IglooScrim` fills the
+screen, yet §9.3's exemption for full-screen overlays doesn't seem to apply to it. The likely fix is
+the same clear on the controls while `playerMenu != null`, with their test tags kept outside.
+
+---
+
+## D-pad Down sometimes moves sideways in a pane grid with TalkBack on
+
+**Found:** 2026-09-29, in the same Shield check.
+**Status:** open; cause unknown. The same key sequence gives the same result on a `main` build.
+**Files:** `app/src/main/java/com/igloo/blindpenguincoder/feature/shared/PaneGrid.kt` (the cards'
+`focusProperties`)
+
+In Movies → Genres → Action (149 movies in five columns), a Down press sometimes moved focus along
+the row instead of down it:
+
+- From the Genres tab, 38 Down presses ended on the last row's fourth card (Zack Snyder's Justice
+  League) instead of its first (X2). `main` ended on the same card.
+- From V for Vendetta (row 28, first column), one Down moved focus to X-Men: Days of Future Past
+  (row 28, fourth column). The next Down reached X2.
+
+The grid overrides only `left` on the first column, `up` on the first row, `right` on the last
+column and the final card, and `down` on the last row. Every other Down is Compose's own focus
+search. During these presses TalkBack's cursor visibly lagged behind input focus, which makes
+TalkBack for TV's key handling the first suspect. The grid has not been tested with TalkBack off.
+
+---
+
 ## Rejected: album cover URLs are absolute and must not be "resolved"
 
 **Found:** 2026-08-13, raised as a home-screen review comment and investigated.
