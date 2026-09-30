@@ -4,9 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import kotlinx.coroutines.delay
 
 /**
  * Attaches [requester] when there is one. Several requesters may ride the same node — a rail's
@@ -27,6 +29,31 @@ internal fun Modifier.withRequester(requester: FocusRequester?): Modifier =
  */
 internal fun FocusRequester.requestFocusSafely(): Boolean =
     runCatching { requestFocus() }.isSuccess
+
+/**
+ * Focuses a node that has only just been composed so that a screen reader hears about it.
+ *
+ * Compose sends `TYPE_VIEW_FOCUSED` only when a node that was already in its previous
+ * accessibility snapshot becomes focused. Those snapshots are taken in batches about 100ms apart.
+ * A node focused in the frame it first appears is never announced, and TalkBack for TV leaves its
+ * cursor on whatever it was reading before. With [screenReader] on, this waits one frame and one
+ * batch, so the node has been seen unfocused, and then requests focus. With it off, focus moves at
+ * once. [shouldFocus] is checked after the wait, so a caller can skip the request if the user has
+ * already moved focus somewhere else.
+ */
+internal suspend fun FocusRequester.requestFocusAnnounced(
+    screenReader: Boolean,
+    shouldFocus: () -> Boolean = { true },
+) {
+    if (screenReader) {
+        withFrameNanos { }
+        delay(ACCESSIBILITY_BATCH_WAIT_MS)
+    }
+    if (shouldFocus()) requestFocusSafely()
+}
+
+/** Compose's accessibility batch interval (100ms) plus headroom for a busy main thread. */
+private const val ACCESSIBILITY_BATCH_WAIT_MS = 150L
 
 /**
  * Re-lands focus after [key] swaps what a subtree shows, but only if the subtree owned focus going
