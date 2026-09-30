@@ -1133,9 +1133,9 @@ private fun ContentPane(
     // the shell leaves focus on the rail row (see IglooShell) and the pane claims the anchor
     // here, once the incoming branch's node exists. Deliberately keyed on the branch and not
     // the destination: within the placeholder branch the anchor persists, and activating a card
-    // there must keep focus where the user put it. The anchor is brand new, so under TalkBack
-    // the request waits until it can be announced; if the user has moved into the pane in the
-    // meantime, their focus stands.
+    // there must keep focus where the user put it. The anchor is brand new and paneTitle has
+    // just changed, so under TalkBack the request waits until it can be announced; if the user
+    // has moved into the pane in the meantime, their focus stands.
     var paneBranch by remember { mutableStateOf(paneBranchOf(currentDestination)) }
     LaunchedEffect(currentDestination) {
         val branch = paneBranchOf(currentDestination)

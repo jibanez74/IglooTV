@@ -31,6 +31,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -184,13 +185,13 @@ class NavigationRailBehaviorTest {
     }
 
     /**
-     * The incoming pane's anchor is brand new, and Compose announces focus only on a node its
-     * last accessibility snapshot saw unfocused. So under a screen reader the handoff waits one
-     * batch, and the pressed rail row keeps focus until then; TalkBack would otherwise stay on
-     * the row and never read the card.
+     * The incoming pane's anchor is brand new, and TalkBack for TV drops a focus event that lands
+     * on it too soon (see requestFocusAnnounced). So under a screen reader the handoff waits, and
+     * the pressed rail row keeps focus until then; TalkBack would otherwise stay on the row and
+     * never read the card.
      */
     @Test
-    fun underAScreenReaderACrossBranchPressHandsFocusOverAfterOneBatch() {
+    fun underAScreenReaderACrossBranchPressHandsFocusOverAfterTheWait() {
         setShellContent(spokenAccessibilityEnabled = true)
         contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
         rail().performKeyInput { pressKey(Key.DirectionDown) }
@@ -312,8 +313,8 @@ class NavigationRailBehaviorTest {
     }
 }
 
-/** Longer than the helper's one-batch wait, so the deferred request has certainly run. */
-private const val ANNOUNCE_WAIT_MS = 400L
+/** Longer than the helper's wait, so the deferred request has certainly run. */
+private const val ANNOUNCE_WAIT_MS = ANNOUNCED_FOCUS_WAIT_MS + 100L
 
 internal tailrec fun Context.findActivity(): Activity = when (this) {
     is Activity -> this
