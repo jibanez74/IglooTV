@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.data.model
 import java.io.File
 import java.util.jar.JarFile
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.descriptors.PolymorphicKind
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -326,7 +327,11 @@ class OpenApiContractTest {
         private fun ref(pointer: String) = JsonObject(mapOf("\$ref" to JsonPrimitive(pointer)))
     }
 
-    /** Every `@Serializable` class with properties in this package, by its generated serializer. */
+    /**
+     * Every `@Serializable` class with properties in this package, found by its generated serializer
+     * and named by its serial name, which is what the walk records: `Outer.Inner` for a nested
+     * class, or its class-level `@SerialName`.
+     */
     private fun serializableModelNames(): Set<String> {
         val packagePath = ApiEnvelope::class.java.`package`.name.replace('.', '/')
         val location = File(ApiEnvelope::class.java.protectionDomain.codeSource.location.toURI())
@@ -341,7 +346,8 @@ class OpenApiContractTest {
         }
         return classFiles
             .filter { it.endsWith(SERIALIZER_CLASS_SUFFIX) }
-            .map { "${ApiEnvelope::class.java.`package`.name}.${it.removeSuffix(SERIALIZER_CLASS_SUFFIX)}" }
+            .map { Class.forName("${ApiEnvelope::class.java.`package`.name}.${it.removeSuffix(SERIALIZER_CLASS_SUFFIX)}") }
+            .map { it.getAnnotation(SerialName::class.java)?.value ?: it.canonicalName }
             .toSet()
     }
 

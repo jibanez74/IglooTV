@@ -249,6 +249,33 @@ class NavigationRailBehaviorTest {
         assertEquals(chosen, composeRule.onNode(isFocused()).fetchSemanticsNode().id)
     }
 
+    /** A dialog opened during that wait keeps its focus; the handoff must not land behind it. */
+    @Test
+    fun signOutOpenedDuringTheWaitKeepsFocusInTheDialog() {
+        setShellContent(spokenAccessibilityEnabled = true)
+        contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+        rail().performKeyInput { pressKey(Key.DirectionDown) }
+
+        composeRule.mainClock.autoAdvance = false
+        composeRule.onNodeWithContentDescription("Movies")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.mainClock.advanceTimeByFrame()
+        // Movies -> TV Shows -> Music -> Photos -> Settings -> Switch profile -> Sign out
+        repeat(6) { rail().performKeyInput { pressKey(Key.DirectionDown) } }
+        composeRule.onNodeWithContentDescription("Sign out")
+            .performKeyInput { pressKey(Key.DirectionCenter) }
+        repeat(2) { composeRule.mainClock.advanceTimeByFrame() }
+        val cancel = composeRule.onNodeWithContentDescription("Cancel")
+        cancel.assertIsFocused()
+
+        composeRule.mainClock.advanceTimeBy(ANNOUNCE_WAIT_MS)
+        composeRule.mainClock.autoAdvance = true
+        composeRule.waitForIdle()
+        cancel.assertIsFocused()
+        composeRule.onNodeWithTag("poster_card_1").assertIsNotFocused()
+    }
+
     @Test
     fun searchIsReachableFromTheRail() {
         setShellContent()
