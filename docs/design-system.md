@@ -1267,6 +1267,15 @@ The footer must remain visible at every `UiScale` — at 540dp tall this is the 
 constraint in the app and the first thing to break. It now carries two rows rather than one,
 so re-verify it at `UiScale.Large` after any spine change.
 
+**The destinations scroll only when the d-pad needs them to.** Seven rows plus the footer do not
+fit in 540dp, so the destinations have their own scrolling column. When a row takes focus, the
+column scrolls just far enough to show one whole row past it on each side
+(`NeighbourRevealingScroll`). The row the d-pad reaches next must already be on screen, or
+TalkBack for TV does not follow focus onto it (the same cause as the grid entry in
+`docs/known-issues.md`). This replaces Compose's TV default, which parks every focused row 30%
+down the viewport. That scrolled the resting rail on every destination below Home and cut the
+rows above it in half. `LocalBringIntoViewSpec` is experimental, and this is its only use.
+
 ### 11.3 Home
 
 Stacked horizontal rails — continue watching, latest movies, latest albums, movies in theaters,
@@ -2353,6 +2362,13 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-09-30 — The rail's destinations stay whole (§11.2).**
+
+- The destination column scrolls only far enough to keep one whole row visible on each side of
+  the focused row. Compose's TV default parked the focused row 30% down the column, which cut
+  Search and Home in half behind the Movies, TV Shows and Music panes. The neighbour row is also
+  what lets TalkBack follow focus down the rail past the fold.
 
 **2026-09-30 — TalkBack follows focus into new panes and player menus (§6.3, §9.3).**
 

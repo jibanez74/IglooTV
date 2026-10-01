@@ -44,7 +44,8 @@ earlier accessibility snapshot. Options considered on 2026-09-30:
   screen, waits one accessibility batch, then focuses the card in the same column. This is the
   row-level version of `requestFocusAnnounced`.
 - A layout in which the next row always shows at the edge of the viewport. At 960x540dp there is
-  barely room for that.
+  barely room for that. The navigation rail does this for its short rows with a custom
+  `BringIntoViewSpec` (`NeighbourRevealingScroll`, design-system §11.2).
 
 `LazyLayoutCacheWindow` only precomposes items and doesn't place them, and it is experimental,
 so it is not expected to help.
