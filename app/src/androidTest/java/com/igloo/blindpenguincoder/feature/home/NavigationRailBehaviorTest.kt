@@ -16,6 +16,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertWidthIsEqualTo
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -27,10 +29,13 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.height
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.navigation.IglooDestination
+import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.testContinueMovies
@@ -285,6 +290,53 @@ class NavigationRailBehaviorTest {
         composeRule.onNodeWithContentDescription(
             "Search. Find movies, shows, music, and photos across your library.",
         ).assertIsDisplayed()
+    }
+
+    /**
+     * The destinations overflow the rail at 540dp, and a TV's default bring-into-view parks the
+     * focused row 30% down the column, which scrolled it for every row below Home and left Search
+     * cut in half behind the Movies pane. Movies and both its neighbours fit at rest, so reaching
+     * it must not move the column at all.
+     */
+    @Test
+    fun focusingADestinationWhoseNeighboursAreInViewDoesNotScrollTheRail() {
+        setShellContent()
+        val search = composeRule.onNodeWithContentDescription("Search")
+        val restingTop = search.getUnclippedBoundsInRoot().top
+
+        contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+        rail().performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithContentDescription("Movies").assertIsFocused()
+
+        assertEquals(restingTop, search.getUnclippedBoundsInRoot().top)
+    }
+
+    /**
+     * TalkBack for TV only follows focus onto a row that was on screen before the press (see
+     * docs/known-issues.md), so the row the d-pad reaches next must already be whole in the
+     * rail's viewport, walking down past the fold and back up again.
+     */
+    @Test
+    fun theDestinationTheDpadReachesNextIsAlreadyWholeOnScreen() {
+        setShellContent()
+        contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+        val destinations = PrimaryIglooDestinations
+        val home = destinations.indexOf(IglooDestination.Home)
+        val walk = (home until destinations.lastIndex).map { it to it + 1 } +
+            (destinations.lastIndex downTo 1).map { it to it - 1 }
+
+        walk.forEach { (from, to) ->
+            composeRule.onNodeWithContentDescription(destinations[from].label).assertIsFocused()
+            val next = composeRule.onNodeWithContentDescription(destinations[to].label)
+            assertEquals(
+                "${destinations[to].label} must be whole on screen before focus leaves ${destinations[from].label}",
+                next.getUnclippedBoundsInRoot().height,
+                next.getBoundsInRoot().height,
+            )
+            val key = if (to > from) Key.DirectionDown else Key.DirectionUp
+            rail().performKeyInput { pressKey(key) }
+        }
+        composeRule.onNodeWithContentDescription(destinations.first().label).assertIsFocused()
     }
 
     @Test
