@@ -49,15 +49,29 @@ internal suspend fun FocusRequester.requestFocusAnnounced(
     screenReader: Boolean,
     shouldFocus: () -> Boolean = { true },
 ) {
-    if (screenReader) {
-        withFrameNanos { }
-        delay(ANNOUNCED_FOCUS_WAIT_MS)
-    }
+    if (screenReader) awaitAccessibilitySnapshot(ANNOUNCED_FOCUS_WAIT_MS)
     if (shouldFocus()) requestFocusSafely()
+}
+
+/**
+ * Waits until a node placed in the current frame has been seen by an accessibility snapshot: one
+ * frame so it is laid out, then [waitMs] for the batch that reads it. Focus moved after this is
+ * announced; focus moved before it is silently dropped (see [requestFocusAnnounced]).
+ */
+internal suspend fun awaitAccessibilitySnapshot(waitMs: Long) {
+    withFrameNanos { }
+    delay(waitMs)
 }
 
 /** Outlasts both Compose's accessibility batch and TalkBack for TV's pane-change window. */
 internal const val ANNOUNCED_FOCUS_WAIT_MS = 700L
+
+/**
+ * The waits of a lazy line move ([AnnouncedLazyMove]): one accessibility batch with margin before
+ * the focus request, and the same again while the scroll is held after it. Measured on a Shield,
+ * TalkBack for TV put its cursor on the newly focused card about 70ms after the focus event.
+ */
+internal const val ANNOUNCED_LINE_WAIT_MS = 250L
 
 /**
  * Re-lands focus after [key] swaps what a subtree shows, but only if the subtree owned focus going

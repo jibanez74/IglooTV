@@ -8,50 +8,6 @@ Smaller things — duplication, organisation, coverage gaps and polish — live 
 
 ---
 
-## With TalkBack on, d-pad Down into an off-screen grid row moves sideways
-
-**Found:** 2026-09-29, in the DRY pass's Shield check. **Cause confirmed:** 2026-09-30, on the
-Shield, with an accessibility-event trace.
-**Status:** open, to be fixed in its own branch. Home's horizontal rails probably have the same
-problem when Right reaches a card that isn't on screen yet, but that hasn't been checked.
-**Files:** `app/src/main/java/com/igloo/blindpenguincoder/feature/shared/PaneGrid.kt`
-
-In Movies → Genres → Action (149 movies in five columns), 38 Down presses from the Genres tab end
-on the last row's fourth card, Zack Snyder's Justice League, instead of its first, X2. With
-TalkBack off, the same presses at the same pace end on X2. So the grid's own focus wiring is
-correct, and the fault only appears with TalkBack on.
-
-The trace, taken by logging every focus and accessibility event from the activity's content
-view, shows the same sequence on almost every press:
-
-1. Down from a card on the bottom visible row. Compose's focus search places the next row and
-   focuses its first card in the same frame, for example index 105, row 21, column 0.
-2. Compose sends no `TYPE_VIEW_FOCUSED` for that card. It only announces a node that its last
-   accessibility snapshot saw unfocused, which is the same rule behind the rail fix in
-   design-system §6.3. TalkBack's cursor stays on the previous card.
-3. The grid scrolls and sends `TYPE_VIEW_SCROLLED`. About 120–160ms later, with no key pressed,
-   input focus moves to the last card of the new row (index 109, column 4). TalkBack for TV moves
-   its cursor after a scroll and, on TV, moves input focus with it. Only this card gets a
-   `TYPE_VIEW_FOCUSED`, followed by TalkBack's `TYPE_VIEW_ACCESSIBILITY_FOCUSED`.
-
-After the first jump, every later Down starts from the last column, so the walk down the grid
-runs through column 4 and ends on the final card.
-
-What a fix has to do: make sure the card focus lands on already existed, unfocused, in an
-earlier accessibility snapshot. Options considered on 2026-09-30:
-
-- While a screen reader runs, the grid handles Up and Down itself. It scrolls the next row on
-  screen, waits one accessibility batch, then focuses the card in the same column. This is the
-  row-level version of `requestFocusAnnounced`.
-- A layout in which the next row always shows at the edge of the viewport. At 960x540dp there is
-  barely room for that. The navigation rail does this for its short rows with a custom
-  `BringIntoViewSpec` (`NeighbourRevealingScroll`, design-system §11.2).
-
-`LazyLayoutCacheWindow` only precomposes items and doesn't place them, and it is experimental,
-so it is not expected to help.
-
----
-
 ## Rejected: album cover URLs are absolute and must not be "resolved"
 
 **Found:** 2026-08-13, raised as a home-screen review comment and investigated.

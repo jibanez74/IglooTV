@@ -139,6 +139,7 @@ fun MusicScreen(
     onTrackFocused: (TrackFocusMemory) -> Unit,
     onMusicianSelected: ((Long) -> Unit)?,
     onAlbumSelected: ((Long) -> Unit)?,
+    spokenAccessibilityEnabled: Boolean,
 ) {
     val columns = IglooTheme.layout.gridColumns
     val tab = state.tab
@@ -306,6 +307,7 @@ fun MusicScreen(
                         refreshing = state.refreshing,
                         columns = columns,
                         gridState = musiciansGridState,
+                        screenReader = spokenAccessibilityEnabled,
                         contentInset = contentInset,
                         contentStartRequester = contentStartRequester,
                         navigationRequester = navigationRequester,
@@ -345,6 +347,7 @@ fun MusicScreen(
                         refreshing = state.refreshing,
                         columns = columns,
                         gridState = albumsGridState,
+                        screenReader = spokenAccessibilityEnabled,
                         contentInset = contentInset,
                         contentStartRequester = contentStartRequester,
                         navigationRequester = navigationRequester,

@@ -11,16 +11,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
+import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_LINE_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.feature.home.findActivity
@@ -34,6 +40,7 @@ import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testMovieDetails
 import com.igloo.blindpenguincoder.testMovieGridItems
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -71,7 +78,10 @@ class MoviesGridBehaviorTest {
     private var openDetailsOnSelect = false
     private var detailsState by mutableStateOf(MovieDetailsUiState())
 
-    private fun setContent(initial: LibraryUiState = testLibraryState()) {
+    private fun setContent(
+        initial: LibraryUiState = testLibraryState(),
+        spokenAccessibilityEnabled: Boolean = false,
+    ) {
         moviesState = initial
         loadMoreCalls = 0
         refreshCalls = 0
@@ -115,11 +125,18 @@ class MoviesGridBehaviorTest {
                         )
                     },
                     details = detailsState,
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
         }
         composeRule.waitForIdle()
         openMovies()
+        // Under a screen reader the pane claims focus only after requestFocusAnnounced's wait,
+        // which is virtual time that waitForIdle does not advance.
+        if (spokenAccessibilityEnabled) {
+            composeRule.mainClock.advanceTimeBy(ANNOUNCED_FOCUS_WAIT_MS + 100L)
+            composeRule.waitForIdle()
+        }
     }
 
     /**
@@ -839,6 +856,151 @@ class MoviesGridBehaviorTest {
         card(1L + columns).assertIsFocused()
     }
 
+    // --- screen-reader row moves --------------------------------------------------------------
+
+    /**
+     * A cell the grid has laid out. Existence is not enough: the grid prefetches the next row,
+     * and a prefetched cell has a semantics node before it is placed.
+     */
+    private fun isPlaced(id: Long) =
+        composeRule.onAllNodesWithTag("poster_card_$id").fetchSemanticsNodes().isNotEmpty() &&
+            card(id).isDisplayed()
+
+    /**
+     * Walks Down while the row below is already on screen — Compose's own, announced move — and
+     * returns the id of the card it stops on: one whose row below is not placed yet.
+     */
+    private fun descendToTheLastPlacedRow(): Long {
+        var id = 1L
+        while (isPlaced(id + columns)) {
+            card(id).performKeyInput { pressKey(Key.DirectionDown) }
+            id += columns
+        }
+        card(id).assertIsFocused()
+        assertTrue(
+            "the fixture needs a row below the fold",
+            id + columns <= testMovieGridItems.size,
+        )
+        return id
+    }
+
+    /**
+     * TalkBack for TV only follows focus onto a card that was already on screen, and reacts to
+     * the scroll that follows an unannounced move by refocusing the new row's last card (see
+     * AnnouncedLazyMove). So under a screen reader, Down into a row below the fold scrolls that
+     * row on first and keeps the pressed card focused through the accessibility batch; the
+     * same-column card takes focus after the wait.
+     */
+    @Test
+    fun underAScreenReaderDownIntoARowBelowTheFoldWaitsThenLandsInTheSameColumn() {
+        setContent(spokenAccessibilityEnabled = true)
+        val origin = descendToTheLastPlacedRow()
+        val target = origin + columns
+
+        composeRule.mainClock.autoAdvance = false
+        card(origin).performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.mainClock.advanceTimeByFrame()
+
+        card(target).assertIsDisplayed()
+        card(origin).assertIsFocused()
+
+        composeRule.mainClock.advanceTimeBy(LINE_WAIT_MS)
+        composeRule.mainClock.autoAdvance = true
+        card(target).assertIsFocused()
+    }
+
+    /** Up is the same move the other way: a row scrolled off the top is placed before it is focused. */
+    @Test
+    fun underAScreenReaderUpIntoARowAboveTheFoldWaitsThenLandsInTheSameColumn() {
+        setContent(spokenAccessibilityEnabled = true)
+        // Focus a card in the third row, then scroll that row back to the top edge: focusing it
+        // brought the row above into view, and a scroll that moves no focus hides it again.
+        val grid = composeRule.onNodeWithTag("movies_grid")
+        grid.performScrollToIndex(2 * columns)
+        val origin = 2L * columns + 2
+        val target = origin - columns
+        card(origin).requestFocus()
+        card(origin).assertIsFocused()
+        grid.performScrollToIndex(2 * columns)
+        assertFalse(isPlaced(target))
+
+        composeRule.mainClock.autoAdvance = false
+        card(origin).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.mainClock.advanceTimeByFrame()
+
+        card(target).assertIsDisplayed()
+        card(origin).assertIsFocused()
+
+        composeRule.mainClock.advanceTimeBy(LINE_WAIT_MS)
+        composeRule.mainClock.autoAdvance = true
+        card(target).assertIsFocused()
+    }
+
+    /** The row below the fold is a shorter one: its last card is the nearest to this column. */
+    @Test
+    fun underAScreenReaderDownIntoAShorterRowBelowTheFoldLandsOnItsLastCard() {
+        setContent(spokenAccessibilityEnabled = true)
+        val origin = descendToTheLastPlacedRow()
+        // Cut the list to the origin's row plus one card, then move off the first column.
+        val lastId = ((origin - 1) / columns + 1) * columns + 1
+        moviesState = testLibraryState(
+            grid = IglooRailState.Loaded(testMovieGridItems.take(lastId.toInt())),
+        )
+        composeRule.waitForIdle()
+        card(origin).performKeyInput { pressKey(Key.DirectionRight) }
+        card(origin + 1).assertIsFocused()
+        assertFalse(isPlaced(lastId))
+
+        composeRule.mainClock.autoAdvance = false
+        card(origin + 1).performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.mainClock.advanceTimeBy(LINE_WAIT_MS)
+        composeRule.mainClock.autoAdvance = true
+
+        card(lastId).assertIsFocused()
+    }
+
+    /** A row already on screen was in an accessibility snapshot, so Compose's own move is announced. */
+    @Test
+    fun underAScreenReaderDownIntoARowAlreadyOnScreenMovesAtOnce() {
+        setContent(spokenAccessibilityEnabled = true)
+        assertTrue(isPlaced(1L + columns))
+
+        composeRule.mainClock.autoAdvance = false
+        card(1).performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.mainClock.advanceTimeByFrame()
+
+        card(1L + columns).assertIsFocused()
+        composeRule.mainClock.autoAdvance = true
+    }
+
+    /** The last row has no row to scroll to, so its pinned edge still wins. */
+    @Test
+    fun underAScreenReaderDownFromTheLastRowStaysPut() {
+        setContent(spokenAccessibilityEnabled = true)
+        showRows(rows = 1)
+
+        card(1).performKeyInput { pressKey(Key.DirectionDown) }
+
+        card(1).assertIsFocused()
+    }
+
+    @Test
+    fun withoutAScreenReaderDownIntoARowBelowTheFoldMovesAtOnce() {
+        setContent()
+        val origin = descendToTheLastPlacedRow()
+
+        composeRule.mainClock.autoAdvance = false
+        card(origin).performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.mainClock.advanceTimeByFrame()
+
+        card(origin + columns).assertIsFocused()
+        composeRule.mainClock.autoAdvance = true
+    }
+
     /** Focusable while refreshing: disabling it would remove the focused node from the tree. */
     @Test
     fun refreshStaysAFocusTargetWhileItIsRefreshing() {
@@ -1137,3 +1299,6 @@ class MoviesGridBehaviorTest {
         card(2).assertIsFocused()
     }
 }
+
+/** The row move's wait plus a margin, so the assertion sits past the request rather than on it. */
+private const val LINE_WAIT_MS = ANNOUNCED_LINE_WAIT_MS + 100L

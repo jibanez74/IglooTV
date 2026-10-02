@@ -565,8 +565,10 @@ it for a ≤1.5:1 effect.
   through `requestFocusAnnounced` (`core/ui/FocusRequesters.kt`). While a screen reader runs, it
   waits one frame and 700ms before requesting focus, and skips the request if the user has
   already moved. With no screen reader, focus moves at once. The rail's cross-branch switch
-  (Home → Movies) uses it (§11.2). Overlays that cover part of the screen solve the same problem
-  another way (§9.3).
+  (Home → Movies) uses it (§11.2), and the pane grids apply the same wait at row scale, with a
+  held scroll, when the d-pad moves into a row that is not on screen yet (`AnnouncedLazyMove`,
+  §8.3). Overlays that
+  cover part of the screen solve the same problem another way (§9.3).
 - Order matters: `Modifier.clickable` and `Modifier.onFocusChanged` are order-sensitive. Put
   focus observation *outside* the clickable so it sees the same focus state the indication does.
 
@@ -731,6 +733,36 @@ destination switch; and whatever records that a scroll-to-top has been handled, 
 the pane replays it. The item list itself lives in the view model and never in `rememberSaveable`
 — a five-thousand-item library would exceed the saved-state `Bundle` limit and crash on process
 death.
+
+**Under a screen reader, a grid reveals a row before focusing into it, and holds its scroll
+while it does.** Compose's own Down from the bottom visible row composes the next row and focuses
+its card in the same frame, so the card was never in an accessibility snapshot and no focus
+event is sent (§6.3). TalkBack for TV then reacts to the scroll that follows by moving input
+focus itself, to the new row's last card, and a walk down the grid drifts into the last column.
+So while a screen reader runs, `PaneGrid` previews Up and Down through `AnnouncedLazyMove`
+(`core/ui/AnnouncedLazyMove.kt`). When the target row is not placed with visible bounds — being
+in `visibleItemsInfo` is not enough, because after a scroll to a line the grid still lists the
+line above it while it sits wholly outside the viewport — the press is consumed and the move
+runs in three steps, measured on a Shield with an accessibility-event trace on 2026-10-01:
+
+1. Scroll just far enough to show half of the target row while a quarter of the origin row
+   stays. A scroll that takes the card TalkBack is reading off screen makes it re-sync its
+   cursor to a card of its own choosing, and move input focus with it.
+2. Wait one frame and `ANNOUNCED_LINE_WAIT_MS` (250ms), so a snapshot has seen the new cards,
+   then focus the card in the same column (or the last card of a shorter row) **while holding
+   the grid's scroll** (`ScrollableState.scroll(MutatePriority.PreventUserInput)`) for another
+   250ms. At 540dp a poster row is taller than Compose's TV pivot allows, so its bring-into-view
+   bottom-aligns the focused row and the origin row leaves the screen in the next frame; in
+   three of twenty-nine presses TalkBack handled that scroll before the focus event, lost the
+   card it was reading, and moved input focus to the Genres tab. The hold refuses the scroll
+   until TalkBack has put its cursor on the new card (about 70ms after the focus event).
+3. Animate the row to the edge the d-pad was heading for: the bottom for Down, the top for Up.
+
+A press whose target is already on screen, whose row does not exist, or that repeats while a
+move is in flight is left to Compose, and with no screen reader every press is. The cards carry
+a per-item `FocusRequester` for this, the way the rails already do. The horizontal rails do not
+need the move: parking the focused card 30% in keeps the next two cards placed, so Right never
+reaches a card TalkBack has not seen (checked on the same Shield).
 
 **Rails pad their content and let the scroll surface bleed past it.** `IglooMediaRail` takes the
 pane's `contentInset` and splits it by node:
@@ -2362,6 +2394,13 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-01 — TalkBack follows a grid's Down into a row below the fold (§6.3, §8.3).**
+
+- While a screen reader runs, the pane grids reveal the next row, wait for an accessibility
+  snapshot, focus the same-column card with the scroll held, then settle the row, instead of
+  letting Compose focus a card TalkBack has never seen; TalkBack for TV used to answer that
+  unannounced move by refocusing the new row's last card (`AnnouncedLazyMove`).
 
 **2026-09-30 — The rail's destinations stay whole (§11.2).**
 
