@@ -1001,6 +1001,72 @@ class MoviesGridBehaviorTest {
         composeRule.mainClock.autoAdvance = true
     }
 
+    @Test
+    fun silentReconcileKeepsTheColumnForScreenReaderUpAboveTheFold() {
+        assertOffScreenMoveAfterSilentReconcile(Key.DirectionUp, screenReader = true)
+    }
+
+    @Test
+    fun silentReconcileKeepsTheColumnForScreenReaderDownBelowTheFold() {
+        assertOffScreenMoveAfterSilentReconcile(Key.DirectionDown, screenReader = true)
+    }
+
+    @Test
+    fun silentReconcileKeepsTheColumnForDpadUpAboveTheFold() {
+        assertOffScreenMoveAfterSilentReconcile(Key.DirectionUp, screenReader = false)
+    }
+
+    @Test
+    fun silentReconcileKeepsTheColumnForDpadDownBelowTheFold() {
+        assertOffScreenMoveAfterSilentReconcile(Key.DirectionDown, screenReader = false)
+    }
+
+    private fun assertOffScreenMoveAfterSilentReconcile(key: Key, screenReader: Boolean) {
+        setContent(
+            testLibraryState(tab = LibraryTab.Liked),
+            spokenAccessibilityEnabled = screenReader,
+        )
+        val grid = composeRule.onNodeWithTag("movies_grid")
+        val movingUp = key == Key.DirectionUp
+        val origin = testMovieGridItems[if (movingUp) 2 * columns - 1 else columns + 1].id
+        grid.performScrollToIndex(columns)
+        card(origin).requestFocus()
+        card(origin).assertIsFocused()
+
+        val remaining = testMovieGridItems.drop(1)
+        moviesState = testLibraryState(
+            tab = LibraryTab.Liked,
+            grid = IglooRailState.Loaded(remaining),
+            total = remaining.size.toLong(),
+            silentReconcileGeneration = 1,
+        )
+        composeRule.waitForIdle()
+        card(origin).assertIsFocused()
+
+        val originIndex = remaining.indexOfFirst { it.id == origin }
+        val target = remaining[originIndex + if (movingUp) -columns else columns].id
+        // In five columns, removing movie 1 moves focused movie 10 to index 8: Up is movie 5.
+        if (columns == 5 && movingUp) assertEquals(5L, target)
+        val originRow = originIndex / columns
+        grid.performScrollToIndex((originRow - if (movingUp) 0 else 1) * columns)
+        card(origin).assertIsFocused()
+        assertFalse("the destination must start off screen", isPlaced(target))
+
+        composeRule.mainClock.autoAdvance = false
+        card(origin).performKeyInput { pressKey(key) }
+        composeRule.mainClock.advanceTimeByFrame()
+        if (screenReader) {
+            composeRule.mainClock.advanceTimeByFrame()
+            card(target).assertIsDisplayed()
+            card(origin).assertIsFocused()
+            composeRule.mainClock.advanceTimeBy(LINE_WAIT_MS)
+        } else {
+            composeRule.mainClock.autoAdvance = true
+        }
+        card(target).assertIsFocused()
+        composeRule.mainClock.autoAdvance = true
+    }
+
     /** Focusable while refreshing: disabling it would remove the focused node from the tree. */
     @Test
     fun refreshStaysAFocusTargetWhileItIsRefreshing() {

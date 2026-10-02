@@ -12,7 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -89,9 +88,6 @@ internal fun <T> PaneGrid(
     val append = paged.append
     val itemRequesters = remember(items) { items.associate { itemId(it) to FocusRequester() } }
 
-    // The focused card's index, kept outside the snapshot the handler runs in. The two callbacks
-    // of a move arrive in either order, so a blur only clears its own index.
-    val focusedIndex = remember { mutableIntStateOf(-1) }
     val currentItems by rememberUpdatedState(items)
     val currentRequesters by rememberUpdatedState(itemRequesters)
     val currentItemId by rememberUpdatedState(itemId)
@@ -99,11 +95,15 @@ internal fun <T> PaneGrid(
     val screenReaderOn by rememberUpdatedState(screenReader)
     val scope = rememberCoroutineScope()
     val rowMove = remember(gridState, focusOwnership) {
+        val focusedIndex = {
+            val focusedId = focusOwnership.focusedItemId
+            if (focusedId == null) -1 else currentItems.indexOfFirst { currentItemId(it) == focusedId }
+        }
         AnnouncedLazyMove(
             scope = scope,
             scrollable = gridState,
             screenReader = { screenReaderOn },
-            focusedIndex = { focusedIndex.intValue },
+            focusedIndex = focusedIndex,
             lastIndex = { currentItems.lastIndex },
             // Placed with visible bounds: an accessibility snapshot only holds nodes that show
             // on screen, and after a scroll to a line the grid still lists the line above it
@@ -120,7 +120,8 @@ internal fun <T> PaneGrid(
             revealDistance = { forward ->
                 val info = gridState.layoutInfo
                 val visible = info.visibleItemsInfo
-                val origin = visible.firstOrNull { it.index == focusedIndex.intValue }
+                val originIndex = focusedIndex()
+                val origin = visible.firstOrNull { it.index == originIndex }
                 val row = visible.filter { it.row == origin?.row }.ifEmpty { visible }
                 val height = row.maxOfOrNull { it.size.height } ?: 0
                 val pitch = height + info.mainAxisItemSpacing
@@ -145,7 +146,8 @@ internal fun <T> PaneGrid(
             settleDistance = { forward ->
                 val info = gridState.layoutInfo
                 val visible = info.visibleItemsInfo
-                val focused = visible.firstOrNull { it.index == focusedIndex.intValue }
+                val index = focusedIndex()
+                val focused = visible.firstOrNull { it.index == index }
                 val row = visible.filter { it.row == focused?.row }
                 when {
                     focused == null -> 0f
@@ -159,7 +161,7 @@ internal fun <T> PaneGrid(
                 currentItems.getOrNull(index)?.let { currentRequesters[currentItemId(it)] }
             },
             stillOnCourse = { origin, target ->
-                val now = focusedIndex.intValue
+                val now = focusedIndex()
                 now == origin || (now >= 0 && now / currentColumns == target / currentColumns)
             },
         )
@@ -259,12 +261,7 @@ internal fun <T> PaneGrid(
                     }
                     .onFocusChanged {
                         focusOwnership.onItemFocusChanged(id, it.isFocused)
-                        if (it.isFocused) {
-                            focusedIndex.intValue = index
-                            onItemFocused(id)
-                        } else if (focusedIndex.intValue == index) {
-                            focusedIndex.intValue = -1
-                        }
+                        if (it.isFocused) onItemFocused(id)
                     }
                     .testTag(cardTag(item)),
             )
