@@ -94,6 +94,8 @@ internal fun <T> PaneGrid(
     val focusedIndex = remember { mutableIntStateOf(-1) }
     val currentItems by rememberUpdatedState(items)
     val currentRequesters by rememberUpdatedState(itemRequesters)
+    val currentItemId by rememberUpdatedState(itemId)
+    val currentColumns by rememberUpdatedState(columns)
     val screenReaderOn by rememberUpdatedState(screenReader)
     val scope = rememberCoroutineScope()
     val rowMove = remember(gridState, focusOwnership) {
@@ -153,10 +155,12 @@ internal fun <T> PaneGrid(
                         .coerceAtMost(0).toFloat()
                 }
             },
-            requesterFor = { index -> currentItems.getOrNull(index)?.let { currentRequesters[itemId(it)] } },
+            requesterFor = { index ->
+                currentItems.getOrNull(index)?.let { currentRequesters[currentItemId(it)] }
+            },
             stillOnCourse = { origin, target ->
                 val now = focusedIndex.intValue
-                now == origin || (now >= 0 && now / columns == target / columns)
+                now == origin || (now >= 0 && now / currentColumns == target / currentColumns)
             },
         )
     }
