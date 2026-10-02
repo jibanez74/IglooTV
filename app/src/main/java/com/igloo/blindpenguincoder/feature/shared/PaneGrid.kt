@@ -14,15 +14,21 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.ui.AnnouncedLazyMove
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooSkeletonAnchorCell
 import com.igloo.blindpenguincoder.core.ui.IglooSkeletonTextureCell
@@ -38,8 +44,10 @@ import com.igloo.blindpenguincoder.core.ui.withRequester
  * Focus: [contentStartRequester] and [returnRequester] ride the entry card — the remembered one
  * if it is still loaded, otherwise the first — so the pane always has an anchor and an overlay's
  * Back lands on the card that opened it. The left column exits to [navigationRequester], the
- * first row climbs to [upRequester], and the right and bottom edges are pinned. [card] draws one
- * item with the modifier that carries all of that.
+ * first row climbs to [upRequester], and the right and bottom edges are pinned. While a screen
+ * reader runs ([screenReader]), Up and Down into a row that is not on screen yet go through
+ * [AnnouncedLazyMove], so TalkBack follows them. [card] draws one item with the modifier that
+ * carries all of that.
  */
 @Composable
 internal fun <T> PaneGrid(
@@ -49,6 +57,7 @@ internal fun <T> PaneGrid(
     refreshing: Boolean,
     columns: Int,
     gridState: LazyGridState,
+    screenReader: Boolean,
     contentInset: PaddingValues,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
@@ -77,6 +86,86 @@ internal fun <T> PaneGrid(
     var appendRetryHandoffPending by remember { mutableStateOf(false) }
     val appendRetryReturnId = lastFocusedId?.takeIf { id -> items.any { itemId(it) == id } }
     val append = paged.append
+    val itemRequesters = remember(items) { items.associate { itemId(it) to FocusRequester() } }
+
+    val currentItems by rememberUpdatedState(items)
+    val currentRequesters by rememberUpdatedState(itemRequesters)
+    val currentItemId by rememberUpdatedState(itemId)
+    val currentColumns by rememberUpdatedState(columns)
+    val screenReaderOn by rememberUpdatedState(screenReader)
+    val scope = rememberCoroutineScope()
+    val rowMove = remember(gridState, focusOwnership) {
+        val focusedIndex = {
+            val focusedId = focusOwnership.focusedItemId
+            if (focusedId == null) -1 else currentItems.indexOfFirst { currentItemId(it) == focusedId }
+        }
+        AnnouncedLazyMove(
+            scope = scope,
+            scrollable = gridState,
+            screenReader = { screenReaderOn },
+            focusedIndex = focusedIndex,
+            lastIndex = { currentItems.lastIndex },
+            // Placed with visible bounds: an accessibility snapshot only holds nodes that show
+            // on screen, and after a scroll to a line the grid still lists the line above it
+            // while it sits wholly outside the viewport.
+            isPlaced = { index ->
+                val info = gridState.layoutInfo
+                info.visibleItemsInfo.any {
+                    it.index == index &&
+                        it.offset.y + it.size.height > info.viewportStartOffset &&
+                        it.offset.y < info.viewportEndOffset
+                }
+            },
+            // Half of the target row, while at least a quarter of the origin row stays.
+            revealDistance = { forward ->
+                val info = gridState.layoutInfo
+                val visible = info.visibleItemsInfo
+                val originIndex = focusedIndex()
+                val origin = visible.firstOrNull { it.index == originIndex }
+                val row = visible.filter { it.row == origin?.row }.ifEmpty { visible }
+                val height = row.maxOfOrNull { it.size.height } ?: 0
+                val pitch = height + info.mainAxisItemSpacing
+                val distance = when {
+                    origin == null -> pitch / 2
+                    forward -> {
+                        val targetTop = origin.offset.y + pitch
+                        val keepOrigin = origin.offset.y + origin.size.height - height / 4
+                        (targetTop + height / 2 - info.viewportEndOffset)
+                            .coerceIn(0, (keepOrigin - info.viewportStartOffset).coerceAtLeast(0))
+                    }
+                    else -> {
+                        val targetBottom = origin.offset.y - info.mainAxisItemSpacing
+                        val keepOrigin = origin.offset.y + height / 4
+                        (info.viewportStartOffset - (targetBottom - height / 2))
+                            .coerceIn(0, (info.viewportEndOffset - keepOrigin).coerceAtLeast(0))
+                    }
+                }
+                if (forward) distance.toFloat() else -distance.toFloat()
+            },
+            // The whole row, against the edge the d-pad was heading for.
+            settleDistance = { forward ->
+                val info = gridState.layoutInfo
+                val visible = info.visibleItemsInfo
+                val index = focusedIndex()
+                val focused = visible.firstOrNull { it.index == index }
+                val row = visible.filter { it.row == focused?.row }
+                when {
+                    focused == null -> 0f
+                    forward -> (row.maxOf { it.offset.y + it.size.height } - info.viewportEndOffset)
+                        .coerceAtLeast(0).toFloat()
+                    else -> (row.minOf { it.offset.y } - info.viewportStartOffset)
+                        .coerceAtMost(0).toFloat()
+                }
+            },
+            requesterFor = { index ->
+                currentItems.getOrNull(index)?.let { currentRequesters[currentItemId(it)] }
+            },
+            stillOnCourse = { origin, target ->
+                val now = focusedIndex()
+                now == origin || (now >= 0 && now / currentColumns == target / currentColumns)
+            },
+        )
+    }
 
     // layoutInfo changes on every scroll frame — and on a TV every d-pad press is a scroll frame
     // — so reading it straight from the composable would subscribe the whole grid to a per-frame
@@ -129,6 +218,9 @@ internal fun <T> PaneGrid(
         // the cards — is what has to span the panel for the end inset to be scrolled through.
         modifier = Modifier
             .fillMaxWidth()
+            .onPreviewKeyEvent {
+                rowMove.onPreviewKey(it, Key.DirectionDown, Key.DirectionUp, columns)
+            }
             .testTag(testTag),
     ) {
         // Whether d-pad down from the last row has anywhere legitimate to go. The skeleton tail
@@ -145,6 +237,7 @@ internal fun <T> PaneGrid(
             card(
                 item,
                 Modifier
+                    .focusRequester(itemRequesters.getValue(id))
                     .withRequester(firstItemRequester.takeIf { index == 0 })
                     .withRequester(contentStartRequester.takeIf { id == entryId })
                     .withRequester(returnRequester?.takeIf { id == entryId })

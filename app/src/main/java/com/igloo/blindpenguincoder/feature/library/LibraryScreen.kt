@@ -89,6 +89,7 @@ fun LibraryScreen(
     lastFocusedId: Long?,
     onItemFocused: (Long) -> Unit,
     onItemSelected: ((Long) -> Unit)?,
+    spokenAccessibilityEnabled: Boolean,
 ) {
     val kind = state.kind
     val columns = IglooTheme.layout.gridColumns
@@ -226,6 +227,7 @@ fun LibraryScreen(
                 refreshing = state.refreshing,
                 columns = columns,
                 gridState = gridState,
+                screenReader = spokenAccessibilityEnabled,
                 contentInset = contentInset,
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequester,

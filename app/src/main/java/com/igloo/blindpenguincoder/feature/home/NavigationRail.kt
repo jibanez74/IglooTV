@@ -1,9 +1,13 @@
 package com.igloo.blindpenguincoder.feature.home
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -52,6 +58,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.images.avatarImageUrl
+import kotlin.math.roundToInt
 
 /**
  * The collapsible navigation rail. The caller owns the expansion state (it is a pure
@@ -60,6 +67,7 @@ import com.igloo.blindpenguincoder.images.avatarImageUrl
  * focusable in both states — collapse hides text, never targets — so TalkBack and the
  * d-pad see the same tree whether the rail is open or shut.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NavigationRail(
     user: AuthUser,
@@ -134,37 +142,49 @@ fun NavigationRail(
             }
         }
 
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-        ) {
-            PrimaryIglooDestinations.forEach { destination ->
-                val selected = destination == currentDestination
-                RailRow(
-                    icon = destination.icon,
-                    label = destination.label,
-                    selected = selected,
-                    actionLabel = "Open ${destination.label}",
-                    labelColor = if (selected) colors.sidebarPrimary else colors.foreground,
-                    iconTint = { _ -> if (selected) colors.sidebarPrimary else colors.foreground },
-                    fill = { focused ->
-                        when {
-                            selected -> colors.primary.copy(alpha = 0.18f)
-                            focused -> colors.card.copy(alpha = 0.72f)
-                            else -> Color.Transparent
-                        }
-                    },
-                    labelFade = labelFade,
-                    onClick = { onDestinationSelected(destination) },
-                    modifier = Modifier
-                        .focusRequester(navigationRequesters.getValue(destination))
-                        .focusProperties {
-                            right = contentStartRequester
-                            if (destination == lastDestination) down = switchProfileFocus
+        // Seven destinations overflow this column at 540dp, and the TV default bring-into-view
+        // parks the focused row 30% down it, which scrolled the resting rail on every
+        // destination below Home and cut the rows above in half. LocalBringIntoViewSpec is still
+        // experimental, and nothing stable reaches a verticalScroll's bring-into-view behaviour.
+        val destinationGap = IglooTheme.spacing.sm
+        val destinationGapPx = with(LocalDensity.current) { destinationGap.toPx() }
+        val destinationScrollState = rememberScrollState()
+        val destinationScroll = remember(destinationScrollState, destinationGapPx) {
+            NeighbourRevealingScroll(destinationScrollState, destinationGapPx)
+        }
+        CompositionLocalProvider(LocalBringIntoViewSpec provides destinationScroll) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(destinationScrollState),
+                verticalArrangement = Arrangement.spacedBy(destinationGap),
+            ) {
+                PrimaryIglooDestinations.forEach { destination ->
+                    val selected = destination == currentDestination
+                    RailRow(
+                        icon = destination.icon,
+                        label = destination.label,
+                        selected = selected,
+                        actionLabel = "Open ${destination.label}",
+                        labelColor = if (selected) colors.sidebarPrimary else colors.foreground,
+                        iconTint = { _ -> if (selected) colors.sidebarPrimary else colors.foreground },
+                        fill = { focused ->
+                            when {
+                                selected -> colors.primary.copy(alpha = 0.18f)
+                                focused -> colors.card.copy(alpha = 0.72f)
+                                else -> Color.Transparent
+                            }
                         },
-                )
+                        labelFade = labelFade,
+                        onClick = { onDestinationSelected(destination) },
+                        modifier = Modifier
+                            .focusRequester(navigationRequesters.getValue(destination))
+                            .focusProperties {
+                                right = contentStartRequester
+                                if (destination == lastDestination) down = switchProfileFocus
+                            },
+                    )
+                }
             }
         }
 
@@ -288,6 +308,35 @@ private fun RailRow(
             color = labelColor,
             modifier = labelFade,
         )
+    }
+}
+
+/**
+ * Scrolls just far enough to show one whole row past the focused one on each side. TalkBack for
+ * TV only follows focus onto a node that was on screen in Compose's previous accessibility
+ * snapshot (docs/known-issues.md), so the row the d-pad reaches next must already be showing.
+ * Rows are equal in height and [gapPx] apart, so every row starts on a multiple of one pitch.
+ */
+private class NeighbourRevealingScroll(
+    private val scrollState: ScrollState,
+    private val gapPx: Float,
+) : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val pitch = size + gapPx
+        if (size + 2 * pitch > containerSize) {
+            return super.calculateScrollDistance(offset, size, containerSize)
+        }
+        // The focus ring's scale moves the focused row's reported offset but not its size, so
+        // the offset is snapped back to the row's slot rather than trusted to the pixel.
+        val scrolled = scrollState.value
+        val slotTop = ((offset + scrolled) / pitch).roundToInt() * pitch - scrolled
+        val leading = slotTop - pitch
+        val trailing = slotTop + size + pitch
+        return when {
+            leading < 0f -> leading
+            trailing > containerSize -> trailing - containerSize
+            else -> 0f
+        }
     }
 }
 

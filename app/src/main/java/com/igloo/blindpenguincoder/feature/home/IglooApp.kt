@@ -1076,6 +1076,7 @@ private fun ContentPane(
                 onItemSelected = openMovie?.let { open ->
                     { movieId -> open(DetailsOrigin.MoviesGrid, movieId) }
                 },
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
             // Its own `when` arm rather than a kind parameter on the Movies call: each arm owns
@@ -1094,6 +1095,7 @@ private fun ContentPane(
                 // No show details screen yet: the cards are inert on press (section 10's
                 // actionless-anchor contract) rather than announcing an action that does nothing.
                 onItemSelected = null,
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
             IglooDestination.Music -> MusicScreen(
@@ -1119,6 +1121,7 @@ private fun ContentPane(
                 onAlbumSelected = openAlbum?.let { open ->
                     { albumId -> open(DetailsOrigin.Music, albumId) }
                 },
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
             else -> PlaceholderContent(
