@@ -9,6 +9,12 @@ local.properties
 app/build/
 
 .claude/
+.codex/
+.agents/
+AGENTS.md
+AGENTS.override.md
+CLAUDE.md
+CLAUDE.local.md
 
 # Browser-automation scratch output; never belongs in the repo.
 .playwright-mcp/
