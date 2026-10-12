@@ -539,7 +539,10 @@ fun IglooApp(
     }
     // railHasFocus && railOpenedByBack: no handler enabled, so Back exits the app.
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Whether anything in the app holds focus, overlays included: the entry anchor's announced
+    // request below must not take focus from a node the user has already pressed their way to.
+    var appHasFocus by remember { mutableStateOf(false) }
+    Box(modifier = Modifier.fillMaxSize().onFocusChanged { appHasFocus = it.hasFocus }) {
         IglooShell(
             user = user,
             serverOrigin = serverOrigin,
@@ -780,8 +783,20 @@ fun IglooApp(
     // pane outlives a destination change, so re-anchoring here would steal focus from the
     // card the user had just activated. Skipped entirely when something is already over the
     // shell — this effect runs after the overlay's own, so it would take focus off it.
+    //
+    // Under a screen reader the request waits until it can be heard (section 6.3): the shell
+    // has just replaced the sign-in or PIN screen, which TalkBack for TV handles as a window
+    // change, and the anchor is in its first frame. Asked at once, the focus goes unannounced
+    // and TalkBack parks its cursor on a node of its own choosing — on a Shield, the profile
+    // avatar, or the hero's second page, taking input focus with it. A press made during the
+    // wait, or an overlay opened during it, wins.
+    val currentShellCovered by rememberUpdatedState(shellCovered)
     LaunchedEffect(Unit) {
-        if (!shellCovered) contentStartRequester.requestFocus()
+        if (shellCovered) return@LaunchedEffect
+        contentStartRequester.requestFocusAnnounced(
+            screenReader = spokenAccessibilityEnabled,
+            shouldFocus = { !currentShellCovered && !appHasFocus },
+        )
     }
 }
 
