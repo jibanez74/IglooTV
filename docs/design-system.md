@@ -299,11 +299,12 @@ ground — are named in `core/design/OverMediaColors.kt`, still literals rather 
 
 - Poster dim overlay on focus: `Color.Black.copy(alpha = 0.30f)` (video) / `0.40f` (album art)
 - Title gradient over poster: `Brush.verticalGradient` to `Color.Black.copy(alpha = 0.90f)`
-- Hero side gradient (§11.3.1): `Brush.horizontalGradient`, `Color.Black.copy(alpha = 0.70f)` →
-  `0.35f` → transparent, left to right — web parity with the detail hero's side scrim. The web's
-  third, theme-tracking fade into the page background is deliberately **not** ported: it blends an
-  unclipped hero into the canvas, and our hero is a clipped card — a theme-tracking brush over
-  media would contradict this section.
+- Hero side gradient (§11.3.1, §11.4.1): `Brush.horizontalGradient`, `Color.Black.copy(alpha =
+  0.80f)` → `0.55f` at 65% → transparent, left to right. The home hero used `0.70f` → `0.35f`
+  while it was a clipped card about 752dp wide; across a full-bleed panel that ramp decays to
+  almost nothing by the end of the metadata line. Both full-bleed heroes also end in a short
+  theme-tracking fade into `background` — the web's third scrim — which is a blend into the canvas
+  below the art, not a colour over the text column.
 - Text over media: `Color.White`, with a shadow for legibility. Secondary text over media —
   the detail hero's tagline, runtime and date line, and resume caption, and the theater card's
   year — steps to `Color.White.copy(alpha = 0.85f)`, and tertiary text (the detail hero's
@@ -379,8 +380,8 @@ intended, say so explicitly with `maxLines`:
 
 - Card titles: `maxLines = 2`
 - Nav labels, list rows: `maxLines = 1`
-- Home hero (§11.3.1): title `maxLines = 2`, overview `maxLines = 3` — it is a card, so it takes
-  card clamps
+- Home hero (§11.3.1): title `maxLines = 2`, overview `maxLines = 3` — a plate on a page that
+  must not grow when the user turns to the other one, so it takes card clamps
 - Detail overview (§11.4.1): `maxLines = 6`, and it **fades** at the bottom edge instead of
   ellipsizing (`TextOverflow.Clip` plus a `background`-token gradient drawn only when the text
   actually overflows). An ellipsis mid-sentence reads as punctuation; the fade says plainly that
@@ -567,7 +568,9 @@ it for a ≤1.5:1 effect.
   already moved. With no screen reader, focus moves at once. The rail's cross-branch switch
   (Home → Movies) uses it (§11.2), and the pane grids apply the same wait at row scale, with a
   held scroll, when the d-pad moves into a row that is not on screen yet (`AnnouncedLazyMove`,
-  §8.3). Overlays that
+  §8.3). So does the shell's first request, when it replaces the sign-in or PIN screen: asked in
+  the anchor's first frame, the focus went unannounced and TalkBack for TV parked its cursor on
+  the profile avatar. Overlays that
   cover part of the screen solve the same problem another way (§9.3).
 - Order matters: `Modifier.clickable` and `Modifier.onFocusChanged` are order-sensitive. Put
   focus observation *outside* the clickable so it sees the same focus state the indication does.
@@ -1311,7 +1314,7 @@ rows above it in half. `LocalBringIntoViewSpec` is experimental, and this is its
 ### 11.3 Home
 
 Stacked horizontal rails — continue watching, latest movies, latest albums, movies in theaters,
-watch rooms — under the hero (§11.3.1). This is the most TV-native layout in the product and the model for other
+watch rooms — under the hero, which features the newest movie and the newest show (§11.3.1). This is the most TV-native layout in the product and the model for other
 index screens. Vertical d-pad moves between rails; horizontal moves within one; focus is
 restored per-rail on return.
 
@@ -1323,61 +1326,112 @@ destinations still render a heading, inside their own content.
 
 #### 11.3.1 The hero
 
-The hero features the **single most recently added movie**: the first item of the Recently Added
-data, enriched with `GET /api/movies/details/{id}` for its backdrop, overview, and metadata. The
-two requests chain inside the rail's own load job, so the rail's Retry re-runs the hero and a
-foreground refresh cancels both together. It does not rotate — §7.2 permits no looping surface,
-and a hero carousel fails that rule twice (it carries information; it moves geometry under text).
+The hero is a **paged billboard** of two features: the **single most recently added movie** and
+the **single most recently added TV show**, in that order, one page on screen at a time. The
+movie page is the first item of the Recently Added data, enriched with
+`GET /api/movies/details/{id}`; the two requests chain inside the rail's own load job, so the
+rail's Retry re-runs the movie page and a foreground refresh cancels both together. The show page
+is the first item of `GET /api/shows/latest`, enriched with `GET /api/shows/details/{id}`, in a
+job of its own — Home has no shows rail. Pages never turn on their own — §7.2 permits no looping
+surface, and a carousel fails that rule twice (it carries information; it moves geometry under
+text). D-pad right and left turn them.
 
 **Geometry. The art is full-bleed; the words are not.** The backdrop reaches the top, left and
 right physical edges — §2.5's opt-out is exactly what it exists for — and passes *under* the nav
 rail, which rests as a scrim over it (§11.2). The text sits on a plate inset by the pane's
 `contentInset`, so the title never lands under the icon strip. Art may go under chrome; words may
-not.
+not. The page dots sit bottom-right, inset by the pane's end gutter and level with the plate's
+padding.
 
 `heightIn(min = 360dp)` (scaled; a one-off literal per §2.8 — it contains text, so §2.6 requires
-min, not fixed). It was 280dp as a rounded card parked ~117dp down the screen under a pane header;
-starting at the top edge instead, 360dp leaves **more** of the Continue Watching rail showing than
-the card did (540 − 360 = 180dp against 540 − 397 = 143dp), so §8.2's scroll affordance
-strengthens. The hero scrolls away with the rails; no pinning, no collapse choreography.
+min, not fixed). Starting at the top edge, 360dp leaves 180dp of the Continue Watching rail
+showing, so §8.2's scroll affordance holds. Both pages' plates are always measured, so the hero
+takes the taller one's height and a page turn never moves the rails. The hero scrolls away with
+the rails; no pinning, no collapse choreography.
 
 **The focus ring rides the text plate, not the bleeding surface.** This is a deliberate departure
 from §6.1's "ring wraps the focusable" and must not be tidied back: a 3dp ring traced around a
 surface that reaches the panel's edges sits in the overscan margin, the one place §2.5 says a TV
 is allowed to crop — a focus indicator that a television may simply not show. The plate is
-bounded, always inside the safe area, and carries §3.2's chip-and-control ground so the ring has a
-surface to contract against. The node the ring *describes* is still the hero: one focus target,
-one `clearAndSetSemantics`, every focus edge unchanged.
+bounded, always inside the safe area, and carries §3.2's chip-and-control ground over media
+(`muted` off media) so the ring has a surface to contract against.
 
-**Backdrop.** `w1280` via the TMDB proxy, `ContentScale.Crop`. Over it, two static gradients
-(over-media literals, §3.2): the bottom title gradient, and the side gradient left-to-right so the
-text column reads against busy art. When the movie has **no backdrop** (or the image fails), the
-hero renders as an ordinary card surface — `card` fill, token text colors, **no gradients** —
-because §3.2's white-on-black literals are licensed only by media behind them; keeping them over a
-`muted` fill fails contrast in light mode.
+**Backdrop.** `w1280` via the TMDB proxy, `ContentScale.Crop`, fading in once decoded (`page`).
+Over it, two static over-media gradients (§3.2) — the side gradient left-to-right at the detail
+hero's stops so the text column reads against busy art across the full panel, and the bottom
+title gradient — and under the plate a short token fade (`background`, from 88% down) that
+dissolves the art into the canvas the rails sit on. Both pages' images load up front; the one
+off screen waits at zero alpha, so a page turn never waits on the network. When a page has **no
+backdrop** (or the image fails), it renders as an ordinary card surface — `card` fill, token text
+colors, **no over-media gradients** — because §3.2's white-on-black literals are licensed only by
+media actually behind them. Until the image decodes the page uses the token colors too.
 
-**Text.** Bottom-left column, max width ~420dp (readable measure), `spacing.xl` inset. Over
-media: `Color.White` with a shadow (§3.2). Title `titleLarge`, `maxLines = 2` — **not `display`**,
-which §4 reserves for a canvas with no card. Metadata line in `label`: year · certification ·
-runtime · rating, every field nullable, separator-joined, the whole line omitted when empty.
-Overview `bodyMedium`, `maxLines = 3` (§4.1).
+**A page turn is a dissolve.** The incoming art fades in over the outgoing art (`page`), which
+holds still underneath until it is covered — two layers at half alpha would let the fill show
+through mid-turn. Text cannot dissolve through text and stay legible, so the outgoing plate fades
+out over `micro` and the incoming one fades in over the next `micro`. The active dot lengthens
+into a pill (`standard`). All of it goes through `iglooTween`, so reduced motion snaps.
 
-**Focus and semantics.** The hero is **one focus target** and owns the pane's entry anchor
-(`contentStartRequester`) whenever it is visible; the Continue Watching rail takes the anchor back
-when it is not — the two must never hold it in the same composition. `focusRing` with
-`scaleOnFocus = false` (1.05× on a pane-width surface overflows the pane; ring, separator,
-fill-contract, and glow still carry the signal). D-pad left exits to the spine, right is
-cancelled, and down is hand-wired to the first rail's entry anchor — spatial resolution from a
-pane-wide surface is heuristic, and the wire means the rail's focus memory applies, the same as
-spine re-entry. Like the poster cards, the hero announces **no action** until the
-details screen lands: one `clearAndSetSemantics` node reading "Featured", title, metadata, and the
-full overview (the visual clamp is not an accessibility clamp).
+**Text.** Bottom-left column, max width ~420dp (readable measure), `spacing.lg` inside the plate.
+Over media: `Color.White` with a shadow (§3.2). Top to bottom:
 
-**States.** Loading is a static geometry-matched skeleton (§10) that is focusable and carries the
-entry anchor, with a polite "Loading featured movie". There is no hero error card: an empty
-library, a failed latest fetch, or a failed details fetch **hides the hero** — the rail below
-already owns the error and its Retry. A background refresh that fails keeps a previously loaded
-hero, exactly the rails' rule; an empty library hides it unconditionally.
+- **Eyebrow**: `RECENTLY ADDED · MOVIE` / `RECENTLY ADDED · TV SHOW` in `label`, upper-case with
+  1.5sp tracking, secondary over-media white (`mutedForeground` off media), behind a 4×16dp
+  `aurora` mark — the one accent licensed over media.
+- **Title**: `display`, `maxLines = 2`. The hero is a full-bleed canvas now, which is what §4
+  reserves `display` for; it was `titleLarge` while the hero was a card.
+- **Metadata row**, the detail hero's order so the two surfaces read alike: the rating badge
+  (`RatingBadge`, pill), the certification chip (`DetailChip`), then `year · extent` in `label`.
+  The extent is the runtime for a movie (`2h 50m`) and the season count for a show
+  (`3 Seasons`), specials (season 0) not counted. Every field is nullable and guarded against
+  zero — the scraper writes TMDB's "no data" as a valid 0 — and the row is omitted when empty.
+- **Overview**: `bodyMedium`, `maxLines = 3` (§4.1).
+
+**Focus and semantics.** The hero is **one focus target**, whichever page shows, and owns the
+pane's entry anchor (`contentStartRequester`) whenever it is visible; the Continue Watching rail
+takes the anchor back when it is not — the two must never hold it in the same composition. A
+page turn changes what the target says, not where focus is. Which page shows is hoisted beside
+the rails' focus memory, so the spine, the rail below and a Home round trip all come back to the
+page the user left.
+
+One target is not a simplification to be undone. Two stacked targets, one per page and sharing
+a rectangle, were built first and passed every semantics assertion, and on a Shield TalkBack never
+saw the page beneath: Compose builds the platform accessibility tree topmost-first and leaves out
+a node another covers completely. A focus move onto the covered page sent no event, and TalkBack
+moved input focus onto the top page whenever it went looking for a node. `HomeHeroFocusTest`
+now reads the platform tree through `UiAutomation`, not only Compose's.
+
+D-pad right turns to the next page and is cancelled on the last; left turns back, and from the
+first page exits to the spine; down is hand-wired to the first rail's entry anchor on every page
+— spatial resolution from a pane-wide surface is heuristic, and the wire means the rail's focus
+memory applies, the same as spine re-entry. `focusRing` rides the active plate with
+`scaleOnFocus = false` (1.05× on a pane-width plate overflows the pane; ring, separator,
+fill-contract, and glow still carry the signal).
+
+The target reads as one node: the page's feature and place, then the title, the metadata sentence
+and the full overview (the visual clamp is not an accessibility clamp) — "Recently added TV show,
+2 of 2. Severance. Rated 8.4 out of 10, TV-MA, 2022, 2 seasons. Mark leads…". The position is
+what tells a screen-reader user there is a page to the right; a lone page gives none, and draws no
+dots. **There is no live region.** TalkBack speaks a change to the description of the node its
+cursor is on, which covers a turn and a load under focus; a live region on top made TalkBack
+re-read the hero each time focus came or went, because Compose reports every focus change as a
+content change on the node. On the movie page the target announces "Open {title}" and opens its
+details (Back returns to it); on the show page it announces **no action** until a show details
+screen lands, like the TV Shows grid's cards. The target is `focusable` with the press handled on
+it (Select, Enter, keypad Enter on release, and the semantics click) rather than `clickable`: the
+two are different modifier nodes, and the skeleton turning into the movie page under focus would
+otherwise detach the focused node.
+
+**States.** Loading is a static geometry-matched skeleton (§10) drawn by the **same target**,
+focusable and holding the entry anchor, announcing "Loading featured titles". When the hero
+loads, the focused node stays put and only what it says changes, and TalkBack reads the loaded
+page out as it reads a turn. The hero stays Loading until **both** pages have
+settled, so a page never appears or disappears under focus and "1 of 2" is right from the first
+word. There is no hero error card: a page whose list is empty, whose latest fetch fails, or whose
+details fetch fails **hides**, and the hero shows whatever is left — both gone hides the hero.
+The movie page's failures are the rail's to report; the show page has no rail, so it is retried by
+the next foreground refresh. A background refresh that fails keeps a previously loaded page,
+exactly the rails' rule; an empty library hides its page unconditionally.
 
 #### 11.3.2 The rails
 
@@ -1565,23 +1619,24 @@ the screen owns only its entry anchor.
 **Hero.** The backdrop is full-bleed (§2.5) at `w1280`, `ContentScale.Crop`, fading in at
 `page` once it decodes. Two scrims with two different jobs: the §3.2 black side gradient
 licenses the white text column against busy art, and a **vertical fade to the `background`
-token** blends the backdrop into the canvas the sections sit on. That token fade is the case
-§3.2's home-hero note carves out — the detail backdrop is unclipped and really does meet the
-page. Alpha-zero stops are written `color.copy(alpha = 0f)`, never `Color.Transparent`, which
+token** blends the backdrop into the canvas the sections sit on. That token fade is the blend
+§3.2's side-gradient note describes — the detail backdrop is unclipped and really does meet the
+page, as the full-bleed home hero's now does too. Alpha-zero stops are written `color.copy(alpha = 0f)`, never `Color.Transparent`, which
 is black at zero and greys the fade. Chrome and text keep the safe-area inset.
 
-The side gradient runs its **own stops** here — `0.80` → `0.55` at `0.65` → `0` — not §3.2's
-`0.70 → 0.35 at 0.5 → 0`. That ramp is written for the home hero, a *clipped card* about 752dp
-wide; stretched across a full-bleed panel the same fractions have decayed to alpha 0.14 by the
-time the metadata line ends, and the backdrop's highlights come back up through the text column.
+The side gradient runs `0.80` → `0.55` at `0.65` → `0`, not the `0.70 → 0.35 at 0.5 → 0` ramp
+the home hero used while it was a *clipped card* about 752dp wide; stretched across a full-bleed
+panel those fractions have decayed to alpha 0.14 by the time the metadata line ends, and the
+backdrop's highlights come back up through the text column. The home hero took these stops when
+it went full-bleed (§11.3.1).
 Measured on a high-frequency backdrop, white-on-peak in the title band was **1.69:1** under the
 home ramp and **3.72:1** under these stops, with the tagline and genre bands at 6.51:1 and 4.18:1
 (3.74 / 6.62 / 4.59 on a Shield). The `.overMedia()` shadow mitigates the peaks but does not
-remove them, so the ramp has to carry it. Both heroes still use the same *shape* — a black side
-gradient, left to right — and neither is licensed off media.
+remove them, so the ramp has to carry it. Both heroes use the same black side gradient, left to
+right, and neither is licensed off media.
 
-Poster at `posterWidth` / `posterAspect`; title `titleLarge` at 2 lines (**not** `display`,
-per §11.3.1); tagline `bodyLarge` italic in quotes; then the metadata row, genres joined by
+Poster at `posterWidth` / `posterAspect`; title `titleLarge` at 2 lines (**not** `display`:
+it shares the hero row with the poster, so it is a heading, not a full-bleed headline); tagline `bodyLarge` italic in quotes; then the metadata row, genres joined by
 `·`, the action row, and the resume strip. The §3.2 treatment is licensed by a **decoded**
 backdrop, not by a non-null URL: until the decode lands — and permanently, with no backdrop or
 one that fails — every §3.2 literal is dropped for token colors, exactly as the home hero
@@ -2394,6 +2449,25 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-12 — The home hero features the newest TV show too (§11.3.1, §3.2, §4.1).**
+
+- The hero is a paged billboard: the newest movie, then the newest show
+  (`GET /api/shows/latest` + `GET /api/shows/details/{id}`). D-pad right and left turn the page
+  with a dissolve; page dots bottom-right; nothing turns on its own.
+- One focus target, whichever page shows: a turn changes what it says, and TalkBack reads the
+  change because its cursor is on it — "Recently added TV show, 2 of 2. …". The skeleton is the
+  same node and keeps focus through the load. No live region: one re-read the hero on every
+  focus change. Two stacked per-page targets were tried first and were invisible to TalkBack
+  below the top one; `HomeHeroFocusTest` now checks the platform accessibility tree.
+- The shell's first focus request waits until TalkBack can hear it (§6.3,
+  `requestFocusAnnounced`): straight after the sign-in or PIN screen it went unannounced, and
+  TalkBack parked its cursor on the profile avatar.
+- Cinematic pass: an upper-case "Recently added" eyebrow with an aurora mark, a `display` title,
+  the detail hero's rating badge and certification chip, the detail hero's side scrim, and a
+  token fade into the canvas. Over-media text waits for the image to decode.
+- The hero stays Loading until both pages settle; a page that cannot load hides alone. The show
+  page has no action until a show details screen exists.
 
 **2026-10-01 — TalkBack follows a grid's Down into a row below the fold (§6.3, §8.3).**
 
