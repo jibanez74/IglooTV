@@ -36,6 +36,14 @@ class ShowApi(
             sort,
         )
 
+    /** Newest additions to the library, newest first; the backend caps the list at 12. */
+    suspend fun latestShows(): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/shows/latest")
+
+    /** One show with its seasons and credits; backs the Home hero's show page. */
+    suspend fun showDetails(id: Long): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/shows/details/$id")
+
     /** Library-wide counts; today just the total number of shows. */
     suspend fun showStats(): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/shows/stats")

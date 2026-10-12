@@ -94,3 +94,51 @@ data class ShowTechnicalFile(
     @SerialName("mime_type") val mimeType: String,
     val duration: SqlNullFloat64,
 )
+
+/**
+ * One entry of `GET /shows/latest`. The Home hero needs only the newest show's id — everything
+ * it draws comes from the details request — so `name`, `poster_path` and `premiere_year` are left
+ * to `ignoreUnknownKeys`.
+ */
+@Serializable
+data class LatestShow(
+    val id: Long,
+)
+
+/** Payload of `LatestShowsEnvelope.data`. */
+@Serializable
+data class LatestShowsData(
+    val shows: List<LatestShow>,
+)
+
+/**
+ * Payload of `ShowDetailsEnvelope.data`, reduced to what the Home hero reads: the show and its
+ * seasons, whose count the hero prints. Credits, creators, genres, networks, companies and extra
+ * videos are left to `ignoreUnknownKeys` until a show details screen reads them.
+ */
+@Serializable
+data class ShowDetailsData(
+    val show: Show,
+    val seasons: List<ShowSeasonSummary>,
+)
+
+/**
+ * The stored show, as far as the Home hero reads it. The scraper writes TMDB's "no data" as a
+ * valid zero, so callers guard every number against zero as well as null.
+ */
+@Serializable
+data class Show(
+    val id: Long,
+    val name: String,
+    @SerialName("premiere_year") val premiereYear: SqlNullInt64,
+    val overview: SqlNullString,
+    val certification: SqlNullString,
+    @SerialName("backdrop_path") val backdropPath: SqlNullString,
+    @SerialName("vote_average") val voteAverage: SqlNullFloat64,
+)
+
+/** One season the library holds; season 0 is the specials, which the hero does not count. */
+@Serializable
+data class ShowSeasonSummary(
+    @SerialName("season_number") val seasonNumber: Long,
+)
