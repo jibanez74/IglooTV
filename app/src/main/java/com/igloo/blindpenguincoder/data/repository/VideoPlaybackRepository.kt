@@ -33,8 +33,11 @@ class VideoPlaybackRepository(
      * manifest while FFmpeg warms up; a connection timeout means the server was never reached.
      * Only transport failures are absorbed, and programming errors must surface.
      */
-    override suspend fun fetchHlsManifest(spec: HlsSessionSpec): HlsManifestResult = try {
-        val response = api.hlsPlaylist(spec.media, spec.profileId, hlsQueryParams(spec))
+    override suspend fun fetchHlsManifest(
+        spec: HlsSessionSpec,
+        keepalive: Boolean,
+    ): HlsManifestResult = try {
+        val response = api.hlsPlaylist(spec.media, spec.profileId, hlsQueryParams(spec, keepalive))
         val status = response.status.value
         val headers = response.headers.entries().associate { (name, values) ->
             name.lowercase() to values.firstOrNull()

@@ -130,12 +130,29 @@ class VideoPlaybackRepositoryTest(
         // A legacy spec must not leak half a conversion pair onto the wire.
         assertEquals(null, captured.url.parameters["audio_codec"])
         assertEquals(null, captured.url.parameters["audio_channels"])
+        // Only a keepalive ping is refresh-only; this fetch must be free to create the session.
+        assertEquals(null, captured.url.parameters["keepalive"])
         assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
         val timeouts = requireNotNull(captured.getCapabilityOrNull(HttpTimeoutCapability))
-        assertEquals(45_000L, timeouts.requestTimeoutMillis)
-        assertEquals(45_000L, timeouts.socketTimeoutMillis)
+        assertEquals(90_000L, timeouts.requestTimeoutMillis)
+        assertEquals(90_000L, timeouts.socketTimeoutMillis)
         assertEquals(HlsManifestResult.Ready("1080p_8mbps", 87.417), result)
         assertTrue("a successful manifest body must be drained", body.isClosedForRead)
+    }
+
+    @Test
+    fun `a keepalive ping asks for a refresh-only manifest`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            respond(content = "#EXTM3U", status = HttpStatusCode.OK)
+        }
+
+        http.videoPlaybackRepository.fetchHlsManifest(hlsSpec(), keepalive = true)
+
+        val captured = requireNotNull(request)
+        assertEquals("1", captured.url.parameters["keepalive"])
+        assertEquals("90", captured.url.parameters["start"])
     }
 
     @Test

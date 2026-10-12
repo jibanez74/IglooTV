@@ -111,7 +111,7 @@ data class AlbumDetailsData(
     val artists: List<AlbumArtist>,
     @SerialName("track_genres") val trackGenres: List<TrackGenre>,
     @SerialName("album_genres") val albumGenres: List<String>,
-    @SerialName("total_duration") val totalDuration: Double,
+    @SerialName("total_duration") val totalDuration: Long,
 )
 
 /** Payload of `MusiciansEnvelope.data`. */
@@ -165,7 +165,7 @@ data class MusicianDetailsData(
     val albums: List<MusicianAlbum>,
     val tracks: List<MusicianTrack>,
     val genres: List<String>,
-    @SerialName("total_duration") val totalDuration: Double,
+    @SerialName("total_duration") val totalDuration: Long,
 )
 
 /** Payload of `TracksEnvelope.data`. */

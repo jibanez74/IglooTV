@@ -220,8 +220,9 @@ fun showsLibraryJson(
     """"shows":[${shows.joinToString(",")}],"total":$total,"page":$page,""" +
     """"per_page":$perPage,"total_pages":$totalPages,"sort":"$sort"}}"""
 
-fun showsStatsJson(totalShows: Long = 1): String =
-    """{"error":false,"message":"show stats","data":{"total_shows":$totalShows}}"""
+fun showsStatsJson(totalShows: Long = 1, totalSeasons: Long = 1, totalEpisodes: Long = 1): String =
+    """{"error":false,"message":"show stats","data":{"total_shows":$totalShows,""" +
+    """"total_seasons":$totalSeasons,"total_episodes":$totalEpisodes}}"""
 
 /** One `GET /shows/genres` list entry. */
 fun showGenreWithCountJson(
@@ -333,7 +334,7 @@ fun albumDetailsJson(
     artists: List<String> = listOf(albumArtistJson()),
     trackGenres: List<String> = listOf(trackGenreJson()),
     albumGenres: List<String> = listOf("Rock"),
-    totalDurationMs: Double = 125_000.0,
+    totalDurationMs: Long = 125_000L,
 ): String = """{"error":false,"message":"album details","data":{""" +
     """"album":$album,"tracks":[${tracks.joinToString(",")}],""" +
     """"artists":[${artists.joinToString(",")}],""" +
@@ -416,7 +417,7 @@ fun musicianDetailsJson(
     albums: List<String> = listOf(musicianAlbumJson()),
     tracks: List<String> = listOf(musicianTrackJson()),
     genres: List<String> = listOf("Rock", "Pop"),
-    totalDurationMs: Double = 125_000.0,
+    totalDurationMs: Long = 125_000L,
 ): String = """{"error":false,"message":"musician details","data":{""" +
     """"musician":$musician,"albums":[${albums.joinToString(",")}],""" +
     """"tracks":[${tracks.joinToString(",")}],""" +
@@ -701,10 +702,8 @@ fun chapterJson(
     id: Long = 1,
     title: String = "00:03:13.026",
     startTimeSec: Long = 193,
-    thumb: String? = null,
     ownerKey: String = "movie_id",
-): String = """{"id":$id,"title":"$title","start_time":$startTimeSec,""" +
-    """"thumb":${sqlNullStringJson(thumb)},"$ownerKey":1}"""
+): String = """{"id":$id,"title":"$title","start_time":$startTimeSec,"$ownerKey":1}"""
 
 /** `GET /movies/{id}/technical-details` payload; `movie` is the file's playback subset. */
 fun technicalDetailsJson(

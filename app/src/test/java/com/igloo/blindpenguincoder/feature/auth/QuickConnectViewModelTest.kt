@@ -63,7 +63,7 @@ class QuickConnectViewModelTest {
         {"error":false,"data":{"status":"approved","token":"igd_paired","device":{
             "id":9,"name":"Shield","platform":"android_tv","app_version":"0.1.0",
             "created_at":"2026-07-01T00:00:00Z",
-            "last_used_at":"2026-07-01T00:01:00Z","is_current":true
+            "last_used_at":"2026-07-01T00:01:00Z"
         }}}
     """.trimIndent()
 

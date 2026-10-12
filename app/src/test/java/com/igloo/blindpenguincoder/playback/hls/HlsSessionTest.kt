@@ -55,6 +55,21 @@ class HlsSessionTest {
     }
 
     @Test
+    fun `keepalive appears only on a refresh-only ping, after the session query`() {
+        assertTrue(hlsQueryParams(spec()).none { it.first == "keepalive" })
+        assertEquals(
+            listOf(
+                "playback_session" to "5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1",
+                "start" to "90",
+                "audio_track" to "1",
+                "reload" to "2",
+                "keepalive" to "1",
+            ),
+            hlsQueryParams(spec(reload = 2), keepalive = true),
+        )
+    }
+
+    @Test
     fun `an audio profile adds the codec-channels pair after the audio ordinal`() {
         assertEquals(
             listOf(

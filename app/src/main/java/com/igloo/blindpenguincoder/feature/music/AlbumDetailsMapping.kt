@@ -64,7 +64,7 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
     val releaseDateText = album.releaseDate.orNullIfBlank()?.let(::formatReleaseDate)
         ?: album.year.orNull()?.toString()
     val trackCountText = countLine(data.tracks.size.toLong(), "track")
-    val totalDurationText = formatAlbumDuration(data.totalDuration.toLong())
+    val totalDurationText = formatAlbumDuration(data.totalDuration)
     val popularity = spotifyPopularity(album.spotifyPopularity)
     val artists = data.artists.filter { it.name.isNotBlank() }.map { AlbumArtistUi(it.id, it.name) }
     // With no credited rows the album's own musician is the one name, and it has no id to open.

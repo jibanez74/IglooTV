@@ -620,7 +620,7 @@ Open coverage gaps are tracked in `docs/cleanup-backlog.md` §4 rather than left
 | --- | --- |
 | `AGENTS.md` | The contributor contract: TV-only product rules, architecture, networking/auth/playback/image policy, dependency policy, definition of done. **Authoritative.** |
 | `docs/design-system.md` | The 12-section design system: scale model, color, typography, spacing, the single focus treatment, motion, shell, components, UI states, per-screen UX, accessibility. Appendix B maps tokens to files. **Authoritative for UI.** |
-| `docs/openapi.json` | The backend API contract (Igloo API 0.1.0, 129 paths). Read before API work; do not invent routes or payloads. `OpenApiContractTest` checks the models against it. |
+| `docs/openapi.json` | The backend API contract (Igloo API 0.1.0, 130 paths). Read before API work; do not invent routes or payloads. `OpenApiContractTest` checks the models against it. |
 | `docs/known-issues.md` | Contract and behavior gaps deliberately not fixed yet, with enough detail to act on |
 | `docs/cleanup-backlog.md` | Duplication, small correctness edges, coverage gaps and polish, each actionable |
 | `docs/movies-screen-status.md` | Plain-language state of the Movies screen after the tab-strip pass |

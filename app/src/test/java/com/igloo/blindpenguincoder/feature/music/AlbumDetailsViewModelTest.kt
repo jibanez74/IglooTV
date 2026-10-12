@@ -122,7 +122,7 @@ class AlbumDetailsViewModelTest {
                         trackGenreJson(trackId = 900, genreId = 13, tag = "Electronic"),
                     ),
                     albumGenres = listOf("Ambient", "Electronic"),
-                    totalDurationMs = 412_000.0,
+                    totalDurationMs = 412_000L,
                 ),
             )
         }
@@ -201,7 +201,7 @@ class AlbumDetailsViewModelTest {
                         artists = emptyList(),
                         trackGenres = emptyList(),
                         albumGenres = emptyList(),
-                        totalDurationMs = 0.0,
+                        totalDurationMs = 0L,
                     ),
                 )
             },

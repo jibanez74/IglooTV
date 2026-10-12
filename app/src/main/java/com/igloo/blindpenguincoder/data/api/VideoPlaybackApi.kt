@@ -32,8 +32,10 @@ class VideoPlaybackApi(
     /**
      * The HLS manifest, which implicitly creates or refreshes the playback session. The query
      * pairs come pre-built (see `hlsQueryParams`) so their names are spelled in one place.
-     * The server may hold a remux manifest up to 30s waiting for FFmpeg's first segments, so
-     * this request gets a longer budget than the client default.
+     * A cold manifest can legitimately take about 75s on the server — a remux preflight, a wait
+     * for transcode capacity, then FFmpeg's first output — so this request gets a longer budget
+     * than the client default. It must outlast that wait: hanging up cancels the server's
+     * creation, and the retry would start it over from nothing.
      */
     suspend fun hlsPlaylist(
         media: PlaybackMediaRef,
@@ -91,6 +93,6 @@ class VideoPlaybackApi(
     }
 
     private companion object {
-        const val HLS_MANIFEST_TIMEOUT_MS = 45_000L
+        const val HLS_MANIFEST_TIMEOUT_MS = 90_000L
     }
 }

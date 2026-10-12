@@ -40,7 +40,7 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
     val name = musician.name.ifBlank { UNKNOWN_ARTIST }
     val albumCountText = countLine(data.albums.size.toLong(), "album")
     val trackCountText = countLine(data.tracks.size.toLong(), "track")
-    val totalDurationText = formatAlbumDuration(data.totalDuration.toLong())
+    val totalDurationText = formatAlbumDuration(data.totalDuration)
     val popularity = spotifyPopularity(musician.spotifyPopularity)
     val followers = musician.spotifyFollowers.orNull()?.takeIf { it > 0 }
     val genresSpoken = joinedLine(data.genres, ", ")
