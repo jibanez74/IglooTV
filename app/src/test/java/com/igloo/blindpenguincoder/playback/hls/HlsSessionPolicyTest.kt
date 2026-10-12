@@ -88,7 +88,17 @@ class HlsSessionPolicyTest {
         // wall-clock ceiling is what keeps that off a loading screen the viewer is watching.
         val attemptsOnly = HLS_CAPACITY_RETRY_MAX_ATTEMPTS * 5_000L
         assertTrue(HLS_START_TOTAL_BUDGET_MS > attemptsOnly)
-        assertTrue(HLS_START_TOTAL_BUDGET_MS < HLS_CAPACITY_RETRY_MAX_ATTEMPTS * 50_000L)
+        // Each attempt can spend the 90s manifest timeout plus the 5s fallback retry delay.
+        assertTrue(HLS_START_TOTAL_BUDGET_MS < HLS_CAPACITY_RETRY_MAX_ATTEMPTS * 95_000L)
+    }
+
+    @Test
+    fun `the start budget outlasts the server's worst cold start and a capacity retry`() {
+        // A remux preflight, a transcode-permit wait, and the first-output wait: about 75s.
+        val worstColdStartMs = 75_000L
+        // The retry finds the preflight verdict stored, so it waits on the last two alone.
+        val retryAfterBusyMs = 5_000L + 45_000L
+        assertTrue(HLS_START_TOTAL_BUDGET_MS > worstColdStartMs + retryAfterBusyMs)
     }
 
     // --- Media3 load-error delays ---

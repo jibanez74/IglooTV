@@ -200,7 +200,7 @@ class HlsSessionControllerTest {
             // Never Busy, never Ready: every attempt burns a manifest request timeout, which is
             // exactly the shape the attempt budget alone cannot bound.
             api.fetchOverride = {
-                delay(45_000)
+                delay(90_000)
                 HlsManifestResult.Busy(retryAfterSec = null)
             }
             val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)

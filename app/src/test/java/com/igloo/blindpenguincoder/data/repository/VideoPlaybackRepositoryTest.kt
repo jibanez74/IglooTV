@@ -134,8 +134,8 @@ class VideoPlaybackRepositoryTest(
         assertEquals(null, captured.url.parameters["keepalive"])
         assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
         val timeouts = requireNotNull(captured.getCapabilityOrNull(HttpTimeoutCapability))
-        assertEquals(45_000L, timeouts.requestTimeoutMillis)
-        assertEquals(45_000L, timeouts.socketTimeoutMillis)
+        assertEquals(90_000L, timeouts.requestTimeoutMillis)
+        assertEquals(90_000L, timeouts.socketTimeoutMillis)
         assertEquals(HlsManifestResult.Ready("1080p_8mbps", 87.417), result)
         assertTrue("a successful manifest body must be drained", body.isClosedForRead)
     }

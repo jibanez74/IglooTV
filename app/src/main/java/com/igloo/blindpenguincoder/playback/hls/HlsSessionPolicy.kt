@@ -38,9 +38,11 @@ private const val HLS_CAPACITY_RETRY_DEFAULT_DELAY_SEC = 5
  * Wall-clock ceiling on one [HlsSessionController.start], attempt budgets included. The attempt
  * counts alone bound nothing useful: a server that accepts connections but never answers spends
  * the manifest request timeout on every attempt, so six attempts can hold the viewer for minutes
- * on a loading screen whose only escape is Back.
+ * on a loading screen whose only escape is Back. It still has to fit one worst-case cold start
+ * (about 75s on the server) followed by capacity retries; the web client gives up after about
+ * 135s of those.
  */
-const val HLS_START_TOTAL_BUDGET_MS = 90_000L
+const val HLS_START_TOTAL_BUDGET_MS = 150_000L
 
 const val HLS_SESSION_LOST_MAX_ATTEMPTS = 3
 private const val HLS_SESSION_LOST_MIN_DELAY_MS = 2_000L
