@@ -57,7 +57,7 @@ class MusicianDetailsMappingTest {
         albums = albums,
         tracks = tracks,
         genres = genres,
-        totalDuration = tracks.sumOf { it.duration }.toDouble(),
+        totalDuration = tracks.sumOf { it.duration },
     )
 
     @Test

@@ -120,7 +120,7 @@ class MusicRepositoryTest {
                         ),
                         trackGenres = listOf(trackGenreJson(trackId = 900, tag = "Ambient")),
                         albumGenres = listOf("Ambient", "Electronic"),
-                        totalDurationMs = 459_000.0,
+                        totalDurationMs = 459_000L,
                     ),
                 )
             }
@@ -137,7 +137,7 @@ class MusicRepositoryTest {
             // Milliseconds on the wire, delivered untouched.
             assertEquals(listOf(214_000L, 245_000L), data.tracks.map { it.duration })
             assertEquals(listOf(1L, 2L), data.tracks.map { it.disc })
-            assertEquals(459_000.0, data.totalDuration, 0.0)
+            assertEquals(459_000L, data.totalDuration)
             assertEquals("The Beatles", data.artists.single().name)
             assertEquals("Ambient", data.trackGenres.single().tag)
             assertEquals(listOf("Ambient", "Electronic"), data.albumGenres)
@@ -274,7 +274,7 @@ class MusicRepositoryTest {
                         musicianTrackJson(id = 901, albumId = null, albumTitle = null, albumCover = null),
                     ),
                     genres = listOf("Rock", "Pop"),
-                    totalDurationMs = 250_000.0,
+                    totalDurationMs = 250_000L,
                 ),
             )
         }
@@ -290,7 +290,7 @@ class MusicRepositoryTest {
         assertEquals(1L, data.tracks[0].albumId.orNull())
         assertNull(data.tracks[1].albumId.orNull())
         assertEquals(listOf("Rock", "Pop"), data.genres)
-        assertEquals(250_000.0, data.totalDuration, 0.0)
+        assertEquals(250_000L, data.totalDuration)
     }
 
     @Test

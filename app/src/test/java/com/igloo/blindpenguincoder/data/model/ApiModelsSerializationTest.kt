@@ -768,7 +768,7 @@ class ApiModelsSerializationTest {
         assertEquals("https://i.scdn.co/image/ab67.jpg", data.album.cover.orNull())
         // Milliseconds on the wire, untouched by decode; formatting owns the /1000.
         assertEquals(214000L, data.tracks[0].duration)
-        assertEquals(657000.0, data.totalDuration, 0.0)
+        assertEquals(657_000L, data.totalDuration)
         assertEquals(listOf(1L, 2L), data.tracks.map { it.disc })
         assertEquals("stereo", data.tracks[0].channelLayout)
         assertEquals(900000L, data.tracks[0].bitRate)
@@ -949,7 +949,7 @@ class ApiModelsSerializationTest {
         assertEquals(214000L, data.tracks.single().duration)
         assertEquals(211L, data.tracks.single().albumId.orNull())
         assertEquals(listOf("Ambient", "Electronic"), data.genres)
-        assertEquals(214000.0, data.totalDuration, 0.0)
+        assertEquals(214_000L, data.totalDuration)
     }
 
     /** `GET /music/tracks/liked-ids`, `POST /music/tracks/{id}/like`, `GET /music/stats`. */

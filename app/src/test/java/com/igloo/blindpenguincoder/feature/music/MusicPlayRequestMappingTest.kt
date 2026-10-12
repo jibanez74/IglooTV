@@ -49,7 +49,7 @@ class MusicPlayRequestMappingTest {
         artists = emptyList(),
         trackGenres = emptyList(),
         albumGenres = emptyList(),
-        totalDuration = tracks.sumOf { it.duration }.toDouble(),
+        totalDuration = tracks.sumOf { it.duration },
     )
 
     @Test
@@ -125,7 +125,7 @@ class MusicPlayRequestMappingTest {
             artists = emptyList(),
             trackGenres = emptyList(),
             albumGenres = emptyList(),
-            totalDuration = 1000.0,
+            totalDuration = 1000L,
         )
         val request = toMusicPlayRequest(toAlbumDetailsUi(data))
         assertNull(request.tracks.single().artistName)

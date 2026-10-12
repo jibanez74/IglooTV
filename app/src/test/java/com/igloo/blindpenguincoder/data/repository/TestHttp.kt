@@ -333,7 +333,7 @@ fun albumDetailsJson(
     artists: List<String> = listOf(albumArtistJson()),
     trackGenres: List<String> = listOf(trackGenreJson()),
     albumGenres: List<String> = listOf("Rock"),
-    totalDurationMs: Double = 125_000.0,
+    totalDurationMs: Long = 125_000L,
 ): String = """{"error":false,"message":"album details","data":{""" +
     """"album":$album,"tracks":[${tracks.joinToString(",")}],""" +
     """"artists":[${artists.joinToString(",")}],""" +
@@ -416,7 +416,7 @@ fun musicianDetailsJson(
     albums: List<String> = listOf(musicianAlbumJson()),
     tracks: List<String> = listOf(musicianTrackJson()),
     genres: List<String> = listOf("Rock", "Pop"),
-    totalDurationMs: Double = 125_000.0,
+    totalDurationMs: Long = 125_000L,
 ): String = """{"error":false,"message":"musician details","data":{""" +
     """"musician":$musician,"albums":[${albums.joinToString(",")}],""" +
     """"tracks":[${tracks.joinToString(",")}],""" +
