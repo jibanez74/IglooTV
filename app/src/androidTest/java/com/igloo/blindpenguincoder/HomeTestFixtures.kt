@@ -13,6 +13,7 @@ import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
 import com.igloo.blindpenguincoder.feature.home.HomeContinueItem
 import com.igloo.blindpenguincoder.feature.home.HomeHero
+import com.igloo.blindpenguincoder.feature.home.HomeHeroKind
 import com.igloo.blindpenguincoder.feature.home.HomeTheaterMovie
 import com.igloo.blindpenguincoder.feature.library.LibraryActions
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
@@ -197,11 +198,30 @@ internal val testTheaterMovies = listOf(
 
 /** Backdrop-less on purpose: the card-surface fallback renders with no image loading. */
 internal val testHero = HomeHero(
+    kind = HomeHeroKind.Movie,
     id = 1,
     title = "Heat",
     backdropUrl = null,
     overview = "Obsessive master thief Neil McCauley leads a top-notch crew.",
-    metadataLine = "1995 · R · 2h 50m · 8.2",
+    year = "1995",
+    certification = "R",
+    ratingBadge = ratingBadgeSpec(8.2),
+    extent = "2h 50m",
+    metadataDescription = "Rated 8.2 out of 10, R, 1995, 2 hours and 50 minutes",
+)
+
+/** The hero's second page; backdrop-less like [testHero], so nothing waits on an image. */
+internal val testShowHero = HomeHero(
+    kind = HomeHeroKind.Show,
+    id = 40,
+    title = "Severance",
+    backdropUrl = null,
+    overview = "Mark leads a team of office workers whose memories have been split.",
+    year = "2022",
+    certification = "TV-MA",
+    ratingBadge = ratingBadgeSpec(8.4),
+    extent = "2 Seasons",
+    metadataDescription = "Rated 8.4 out of 10, TV-MA, 2022, 2 seasons",
 )
 
 /** No-op actions for shells whose details overlay is closed. */

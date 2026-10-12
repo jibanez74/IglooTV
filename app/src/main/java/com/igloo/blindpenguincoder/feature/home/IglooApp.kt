@@ -992,6 +992,9 @@ private fun ContentPane(
             },
         ),
     ) { mutableStateMapOf() }
+    // The hero's page memory, hoisted with the rails' for the same round trip: Home comes back
+    // on the page the user left, movie or show (section 11.3.1).
+    var heroPageKind by rememberSaveable { mutableStateOf<HomeHeroKind?>(null) }
 
     // Hoisted beside lastFocusedByRail and for the same reason: a Movies -> Home -> Movies round
     // trip must land on the same cell. A plain var rather than another map entry — HomeRail names
@@ -1059,6 +1062,8 @@ private fun ContentPane(
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequesters.getValue(IglooDestination.Home),
                 lastFocusedByRail = lastFocusedByRail,
+                heroPageKind = heroPageKind,
+                onHeroPageChange = { heroPageKind = it },
             )
 
             IglooDestination.Movies -> LibraryScreen(
@@ -1190,6 +1195,8 @@ private fun HomeRails(
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
     lastFocusedByRail: MutableMap<HomeRail, Long>,
+    heroPageKind: HomeHeroKind?,
+    onHeroPageChange: (HomeHeroKind) -> Unit,
 ) {
     // The hero owns the pane's entry anchor whenever it is visible; the Continue Watching rail
     // takes it back when the hero hides (section 11.3.1). heroVisible gates both attachment
@@ -1198,8 +1205,8 @@ private fun HomeRails(
     // The hero's d-pad down target: attached to the Continue rail's entry anchor in every rail
     // state, so down always lands where spine re-entry would.
     val continueEntryRequester = remember { FocusRequester() }
-    // By the time the refocus runs, the requester already sits on the incoming hero node, or on
-    // the Continue rail's anchor if the hero hid.
+    // The hero's one target outlives Loading -> Loaded and every page turn, so this matters only
+    // when the hero hides while focused: the requester then sits on the Continue rail's anchor.
     val onHeroFocus = rememberRefocusAfterSwap(home.hero) { contentStartRequester.requestFocus() }
     // A Retry that clears while focused leaves focus on nothing; it goes back to the card the
     // player closed onto, the same hand-back the details page's Retry makes.
@@ -1225,11 +1232,13 @@ private fun HomeRails(
         if (heroVisible) {
             HomeHero(
                 state = home.hero,
+                pageKind = heroPageKind,
+                onPageChange = onHeroPageChange,
                 entryRequester = contentStartRequester,
                 leftFocusRequester = navigationRequester,
                 downFocusRequester = continueEntryRequester,
                 contentInset = contentInset,
-                onSelect = openMovie?.let { open ->
+                onOpenMovie = openMovie?.let { open ->
                     { movieId -> open(DetailsOrigin.Hero, movieId) }
                 },
                 modifier = Modifier.onFocusChanged { onHeroFocus(it.hasFocus) },

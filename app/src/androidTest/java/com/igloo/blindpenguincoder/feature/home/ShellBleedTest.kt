@@ -76,7 +76,7 @@ class ShellBleedTest {
                     ) {
                         TestIglooApp(
                             home = HomeUiState(
-                                hero = HomeHeroState.Loaded(testHero),
+                                hero = HomeHeroState.Loaded(listOf(testHero)),
                                 continueWatching = IglooRailState.Loaded(testContinueMovies),
                                 latestMovies = IglooRailState.Loaded(testHomeMovies),
                             ),

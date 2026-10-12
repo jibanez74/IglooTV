@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.home
 
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.audioStreamJson
@@ -13,7 +14,11 @@ import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.latestAlbumsJson
 import com.igloo.blindpenguincoder.data.repository.latestMovieJson
 import com.igloo.blindpenguincoder.data.repository.latestMoviesJson
+import com.igloo.blindpenguincoder.data.repository.latestShowJson
+import com.igloo.blindpenguincoder.data.repository.latestShowsJson
 import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
+import com.igloo.blindpenguincoder.data.repository.showDetailsJson
+import com.igloo.blindpenguincoder.data.repository.showSeasonSummaryJson
 import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
 import com.igloo.blindpenguincoder.data.repository.theaterMovieJson
 import com.igloo.blindpenguincoder.data.repository.theaterMoviesJson
@@ -81,7 +86,11 @@ class HomeViewModelTest {
     private fun List<HomeContinueItem>.movieTitles() =
         map { (it as HomeContinueItem.Movie).movie.title }
 
-    /** A refresh fires all four rails' requests plus the hero's, so handlers route by path. */
+    /**
+     * A refresh fires all four rails' requests plus both hero pages', so handlers route by path.
+     * The show library is empty unless a test says otherwise, so the movie-page cases see the
+     * hero they always did: one page, or none.
+     */
     private fun routedHttp(
         engineDispatcher: CoroutineDispatcher? = null,
         continueWatching: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
@@ -94,6 +103,10 @@ class HomeViewModelTest {
             { jsonResponse(latestAlbumsJson()) },
         theaters: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(theaterMoviesJson()) },
+        latestShows: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+            { jsonResponse(latestShowsJson()) },
+        showDetails: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+            { jsonResponse(showDetailsJson()) },
         episode: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(episodePlaybackJson()) },
         episodeTechnical: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
@@ -111,6 +124,8 @@ class HomeViewModelTest {
             path.startsWith("/api/shows/episodes/") -> episode(request)
             path == "/api/music/albums/latest" -> albums(request)
             path == "/api/tmdb/movies/in-theaters" -> theaters(request)
+            path == "/api/shows/latest" -> latestShows(request)
+            path.startsWith("/api/shows/details/") -> showDetails(request)
             // Before the catch-all: the details call must never silently get a latest-shaped body.
             path.startsWith("/api/movies/details/") -> details(request)
             else -> latest(request)
@@ -125,8 +140,11 @@ class HomeViewModelTest {
         uiState.first { it.continueWatching is IglooRailState.Loaded }
             .continueWatching as IglooRailState.Loaded
 
-    private suspend fun HomeViewModel.awaitHero(): HomeHero =
-        (uiState.first { it.hero is HomeHeroState.Loaded }.hero as HomeHeroState.Loaded).hero
+    private suspend fun HomeViewModel.awaitHeroPages(): List<HomeHero> =
+        (uiState.first { it.hero is HomeHeroState.Loaded }.hero as HomeHeroState.Loaded).pages
+
+    /** The movie page, for the cases where the show library is empty and it is the only one. */
+    private suspend fun HomeViewModel.awaitHero(): HomeHero = awaitHeroPages().single()
 
     private suspend fun HomeViewModel.awaitHiddenHero() {
         uiState.first { it.hero is HomeHeroState.Hidden }
@@ -782,11 +800,16 @@ class HomeViewModelTest {
 
         assertEquals(
             HomeHero(
+                kind = HomeHeroKind.Movie,
                 id = 7,
                 title = "Heat",
                 backdropUrl = "http://igloo.test:8080/api/tmdb/images/w1280/heat-backdrop.jpg",
                 overview = "Neil McCauley leads a top-notch crew.",
-                metadataLine = "1995 · R · 2h 50m · 8.2",
+                year = "1995",
+                certification = "R",
+                ratingBadge = ratingBadgeSpec(8.2),
+                extent = "2h 50m",
+                metadataDescription = "Rated 8.2 out of 10, R, 1995, 2 hours and 50 minutes",
             ),
             hero,
         )
@@ -906,7 +929,21 @@ class HomeViewModelTest {
 
         val hero = viewModel(http).awaitHero()
 
-        assertEquals(HomeHero(1, "Heat", null, null, null), hero)
+        assertEquals(
+            HomeHero(
+                kind = HomeHeroKind.Movie,
+                id = 1,
+                title = "Heat",
+                backdropUrl = null,
+                overview = null,
+                year = null,
+                certification = null,
+                ratingBadge = null,
+                extent = null,
+                metadataDescription = null,
+            ),
+            hero,
+        )
     }
 
     @Test
@@ -929,12 +966,17 @@ class HomeViewModelTest {
             },
         )
 
-        assertEquals("R", viewModel(http).awaitHero().metadataLine)
+        val hero = viewModel(http).awaitHero()
+
+        assertNull(hero.year)
+        assertNull(hero.extent)
+        assertNull(hero.ratingBadge)
+        assertEquals("R", hero.metadataDescription)
     }
 
     @Test
     fun `runtimes format as hours and minutes`() = runTest {
-        suspend fun metadataLine(runTimeMinutes: Long): String? {
+        suspend fun extent(runTimeMinutes: Long): String? {
             val http = routedHttp(
                 latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 1))) },
                 details = {
@@ -949,12 +991,240 @@ class HomeViewModelTest {
                     )
                 },
             )
-            return viewModel(http).awaitHero().metadataLine
+            return viewModel(http).awaitHero().extent
         }
 
-        assertEquals("45m", metadataLine(45))
-        assertEquals("2h", metadataLine(120))
-        assertEquals("2h 50m", metadataLine(170))
+        assertEquals("45m", extent(45))
+        assertEquals("2h", extent(120))
+        assertEquals("2h 50m", extent(170))
+    }
+
+    @Test
+    fun `the hero features the newest show after the movie, enriched by one details request`() =
+        runTest {
+            var detailsRequests = 0
+            val http = routedHttp(
+                latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat"))) },
+                details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
+                latestShows = {
+                    jsonResponse(
+                        latestShowsJson(
+                            latestShowJson(id = 40, name = "Severance"),
+                            latestShowJson(id = 12, name = "Friends"),
+                        ),
+                    )
+                },
+                showDetails = { request ->
+                    detailsRequests++
+                    assertEquals("/api/shows/details/40", request.url.encodedPath)
+                    jsonResponse(
+                        showDetailsJson(
+                            id = 40,
+                            name = "Severance",
+                            backdropPath = "/severance-backdrop.jpg",
+                            overview = "Mark leads a team of office workers.",
+                            premiereYear = 2022,
+                            certification = "TV-MA",
+                            voteAverage = 8.4,
+                            seasons = listOf(showSeasonSummaryJson(1), showSeasonSummaryJson(2)),
+                        ),
+                    )
+                },
+            )
+
+            val pages = viewModel(http).awaitHeroPages()
+
+            assertEquals(listOf(HomeHeroKind.Movie, HomeHeroKind.Show), pages.map { it.kind })
+            assertEquals(
+                HomeHero(
+                    kind = HomeHeroKind.Show,
+                    id = 40,
+                    title = "Severance",
+                    backdropUrl = "http://igloo.test:8080/api/tmdb/images/w1280/severance-backdrop.jpg",
+                    overview = "Mark leads a team of office workers.",
+                    year = "2022",
+                    certification = "TV-MA",
+                    ratingBadge = ratingBadgeSpec(8.4),
+                    extent = "2 Seasons",
+                    metadataDescription = "Rated 8.4 out of 10, TV-MA, 2022, 2 seasons",
+                ),
+                pages[1],
+            )
+            assertEquals(1, detailsRequests)
+        }
+
+    @Test
+    fun `specials do not count as a season, and one season is singular`() = runTest {
+        val http = routedHttp(
+            latestShows = { jsonResponse(latestShowsJson(latestShowJson(id = 40))) },
+            showDetails = {
+                jsonResponse(
+                    showDetailsJson(
+                        id = 40,
+                        seasons = listOf(showSeasonSummaryJson(1), showSeasonSummaryJson(0)),
+                    ),
+                )
+            },
+        )
+
+        val show = viewModel(http).awaitHero()
+
+        assertEquals("1 Season", show.extent)
+        assertEquals("Rated 8.4 out of 10, TV-MA, 2022, 1 season", show.metadataDescription)
+    }
+
+    @Test
+    fun `show fields absent or zero on the wire are dropped, not rendered`() = runTest {
+        val http = routedHttp(
+            latestShows = { jsonResponse(latestShowsJson(latestShowJson(id = 40))) },
+            showDetails = {
+                jsonResponse(
+                    showDetailsJson(
+                        id = 40,
+                        backdropPath = null,
+                        overview = "  ",
+                        premiereYear = 0,
+                        certification = null,
+                        voteAverage = 0.0,
+                        // A show the library holds only the specials of has no season to count.
+                        seasons = listOf(showSeasonSummaryJson(0)),
+                    ),
+                )
+            },
+        )
+
+        val show = viewModel(http).awaitHero()
+
+        assertEquals(HomeHeroKind.Show, show.kind)
+        assertNull(show.backdropUrl)
+        assertNull(show.overview)
+        assertNull(show.year)
+        assertNull(show.certification)
+        assertNull(show.ratingBadge)
+        assertNull(show.extent)
+        assertNull(show.metadataDescription)
+    }
+
+    @Test
+    fun `the hero stays loading until both pages have settled`() = runTest {
+        val showGate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat"))) },
+            details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
+            latestShows = { jsonResponse(latestShowsJson(latestShowJson(id = 40))) },
+            showDetails = {
+                showGate.await()
+                jsonResponse(showDetailsJson(id = 40))
+            },
+        )
+        val viewModel = viewModel(http)
+
+        // The movie page is ready, but showing it alone would put "1 of 1" under the user's
+        // focus and then grow a second page beside it.
+        viewModel.awaitLatest()
+        assertEquals(HomeHeroState.Loading, viewModel.uiState.value.hero)
+
+        showGate.complete(Unit)
+        assertEquals(
+            listOf(HomeHeroKind.Movie, HomeHeroKind.Show),
+            viewModel.awaitHeroPages().map { it.kind },
+        )
+    }
+
+    @Test
+    fun `a show page that cannot load leaves the movie page alone`() = runTest {
+        suspend fun pagesWhen(
+            latestShows: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
+            showDetails: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
+        ): List<HomeHeroKind> {
+            val http = routedHttp(
+                latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat"))) },
+                details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
+                latestShows = latestShows,
+                showDetails = showDetails,
+            )
+            return viewModel(http).awaitHeroPages().map { it.kind }
+        }
+        val boom: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData = {
+            jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+        }
+
+        // An empty show library, a failed latest fetch, and a failed details fetch.
+        assertEquals(
+            listOf(HomeHeroKind.Movie),
+            pagesWhen({ jsonResponse(latestShowsJson()) }, { jsonResponse(showDetailsJson()) }),
+        )
+        assertEquals(listOf(HomeHeroKind.Movie), pagesWhen(boom, { jsonResponse(showDetailsJson()) }))
+        assertEquals(
+            listOf(HomeHeroKind.Movie),
+            pagesWhen({ jsonResponse(latestShowsJson(latestShowJson(id = 40))) }, boom),
+        )
+    }
+
+    @Test
+    fun `the show page stands alone when the movie library is empty`() = runTest {
+        val http = routedHttp(
+            latestShows = { jsonResponse(latestShowsJson(latestShowJson(id = 40))) },
+            showDetails = { jsonResponse(showDetailsJson(id = 40, name = "Severance")) },
+        )
+
+        assertEquals("Severance", viewModel(http).awaitHero().title)
+    }
+
+    @Test
+    fun `a refresh whose show details fail keeps the loaded show page`() = runTest {
+        var showRequests = 0
+        val http = routedHttp(
+            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat"))) },
+            details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
+            latestShows = { jsonResponse(latestShowsJson(latestShowJson(id = 40))) },
+            showDetails = {
+                showRequests += 1
+                if (showRequests == 1) {
+                    jsonResponse(showDetailsJson(id = 40, name = "Severance"))
+                } else {
+                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                }
+            },
+        )
+        val viewModel = viewModel(http)
+        assertEquals(listOf("Heat", "Severance"), viewModel.awaitHeroPages().map { it.title })
+
+        viewModel.refresh()
+
+        assertEquals(2, showRequests)
+        assertEquals(listOf("Heat", "Severance"), viewModel.awaitHeroPages().map { it.title })
+    }
+
+    @Test
+    fun `retrying the latest rail reloads the movie page and keeps the show page`() = runTest {
+        var latestRequests = 0
+        val gate = CompletableDeferred<Unit>()
+        var showRequests = 0
+        val http = routedHttp(
+            latest = {
+                latestRequests += 1
+                if (latestRequests == 2) gate.await()
+                jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat")))
+            },
+            details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
+            latestShows = {
+                showRequests += 1
+                jsonResponse(latestShowsJson(latestShowJson(id = 40)))
+            },
+            showDetails = { jsonResponse(showDetailsJson(id = 40, name = "Severance")) },
+        )
+        val viewModel = viewModel(http)
+        assertEquals(2, viewModel.awaitHeroPages().size)
+
+        viewModel.retry(HomeRail.LatestMovies)
+
+        assertEquals(HomeHeroState.Loading, viewModel.uiState.value.hero)
+        gate.complete(Unit)
+        assertEquals(listOf("Heat", "Severance"), viewModel.awaitHeroPages().map { it.title })
+        // The rail's Retry is the movie page's; the show page has none and is not re-read.
+        assertEquals(1, showRequests)
     }
 
     @Test

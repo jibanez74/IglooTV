@@ -204,7 +204,7 @@ class MovieDetailsFocusTest {
      */
     @Test
     fun theHeroOpensDetailsAndBackReturnsToIt() {
-        setShellContent(hero = HomeHeroState.Loaded(testHero))
+        setShellContent(hero = HomeHeroState.Loaded(listOf(testHero)))
 
         val hero = composeRule.onNodeWithTag("home_hero")
         hero.assertIsFocused().assertHasClickAction()
