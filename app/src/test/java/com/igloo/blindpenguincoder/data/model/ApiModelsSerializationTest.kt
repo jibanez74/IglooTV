@@ -161,7 +161,7 @@ class ApiModelsSerializationTest {
                 """{"genre_id":7,"genre_tag":"Comedy","show_count":2}]}}""",
         ).data!!.genres
         val stats = json.decodeFromString<ApiEnvelope<ShowsStatsData>>(
-            """{"error":false,"message":"show stats","data":{"total_shows":3}}""",
+            """{"error":false,"message":"show stats","data":{"total_shows":3,"total_seasons":7,"total_episodes":58}}""",
         ).data!!
 
         assertEquals(
@@ -331,8 +331,7 @@ class ApiModelsSerializationTest {
                    "is_forced": false, "is_default": false}
                 ],
                 "chapters": [
-                  {"id": 14, "title": "", "start_time": 60,
-                   "thumb": {"String": "", "Valid": false}, "file_id": 7}
+                  {"id": 14, "title": "", "start_time": 60, "file_id": 7}
                 ]
               }
             }
@@ -422,8 +421,7 @@ class ApiModelsSerializationTest {
                   "platform": "android_tv",
                   "app_version": "0.1.0",
                   "created_at": "2026-07-01T00:00:00Z",
-                  "last_used_at": "2026-07-01T00:01:00Z",
-                  "is_current": true
+                  "last_used_at": "2026-07-01T00:01:00Z"
                 }
               }
             }
@@ -454,8 +452,7 @@ class ApiModelsSerializationTest {
                       "platform": "android_tv",
                       "app_version": null,
                       "created_at": "2026-07-01T00:00:00Z",
-                      "last_used_at": "2026-07-01T00:01:00Z",
-                      "is_current": true
+                      "last_used_at": "2026-07-01T00:01:00Z"
                     }
                   }
                 }
@@ -1115,7 +1112,6 @@ class ApiModelsSerializationTest {
                 ],
                 "chapters": [
                   {"id": 6675, "title": "00:03:13.026", "start_time": 193,
-                   "thumb": {"String": "", "Valid": false},
                    "movie_id": 406}
                 ]
               }
