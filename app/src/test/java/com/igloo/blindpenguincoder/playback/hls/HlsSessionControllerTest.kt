@@ -25,11 +25,17 @@ class HlsSessionControllerTest {
     private class FakeHlsApi : HlsSessionApi {
         val queuedResults = ArrayDeque<HlsManifestResult>()
         val fetchedSpecs = mutableListOf<HlsSessionSpec>()
+        /** Parallel to [fetchedSpecs]: whether each fetch was a refresh-only keepalive ping. */
+        val keepaliveFlags = mutableListOf<Boolean>()
         val stops = mutableListOf<Pair<PlaybackMediaRef, String>>()
         var fetchOverride: (suspend (HlsSessionSpec) -> HlsManifestResult)? = null
 
-        override suspend fun fetchHlsManifest(spec: HlsSessionSpec): HlsManifestResult {
+        override suspend fun fetchHlsManifest(
+            spec: HlsSessionSpec,
+            keepalive: Boolean,
+        ): HlsManifestResult {
             fetchedSpecs += spec
+            keepaliveFlags += keepalive
             fetchOverride?.let { return it(spec) }
             return queuedResults.removeFirstOrNull()
                 ?: HlsManifestResult.Ready("remux", spec.startSec.toDouble())
@@ -348,7 +354,7 @@ class HlsSessionControllerTest {
     }
 
     @Test
-    fun `the keepalive refetches the started spec and reports a lost session`() = runTest {
+    fun `the keepalive pings the started spec refresh-only and reports a lost session`() = runTest {
         val api = FakeHlsApi()
         val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
         controller.start("remux", 2, null, 60)
@@ -358,6 +364,8 @@ class HlsSessionControllerTest {
         advanceTimeBy(HLS_KEEPALIVE_INTERVAL_MS + 1)
         assertEquals(2, api.fetchedSpecs.size)
         assertEquals(api.fetchedSpecs.first(), api.fetchedSpecs.last())
+        // Only the ping is refresh-only; the start must be free to create the session.
+        assertEquals(listOf(false, true), api.keepaliveFlags)
         assertEquals(0, lost)
 
         api.queuedResults += HlsManifestResult.Lost

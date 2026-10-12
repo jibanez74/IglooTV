@@ -67,7 +67,10 @@ class ExoVideoPlayerEngineTest {
         var throwOnFetch: (() -> Nothing)? = null
         var suspendedResult: CompletableDeferred<HlsManifestResult>? = null
 
-        override suspend fun fetchHlsManifest(spec: HlsSessionSpec): HlsManifestResult {
+        override suspend fun fetchHlsManifest(
+            spec: HlsSessionSpec,
+            keepalive: Boolean,
+        ): HlsManifestResult {
             fetched += spec
             throwOnFetch?.invoke()
             return suspendedResult?.await() ?: result

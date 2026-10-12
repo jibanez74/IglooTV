@@ -21,7 +21,8 @@ import kotlinx.coroutines.withTimeout
  * Implemented by the video playback repository.
  */
 interface HlsSessionApi {
-    suspend fun fetchHlsManifest(spec: HlsSessionSpec): HlsManifestResult
+    /** [keepalive]: a refresh-only ping that never creates a session (see [hlsQueryParams]). */
+    suspend fun fetchHlsManifest(spec: HlsSessionSpec, keepalive: Boolean = false): HlsManifestResult
     suspend fun stopHlsSession(media: PlaybackMediaRef, sessionUuid: String)
     fun hlsPlaylistUrl(spec: HlsSessionSpec): String
     fun subtitleUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String
@@ -165,9 +166,13 @@ class HlsSessionController(
      * Refreshes the server's 5-minute idle TTL for the life of the session. The refresh only
      * matters while the player is paused or fully buffered — its own traffic covers the rest —
      * but it deliberately runs unconditionally: one small manifest GET every two minutes is
-     * cheaper than racing the player's transport-state changes. A lost session surfaces
-     * through [onSessionLost]; transient failures are ignored — the next tick or the player's
-     * own traffic will recover.
+     * cheaper than racing the player's transport-state changes.
+     *
+     * Each ping is refresh-only. A plain manifest request would recreate an evicted session at
+     * its original start, which after a long sleep can be far behind the playhead; the refresh-only
+     * ping gets a 404 instead, surfaced through [onSessionLost] so the engine rebases where the
+     * viewer is. Transient failures are ignored — the next tick or the player's own traffic will
+     * recover.
      */
     fun startKeepalive(onSessionLost: () -> Unit) {
         keepaliveJob?.cancel()
@@ -181,7 +186,7 @@ class HlsSessionController(
                 // A throwing tick must not end the loop, and must not reach the scope's
                 // uncaught handler: the next tick, or the player's own traffic, recovers.
                 val result = try {
-                    api.fetchHlsManifest(spec)
+                    api.fetchHlsManifest(spec, keepalive = true)
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (_: Exception) {

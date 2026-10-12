@@ -41,7 +41,10 @@ sealed interface HlsManifestResult {
     /** 503: no transcode capacity right now. Retry after [retryAfterSec] (null = unspecified). */
     data class Busy(val retryAfterSec: Int?) : HlsManifestResult
 
-    /** 404: the session (or movie) is gone; a fresh manifest request may recreate it. */
+    /**
+     * 404: the session (or movie) is gone; a fresh manifest request may recreate it. For a
+     * keepalive ping it is the eviction itself, reported instead of a stale-start recreation.
+     */
     data object Lost : HlsManifestResult
 
     /** [rejectedRequest]: the server refused what was asked (400/422), not how or when. */
@@ -58,17 +61,23 @@ sealed interface HlsManifestResult {
  * pair only when a conversion is requested (the server 400s a lone half; the single
  * [HlsAudioProfile] value makes that unrepresentable), `reload` only once recovery has bumped
  * it. Segment URLs need none of this — the server propagates the query onto them itself.
+ *
+ * [keepalive] marks a refresh-only ping: the server refreshes the session's idle TTL but never
+ * creates one, answering 404 once it is gone. It is a request flag, not part of the session, so
+ * the playlist URL handed to Media3 never carries it.
  */
-fun hlsQueryParams(spec: HlsSessionSpec): List<Pair<String, String>> = buildList {
-    add("playback_session" to spec.sessionUuid)
-    add("start" to spec.startSec.toString())
-    spec.audioTypeIndex?.let { add("audio_track" to it.toString()) }
-    spec.audioProfile?.let {
-        add("audio_codec" to it.audioCodec)
-        add("audio_channels" to it.audioChannels.toString())
+fun hlsQueryParams(spec: HlsSessionSpec, keepalive: Boolean = false): List<Pair<String, String>> =
+    buildList {
+        add("playback_session" to spec.sessionUuid)
+        add("start" to spec.startSec.toString())
+        spec.audioTypeIndex?.let { add("audio_track" to it.toString()) }
+        spec.audioProfile?.let {
+            add("audio_codec" to it.audioCodec)
+            add("audio_channels" to it.audioChannels.toString())
+        }
+        if (spec.reload > 0) add("reload" to spec.reload.toString())
+        if (keepalive) add("keepalive" to "1")
     }
-    if (spec.reload > 0) add("reload" to spec.reload.toString())
-}
 
 /**
  * Classifies a manifest response. On 200 the two `X-Igloo-*` headers carry the truth about
