@@ -7,9 +7,12 @@ import com.igloo.blindpenguincoder.core.error.flatMap
 import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
+import com.igloo.blindpenguincoder.core.ui.countNoun
 import com.igloo.blindpenguincoder.core.ui.formatEpisodeCode
 import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
+import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.orKeepContent
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
@@ -17,6 +20,7 @@ import com.igloo.blindpenguincoder.data.model.ContinueWatchingItem
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.data.model.ShowDetailsData
 import com.igloo.blindpenguincoder.data.model.ShowEpisodePlaybackData
 import com.igloo.blindpenguincoder.data.model.ShowEpisodeTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.WatchProgress
@@ -96,23 +100,41 @@ data class HomeTheaterMovie(
 /** The rails Home renders, in the order it renders them (docs/design-system.md section 11.3). */
 enum class HomeRail { ContinueWatching, LatestMovies, LatestAlbums, InTheaters }
 
-/** The featured movie, render-ready (section 11.3.1). Every field but id and title may be absent. */
+/** What a hero page features: the newest movie or the newest show (section 11.3.1). */
+enum class HomeHeroKind { Movie, Show }
+
+/**
+ * One featured title, render-ready (section 11.3.1). Every field but kind, id and title may be
+ * absent. [extent] is what the title runs to — "2h 50m" for a movie, "3 Seasons" for a show —
+ * and [metadataDescription] is the metadata row's one spoken sentence, composed here so the chips
+ * the row draws never reach TalkBack one by one.
+ */
 data class HomeHero(
+    val kind: HomeHeroKind,
     val id: Long,
     val title: String,
     val backdropUrl: String?,
     val overview: String?,
-    val metadataLine: String?,
+    val year: String?,
+    val certification: String?,
+    val ratingBadge: RatingBadgeSpec?,
+    val extent: String?,
+    val metadataDescription: String?,
 )
 
 /**
- * No Error member on purpose: the hero's data is the Recently Added rail's data, and that rail
- * already owns the error card and its Retry. A hero that cannot load hides instead.
+ * No Error member on purpose: a hero page that cannot load hides instead. The movie page's data
+ * is the Recently Added rail's, and that rail already owns the error card and its Retry; the show
+ * page has no rail, and the next foreground refresh is its retry.
+ *
+ * [Loaded] holds one page per feature that loaded, the movie first. The hero stays [Loading]
+ * until every feature has settled, so a page never appears or disappears under the user's focus
+ * mid-load and the announced "1 of 2" is right from the first word.
  */
 sealed interface HomeHeroState {
     data object Loading : HomeHeroState
     data object Hidden : HomeHeroState
-    data class Loaded(val hero: HomeHero) : HomeHeroState
+    data class Loaded(val pages: List<HomeHero>) : HomeHeroState
 }
 
 /** Everything Home draws. One object, so a new rail does not re-thread every composable. */
@@ -139,6 +161,11 @@ class HomeViewModel(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     private val loads = mutableMapOf<HomeRail, Job>()
+    private var showFeatureLoad: Job? = null
+
+    /** Each featured title's own load state; [HomeHeroState] is composed from them in order. */
+    private val features: MutableMap<HomeHeroKind, Feature> =
+        HomeHeroKind.entries.associateWithTo(mutableMapOf()) { Feature.Loading }
 
     // Conflated, like the details page's: the host consumes launches, and only the latest one
     // can matter once it does.
@@ -158,6 +185,7 @@ class HomeViewModel(
         _uiState.update { it.copy(playbackNotice = null) }
         loadContinueWatching(userInitiated = false)
         loadLatestMovies(userInitiated = false)
+        loadShowFeature()
         loadLatestAlbums(userInitiated = false)
         loadInTheaters(userInitiated = false)
     }
@@ -319,9 +347,8 @@ class HomeViewModel(
 
     private fun loadLatestMovies(userInitiated: Boolean) {
         if (userInitiated) {
-            _uiState.update {
-                it.copy(latestMovies = IglooRailState.Loading, hero = HomeHeroState.Loading)
-            }
+            _uiState.update { it.copy(latestMovies = IglooRailState.Loading) }
+            setFeature(HomeHeroKind.Movie, Feature.Loading)
         }
         launchLoad(HomeRail.LatestMovies) {
             val result = movies.latestMovies()
@@ -341,7 +368,7 @@ class HomeViewModel(
             _uiState.update {
                 it.copy(latestMovies = next.orKeepContent(it.latestMovies, keep = !userInitiated))
             }
-            loadHero(result, userInitiated)
+            loadMovieFeature(result, userInitiated)
         }
     }
 
@@ -393,43 +420,79 @@ class HomeViewModel(
     }
 
     /**
-     * The hero features the newest addition (section 11.3.1), so its subject comes out of the
-     * rail's own response — one source, and the rail's Retry re-runs the hero for free. Only the
-     * backdrop, overview, and metadata need the second, per-movie request.
+     * The movie page features the newest addition (section 11.3.1), so its subject comes out of
+     * the rail's own response — one source, and the rail's Retry re-runs the page for free. Only
+     * the backdrop, overview, and metadata need the second, per-movie request.
      */
-    private suspend fun loadHero(latest: ApiResult<List<LatestMovie>>, userInitiated: Boolean) {
+    private suspend fun loadMovieFeature(
+        latest: ApiResult<List<LatestMovie>>,
+        userInitiated: Boolean,
+    ) {
         val newest = when (latest) {
             is ApiResult.Failure -> {
-                hideHeroOrKeep(userInitiated)
+                hideFeatureOrKeep(HomeHeroKind.Movie, userInitiated)
                 return
             }
             is ApiResult.Success -> latest.value.firstOrNull() ?: run {
-                // An empty library has no hero to protect: hide unconditionally.
-                _uiState.update { it.copy(hero = HomeHeroState.Hidden) }
+                // An empty library has no page to protect: hide unconditionally.
+                setFeature(HomeHeroKind.Movie, Feature.Hidden)
                 return
             }
         }
         when (val details = movies.movieDetails(newest.id)) {
-            is ApiResult.Success -> _uiState.update {
-                it.copy(
-                    hero = HomeHeroState.Loaded(
-                        toHomeHero(details.value.movie, serverUrl.require().apiBaseUrl),
-                    ),
-                )
-            }
-            is ApiResult.Failure -> hideHeroOrKeep(userInitiated)
+            is ApiResult.Success -> setFeature(
+                HomeHeroKind.Movie,
+                Feature.Loaded(toMovieHero(details.value.movie, serverUrl.require().apiBaseUrl)),
+            )
+            is ApiResult.Failure -> hideFeatureOrKeep(HomeHeroKind.Movie, userInitiated)
         }
     }
 
-    /** The hero's [orKeepContent]: a background refresh that fails leaves a loaded hero alone. */
-    private fun hideHeroOrKeep(userInitiated: Boolean) {
-        _uiState.update {
-            if (!userInitiated && it.hero is HomeHeroState.Loaded) {
-                it
-            } else {
-                it.copy(hero = HomeHeroState.Hidden)
+    /**
+     * The show page: the first of `GET /shows/latest`, enriched by its details. It has no rail of
+     * its own, so it loads in its own job, never shows an error, and is never user-retried — a
+     * page that fails hides (or, on a background refresh, stays as it was) and the next
+     * foreground refresh tries again.
+     */
+    private fun loadShowFeature() {
+        showFeatureLoad?.cancel()
+        showFeatureLoad = viewModelScope.launch {
+            val newest = when (val latest = shows.latestShows()) {
+                is ApiResult.Failure -> {
+                    hideFeatureOrKeep(HomeHeroKind.Show, userInitiated = false)
+                    return@launch
+                }
+                is ApiResult.Success -> latest.value.firstOrNull() ?: run {
+                    setFeature(HomeHeroKind.Show, Feature.Hidden)
+                    return@launch
+                }
+            }
+            when (val details = shows.showDetails(newest.id)) {
+                is ApiResult.Success -> setFeature(
+                    HomeHeroKind.Show,
+                    Feature.Loaded(toShowHero(details.value, serverUrl.require().apiBaseUrl)),
+                )
+                is ApiResult.Failure -> hideFeatureOrKeep(HomeHeroKind.Show, userInitiated = false)
             }
         }
+    }
+
+    /** The hero's [orKeepContent]: a background refresh that fails leaves a loaded page alone. */
+    private fun hideFeatureOrKeep(kind: HomeHeroKind, userInitiated: Boolean) {
+        if (!userInitiated && features.getValue(kind) is Feature.Loaded) return
+        setFeature(kind, Feature.Hidden)
+    }
+
+    private fun setFeature(kind: HomeHeroKind, feature: Feature) {
+        features[kind] = feature
+        val slots = HomeHeroKind.entries.map { features.getValue(it) }
+        val pages = slots.filterIsInstance<Feature.Loaded>().map { it.hero }
+        val hero = when {
+            slots.any { it is Feature.Loading } -> HomeHeroState.Loading
+            pages.isEmpty() -> HomeHeroState.Hidden
+            else -> HomeHeroState.Loaded(pages)
+        }
+        _uiState.update { it.copy(hero = hero) }
     }
 
     /**
@@ -447,28 +510,83 @@ class HomeViewModel(
             is ApiResult.Failure -> IglooRailState.Error(error.toLibraryDisplayMessage())
         }
 
-    private fun toHomeHero(movie: Movie, apiBaseUrl: String): HomeHero = HomeHero(
-        id = movie.id,
-        title = movie.title,
-        // w1280 for a pane-width backdrop (section 11.3.1); w500 would upscale visibly at 10ft.
-        backdropUrl = tmdbImageUrl(
-            apiBaseUrl = apiBaseUrl,
-            size = TmdbImageSize.W1280,
-            path = movie.backdropPath?.orNull(),
-        ),
-        overview = movie.overview?.orNullIfBlank(),
-        metadataLine = heroMetadataLine(movie),
-    )
+    private fun toMovieHero(movie: Movie, apiBaseUrl: String): HomeHero {
+        val ratingBadge = movie.criticRating?.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
+        val certification = movie.certification?.orNullIfBlank()
+        val year = movie.year?.orNull()?.takeIf { it > 0 }?.toString()
+        val runtime = movie.runTime?.orNull()?.takeIf { it > 0 }
+        return HomeHero(
+            kind = HomeHeroKind.Movie,
+            id = movie.id,
+            title = movie.title,
+            backdropUrl = heroBackdropUrl(apiBaseUrl, movie.backdropPath?.orNull()),
+            overview = movie.overview?.orNullIfBlank(),
+            year = year,
+            certification = certification,
+            ratingBadge = ratingBadge,
+            extent = runtime?.let(::formatRuntime),
+            metadataDescription = heroMetadataDescription(
+                ratingBadge = ratingBadge,
+                certification = certification,
+                year = year,
+                spokenExtent = runtime?.let { formatSpokenTime(it * 60.0) },
+            ),
+        )
+    }
 
-    // Every numeric field is guarded against zero, not just null: the scraper writes TMDB's
-    // "no data" as a valid 0 — an unrated movie would otherwise read "· 0.0".
-    private fun heroMetadataLine(movie: Movie): String? = listOfNotNull(
-        movie.year?.orNull()?.takeIf { it > 0 }?.toString(),
-        movie.certification?.orNullIfBlank(),
-        movie.runTime?.orNull()?.takeIf { it > 0 }?.let(::formatRuntime),
-        movie.criticRating?.orNull()?.takeIf { it > 0 }?.let { ratingBadgeSpec(it).label },
-    )
-        .joinToString(" · ")
-        .ifEmpty { null }
+    private fun toShowHero(details: ShowDetailsData, apiBaseUrl: String): HomeHero {
+        val show = details.show
+        val ratingBadge = show.voteAverage.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
+        val certification = show.certification.orNullIfBlank()
+        val year = show.premiereYear.orNull()?.takeIf { it > 0 }?.toString()
+        // Specials are season 0 and do not count as a season, the way every catalogue counts.
+        val seasons = details.seasons.count { it.seasonNumber > 0 }.toLong().takeIf { it > 0 }
+        return HomeHero(
+            kind = HomeHeroKind.Show,
+            id = show.id,
+            title = show.name,
+            backdropUrl = heroBackdropUrl(apiBaseUrl, show.backdropPath.orNull()),
+            overview = show.overview.orNullIfBlank(),
+            year = year,
+            certification = certification,
+            ratingBadge = ratingBadge,
+            extent = seasons?.let { "$it ${countNoun(it, "Season")}" },
+            metadataDescription = heroMetadataDescription(
+                ratingBadge = ratingBadge,
+                certification = certification,
+                year = year,
+                spokenExtent = seasons?.let { "$it ${countNoun(it, "season")}" },
+            ),
+        )
+    }
 
+    // w1280 for a pane-width backdrop (section 11.3.1); w500 would upscale visibly at 10ft.
+    private fun heroBackdropUrl(apiBaseUrl: String, path: String?): String? =
+        tmdbImageUrl(apiBaseUrl = apiBaseUrl, size = TmdbImageSize.W1280, path = path)
 }
+
+/** One featured title's own load state, before the hero composes its pages (section 11.3.1). */
+private sealed interface Feature {
+    data object Loading : Feature
+    data object Hidden : Feature
+    data class Loaded(val hero: HomeHero) : Feature
+}
+
+/**
+ * The hero's metadata row as one sentence, in the order the row draws it: rating badge,
+ * certification chip, then the year and extent. Every field is guarded against zero upstream —
+ * the scraper writes TMDB's "no data" as a valid 0, and an unrated title must not read "0.0".
+ */
+internal fun heroMetadataDescription(
+    ratingBadge: RatingBadgeSpec?,
+    certification: String?,
+    year: String?,
+    spokenExtent: String?,
+): String? = listOfNotNull(
+    ratingBadge?.let { "Rated ${it.label} out of 10" },
+    certification,
+    year,
+    spokenExtent,
+)
+    .joinToString(", ")
+    .ifEmpty { null }

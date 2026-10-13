@@ -159,6 +159,60 @@ class ShowRepositoryTest {
     }
 
     @Test
+    fun `latest shows hit the contract path and keep the server's order`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(latestShowsJson(latestShowJson(id = 40), latestShowJson(id = 12, name = "Friends")))
+        }
+        http.profiles.setPending("igd_test")
+
+        val result = http.showRepository.latestShows()
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/shows/latest", captured.url.encodedPath)
+        assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+        assertEquals(listOf(40L, 12L), (result as ApiResult.Success).value.map { it.id })
+    }
+
+    @Test
+    fun `show details hit the contract path and decode the show and its seasons`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(
+                showDetailsJson(
+                    id = 40,
+                    seasons = listOf(showSeasonSummaryJson(1), showSeasonSummaryJson(0)),
+                ),
+            )
+        }
+
+        val result = http.showRepository.showDetails(40)
+
+        assertEquals("/api/shows/details/40", requireNotNull(request).url.encodedPath)
+        val data = (result as ApiResult.Success).value
+        assertEquals("Severance", data.show.name)
+        assertEquals(2022L, data.show.premiereYear.orNull())
+        assertEquals("TV-MA", data.show.certification.orNull())
+        assertEquals("/severance-backdrop.jpg", data.show.backdropPath.orNull())
+        assertEquals(8.4, requireNotNull(data.show.voteAverage.orNull()), 0.0)
+        assertEquals(listOf(1L, 0L), data.seasons.map { it.seasonNumber })
+    }
+
+    @Test
+    fun `a missing show fails with its status`() = runTest {
+        val http = TestHttp {
+            jsonResponse("""{"error":true,"message":"show not found"}""", HttpStatusCode.NotFound)
+        }
+
+        val result = http.showRepository.showDetails(404)
+
+        val error = (result as ApiResult.Failure).error
+        assertEquals(404, (error as AppError.Api).status)
+    }
+
+    @Test
     fun `episode playback hits the contract path and decodes the header`() = runTest {
         var request: HttpRequestData? = null
         val http = TestHttp {

@@ -67,9 +67,15 @@ class NavigationRailBehaviorTest {
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
 
+    /**
+     * Under a screen reader the shell's first focus request waits until it can be announced, and
+     * `waitForIdle` does not fast-forward that delay, so [settleEntryFocus] advances the clock past
+     * it — the state a TalkBack user is in once Home has been read out.
+     */
     private fun setShellContent(
         initialSignOut: SignOutUiState = SignOutUiState(),
         spokenAccessibilityEnabled: Boolean = false,
+        settleEntryFocus: Boolean = true,
     ) {
         composeRule.setContent {
             val context = LocalContext.current
@@ -84,7 +90,7 @@ class NavigationRailBehaviorTest {
                     // paths render with no network or image loading, so the shell tests stay
                     // hermetic while exercising the shipped entry anchor — the hero.
                     home = HomeUiState(
-                        hero = HomeHeroState.Loaded(testHero),
+                        hero = HomeHeroState.Loaded(listOf(testHero)),
                         continueWatching = IglooRailState.Loaded(testContinueMovies),
                         latestMovies = IglooRailState.Loaded(testHomeMovies),
                     ),
@@ -96,6 +102,10 @@ class NavigationRailBehaviorTest {
             }
         }
         composeRule.waitForIdle()
+        if (spokenAccessibilityEnabled && settleEntryFocus) {
+            composeRule.mainClock.advanceTimeBy(ANNOUNCE_WAIT_MS)
+            composeRule.waitForIdle()
+        }
     }
 
     /** The content anchor on Home: the hero, whenever it is visible (section 11.3.1). */
@@ -187,6 +197,35 @@ class NavigationRailBehaviorTest {
             "Back on a rail opened by Back must exit the app",
             activity.isFinishing || activity.isDestroyed,
         )
+    }
+
+    /**
+     * The shell has just replaced the sign-in or PIN screen, and its anchor is in its first frame:
+     * focus taken there goes unannounced, and on a Shield TalkBack parked its cursor on the
+     * profile avatar instead. Under a screen reader the first request waits until it can be heard.
+     */
+    @Test
+    fun underAScreenReaderTheShellsFirstFocusWaitsUntilItCanBeHeard() {
+        composeRule.mainClock.autoAdvance = false
+        setShellContent(spokenAccessibilityEnabled = true, settleEntryFocus = false)
+        repeat(2) { composeRule.mainClock.advanceTimeByFrame() }
+
+        contentStartCard().assertExists().assertIsNotFocused()
+
+        composeRule.mainClock.advanceTimeBy(ANNOUNCE_WAIT_MS)
+        composeRule.mainClock.autoAdvance = true
+        contentStartCard().assertIsFocused()
+    }
+
+    /** With no screen reader there is nothing to wait for: the anchor has focus at once. */
+    @Test
+    fun withoutAScreenReaderTheShellsFirstFocusIsImmediate() {
+        composeRule.mainClock.autoAdvance = false
+        setShellContent(spokenAccessibilityEnabled = false)
+        repeat(2) { composeRule.mainClock.advanceTimeByFrame() }
+
+        contentStartCard().assertIsFocused()
+        composeRule.mainClock.autoAdvance = true
     }
 
     /**

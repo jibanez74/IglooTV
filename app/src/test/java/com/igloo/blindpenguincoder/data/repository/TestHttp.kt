@@ -234,6 +234,67 @@ fun showGenreWithCountJson(
 fun showsGenresJson(vararg genres: String): String =
     """{"error":false,"message":"show genres","data":{"genres":[${genres.joinToString(",")}]}}"""
 
+/** One `GET /shows/latest` entry, in the contract's full shape. */
+fun latestShowJson(
+    id: Long = 40,
+    name: String = "Severance",
+    posterPath: String? = "/severance.jpg",
+    premiereYear: Long? = 2022,
+): String = """{"id":$id,"name":"$name","poster_path":${sqlNullStringJson(posterPath)},""" +
+    """"premiere_year":${sqlNullInt64Json(premiereYear)}}"""
+
+fun latestShowsJson(vararg shows: String): String =
+    """{"error":false,"message":"latest shows","data":{"shows":[${shows.joinToString(",")}]}}"""
+
+/** One `ShowSeasonSummary`, in the contract's full shape. */
+fun showSeasonSummaryJson(seasonNumber: Long, id: Long = seasonNumber + 100): String =
+    """{"id":$id,"season_number":$seasonNumber,"name":"Season $seasonNumber",""" +
+        """"overview":${sqlNullStringJson(null)},"air_date":${sqlNullStringJson(null)},""" +
+        """"poster_path":${sqlNullStringJson(null)},"tmdb_episode_count":${sqlNullInt64Json(9)},""" +
+        """"available_episode_count":9}"""
+
+/**
+ * A `GET /shows/details/{id}` body. The show carries every field the contract requires, so the
+ * fixture exercises `ignoreUnknownKeys` the way the live route does; the credit arrays are empty.
+ */
+fun showDetailsJson(
+    id: Long = 40,
+    name: String = "Severance",
+    backdropPath: String? = "/severance-backdrop.jpg",
+    overview: String? = "Mark leads a team of office workers whose memories have been split.",
+    premiereYear: Long? = 2022,
+    certification: String? = "TV-MA",
+    voteAverage: Double? = 8.4,
+    seasons: List<String> = listOf(showSeasonSummaryJson(1), showSeasonSummaryJson(2)),
+): String = """
+    {"error":false,"message":"show details","data":{
+      "show":{
+        "id":$id,"name":"$name",
+        "original_name":${sqlNullStringJson(name)},
+        "premiere_year":${sqlNullInt64Json(premiereYear)},
+        "tmdb_id":${sqlNullInt64Json(95396)},
+        "overview":${sqlNullStringJson(overview)},
+        "tagline":${sqlNullStringJson(null)},
+        "language":${sqlNullStringJson("en")},
+        "origin_countries":${sqlNullStringJson("US")},
+        "first_air_date":${sqlNullStringJson("2022-02-17")},
+        "last_air_date":${sqlNullStringJson(null)},
+        "status":${sqlNullStringJson("Returning Series")},
+        "type":${sqlNullStringJson("Scripted")},
+        "poster_path":${sqlNullStringJson("/severance.jpg")},
+        "backdrop_path":${sqlNullStringJson(backdropPath)},
+        "vote_average":${sqlNullFloat64Json(voteAverage)},
+        "vote_count":${sqlNullInt64Json(1200)},
+        "certification":${sqlNullStringJson(certification)},
+        "tmdb_season_count":${sqlNullInt64Json(2)},
+        "tmdb_episode_count":${sqlNullInt64Json(19)}
+      },
+      "seasons":[${seasons.joinToString(",")}],
+      "cast":[],"crew":[],"creators":[],"genres":[],"networks":[],
+      "production_companies":[],"extra_videos":[]
+    }}
+""".trimIndent()
+
 /** One `GET /continue-watching` movie entry: the latest-movie shape plus a kind and progress. */
 fun continueWatchingMovieJson(
     id: Long = 1,

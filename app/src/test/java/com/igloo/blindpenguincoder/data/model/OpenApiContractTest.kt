@@ -436,6 +436,8 @@ class OpenApiContractTest {
             Route("GET", "/api/shows/genres", envelope(ShowGenresData.serializer())),
             Route("GET", "/api/shows/genres/{genreId}/shows", envelope(ShowsLibraryData.serializer())),
             Route("GET", "/api/shows/stats", envelope(ShowsStatsData.serializer())),
+            Route("GET", "/api/shows/latest", envelope(LatestShowsData.serializer())),
+            Route("GET", "/api/shows/details/{id}", envelope(ShowDetailsData.serializer())),
             Route("GET", "/api/shows/episodes/{id}", envelope(ShowEpisodePlaybackData.serializer())),
             Route(
                 "GET",
