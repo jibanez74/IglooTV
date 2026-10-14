@@ -43,6 +43,10 @@ fun Modifier.focusRing(
     fill: Color = Color.Transparent,
     hasError: Boolean = false,
     scaleOnFocus: Boolean = true,
+    // False drops the 1dp resting border only; the focused ring, fill-contract and glow stay.
+    // For a surface that should read as bare content until focus arrives — the home hero's
+    // text plate, whose ground arrives with the ring (section 11.3.1).
+    restBorder: Boolean = true,
 ): Modifier {
     val colors = IglooTheme.colors
     val focus = IglooTheme.focus
@@ -137,7 +141,7 @@ fun Modifier.focusRing(
                         alpha = t,
                     )
                 }
-                if (t < 1f) {
+                if (restBorder && t < 1f) {
                     drawInsetRoundRect(
                         color = restColor,
                         outerRadius = outerRadius,
