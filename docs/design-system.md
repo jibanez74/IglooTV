@@ -789,10 +789,11 @@ does. **The parent must not pad horizontally**, or it re-clips the surface and t
 becomes a gutter again — which is exactly how this went unimplemented from the TV-first rewrite
 until 2026-08-19.
 
-**The leading edge fades.** Because the surface reaches x = 0 and the spine rests as a
-translucent scrim (§11.2), a card scrolled past the gutter would show through between the spine's
-icons — on a Shield a whole poster did. The `LazyRow` paints a `background` gradient over its own
-start inset: opaque across the first two thirds (the icon strip and a little past it), dissolving to transparent exactly at
+**The leading edge fades.** Because the surface reaches the logical start edge and the spine
+rests as a translucent scrim (§11.2), a card scrolled past the gutter would show through between
+the spine's icons — on a Shield a whole poster did. The `LazyRow` paints a `background` gradient over its own
+start inset — left in LTR, right in RTL, with the gradient running inward from that edge:
+opaque across the first two thirds (the icon strip and a little past it), dissolving to transparent exactly at
 the first card's resting edge, so a resting or focused first card is untouched and a card leaving
 dissolves into the canvas instead of surfacing under the chrome. It is paint, not a clip and not
 parent padding, so the end-of-rail bleed and the inset-as-`contentPadding` rule above still hold.
