@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.home
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
@@ -539,8 +540,11 @@ private fun HeroPageIndicator(
  * exactly where the loaded plate lands.
  *
  * `scaleOnFocus` stays false: the plate sits on a gradient over art, and lifting text off its own
- * ground is the one motion section 7.2 will not buy. Over media it carries section 3.2's control
- * ground so the ring has a surface to contract against; off media it falls back to `muted`.
+ * ground is the one motion section 7.2 will not buy. The ground arrives with focus and leaves
+ * with it, on the ring's own `micro` driver, and there is no resting border: at rest the words
+ * sit on the side scrim the way the detail hero's do, so the billboard reads as art with a title
+ * on it rather than a card over the art. Focused, the plate carries section 3.2's control ground
+ * so the ring has a surface to contract against; off media it uses `muted`.
  */
 @Composable
 private fun Modifier.heroTextPlate(
@@ -549,6 +553,12 @@ private fun Modifier.heroTextPlate(
     contentInset: PaddingValues,
 ): Modifier {
     val direction = LocalLayoutDirection.current
+    val ground = if (overMedia) OVER_MEDIA_CONTROL_FILL else IglooTheme.colors.muted
+    val fill by animateColorAsState(
+        targetValue = if (focused) ground else ground.copy(alpha = 0f),
+        animationSpec = iglooTween(IglooMotion.MICRO_MS),
+        label = "heroPlateGround",
+    )
     return this
         .padding(
             start = contentInset.calculateStartPadding(direction),
@@ -559,8 +569,9 @@ private fun Modifier.heroTextPlate(
         .focusRing(
             focused = focused,
             radius = IglooTheme.radius.lg,
-            fill = if (overMedia) OVER_MEDIA_CONTROL_FILL else IglooTheme.colors.muted,
+            fill = fill,
             scaleOnFocus = false,
+            restBorder = false,
         )
         .padding(IglooTheme.spacing.lg)
 }

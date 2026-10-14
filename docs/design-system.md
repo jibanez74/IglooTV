@@ -327,6 +327,8 @@ ground — are named in `core/design/OverMediaColors.kt`, still literals rather 
   `card @ 0.72` focus fill tracks the theme, which over media this section forbids. While a
   control carries this ground it keeps it through focus: the ring, glow, and scale carry the
   focus signal instead. Off media, all of it falls back to `muted` / `border` / `foreground`.
+  The one inversion is the home hero's text plate (§11.3.1), which is words on a scrim rather
+  than a control: its ground arrives *with* focus and leaves with it.
 
 These literals are licensed **only by media actually behind them**. A surface that would carry
 them but has no image — a hero with no backdrop, a theater card with no poster or one that failed
@@ -475,6 +477,10 @@ platform projects a child's shadow into its parent render node, which *is* the c
 border drawn outside one is painted over by the fill. So `focusRing` owns the clip, and
 therefore the fill — **a call site passes `fill =` and does not clip.** The colour transition
 runs at `micro` and the scale/elevation at `standard`, per §7.
+
+`restBorder = false` drops the 1dp resting border and nothing else — the ring, separator, fill
+and glow are untouched — for a surface that should read as bare content until focus arrives. The
+home hero's text plate is its only caller (§11.3.1); a control keeps its hairline.
 
 The clip applies **at rest as well as on focus**, at inset zero. A treatment that only clipped
 while focused would square off the corners of every control that had given up its own `clip` on
@@ -782,6 +788,18 @@ because a lazy list otherwise sizes to its content and a short rail would end wh
 does. **The parent must not pad horizontally**, or it re-clips the surface and the inset silently
 becomes a gutter again — which is exactly how this went unimplemented from the TV-first rewrite
 until 2026-08-19.
+
+**The leading edge fades.** Because the surface reaches the logical start edge and the spine
+rests as a translucent scrim (§11.2), a card scrolled past the gutter would show through between
+the spine's icons — on a Shield a whole poster did. The `LazyRow` paints a `background` gradient over its own
+start inset — left in LTR, right in RTL, with the gradient running inward from that edge:
+opaque across the first two thirds (the icon strip and a little past it), dissolving to transparent exactly at
+the first card's resting edge, so a resting or focused first card is untouched and a card leaving
+dissolves into the canvas instead of surfacing under the chrome. It is paint, not a clip and not
+parent padding, so the end-of-rail bleed and the inset-as-`contentPadding` rule above still hold.
+Compose's TV pivot (which parks the focused card 30% in and keeps the card before it placed) is
+unchanged; the card it keeps is now half-dissolved, which reads as the rail continuing leftward
+the way the cut card at the panel's end reads as it continuing right (§8.2).
 
 ---
 
@@ -1353,8 +1371,13 @@ the rails; no pinning, no collapse choreography.
 from §6.1's "ring wraps the focusable" and must not be tidied back: a 3dp ring traced around a
 surface that reaches the panel's edges sits in the overscan margin, the one place §2.5 says a TV
 is allowed to crop — a focus indicator that a television may simply not show. The plate is
-bounded, always inside the safe area, and carries §3.2's chip-and-control ground over media
-(`muted` off media) so the ring has a surface to contract against.
+bounded, always inside the safe area, and while focused carries §3.2's chip-and-control ground
+over media (`muted` off media) so the ring has a surface to contract against. **At rest the plate
+is bare**: the ground fades out with the ring (on the ring's `micro` driver) and there is no
+resting border (`restBorder = false`, §6.1), so the words sit on the side scrim the way the
+detail hero's do and the billboard reads as art with a title on it, not a card over the art. This
+is the one inversion of §3.2's "a control keeps its ground through focus" — the plate is text on a
+scrim, not a control, and focus is the only reason to box it.
 
 **Backdrop.** `w1280` via the TMDB proxy, `ContentScale.Crop`, fading in once decoded (`page`).
 Over it, two static over-media gradients (§3.2) — the side gradient left-to-right at the detail
@@ -2449,6 +2472,16 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-14 — Home visual pass from Shield captures (§3.2, §6.1, §8.3, §11.3.1).**
+
+- Rails fade their leading edge into `background` across the start inset: a card scrolled past
+  the gutter dissolves instead of showing through the spine's translucent scrim. Paint only; the
+  surface still reaches x = 0 and the TV pivot is unchanged.
+- The hero's text plate is bare at rest — no ground, no resting border — and boxes only with
+  focus. `focusRing` gained `restBorder = false` for it.
+- `IglooFocusableEmpty` fills with `background` so the focus glow no longer reads as a second
+  frame inside the ring.
 
 **2026-10-12 — The home hero features the newest TV show too (§11.3.1, §3.2, §4.1).**
 

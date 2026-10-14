@@ -318,6 +318,50 @@ class FocusTreatmentTest {
     }
 
     /**
+     * `restBorder = false` is the home hero plate's opt-out: at rest the plate is meant to be
+     * bare, so nothing may paint over the canvas. Proved against the bordered probe first — a
+     * resting border that did not reach a pixel would make the bare assertion vacuous.
+     */
+    @Test
+    fun optingOutOfTheRestingBorderLeavesTheRestingControlBare() {
+        val restBorder = mutableStateOf(true)
+        composeRule.setContent {
+            RingProbe(
+                focused = false,
+                radius = PROBE_RADIUS,
+                restBorder = restBorder.value,
+                content = {},
+            )
+        }
+        composeRule.waitForIdle()
+        val bordered = composeRule.onRoot().captureToImage().asAndroidBitmap()
+        assertTrue(
+            "the resting border did not reach a pixel on the bordered probe, so this test " +
+                "cannot tell the opt-out apart from it",
+            paintsOverTheCanvas(bordered),
+        )
+
+        composeRule.runOnUiThread { restBorder.value = false }
+        composeRule.waitForIdle()
+        val bare = composeRule.onRoot().captureToImage().asAndroidBitmap()
+        assertTrue(
+            "restBorder = false still painted over the canvas at rest",
+            !paintsOverTheCanvas(bare),
+        )
+    }
+
+    /** Whether any pixel of [capture] stands apart from the dark canvas. */
+    private fun paintsOverTheCanvas(capture: Bitmap): Boolean {
+        val canvas = IglooDarkColors.background.toArgbLuminance()
+        for (y in 0 until capture.height) {
+            for (x in 0 until capture.width) {
+                if (contrastRatio(luminance(capture.getPixel(x, y)), canvas) > 1.1) return true
+            }
+        }
+        return false
+    }
+
+    /**
      * `radius.pill` is 999dp, clamped to half the shortest side so it resolves to the shape it
      * stands for. The avatar case only exercises a square, where the clamp and the correct radius
      * coincide; a non-square pill is where an unclamped radius would produce an invalid outline.
@@ -414,6 +458,7 @@ class FocusTreatmentTest {
         hasError: Boolean = false,
         fill: Color = Color.Transparent,
         scaleOnFocus: Boolean = true,
+        restBorder: Boolean = true,
         size: Dp = PROBE_SIZE,
         width: Dp = size,
         content: @Composable () -> Unit,
@@ -434,6 +479,7 @@ class FocusTreatmentTest {
                                 fill = fill,
                                 hasError = hasError,
                                 scaleOnFocus = scaleOnFocus,
+                                restBorder = restBorder,
                             ),
                     ) {
                         content()

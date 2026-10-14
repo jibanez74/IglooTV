@@ -71,7 +71,11 @@ internal fun IglooFocusableEmpty(
     var focused by remember { mutableStateOf(false) }
     Box(
         modifier = modifier
-            .focusRing(focused = focused, radius = IglooTheme.radius.lg)
+            // An opaque fill, so the focus glow cannot show through the surface: with a
+            // transparent one the ring-coloured shadow read as a second, lighter frame inside
+            // the ring (seen on the Shield, 2026-10-14). The canvas colour keeps the resting
+            // look as it was — the hairline border on bare canvas.
+            .focusRing(focused = focused, radius = IglooTheme.radius.lg, fill = IglooTheme.colors.background)
             .then(anchorModifier)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
