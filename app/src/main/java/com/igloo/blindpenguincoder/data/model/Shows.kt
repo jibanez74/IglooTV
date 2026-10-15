@@ -95,14 +95,13 @@ data class ShowTechnicalFile(
     val duration: SqlNullFloat64,
 )
 
-/**
- * One entry of `GET /shows/latest`. The Home hero needs only the newest show's id — everything
- * it draws comes from the details request — so `name`, `poster_path` and `premiere_year` are left
- * to `ignoreUnknownKeys`.
- */
+/** One entry of `GET /shows/latest`, shared by Home's rail and newest-show hero. */
 @Serializable
 data class LatestShow(
     val id: Long,
+    val name: String,
+    @SerialName("poster_path") val posterPath: SqlNullString,
+    @SerialName("premiere_year") val premiereYear: SqlNullInt64,
 )
 
 /** Payload of `LatestShowsEnvelope.data`. */

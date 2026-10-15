@@ -68,6 +68,13 @@ internal val testHomeMovies = listOf(
     PosterItem(id = 3, title = "Ran", year = 1985, posterUrl = null),
 )
 
+/** Poster-less shows exercise the TV glyph and optional year without network reads. */
+internal val testHomeShows = listOf(
+    PosterItem(id = 40, title = "Severance", year = 2022, posterUrl = null),
+    PosterItem(id = 12, title = "Friends", year = 1994, posterUrl = null),
+    PosterItem(id = 7, title = "Untitled Show", year = null, posterUrl = null),
+)
+
 /**
  * Poster-less like the rail fixtures, and long enough to fill several rows at every
  * `gridColumns` value so the grid's paging and focus contracts have somewhere to travel.

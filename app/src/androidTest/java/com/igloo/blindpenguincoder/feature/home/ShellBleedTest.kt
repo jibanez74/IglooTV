@@ -26,6 +26,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
 import com.igloo.blindpenguincoder.core.design.viewportFactor
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
 import com.igloo.blindpenguincoder.testHomeMovies
@@ -79,6 +80,7 @@ class ShellBleedTest {
                                 hero = HomeHeroState.Loaded(listOf(testHero)),
                                 continueWatching = IglooRailState.Loaded(testContinueMovies),
                                 latestMovies = IglooRailState.Loaded(testHomeMovies),
+                                latestShows = IglooRailState.Loaded(testHomeShows),
                             ),
                         )
                     }

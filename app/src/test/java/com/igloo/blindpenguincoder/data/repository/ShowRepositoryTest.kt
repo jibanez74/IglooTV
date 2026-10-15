@@ -163,7 +163,12 @@ class ShowRepositoryTest {
         var request: HttpRequestData? = null
         val http = TestHttp {
             request = it
-            jsonResponse(latestShowsJson(latestShowJson(id = 40), latestShowJson(id = 12, name = "Friends")))
+            jsonResponse(
+                latestShowsJson(
+                    latestShowJson(id = 40),
+                    latestShowJson(id = 12, name = "Friends", posterPath = null, premiereYear = null),
+                ),
+            )
         }
         http.profiles.setPending("igd_test")
 
@@ -172,7 +177,13 @@ class ShowRepositoryTest {
         val captured = requireNotNull(request)
         assertEquals("/api/shows/latest", captured.url.encodedPath)
         assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
-        assertEquals(listOf(40L, 12L), (result as ApiResult.Success).value.map { it.id })
+        val shows = (result as ApiResult.Success).value
+        assertEquals(listOf(40L, 12L), shows.map { it.id })
+        assertEquals(listOf("Severance", "Friends"), shows.map { it.name })
+        assertEquals("/severance.jpg", shows[0].posterPath.orNull())
+        assertEquals(2022L, shows[0].premiereYear.orNull())
+        assertNull(shows[1].posterPath.orNull())
+        assertNull(shows[1].premiereYear.orNull())
     }
 
     @Test

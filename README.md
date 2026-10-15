@@ -41,13 +41,20 @@ All paths below are relative to `app/src/main/java/com/igloo/blindpenguincoder/`
 | Profiles | Multi-profile household picker, per-profile encrypted token vault, per-profile sign-out | `feature/auth/ProfilePickerScreen.kt`, `core/storage/ProfileVault.kt`, `feature/home/SignOutViewModel.kt` |
 | PIN | PIN entry gate for a profile that has one (verify only; setting a PIN is backend/web for now) | `feature/auth/PinEntryScreen.kt` |
 | Navigation shell | Nav spine with seven destinations, brand block, profile footer, overlay host, Back handling | `feature/home/IglooApp.kt`, `NavigationRail.kt` |
-| Home | Cinematic two-page hero (newest movie, newest TV show; d-pad right/left turns the page) plus rails: continue watching (movies and episodes), latest movies, latest albums, in theaters | `feature/home/HomeViewModel.kt`, `HomeHero.kt` |
+| Home | Cinematic two-page hero (newest movie, newest TV show; d-pad right/left turns the page) plus rails: continue watching (movies and episodes), latest movies, latest shows, latest albums, in theaters | `feature/home/HomeViewModel.kt`, `HomeHero.kt` |
 | Movies and TV Shows | One shared library pane per kind: a poster grid with an `All · Genres (· Liked)` tab strip, focus-driven tab switching with a 300 ms debounce, infinite paging, sort toggle, genre picker with memory. Movies has the Liked tab and opens details; TV Shows has two tabs and inert cards until a show details screen exists | `feature/library/LibraryScreen.kt`, `LibraryViewModel.kt`, `LibraryKind.kt`, `feature/movies/MovieLibrarySource.kt`, `feature/shows/ShowLibrarySource.kt` |
 | Movie details | Backdrop hero, metadata, watched/like toggles, playback-mode + audio + subtitle pickers, trailer launch | `feature/movies/MovieDetailsScreen.kt`, `PlaybackSettingsDialog.kt` |
 | In theaters | A separate TMDB-backed details page sharing the one overlay slot | `feature/movies/TheaterMovieDetailsViewModel.kt` |
 | Album details + music player | Album page with track list and facts panel; Play Album opens a full-screen player with one ExoPlayer playlist, auto-advance and a MediaSession | `feature/music/AlbumDetailsScreen.kt`, `feature/player/MusicPlayerScreen.kt` |
 | Video playback | Media3 over a `SurfaceView` for movies and episodes resumed from Home; Direct play and backend-produced HLS, audio/subtitle track selection, chapters, resume prompt, progress reporting | `feature/player/VideoPlayerScreen.kt`, `playback/` |
 | Trailers | An isolated YouTube IFrame WebView that never receives Igloo credentials or cookies | `playback/youtube/YouTubeIFrameEngine.kt`, `feature/player/TrailerPlayerScreen.kt` |
+
+Home renders Continue Watching → Recently Added Movies → Recently Added Shows → Recently Added
+Albums → Now Playing in Theaters. Shows use focusable poster cards with name and optional premiere
+year; they have no press action yet. Each latest movie/show request supplies both its rail and
+hero, with details fetched only for the first item. Each rail has independent Retry and retains
+loaded content on failed foreground refreshes. Successful empty movie/show lists clear their rail
+and hide their hero page.
 
 ---
 
@@ -354,7 +361,7 @@ Android Lint is stock AGP. There is no ktlint, detekt, spotless, `lint.xml` or l
 | Pairing | `feature/auth/QuickConnectViewModelTest.kt`, `QuickConnectApprovalTest.kt` | Code initiation, polling, redeem, failure paths |
 | Library pane | `feature/library/LibraryViewModelTest.kt` (the largest suite, over the movie routes), `LibraryKindTest.kt`, `feature/shows/ShowLibraryViewModelTest.kt` | Tab strip, the 300 ms switch debounce, pagination and append states, sort, genre memory, liked view; the per-kind wording and tags; the show routes and the two-tab strip |
 | Details | `feature/movies/MovieDetailsViewModelTest.kt`, `PlaybackSettingsMappingTest.kt` | Details state, playback-mode/audio/subtitle option mapping |
-| Home | `feature/home/HomeViewModelTest.kt`, `PlayerRequestSaversTest.kt` | Rails failing independently, hero state, `Saver` round-trips |
+| Home | `feature/home/HomeViewModelTest.kt`, `PlayerRequestSaversTest.kt` | Rails failing independently, shared movie/show rail and hero loads, hero state, `Saver` round-trips |
 | Players | `playback/model/{Video,Music}PlayerStateMachineTest.kt`, `feature/player/VideoPlayerViewModelTest.kt`, `ChaptersTest.kt` | Pure player state machines, chapter math, chrome state |
 | HLS | `playback/hls/HlsSession*Test.kt` | Session lifecycle, policy, timeouts, mode switching |
 | Progress | `playback/progress/ProgressReporterTest.kt` | The 15s / first-save-near-30s cadence, the pause/background/exit eligibility rule |

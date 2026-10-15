@@ -1349,6 +1349,32 @@ private fun HomeRails(
 
         IglooMediaRail(
             contentInset = contentInset,
+            title = "Recently Added Shows",
+            state = home.latestShows,
+            itemKey = { it.id },
+            entryRequester = null,
+            leftFocusRequester = navigationRequester,
+            lastFocusedKey = lastFocusedByRail[HomeRail.LatestShows],
+            onItemFocused = { lastFocusedByRail[HomeRail.LatestShows] = it },
+            loadingLabel = "Loading recently added shows",
+            emptyIcon = IglooIcons.TvShows,
+            emptyText = "No shows in your library yet. Add a shows folder on the server and run a scan.",
+            onRetry = { onRetryRail(HomeRail.LatestShows) },
+            returnRequester = railReturnRequesters.getValue(HomeRail.LatestShows),
+        ) { show, itemModifier, cardAspect ->
+            IglooPosterCard(
+                title = show.title,
+                subtitle = show.year?.toString(),
+                imageUrl = show.posterUrl,
+                onClick = null,
+                aspect = cardAspect,
+                fallbackIcon = IglooIcons.TvShows,
+                modifier = itemModifier.testTag("show_card_${show.id}"),
+            )
+        }
+
+        IglooMediaRail(
+            contentInset = contentInset,
             title = "Recently Added Albums",
             state = home.latestAlbums,
             itemKey = { it.id },

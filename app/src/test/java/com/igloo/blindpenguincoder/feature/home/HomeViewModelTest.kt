@@ -87,7 +87,7 @@ class HomeViewModelTest {
         map { (it as HomeContinueItem.Movie).movie.title }
 
     /**
-     * A refresh fires all four rails' requests plus both hero pages', so handlers route by path.
+     * A refresh fires all five rails' requests, enriching the movie and show heroes from their lists.
      * The show library is empty unless a test says otherwise, so the movie-page cases see the
      * hero they always did: one page, or none.
      */
@@ -136,6 +136,14 @@ class HomeViewModelTest {
         uiState.first { it.latestMovies is IglooRailState.Loaded }
             .latestMovies as IglooRailState.Loaded
 
+    private suspend fun HomeViewModel.awaitShows(): IglooRailState.Loaded<PosterItem> =
+        uiState.first { it.latestShows is IglooRailState.Loaded }
+            .latestShows as IglooRailState.Loaded
+
+    private suspend fun HomeViewModel.awaitShowsError(): IglooRailState.Error =
+        uiState.first { it.latestShows is IglooRailState.Error }
+            .latestShows as IglooRailState.Error
+
     private suspend fun HomeViewModel.awaitContinue(): IglooRailState.Loaded<HomeContinueItem> =
         uiState.first { it.continueWatching is IglooRailState.Loaded }
             .continueWatching as IglooRailState.Loaded
@@ -182,6 +190,7 @@ class HomeViewModelTest {
             latest = { requests++; jsonResponse(latestMoviesJson()) },
             albums = { requests++; jsonResponse(latestAlbumsJson()) },
             theaters = { requests++; jsonResponse(theaterMoviesJson()) },
+            latestShows = { requests++; jsonResponse(latestShowsJson()) },
         )
 
         val viewModel = newViewModel(http)
@@ -189,6 +198,7 @@ class HomeViewModelTest {
         assertEquals(0, requests)
         assertEquals(IglooRailState.Loading, viewModel.uiState.value.continueWatching)
         assertEquals(IglooRailState.Loading, viewModel.uiState.value.latestMovies)
+        assertEquals(IglooRailState.Loading, viewModel.uiState.value.latestShows)
         assertEquals(IglooRailState.Loading, viewModel.uiState.value.latestAlbums)
         assertEquals(IglooRailState.Loading, viewModel.uiState.value.inTheaters)
     }
@@ -1003,10 +1013,12 @@ class HomeViewModelTest {
     fun `the hero features the newest show after the movie, enriched by one details request`() =
         runTest {
             var detailsRequests = 0
+            var latestRequests = 0
             val http = routedHttp(
                 latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat"))) },
                 details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
                 latestShows = {
+                    latestRequests++
                     jsonResponse(
                         latestShowsJson(
                             latestShowJson(id = 40, name = "Severance"),
@@ -1032,7 +1044,10 @@ class HomeViewModelTest {
                 },
             )
 
-            val pages = viewModel(http).awaitHeroPages()
+            val viewModel = viewModel(http)
+            val pages = viewModel.awaitHeroPages()
+            assertEquals(listOf(40L, 12L), viewModel.awaitShows().items.map { it.id })
+            assertEquals(1, latestRequests)
 
             assertEquals(listOf(HomeHeroKind.Movie, HomeHeroKind.Show), pages.map { it.kind })
             assertEquals(
@@ -1223,7 +1238,7 @@ class HomeViewModelTest {
         assertEquals(HomeHeroState.Loading, viewModel.uiState.value.hero)
         gate.complete(Unit)
         assertEquals(listOf("Heat", "Severance"), viewModel.awaitHeroPages().map { it.title })
-        // The rail's Retry is the movie page's; the show page has none and is not re-read.
+        // Movie Retry leaves both the show rail and its hero untouched.
         assertEquals(1, showRequests)
     }
 
@@ -1571,5 +1586,235 @@ class HomeViewModelTest {
 
         viewModel.retry(HomeRail.LatestAlbums)
         assertEquals("music scan in progress", viewModel.awaitAlbumsError().message)
+    }
+    @Test
+    fun `shows map in server order with normalized posters and nullable years`() = runTest {
+        val http = routedHttp(
+            latestShows = {
+                jsonResponse(
+                    latestShowsJson(
+                        latestShowJson(id = 40, posterPath = "/severance.jpg"),
+                        latestShowJson(id = 12, name = "Friends", posterPath = "friends.jpg", premiereYear = 1994),
+                        latestShowJson(id = 7, name = "Untitled", posterPath = null, premiereYear = null),
+                    ),
+                )
+            },
+        )
+
+        assertEquals(
+            listOf(
+                PosterItem(40, "Severance", 2022, "http://igloo.test:8080/api/tmdb/images/w500/severance.jpg"),
+                PosterItem(12, "Friends", 1994, "http://igloo.test:8080/api/tmdb/images/w500/friends.jpg"),
+                PosterItem(7, "Untitled", null, null),
+            ),
+            viewModel(http).awaitShows().items,
+        )
+    }
+
+    @Test
+    fun `an empty show library clears the rail without requesting details`() = runTest {
+        var detailsRequests = 0
+        val viewModel = viewModel(
+            routedHttp(showDetails = { detailsRequests++; jsonResponse(showDetailsJson()) }),
+        )
+
+        assertTrue(viewModel.awaitShows().items.isEmpty())
+        viewModel.awaitHiddenHero()
+        assertEquals(0, detailsRequests)
+    }
+
+    @Test
+    fun `show retry reloads only shows and publishes cards before hero details`() = runTest {
+        var requests = 0
+        var detailsRequests = 0
+        val listGate = CompletableDeferred<Unit>()
+        val detailsGate = CompletableDeferred<Unit>()
+        val otherRequests = mutableListOf<String>()
+        val http = routedHttp(
+            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
+            continueWatching = { otherRequests += "continue"; jsonResponse(continueWatchingJson()) },
+            latest = { otherRequests += "movies"; jsonResponse(latestMoviesJson(latestMovieJson())) },
+            albums = { otherRequests += "albums"; jsonResponse(latestAlbumsJson()) },
+            theaters = { otherRequests += "theaters"; jsonResponse(theaterMoviesJson()) },
+            details = { otherRequests += "movie details"; jsonResponse(movieDetailsJson()) },
+            latestShows = {
+                requests++
+                if (requests == 1) {
+                    jsonResponse("""{"error":true,"message":"shows unavailable"}""", HttpStatusCode.InternalServerError)
+                } else {
+                    listGate.await()
+                    jsonResponse(latestShowsJson(latestShowJson(id = 40), latestShowJson(id = 12)))
+                }
+            },
+            showDetails = { request ->
+                detailsRequests++
+                assertEquals("/api/shows/details/40", request.url.encodedPath)
+                detailsGate.await()
+                jsonResponse(showDetailsJson(id = 40))
+            },
+        )
+        val viewModel = viewModel(http)
+        assertEquals("shows unavailable", viewModel.awaitShowsError().message)
+        assertEquals(listOf(HomeHeroKind.Movie), viewModel.awaitHeroPages().map { it.kind })
+        val otherBefore = otherRequests.toList()
+
+        viewModel.retry(HomeRail.LatestShows)
+
+        assertEquals(IglooRailState.Loading, viewModel.uiState.value.latestShows)
+        assertEquals(HomeHeroState.Loading, viewModel.uiState.value.hero)
+        listGate.complete(Unit)
+        assertEquals(listOf(40L, 12L), viewModel.awaitShows().items.map { it.id })
+        assertEquals(HomeHeroState.Loading, viewModel.uiState.value.hero)
+        detailsGate.complete(Unit)
+        assertEquals(listOf(HomeHeroKind.Movie, HomeHeroKind.Show), viewModel.awaitHeroPages().map { it.kind })
+        assertEquals(2, requests)
+        assertEquals(1, detailsRequests)
+        assertEquals(otherBefore, otherRequests)
+    }
+
+    @Test
+    fun `a failed show details request hides only the hero page`() = runTest {
+        val viewModel = viewModel(
+            routedHttp(
+                latestShows = { jsonResponse(latestShowsJson(latestShowJson())) },
+                showDetails = {
+                    jsonResponse(
+                        """{"error":true,"message":"details unavailable"}""",
+                        HttpStatusCode.InternalServerError,
+                    )
+                },
+            ),
+        )
+
+        viewModel.awaitHiddenHero()
+        assertEquals(listOf("Severance"), viewModel.awaitShows().items.map { it.title })
+    }
+
+    @Test
+    fun `a failed shows refresh retains cards and hero but explicit retry reports the failure`() = runTest {
+        var requests = 0
+        var detailsRequests = 0
+        val refreshGate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
+            latestShows = {
+                requests++
+                if (requests == 1) {
+                    jsonResponse(latestShowsJson(latestShowJson()))
+                } else {
+                    refreshGate.await()
+                    jsonResponse("""{"error":true,"message":"shows unavailable"}""", HttpStatusCode.InternalServerError)
+                }
+            },
+            showDetails = { detailsRequests++; jsonResponse(showDetailsJson()) },
+        )
+        val viewModel = viewModel(http)
+        val cards = viewModel.awaitShows()
+        val hero = viewModel.awaitHeroPages()
+
+        viewModel.refresh()
+        assertEquals(cards, viewModel.uiState.value.latestShows)
+        assertEquals(hero, viewModel.awaitHeroPages())
+        refreshGate.complete(Unit)
+        assertEquals(2, requests)
+        assertEquals(cards, viewModel.uiState.value.latestShows)
+        assertEquals(hero, viewModel.awaitHeroPages())
+        assertEquals(1, detailsRequests)
+
+        viewModel.retry(HomeRail.LatestShows)
+        assertEquals("shows unavailable", viewModel.awaitShowsError().message)
+        viewModel.awaitHiddenHero()
+    }
+
+    @Test
+    fun `a successful empty shows refresh removes its cards and hero page`() = runTest {
+        var requests = 0
+        var detailsRequests = 0
+        val http = routedHttp(
+            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson())) },
+            latestShows = {
+                requests++
+                jsonResponse(if (requests == 1) latestShowsJson(latestShowJson()) else latestShowsJson())
+            },
+            showDetails = { detailsRequests++; jsonResponse(showDetailsJson()) },
+        )
+        val viewModel = viewModel(http)
+        assertEquals(2, viewModel.awaitHeroPages().size)
+        assertEquals(1, viewModel.awaitShows().items.size)
+
+        viewModel.refresh()
+
+        assertTrue(viewModel.awaitShows().items.isEmpty())
+        assertEquals(listOf(HomeHeroKind.Movie), viewModel.awaitHeroPages().map { it.kind })
+        assertEquals(1, detailsRequests)
+    }
+
+    @Test
+    fun `a new show retry cancels the earlier list request`() = runTest {
+        var requests = 0
+        val started = CompletableDeferred<Unit>()
+        val cancelled = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            latestShows = {
+                requests++
+                if (requests == 1) {
+                    started.complete(Unit)
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        cancelled.complete(Unit)
+                    }
+                } else {
+                    jsonResponse(latestShowsJson(latestShowJson(id = 12, name = "Friends")))
+                }
+            },
+            showDetails = { jsonResponse(showDetailsJson(id = 12, name = "Friends")) },
+        )
+        val viewModel = viewModel(http)
+        started.await()
+
+        viewModel.retry(HomeRail.LatestShows)
+
+        cancelled.await()
+        assertEquals(listOf("Friends"), viewModel.awaitShows().items.map { it.title })
+        assertEquals("Friends", viewModel.awaitHero().title)
+        assertEquals(2, requests)
+    }
+
+    @Test
+    fun `a new refresh cancels show details and replaces both rail and hero`() = runTest {
+        var requests = 0
+        val started = CompletableDeferred<Unit>()
+        val cancelled = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            latestShows = {
+                requests++
+                val newest = if (requests == 1) latestShowJson() else latestShowJson(id = 12, name = "Friends")
+                jsonResponse(latestShowsJson(newest))
+            },
+            showDetails = { request ->
+                if (request.url.encodedPath.endsWith("/40")) {
+                    started.complete(Unit)
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        cancelled.complete(Unit)
+                    }
+                } else {
+                    jsonResponse(showDetailsJson(id = 12, name = "Friends"))
+                }
+            },
+        )
+        val viewModel = viewModel(http)
+        started.await()
+        assertEquals(listOf("Severance"), viewModel.awaitShows().items.map { it.title })
+
+        viewModel.refresh()
+
+        cancelled.await()
+        viewModel.uiState.first { (it.latestShows as? IglooRailState.Loaded)?.items?.singleOrNull()?.id == 12L }
+        assertEquals("Friends", viewModel.awaitHero().title)
+        assertEquals(2, requests)
     }
 }

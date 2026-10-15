@@ -76,6 +76,7 @@ class IglooBaseAppTest {
                         hero = HomeHeroState.Hidden,
                         continueWatching = IglooRailState.Loaded(testContinueMovies),
                         latestMovies = IglooRailState.Loaded(testHomeMovies),
+                        latestShows = IglooRailState.Loaded(testHomeShows),
                     ),
                     onSwitchProfile = onSwitchProfile,
                     onSignOut = { signOut = SignOutUiState(confirming = true) },

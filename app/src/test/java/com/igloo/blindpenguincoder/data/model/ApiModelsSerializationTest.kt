@@ -205,6 +205,29 @@ class ApiModelsSerializationTest {
         assertNull(movies[1].year.orNull())
     }
 
+    @Test
+    fun decodesLatestShowsWithNullableMetadataInServerOrder() {
+        val body = """
+            {"error":false,"message":"latest shows","data":{"shows":[
+              {"id":40,"name":"Severance",
+               "poster_path":{"String":"/severance.jpg","Valid":true},
+               "premiere_year":{"Int64":2022,"Valid":true}},
+              {"id":12,"name":"Untitled",
+               "poster_path":{"String":"ignored.jpg","Valid":false},
+               "premiere_year":{"Int64":1994,"Valid":false}}
+            ]}}
+        """.trimIndent()
+
+        val shows = json.decodeFromString<ApiEnvelope<LatestShowsData>>(body).data!!.shows
+
+        assertEquals(listOf(40L, 12L), shows.map { it.id })
+        assertEquals(listOf("Severance", "Untitled"), shows.map { it.name })
+        assertEquals("/severance.jpg", shows[0].posterPath.orNull())
+        assertEquals(2022L, shows[0].premiereYear.orNull())
+        assertNull(shows[1].posterPath.orNull())
+        assertNull(shows[1].premiereYear.orNull())
+    }
+
     /**
      * `GET /continue-watching` mixes movies and episodes under one `kind`; the episode-only keys
      * decode on an episode and stay absent on a movie.
