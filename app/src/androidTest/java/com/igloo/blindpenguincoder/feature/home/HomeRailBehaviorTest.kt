@@ -1,5 +1,7 @@
 package com.igloo.blindpenguincoder.feature.home
 
+import android.os.SystemClock
+import android.view.accessibility.AccessibilityNodeInfo
 import android.app.Activity
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.SideEffect
@@ -7,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assert
@@ -16,6 +19,9 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertWidthIsEqualTo
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -27,6 +33,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.Dp
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
@@ -38,8 +45,10 @@ import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueEpisode
 import com.igloo.blindpenguincoder.testContinueItems
 import com.igloo.blindpenguincoder.testContinueMovies
+import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testHomeMovies
 import com.igloo.blindpenguincoder.testTheaterMovies
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -61,6 +70,7 @@ class HomeRailBehaviorTest {
 
     private val continueMovies = testContinueMovies
     private val movies = testHomeMovies
+    private val shows = testHomeShows
     private val albums = testAlbums
     private val theaterMovies = testTheaterMovies
 
@@ -68,11 +78,13 @@ class HomeRailBehaviorTest {
         mutableStateOf<IglooRailState<HomeContinueItem>>(IglooRailState.Loading)
     private var latestState by
         mutableStateOf<IglooRailState<PosterItem>>(IglooRailState.Loading)
+    private var showsState by mutableStateOf<IglooRailState<PosterItem>>(IglooRailState.Loading)
     private var albumsState by mutableStateOf<IglooRailState<AlbumCardUi>>(IglooRailState.Loading)
     private var theatersState by
         mutableStateOf<IglooRailState<HomeTheaterMovie>>(IglooRailState.Loading)
     private var continueRetries = 0
     private var latestRetries = 0
+    private var showRetries = 0
     private var albumRetries = 0
     private var theaterRetries = 0
     private val opened = mutableListOf<Long>()
@@ -85,6 +97,7 @@ class HomeRailBehaviorTest {
     private fun setShellContent(
         initialContinue: IglooRailState<HomeContinueItem>,
         initialLatest: IglooRailState<PosterItem> = IglooRailState.Loaded(movies),
+        initialShows: IglooRailState<PosterItem> = IglooRailState.Loaded(shows),
         initialAlbums: IglooRailState<AlbumCardUi> = IglooRailState.Loaded(albums),
         initialTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loaded(theaterMovies),
         onMovieSelected: ((Long) -> Unit)? = { opened += it },
@@ -93,10 +106,12 @@ class HomeRailBehaviorTest {
     ) {
         continueState = initialContinue
         latestState = initialLatest
+        showsState = initialShows
         albumsState = initialAlbums
         theatersState = initialTheaters
         continueRetries = 0
         latestRetries = 0
+        showRetries = 0
         albumRetries = 0
         theaterRetries = 0
         opened.clear()
@@ -116,6 +131,7 @@ class HomeRailBehaviorTest {
                         hero = HomeHeroState.Hidden,
                         continueWatching = continueState,
                         latestMovies = latestState,
+                        latestShows = showsState,
                         latestAlbums = albumsState,
                         inTheaters = theatersState,
                     ),
@@ -123,6 +139,7 @@ class HomeRailBehaviorTest {
                         when (rail) {
                             HomeRail.ContinueWatching -> continueRetries += 1
                             HomeRail.LatestMovies -> latestRetries += 1
+                            HomeRail.LatestShows -> showRetries += 1
                             HomeRail.LatestAlbums -> albumRetries += 1
                             HomeRail.InTheaters -> theaterRetries += 1
                         }
@@ -143,6 +160,8 @@ class HomeRailBehaviorTest {
         composeRule.onNodeWithTag("continue_episode_card_$id")
 
     private fun latestCard(id: Long) = composeRule.onNodeWithTag("poster_card_$id")
+
+    private fun showCard(id: Long) = composeRule.onNodeWithTag("show_card_$id")
 
     private fun albumCard(id: Long) = composeRule.onNodeWithTag("album_card_$id")
 
@@ -263,6 +282,7 @@ class HomeRailBehaviorTest {
 
         retry.performClick()
         assertEquals(1, continueRetries)
+        assertEquals(0, showRetries)
         assertEquals(0, latestRetries)
 
         retry.performKeyInput { pressKey(Key.DirectionLeft) }
@@ -381,6 +401,8 @@ class HomeRailBehaviorTest {
         continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
         latestCard(1).assertIsFocused()
         latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        showCard(40).assertIsFocused()
+        showCard(40).performKeyInput { pressKey(Key.DirectionDown) }
         albumCard(11).assertIsFocused()
 
         albumCard(11).performKeyInput { pressKey(Key.DirectionRight) }
@@ -410,6 +432,8 @@ class HomeRailBehaviorTest {
         setShellContent(IglooRailState.Loaded(continueMovies))
         continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
         latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        showCard(40).assertIsFocused()
+        showCard(40).performKeyInput { pressKey(Key.DirectionDown) }
         albumCard(11).performKeyInput { pressKey(Key.DirectionRight) }
         albumCard(12).performKeyInput { pressKey(Key.DirectionRight) }
         albumCard(13).assertIsFocused()
@@ -431,6 +455,7 @@ class HomeRailBehaviorTest {
             .performClick()
 
         assertEquals(1, albumRetries)
+        assertEquals(0, showRetries)
         assertEquals(0, latestRetries)
         assertEquals(0, continueRetries)
     }
@@ -445,6 +470,8 @@ class HomeRailBehaviorTest {
         // The empty rail must still be a landing site, or d-pad down would stop at the rail above.
         continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
         latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        showCard(40).assertIsFocused()
+        showCard(40).performKeyInput { pressKey(Key.DirectionDown) }
 
         composeRule.onNodeWithContentDescription(
             "No albums in your library yet. Add a music folder on the server and run a scan.",
@@ -487,6 +514,8 @@ class HomeRailBehaviorTest {
 
         continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
         latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        showCard(40).assertIsFocused()
+        showCard(40).performKeyInput { pressKey(Key.DirectionDown) }
         albumCard(11).performKeyInput { pressKey(Key.DirectionDown) }
         theaterCard(21).assertIsFocused()
 
@@ -507,6 +536,8 @@ class HomeRailBehaviorTest {
         setShellContent(IglooRailState.Loaded(continueMovies))
         continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
         latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        showCard(40).assertIsFocused()
+        showCard(40).performKeyInput { pressKey(Key.DirectionDown) }
         albumCard(11).performKeyInput { pressKey(Key.DirectionDown) }
         theaterCard(21).performKeyInput { pressKey(Key.DirectionRight) }
         theaterCard(22).performKeyInput { pressKey(Key.DirectionRight) }
@@ -530,6 +561,7 @@ class HomeRailBehaviorTest {
 
         assertEquals(1, theaterRetries)
         assertEquals(0, albumRetries)
+        assertEquals(0, showRetries)
         assertEquals(0, latestRetries)
         assertEquals(0, continueRetries)
     }
@@ -544,6 +576,8 @@ class HomeRailBehaviorTest {
         // The empty rail must still be a landing site, or d-pad down would stop at the rail above.
         continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
         latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        showCard(40).assertIsFocused()
+        showCard(40).performKeyInput { pressKey(Key.DirectionDown) }
         albumCard(11).performKeyInput { pressKey(Key.DirectionDown) }
 
         composeRule.onNodeWithContentDescription(
@@ -586,5 +620,146 @@ class HomeRailBehaviorTest {
         theaterCard(21)
             .performScrollTo()
             .assertHasNoClickAction()
+    }
+
+    @Test
+    fun showsKeepFocusMemoryAcrossStateSwapsAndRespectBothHorizontalEdges() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+        continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        showCard(40).assertIsFocused()
+        showCard(40).performKeyInput { pressKey(Key.DirectionRight) }
+        showCard(12).assertIsFocused()
+
+        showsState = IglooRailState.Loading
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Loading recently added shows").assertIsFocused()
+        showsState = IglooRailState.Loaded(shows)
+        composeRule.waitForIdle()
+        showCard(12).assertIsFocused()
+        showCard(12).performKeyInput { pressKey(Key.DirectionRight) }
+        showCard(7).performKeyInput { pressKey(Key.DirectionRight) }
+        showCard(7).assertIsFocused()
+        showCard(7).performKeyInput { pressKey(Key.DirectionLeft) }
+        showCard(12).performKeyInput { pressKey(Key.DirectionLeft) }
+        showCard(40).performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.onNodeWithContentDescription("Home").assertIsFocused()
+        composeRule.onNodeWithContentDescription("Home")
+            .performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(1).assertIsFocused()
+    }
+
+    @Test
+    fun showLoadingErrorEmptyAndLoadedStatesKeepAnAnchorWithoutStealingFocus() {
+        setShellContent(
+            initialContinue = IglooRailState.Loaded(continueMovies),
+            initialShows = IglooRailState.Loading,
+        )
+        continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithContentDescription("Loading recently added shows").assertIsFocused()
+
+        showsState = IglooRailState.Error("shows scan in progress")
+        composeRule.waitForIdle()
+        val retry = composeRule.onNodeWithContentDescription("Retry loading Recently Added Shows")
+        retry.assertIsFocused().performClick()
+        assertEquals(1, showRetries)
+        assertEquals(0, continueRetries)
+        assertEquals(0, latestRetries)
+        assertEquals(0, albumRetries)
+        assertEquals(0, theaterRetries)
+
+        showsState = IglooRailState.Loaded(emptyList())
+        composeRule.waitForIdle()
+        val empty = composeRule.onNodeWithContentDescription(
+            "No shows in your library yet. Add a shows folder on the server and run a scan.",
+        )
+        empty.assertIsFocused().assertHasNoClickAction()
+        empty.performKeyInput { pressKey(Key.DirectionDown) }
+        // The wide empty anchor lands on the nearest album column, like every empty rail.
+        composeRule.onNode(
+            isFocused() and hasAnyAncestor(hasTestTag("rail_scroll_Recently Added Albums")),
+        ).performKeyInput { pressKey(Key.DirectionUp) }
+        empty.assertIsFocused()
+        empty.performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.onNodeWithContentDescription("Home").assertIsFocused()
+
+        showsState = IglooRailState.Loaded(shows)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Home").assertIsFocused()
+    }
+
+    @Test
+    fun showCardsSpeakNameAndOptionalYearAsOneInertStop() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+        showCard(40).performScrollTo().requestFocus()
+        showCard(40).assertIsFocused()
+            .assertContentDescriptionEquals("Severance, 2022")
+            .assertHasNoClickAction()
+        assertFalse(showCard(40).fetchSemanticsNode().config.contains(SemanticsProperties.Role))
+        composeRule.onAllNodesWithText("Severance").assertCountEquals(0)
+        composeRule.onAllNodesWithText("2022").assertCountEquals(0)
+        assertShowCardInPlatformTree()
+        showCard(40).performKeyInput {
+            pressKey(Key.DirectionCenter)
+            pressKey(Key.Enter)
+        }
+        showCard(40).assertIsFocused()
+        assertEquals(emptyList<Long>(), opened)
+        assertEquals(emptyList<Long>(), resumedEpisodes)
+        assertEquals(emptyList<Long>(), albumsOpened)
+        assertEquals(emptyList<Long>(), theatersOpened)
+        showCard(7).assertContentDescriptionEquals("Untitled Show").assertHasNoClickAction()
+    }
+
+    /** The exported Android tree must contain one focused, inert card, without caption stops. */
+    private fun assertShowCardInPlatformTree() {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val expected = listOf(Triple("Severance, 2022", false, true))
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        var found: List<Triple<String, Boolean, Boolean>>
+        do {
+            composeRule.waitForIdle()
+            found = buildList { automation.rootInActiveWindow?.let { collectShowNodes(it, this) } }
+            if (found == expected) return
+            Thread.sleep(100)
+        } while (SystemClock.uptimeMillis() < deadline)
+        assertEquals(expected, found)
+    }
+
+    private fun collectShowNodes(
+        node: AccessibilityNodeInfo,
+        into: MutableList<Triple<String, Boolean, Boolean>>,
+    ) {
+        val spoken = node.contentDescription?.toString() ?: node.text?.toString()
+        if (spoken != null && (spoken.startsWith("Severance") || spoken == "2022")) {
+            into += Triple(spoken, node.isClickable, node.isFocused)
+        }
+        for (i in 0 until node.childCount) node.getChild(i)?.let { collectShowNodes(it, into) }
+    }
+
+    @Test
+    fun movieShowAlbumNavigationWorksInBothDirectionsAndRestoresShowMemory() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+        continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        showCard(40).performKeyInput { pressKey(Key.DirectionRight) }
+        showCard(12).performKeyInput { pressKey(Key.DirectionDown) }
+        albumCard(12).assertIsFocused()
+        albumCard(12).performKeyInput { pressKey(Key.DirectionUp) }
+        showCard(12).assertIsFocused()
+        showCard(12).performKeyInput { pressKey(Key.DirectionUp) }
+        latestCard(2).assertIsFocused()
+
+        composeRule.onNodeWithContentDescription("Movies").performClick()
+        composeRule.onNodeWithContentDescription("Home").performClick()
+        composeRule.waitForIdle()
+        // A restored rail hands a subsequent state swap back to its saved show id.
+        showCard(12).performScrollTo().requestFocus()
+        showsState = IglooRailState.Loading
+        composeRule.waitForIdle()
+        showsState = IglooRailState.Loaded(shows)
+        composeRule.waitForIdle()
+        showCard(12).assertIsFocused()
     }
 }

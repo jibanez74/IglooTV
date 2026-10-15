@@ -18,6 +18,7 @@ import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.ContinueWatchingItem
 import com.igloo.blindpenguincoder.data.model.LatestMovie
+import com.igloo.blindpenguincoder.data.model.LatestShow
 import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.ShowDetailsData
@@ -98,7 +99,7 @@ data class HomeTheaterMovie(
 )
 
 /** The rails Home renders, in the order it renders them (docs/design-system.md section 11.3). */
-enum class HomeRail { ContinueWatching, LatestMovies, LatestAlbums, InTheaters }
+enum class HomeRail { ContinueWatching, LatestMovies, LatestShows, LatestAlbums, InTheaters }
 
 /** What a hero page features: the newest movie or the newest show (section 11.3.1). */
 enum class HomeHeroKind { Movie, Show }
@@ -123,9 +124,9 @@ data class HomeHero(
 )
 
 /**
- * No Error member on purpose: a hero page that cannot load hides instead. The movie page's data
- * is the Recently Added rail's, and that rail already owns the error card and its Retry; the show
- * page has no rail, and the next foreground refresh is its retry.
+ * No Error member on purpose: a hero page that cannot load hides instead. The movie and show
+ * pages share their Recently Added rails' data and Retry. A details failure affects
+ * only its hero page; the rail's cards remain available.
  *
  * [Loaded] holds one page per feature that loaded, the movie first. The hero stays [Loading]
  * until every feature has settled, so a page never appears or disappears under the user's focus
@@ -142,6 +143,7 @@ data class HomeUiState(
     val hero: HomeHeroState = HomeHeroState.Loading,
     val continueWatching: IglooRailState<HomeContinueItem> = IglooRailState.Loading,
     val latestMovies: IglooRailState<PosterItem> = IglooRailState.Loading,
+    val latestShows: IglooRailState<PosterItem> = IglooRailState.Loading,
     val latestAlbums: IglooRailState<AlbumCardUi> = IglooRailState.Loading,
     val inTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loading,
     /** Why the last episode press did not reach the player; cleared by the next press. */
@@ -161,7 +163,6 @@ class HomeViewModel(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     private val loads = mutableMapOf<HomeRail, Job>()
-    private var showFeatureLoad: Job? = null
 
     /** Each featured title's own load state; [HomeHeroState] is composed from them in order. */
     private val features: MutableMap<HomeHeroKind, Feature> =
@@ -185,7 +186,7 @@ class HomeViewModel(
         _uiState.update { it.copy(playbackNotice = null) }
         loadContinueWatching(userInitiated = false)
         loadLatestMovies(userInitiated = false)
-        loadShowFeature()
+        loadLatestShows(userInitiated = false)
         loadLatestAlbums(userInitiated = false)
         loadInTheaters(userInitiated = false)
     }
@@ -200,6 +201,7 @@ class HomeViewModel(
         when (rail) {
             HomeRail.ContinueWatching -> loadContinueWatching(userInitiated = true)
             HomeRail.LatestMovies -> loadLatestMovies(userInitiated = true)
+            HomeRail.LatestShows -> loadLatestShows(userInitiated = true)
             HomeRail.LatestAlbums -> loadLatestAlbums(userInitiated = true)
             HomeRail.InTheaters -> loadInTheaters(userInitiated = true)
         }
@@ -372,6 +374,34 @@ class HomeViewModel(
         }
     }
 
+    private fun loadLatestShows(userInitiated: Boolean) {
+        if (userInitiated) {
+            _uiState.update { it.copy(latestShows = IglooRailState.Loading) }
+            setFeature(HomeHeroKind.Show, Feature.Loading)
+        }
+        launchLoad(HomeRail.LatestShows) {
+            val result = shows.latestShows()
+            val next = result.toRailState { latest ->
+                val apiBaseUrl = serverUrl.require().apiBaseUrl
+                // Preserve the server's newest-first order and cap of 12.
+                latest.map { show ->
+                    posterItem(
+                        id = show.id,
+                        title = show.name,
+                        posterPath = show.posterPath,
+                        year = show.premiereYear,
+                        apiBaseUrl = apiBaseUrl,
+                    )
+                }
+            }
+            // Publish the rail before enriching its first show for the hero.
+            _uiState.update {
+                it.copy(latestShows = next.orKeepContent(it.latestShows, keep = !userInitiated))
+            }
+            loadShowFeature(result, userInitiated)
+        }
+    }
+
     private fun loadLatestAlbums(userInitiated: Boolean) {
         if (userInitiated) {
             _uiState.update { it.copy(latestAlbums = IglooRailState.Loading) }
@@ -448,32 +478,27 @@ class HomeViewModel(
         }
     }
 
-    /**
-     * The show page: the first of `GET /shows/latest`, enriched by its details. It has no rail of
-     * its own, so it loads in its own job, never shows an error, and is never user-retried — a
-     * page that fails hides (or, on a background refresh, stays as it was) and the next
-     * foreground refresh tries again.
-     */
-    private fun loadShowFeature() {
-        showFeatureLoad?.cancel()
-        showFeatureLoad = viewModelScope.launch {
-            val newest = when (val latest = shows.latestShows()) {
-                is ApiResult.Failure -> {
-                    hideFeatureOrKeep(HomeHeroKind.Show, userInitiated = false)
-                    return@launch
-                }
-                is ApiResult.Success -> latest.value.firstOrNull() ?: run {
-                    setFeature(HomeHeroKind.Show, Feature.Hidden)
-                    return@launch
-                }
+    /** The newest show's details enrich the rail's response within the same cancellable job. */
+    private suspend fun loadShowFeature(
+        latest: ApiResult<List<LatestShow>>,
+        userInitiated: Boolean,
+    ) {
+        val newest = when (latest) {
+            is ApiResult.Failure -> {
+                hideFeatureOrKeep(HomeHeroKind.Show, userInitiated)
+                return
             }
-            when (val details = shows.showDetails(newest.id)) {
-                is ApiResult.Success -> setFeature(
-                    HomeHeroKind.Show,
-                    Feature.Loaded(toShowHero(details.value, serverUrl.require().apiBaseUrl)),
-                )
-                is ApiResult.Failure -> hideFeatureOrKeep(HomeHeroKind.Show, userInitiated = false)
+            is ApiResult.Success -> latest.value.firstOrNull() ?: run {
+                setFeature(HomeHeroKind.Show, Feature.Hidden)
+                return
             }
+        }
+        when (val details = shows.showDetails(newest.id)) {
+            is ApiResult.Success -> setFeature(
+                HomeHeroKind.Show,
+                Feature.Loaded(toShowHero(details.value, serverUrl.require().apiBaseUrl)),
+            )
+            is ApiResult.Failure -> hideFeatureOrKeep(HomeHeroKind.Show, userInitiated)
         }
     }
 

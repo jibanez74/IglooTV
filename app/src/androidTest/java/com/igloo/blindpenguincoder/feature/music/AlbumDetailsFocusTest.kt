@@ -27,6 +27,7 @@ import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testAlbums
+import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -79,6 +80,7 @@ class AlbumDetailsFocusTest {
                         hero = HomeHeroState.Hidden,
                         continueWatching = IglooRailState.Loaded(testContinueMovies),
                         latestAlbums = IglooRailState.Loaded(testAlbums),
+                        latestShows = IglooRailState.Loaded(testHomeShows),
                     ),
                     albumDetails = albumDetailsState,
                     onAlbumSelected = { albumId ->

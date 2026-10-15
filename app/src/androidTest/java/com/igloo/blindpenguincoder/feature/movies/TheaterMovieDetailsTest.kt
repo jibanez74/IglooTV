@@ -26,6 +26,7 @@ import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
+import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testTheaterMovieDetails
 import com.igloo.blindpenguincoder.testTheaterMovies
@@ -71,6 +72,7 @@ class TheaterMovieDetailsTest {
                         hero = HomeHeroState.Hidden,
                         continueWatching = IglooRailState.Loaded(testContinueMovies),
                         inTheaters = IglooRailState.Loaded(testTheaterMovies),
+                        latestShows = IglooRailState.Loaded(testHomeShows),
                     ),
                     details = detailsState,
                     // The in-theaters page's only hero action is the trailer, which the screen

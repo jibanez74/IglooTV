@@ -1331,8 +1331,8 @@ rows above it in half. `LocalBringIntoViewSpec` is experimental, and this is its
 
 ### 11.3 Home
 
-Stacked horizontal rails — continue watching, latest movies, latest albums, movies in theaters,
-watch rooms — under the hero, which features the newest movie and the newest show (§11.3.1). This is the most TV-native layout in the product and the model for other
+Stacked horizontal rails — continue watching, latest movies, latest shows, latest albums, movies
+in theaters, watch rooms — under the hero, which features the newest movie and the newest show (§11.3.1). This is the most TV-native layout in the product and the model for other
 index screens. Vertical d-pad moves between rails; horizontal moves within one; focus is
 restored per-rail on return.
 
@@ -1349,8 +1349,8 @@ the **single most recently added TV show**, in that order, one page on screen at
 movie page is the first item of the Recently Added data, enriched with
 `GET /api/movies/details/{id}`; the two requests chain inside the rail's own load job, so the
 rail's Retry re-runs the movie page and a foreground refresh cancels both together. The show page
-is the first item of `GET /api/shows/latest`, enriched with `GET /api/shows/details/{id}`, in a
-job of its own — Home has no shows rail. Pages never turn on their own — §7.2 permits no looping
+likewise shares the Recently Added Shows response from `GET /api/shows/latest`, enriched with
+`GET /api/shows/details/{id}` in that rail's job. Pages never turn on their own — §7.2 permits no looping
 surface, and a carousel fails that rule twice (it carries information; it moves geometry under
 text). D-pad right and left turn them.
 
@@ -1452,9 +1452,11 @@ page out as it reads a turn. The hero stays Loading until **both** pages have
 settled, so a page never appears or disappears under focus and "1 of 2" is right from the first
 word. There is no hero error card: a page whose list is empty, whose latest fetch fails, or whose
 details fetch fails **hides**, and the hero shows whatever is left — both gone hides the hero.
-The movie page's failures are the rail's to report; the show page has no rail, so it is retried by
-the next foreground refresh. A background refresh that fails keeps a previously loaded page,
-exactly the rails' rule; an empty library hides its page unconditionally.
+The movie and show pages share their respective Recently Added rails' list request and Retry.
+Each rail publishes its cards before fetching details for only the newest title in the same
+cancellable job. A details failure affects only the hero; list failures are the rail's to report.
+A background refresh that fails keeps a previously loaded page, exactly the rails' rule; an empty
+library hides its page unconditionally.
 
 #### 11.3.2 The rails
 
@@ -1465,10 +1467,11 @@ rails fail, retry, and refresh independently (§12's polite live regions depend 
 |---|---|---|---|
 | Continue Watching | `GET /api/continue-watching` (movies and TV episodes, in server order) | poster + progress bar; fully spoken remaining time in card semantics only. A movie card opens its details; an episode card wears the **show's** poster (`TvShows` glyph fallback) with the show name over `S1 E3 · Episode name`, announces "Resume {show} S1 E3", and resumes straight into the player — there is no show details screen yet. The rail's `Long` key folds the kind into the low bit (`id * 2`, `id * 2 + 1`) because a movie id and an episode id can collide. | "Nothing in progress yet. Movies and episodes you start watching appear here." |
 | Recently Added Movies | `GET /api/movies/latest` | poster, year below | "No movies in your library yet. Add a movies folder on the server and run a scan." |
+| Recently Added Shows | `GET /api/shows/latest` | poster, name and optional premiere year below, `TvShows` glyph fallback; focusable with no button role or press action, like the TV Shows grid | "No shows in your library yet. Add a shows folder on the server and run a scan." |
 | Recently Added Albums | `GET /api/music/albums/latest` | `albumAspect` cover, musician below, `Music` glyph fallback | "No albums in your library yet. Add a music folder on the server and run a scan." |
 | Now Playing in Theaters | `GET /api/tmdb/movies/in-theaters` | 2:3 poster, title + year over a bottom scrim, rating badge top-right (§3.2) | "No movies are playing in theaters right now. Check back later." |
 
-**Server order is the contract — for the library rails.** None of the three library routes takes
+**Server order is the contract — for the library rails.** None of the four library routes takes
 a sort, and `GET /api/music/albums/latest` takes no parameters at all — not even a limit; the
 backend owns both the order and the cap of 12. Nothing is re-sorted or re-sliced client-side.
 The theaters rail is the one exception: the TMDB route's order carries no meaning of its own, so
@@ -2472,6 +2475,16 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-14 — Recently Added Shows joins Home (§11.3).**
+
+- The shows rail sits between movies and albums, in server order with the server's cap of 12.
+  Cards show poster, name and optional premiere year with the TV Shows glyph fallback. They
+  remain focusable and announce one name/year sentence without a button role or press action.
+- One cancellable shows job publishes the rail, then enriches only its first show for the hero.
+  The rail has independent Retry and focus memory. Failed refreshes retain loaded content;
+  successful empty lists clear the rail and hide its hero page. Details failures affect only
+  the hero, whose initial loading and movie-first order are unchanged.
 
 **2026-10-14 — Home visual pass from Shield captures (§3.2, §6.1, §8.3, §11.3.1).**
 
