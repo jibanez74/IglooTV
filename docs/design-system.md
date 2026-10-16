@@ -1238,6 +1238,12 @@ IME, which §11.6 reserves for search and login.
 Text entry on a remote is painful. Quick-connect pairing is the primary path; email/password is
 the fallback.
 
+With spoken accessibility enabled, the pairing characters and the two sign-in actions form one
+explicit focus sequence: characters 1–6, email/password, then Change server (or Back to profiles).
+Right/Down advance and Left/Up reverse, stopping at the ends. Each character announces its
+position and either a spelling word ("Letter B, as in Bravo") or a digit name ("Digit eight").
+Initial code focus waits for the accessibility snapshot so VoiceView can follow it.
+
 When this screen is reached by adding a user rather than by first-time setup, the "Change
 server" slot becomes **Back to profiles** — changing the server wipes every stored profile, so
 offering it mid-add is a trap. **Back takes that same slot's action**, and only then: during
