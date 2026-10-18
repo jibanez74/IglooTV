@@ -16,10 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.hideFromAccessibility
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -75,8 +73,9 @@ internal fun IglooSkeletonCell(
 
 /**
  * The one skeleton cell that is real to focus and TalkBack: the anchor a loading surface keeps
- * alive so the pane always has somewhere to land, announcing [loadingLabel] politely. The other
- * cells of the surface are [IglooSkeletonTextureCell]s.
+ * alive so the pane always has somewhere to land, announcing [loadingLabel] when focused. No
+ * live region, for the reason [IglooFocusableEmpty] gives. The other cells of the surface are
+ * [IglooSkeletonTextureCell]s.
  */
 @Composable
 internal fun IglooSkeletonAnchorCell(
@@ -95,10 +94,7 @@ internal fun IglooSkeletonAnchorCell(
         modifier = anchorModifier
             .onFocusChanged { focused = it.isFocused }
             .focusable()
-            .semantics {
-                contentDescription = loadingLabel
-                liveRegion = LiveRegionMode.Polite
-            },
+            .semantics { contentDescription = loadingLabel },
     )
 }
 

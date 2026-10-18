@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -30,7 +31,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -100,8 +100,14 @@ fun <T> IglooMediaRail(
     emptyText: String = "Nothing to show",
     onRetry: () -> Unit = {},
     returnRequester: FocusRequester? = null,
-    /** Include this section in the focused card or empty-state announcement. */
+    /**
+     * Speak [title] once, on the node focus enters this rail on (section 11.3.2): the empty state
+     * always, a card only when it is the first the user lands on from outside. Off for a rail
+     * whose surroundings already name it, such as a details page's sections.
+     */
     announceSectionTitle: Boolean = false,
+    /** Under a screen reader, a state swap's focus handoff waits until it can be heard. */
+    screenReader: Boolean = rememberSpokenAccessibilityEnabled(),
     cardAspect: Float = IglooTheme.layout.posterAspect,
     // The skeleton takes both geometry values, so it is shaped by the same tokens as the card
     // it replaces — the grid-matching rule (section 8.2) holds structurally instead of by
@@ -121,9 +127,18 @@ fun <T> IglooMediaRail(
     }
 
     // A focused skeleton disposing must hand focus to the new state's anchor.
-    val onRailFocus = rememberRefocusAfterSwap(state) {
+    val onRailFocus = rememberRefocusAfterSwap(state, screenReader) {
         (entryKey?.let(itemRequesters::getValue) ?: localAnchor).requestFocus()
     }
+
+    // The section is spoken once, on entry (section 11.3.2). TalkBack for TV reads a card's
+    // description as focus lands on it and afterwards speaks only a change to the node its cursor
+    // is on, so the title rides the description of every card while no card here is focused —
+    // whichever one the user lands on from outside is already prefixed — and stays on that entry
+    // card alone once focus is inside. A sideways move reaches a card that never carried it, and
+    // the entry card sheds it unfocused, silently; leaving the rail restores it everywhere.
+    var focusedKey by remember { mutableStateOf<Long?>(null) }
+    var enteredOnKey by remember { mutableStateOf<Long?>(null) }
 
     val anchorModifier = Modifier
         .focusRequester(localAnchor)
@@ -141,42 +156,49 @@ fun <T> IglooMediaRail(
     // non-scrolling state are text, and text stays inside the overscan inset.
     val insetModifier = Modifier.padding(start = insetStart, end = insetEnd)
 
-    CompositionLocalProvider(
-        LocalMediaSectionTitle provides title.takeIf { announceSectionTitle },
+    Column(
+        modifier = modifier.onFocusChanged {
+            onRailFocus(it.hasFocus)
+            if (!it.hasFocus) {
+                focusedKey = null
+                enteredOnKey = null
+            }
+        },
+        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
-        Column(
-            modifier = modifier.onFocusChanged { onRailFocus(it.hasFocus) },
-            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-        ) {
-            SectionHeading(title, insetModifier)
+        SectionHeading(title, insetModifier)
 
-            when (state) {
-                // The skeleton takes the start inset only: its fixed cells are meant to run off the
-                // end the same way real cards do, which is the affordance they stand in for.
-                is IglooRailState.Loading -> RailSkeleton(
-                    anchorModifier = anchorModifier,
-                    loadingLabel = loadingLabel,
-                    cardAspect = cardAspect,
-                    cardWidth = cardWidth,
-                    modifier = Modifier.padding(start = insetStart),
-                )
+        when (state) {
+            // The skeleton takes the start inset only: its fixed cells are meant to run off the
+            // end the same way real cards do, which is the affordance they stand in for.
+            is IglooRailState.Loading -> RailSkeleton(
+                anchorModifier = anchorModifier,
+                loadingLabel = loadingLabel,
+                cardAspect = cardAspect,
+                cardWidth = cardWidth,
+                modifier = Modifier.padding(start = insetStart),
+            )
 
-                // Rail-shaped, not form-shaped: the card is bounded to the cards it replaces so a
-                // failure reads as this rail's, and Polite because rails fail independently and two
-                // Assertive regions would cut each other off (section 12).
-                is IglooRailState.Error -> IglooInlineError(
-                    message = state.message,
-                    actionText = "Retry",
-                    actionSemanticLabel = "Retry loading $title",
-                    onAction = onRetry,
-                    actionModifier = anchorModifier,
-                    liveRegionMode = LiveRegionMode.Polite,
-                    modifier = insetModifier
-                        .padding(vertical = IglooTheme.spacing.md)
-                        .widthIn(max = railErrorWidth()),
-                )
+            // Rail-shaped, not form-shaped: the card is bounded to the cards it replaces so a
+            // failure reads as this rail's, and Polite because rails fail independently and two
+            // Assertive regions would cut each other off (section 12).
+            is IglooRailState.Error -> IglooInlineError(
+                message = state.message,
+                actionText = "Retry",
+                actionSemanticLabel = "Retry loading $title",
+                onAction = onRetry,
+                actionModifier = anchorModifier,
+                liveRegionMode = LiveRegionMode.Polite,
+                modifier = insetModifier
+                    .padding(vertical = IglooTheme.spacing.md)
+                    .widthIn(max = railErrorWidth()),
+            )
 
-                is IglooRailState.Loaded -> if (state.items.isEmpty()) {
+            is IglooRailState.Loaded -> if (state.items.isEmpty()) {
+                // The rail's only node, so every visit is an entry: always prefixed.
+                CompositionLocalProvider(
+                    LocalMediaSectionTitle provides title.takeIf { announceSectionTitle },
+                ) {
                     IglooFocusableEmpty(
                         anchorModifier = anchorModifier,
                         icon = emptyIcon,
@@ -184,41 +206,46 @@ fun <T> IglooMediaRail(
                         contentPadding = IglooTheme.spacing.xl,
                         modifier = insetModifier,
                     )
-                } else {
-                    // Created scrolled to the entry card so a rail rebuilt on returning to this
-                    // destination has the remembered card composed — a focus requester can only
-                    // land on a node that exists.
-                    val listState = rememberLazyListState(
-                        initialFirstVisibleItemIndex = state.items
-                            .indexOfFirst { itemKey(it) == entryKey }
-                            .coerceAtLeast(0),
-                    )
-                    LazyRow(
-                        state = listState,
-                        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-                        // Vertical room inside the scroll surface, so the focus scale and glow are
-                        // not cross-axis-clipped. The horizontal values are the pane's gutter carried
-                        // *inside* the scroll rather than applied to it (section 8.3): the surface
-                        // spans the whole panel, so the first card still rests at the gutter while the
-                        // last one scrolls off the physical edge — and the trailing glow that the
-                        // row's extreme used to trim now has the end inset to live in.
-                        contentPadding = PaddingValues(
-                            start = insetStart,
-                            end = insetEnd,
-                            top = IglooTheme.spacing.md,
-                            bottom = IglooTheme.spacing.md,
-                        ),
-                        // A lazy list sizes to its content up to the incoming constraint, so a rail
-                        // holding fewer cards than the panel is wide would end where its last card
-                        // does — and the scroll surface, not the card, is what has to span the panel
-                        // for the end inset above to be the thing cards scroll through.
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .leadingEdgeFade(insetStart)
-                            .testTag("rail_scroll_$title"),
-                    ) {
-                        itemsIndexed(state.items, key = { _, item -> itemKey(item) }) { index, item ->
-                            val key = itemKey(item)
+                }
+            } else {
+                // Created scrolled to the entry card so a rail rebuilt on returning to this
+                // destination has the remembered card composed — a focus requester can only
+                // land on a node that exists.
+                val listState = rememberLazyListState(
+                    initialFirstVisibleItemIndex = state.items
+                        .indexOfFirst { itemKey(it) == entryKey }
+                        .coerceAtLeast(0),
+                )
+                LazyRow(
+                    state = listState,
+                    horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
+                    // Vertical room inside the scroll surface, so the focus scale and glow are
+                    // not cross-axis-clipped. The horizontal values are the pane's gutter carried
+                    // *inside* the scroll rather than applied to it (section 8.3): the surface
+                    // spans the whole panel, so the first card still rests at the gutter while the
+                    // last one scrolls off the physical edge — and the trailing glow that the
+                    // row's extreme used to trim now has the end inset to live in.
+                    contentPadding = PaddingValues(
+                        start = insetStart,
+                        end = insetEnd,
+                        top = IglooTheme.spacing.md,
+                        bottom = IglooTheme.spacing.md,
+                    ),
+                    // A lazy list sizes to its content up to the incoming constraint, so a rail
+                    // holding fewer cards than the panel is wide would end where its last card
+                    // does — and the scroll surface, not the card, is what has to span the panel
+                    // for the end inset above to be the thing cards scroll through.
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .leadingEdgeFade(insetStart)
+                        .testTag("rail_scroll_$title"),
+                ) {
+                    itemsIndexed(state.items, key = { _, item -> itemKey(item) }) { index, item ->
+                        val key = itemKey(item)
+                        val spokenTitle = title.takeIf {
+                            announceSectionTitle && (focusedKey == null || key == enteredOnKey)
+                        }
+                        CompositionLocalProvider(LocalMediaSectionTitle provides spokenTitle) {
                             itemContent(
                                 item,
                                 Modifier
@@ -229,7 +256,13 @@ fun <T> IglooMediaRail(
                                         if (index == 0) left = leftFocusRequester
                                         if (index == state.items.lastIndex) right = FocusRequester.Cancel
                                     }
-                                    .onFocusChanged { if (it.isFocused) onItemFocused(key) },
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            enteredOnKey = if (focusedKey == null) key else null
+                                            focusedKey = key
+                                            onItemFocused(key)
+                                        }
+                                    },
                                 cardAspect,
                             )
                         }

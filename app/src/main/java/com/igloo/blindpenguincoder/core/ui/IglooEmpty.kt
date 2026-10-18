@@ -17,10 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 
@@ -57,7 +55,10 @@ private fun IglooEmpty(
 /**
  * [IglooEmpty] as a pane's focus anchor. Focusable deliberately: when the empty state is the
  * pane's only content, an unfocusable node would leave the pane with no anchor and break the
- * shell's focus model. One TalkBack node, announcing [message] politely.
+ * shell's focus model. One TalkBack node, and no live region: a loading anchor that turns into
+ * this one is focused, and TalkBack speaks the description change of the node under its cursor
+ * by itself, while a live region on a focus target re-reads it on every focus change (section
+ * 6.3).
  */
 @Composable
 internal fun IglooFocusableEmpty(
@@ -80,10 +81,7 @@ internal fun IglooFocusableEmpty(
             .then(anchorModifier)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
-            .clearAndSetSemantics {
-                contentDescription = spokenDescription
-                liveRegion = LiveRegionMode.Polite
-            }
+            .clearAndSetSemantics { contentDescription = spokenDescription }
             .padding(contentPadding),
         contentAlignment = contentAlignment,
     ) {

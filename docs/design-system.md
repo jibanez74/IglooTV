@@ -576,8 +576,16 @@ it for a ≤1.5:1 effect.
   held scroll, when the d-pad moves into a row that is not on screen yet (`AnnouncedLazyMove`,
   §8.3). So does the shell's first request, when it replaces the sign-in or PIN screen: asked in
   the anchor's first frame, the focus went unannounced and TalkBack for TV parked its cursor on
-  the profile avatar. Overlays that
+  the profile avatar. And so does every state-swap handoff (`rememberRefocusAfterSwap`): a rail
+  or details page whose focused skeleton gives way to content re-lands focus on the new anchor
+  after the same wait; nothing holds focus in the meantime. Overlays that
   cover part of the screen solve the same problem another way (§9.3).
+- **No live region on a focus target.** Compose reports every focus change as a content change
+  on the node, and TalkBack speaks any content change on a live-region node — so a focusable
+  empty state or skeleton anchor that was also a polite region was re-read each time focus came
+  or went. A focused node needs none: TalkBack already speaks a change to the description of the
+  node under its cursor, which is how loading → empty and a hero page turn are heard (§11.3.1).
+  Live regions stay on text that cannot take focus (`IglooInlineError`'s message, `IglooNotice`).
 - Order matters: `Modifier.clickable` and `Modifier.onFocusChanged` are order-sensitive. Put
   focus observation *outside* the clickable so it sees the same focus state the indication does.
 
@@ -829,7 +837,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
 | `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg` by default and `artworkRadius = radius.pill` for a musician's circle — §8.2's circle is a radius the focus ring clamps, not a second component — with `centerText` for the text under it and `semanticLabel` when "Title, Year" is not the sentence to read, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose fully spoken remaining-time description joins the cleared node ("Title, Year, 2 hours and 20 minutes remaining", §12) so the bar can never render unannounced. The description is semantic only; no numeric percentage or remaining-time caption renders on the card. |
 | `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), the minimal `IglooFocusableEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). Takes the pane's `contentInset` and splits it by node per §8.3 — heading and non-scrolling states pad, the `LazyRow` carries it as `contentPadding` so cards bleed off the panel edge. |
-| `IglooFocusableEmpty` | §10 empty state, minimal variant only: faded icon + one line, as the pane's focusable anchor announcing the line politely. The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
+| `IglooFocusableEmpty` | §10 empty state, minimal variant only: faded icon + one line, as the pane's focusable anchor announcing the line when focused — no live region (§6.3). The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
 | `IglooRadioListDialog` | The scrimmed radio-list dialog behind Playback Settings and the player's track and chapter menus: the `IglooConfirmDialog` recipe (§9.3) around one flat, scrolling list of `IglooRadioRow`s and a pinned Done. The caller draws the rows, applying `rowFocus(n)` to row `n`, which walks up/down and onto Done and cancels every other direction; entry focus lands on `entryIndex`. |
 | `IglooPinnedError` | A screen's full-screen error: `IglooInlineError` centred in the safe area at `dialogWidth`, its one action pinned in every direction because the host is still composed underneath. Assertive — it is the only region on screen. |
 | `ProgressTrack` | The one thin progress bar: 4dp, a ground and a fill, square where it sits flush on an edge (poster card, seek bar) and `rounded` where it stands free (the resume strip, the popularity meter). |
@@ -983,7 +991,10 @@ Build these **once** as shared composables. Three states, one recipe each.
   `Polite` anywhere several can appear at once (the §11.3 rails fail independently), so the
   announcements queue instead of cutting each other off.
 
-All three announce themselves to TalkBack when they replace content (§12).
+All three announce themselves to TalkBack when they replace content (§12): the skeleton and the
+empty state because the pane's anchor is focused through the swap and TalkBack speaks what the
+node under its cursor now says (§6.3's announced handoff), the error through its message's live
+region.
 
 **A pending mutation is shown on the control that started it** — a picker tile (§11.1.1), a submit
 button, a dialog's action row (§9.3) — never as an app-wide overlay. The app-wide pending screen is
@@ -1469,10 +1480,18 @@ library hides its page unconditionally.
 Each rail is one `IglooMediaRail` over one endpoint, loaded by its own cancellable job so the
 rails fail, retry, and refresh independently (§12's polite live regions depend on that).
 
-Home rails include their section title in each card and empty-state announcement. The visible
-heading alone is not reachable through TV screen-reader input focus. For example, a card reads
-"Recently Added Movies. Heat, 1995"; Continue Watching also retains its progress description.
-This uses the existing card focus targets and preserves rail navigation and return focus.
+**The section is spoken once, on entry.** The visible heading is not reachable through TV
+screen-reader input focus (§12), so the rail's title rides the description of the node focus
+enters the rail on: the card the d-pad, the spine or a closing overlay lands on reads
+"Recently Added Movies. Heat, 1995" (Continue Watching keeps its progress description), and the
+empty state always reads "Continue Watching. Nothing in progress yet…". A sideways move inside
+the rail reaches a card that speaks itself alone — "Arrival, 2016" — because TalkBack for TV
+reads a card as focus lands on it and afterwards speaks only a change to the node under its
+cursor: `IglooMediaRail` keeps the title on every card while none of its cards is focused, keeps
+it on the entry card alone once one is, and puts it back everywhere when focus leaves, so each
+change lands on an unfocused node and is silent (`announceSectionTitle`). The skeleton and the
+error Retry name their section in their own labels. Details-page rails leave this off; their
+surroundings already name them.
 
 | Rail | Endpoint | Card | Empty copy |
 |---|---|---|---|

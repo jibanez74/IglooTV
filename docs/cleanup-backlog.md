@@ -210,8 +210,9 @@ together.
 `Dp.scaled()`'s own rule sends a dimension used in two or more files to `IglooDimens` and the
 §5 tables. Two remain: the 64dp brand mark on the auth screens (`feature/auth/AuthLayout.kt`,
 `WelcomeScreen.kt`), and the 14dp / 10dp skeleton text stubs (`core/ui/IglooSkeletonCell.kt`,
-`feature/shared/TrackRow.kt`, `feature/home/HomeHero.kt`). Each is a new token to name and
-document, a design-system call rather than a cleanup, so it was left for one.
+`feature/shared/TrackRow.kt`; the hero's stubs draw through `SkeletonStub` since the Home review).
+Each is a new token to name and document, a design-system call rather than a cleanup, so it was
+left for one.
 
 ### 8.2 The start effect names nine view models twice
 
@@ -228,12 +229,54 @@ adding one for this is not worth it.
   `playback/model/PlaybackMessages.kt`.
 - A failed like reads "Couldn't update like status: …" on a movie and "Couldn't update like: …"
   on a track (both through `AppError.toFailureNotice` now, so aligning them is one word).
-- "Rated … out of 10" opens a sentence in `MovieDetailsMapping.kt` and sits mid-sentence in
-  `InTheatersCard.kt`, so the two spell it with different capitals.
 
 ### 8.4 Track rows repeat their like wiring
 
 `AlbumDetailsSections.kt`, `MusicianDetailsScreen.kt` and `MusicScreen.kt` each derive
 `liked = likes.isLiked(id)` and `likePending = id in likes.pendingIds` for `TrackRow`. Two lines
 per site; a wrapper would add a composable to save them.
+
+---
+
+## 9. Recorded by the Home screen review (2026-10-18)
+
+### 9.1 `HomeViewModel.refresh()` leaves an episode resume in flight
+
+**Files:** `feature/home/HomeViewModel.kt` (`refresh`, `resumeEpisode`)
+
+`refresh()` clears `playbackNotice` but does not cancel `resumeJob`, so a resume prepared just
+before a foreground refresh can still post a notice or a play request after it. Harmless in
+practice — `refresh()` runs on START, before a press — but the two should agree on who owns the
+notice.
+
+### 9.2 `serverUrl.require()` throws inside `viewModelScope.launch`
+
+**Files:** `feature/home/HomeViewModel.kt` (every rail load), `core/config/ServerUrlProvider.kt`
+
+An unset server address would surface as an uncaught `IllegalStateException` rather than an
+`IglooRailState.Error`. The session lifecycle guarantees the address exists while Home is
+composed, which is why it has never fired; the guard is a one-liner if that guarantee moves.
+
+### 9.3 The hero can keep a page the rail no longer leads with
+
+**Files:** `feature/home/HomeViewModel.kt` (`hideFeatureOrKeep`)
+
+On a background refresh whose newest title changed but whose details call failed, the hero
+keeps the old page while the rail shows the new list. Deliberate — working content over an error
+card — but the two can disagree until the next refresh.
+
+### 9.4 `SignOutViewModel.confirm()` does not require a prior `request()`
+
+**Files:** `feature/home/SignOutViewModel.kt`
+
+Nothing calls it that way; the dialog is the only caller. A guard would be one line.
+
+### 9.5 Spoken once, then unreachable on a TV
+
+Three Home texts are live regions or cleared nodes that cannot take focus, so TalkBack for TV
+(which follows input focus, design-system §12) speaks them once at most and can never return to
+them: a rail's error message (`core/ui/IglooInlineError.kt`, the focusable Retry says only
+"Retry loading {title}"), the spine's "Signed in as {name}" footer
+(`feature/home/NavigationRail.kt`), and the shell's `IglooNotice` (`core/ui/IglooNotice.kt`).
+Each would need a reading stop or a fold into a focusable node's description; a design call.
 

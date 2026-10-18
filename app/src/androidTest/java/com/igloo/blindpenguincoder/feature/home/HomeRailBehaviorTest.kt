@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assert
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -38,6 +40,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
@@ -103,6 +106,7 @@ class HomeRailBehaviorTest {
         onMovieSelected: ((Long) -> Unit)? = { opened += it },
         onTheaterMovieSelected: ((Long) -> Unit)? = { theatersOpened += it },
         onAlbumSelected: ((Long) -> Unit)? = { albumsOpened += it },
+        spokenAccessibilityEnabled: Boolean = false,
     ) {
         continueState = initialContinue
         latestState = initialLatest
@@ -148,10 +152,17 @@ class HomeRailBehaviorTest {
                     onTheaterMovieSelected = onTheaterMovieSelected,
                     onAlbumSelected = onAlbumSelected,
                     onResumeEpisode = { resumedEpisodes += it },
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
         }
         composeRule.waitForIdle()
+        // Under a screen reader the shell's first focus request waits until it can be announced,
+        // and waitForIdle does not fast-forward that delay.
+        if (spokenAccessibilityEnabled) {
+            composeRule.mainClock.advanceTimeBy(ANNOUNCED_FOCUS_WAIT_MS + FRAME_MS)
+            composeRule.waitForIdle()
+        }
     }
 
     private fun continueCard(id: Long) = composeRule.onNodeWithTag("continue_card_$id")
@@ -180,6 +191,9 @@ class HomeRailBehaviorTest {
 
         val skeleton = composeRule.onNodeWithContentDescription("Loading continue watching")
         skeleton.assertIsFocused()
+        // Focused, so TalkBack reads it; a live region on top would re-read it on every focus
+        // change (section 6.3).
+        skeleton.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
 
         // The skeleton anchor still opens the spine, so a slow network never traps the d-pad.
         skeleton.performKeyInput { pressKey(Key.DirectionLeft) }
@@ -311,7 +325,30 @@ class HomeRailBehaviorTest {
 
         composeRule.onNodeWithContentDescription(
             "Continue Watching. Nothing in progress yet. Movies and episodes you start watching appear here.",
-        ).assertIsFocused()
+        )
+            .assertIsFocused()
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+    }
+
+    /**
+     * The card that replaces a focused skeleton is in its first frames, and TalkBack for TV
+     * drops a focus event that lands on it too soon (see requestFocusAnnounced): under a screen
+     * reader the handoff waits, and nothing has focus until then.
+     */
+    @Test
+    fun underAScreenReaderTheSwapHandoffWaitsUntilItCanBeHeard() {
+        setShellContent(IglooRailState.Loading, spokenAccessibilityEnabled = true)
+        composeRule.onNodeWithContentDescription("Loading continue watching").assertIsFocused()
+
+        composeRule.mainClock.autoAdvance = false
+        continueState = IglooRailState.Loaded(continueMovies)
+        repeat(2) { composeRule.mainClock.advanceTimeByFrame() }
+        continueCard(1).assertExists().assertIsNotFocused()
+
+        composeRule.mainClock.advanceTimeBy(ANNOUNCED_FOCUS_WAIT_MS + FRAME_MS)
+        composeRule.mainClock.autoAdvance = true
+        continueCard(1).assertIsFocused()
+            .assertContentDescriptionEquals("Continue Watching. Heat, 1995, 2 hours and 7 minutes remaining")
     }
 
     @Test
@@ -709,37 +746,103 @@ class HomeRailBehaviorTest {
         assertEquals(emptyList<Long>(), resumedEpisodes)
         assertEquals(emptyList<Long>(), albumsOpened)
         assertEquals(emptyList<Long>(), theatersOpened)
-        showCard(7).assertContentDescriptionEquals("Recently Added Shows. Untitled Show").assertHasNoClickAction()
+        // Focus is inside the rail and did not enter on this card: it speaks itself alone.
+        showCard(7).assertContentDescriptionEquals("Untitled Show").assertHasNoClickAction()
     }
 
     /** The exported Android tree must contain one focused, inert card, without caption stops. */
-    private fun assertShowCardInPlatformTree() {
+    private fun assertShowCardInPlatformTree() = assertPlatformTreeHolds(
+        expected = listOf(Triple("Recently Added Shows. Severance, 2022", false, true)),
+    ) { spoken -> spoken.contains("Severance") || spoken == "2022" }
+
+    /**
+     * What TalkBack reads is the platform tree, not Compose's semantics: every node whose spoken
+     * text [matches] must be exactly [expected] (text, clickable, focused), within a short wait
+     * for the accessibility batch that exports a change.
+     */
+    private fun assertPlatformTreeHolds(
+        expected: List<Triple<String, Boolean, Boolean>>,
+        matches: (String) -> Boolean,
+    ) {
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val expected = listOf(Triple("Recently Added Shows. Severance, 2022", false, true))
         val deadline = SystemClock.uptimeMillis() + 5_000
         var found: List<Triple<String, Boolean, Boolean>>
         do {
             composeRule.waitForIdle()
-            found = buildList { automation.rootInActiveWindow?.let { collectShowNodes(it, this) } }
+            found = buildList {
+                automation.rootInActiveWindow?.let { collectNodes(it, this, matches) }
+            }
             if (found == expected) return
             Thread.sleep(100)
         } while (SystemClock.uptimeMillis() < deadline)
         assertEquals(expected, found)
     }
 
-    private fun collectShowNodes(
+    private fun collectNodes(
         node: AccessibilityNodeInfo,
         into: MutableList<Triple<String, Boolean, Boolean>>,
+        matches: (String) -> Boolean,
     ) {
         val spoken = node.contentDescription?.toString() ?: node.text?.toString()
-        if (spoken != null && (
-                spoken.startsWith("Recently Added Shows. Severance") ||
-                    spoken.startsWith("Severance") || spoken == "2022"
-                )
-        ) {
+        if (spoken != null && matches(spoken)) {
             into += Triple(spoken, node.isClickable, node.isFocused)
         }
-        for (i in 0 until node.childCount) node.getChild(i)?.let { collectShowNodes(it, into) }
+        for (i in 0 until node.childCount) node.getChild(i)?.let { collectNodes(it, into, matches) }
+    }
+
+    @Test
+    fun theSectionIsSpokenOnEntryAndNotOnSidewaysMoves() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+
+        // Section 11.3.2: the card focus entered on carries the rail's title; its siblings never
+        // did, so a sideways move speaks the card alone — and the entry card sheds the title
+        // while nobody is listening to it.
+        continueCard(1).assertIsFocused()
+            .assertContentDescriptionEquals("Continue Watching. Heat, 1995, 2 hours and 7 minutes remaining")
+        continueCard(2).assertContentDescriptionEquals("Arrival, 2016, 58 minutes remaining")
+
+        continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(2).assertIsFocused()
+            .assertContentDescriptionEquals("Arrival, 2016, 58 minutes remaining")
+        continueCard(1).assertContentDescriptionEquals("Heat, 1995, 2 hours and 7 minutes remaining")
+        assertPlatformTreeHolds(
+            expected = listOf(Triple("Arrival, 2016, 58 minutes remaining", true, true)),
+        ) { spoken -> spoken.contains("58 minutes remaining") }
+
+        continueCard(2).performKeyInput { pressKey(Key.DirectionLeft) }
+        continueCard(1).assertIsFocused()
+            .assertContentDescriptionEquals("Heat, 1995, 2 hours and 7 minutes remaining")
+
+        // Leaving the rail puts the title back on every card, so the next entry — wherever it
+        // lands — is announced; the rail entered next announces itself the same way.
+        continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        latestCard(1).assertIsFocused()
+            .assertContentDescriptionEquals("Recently Added Movies. Heat, 1995")
+        continueCard(1)
+            .assertContentDescriptionEquals("Continue Watching. Heat, 1995, 2 hours and 7 minutes remaining")
+        continueCard(2).assertContentDescriptionEquals("Continue Watching. Arrival, 2016, 58 minutes remaining")
+
+        latestCard(1).performKeyInput { pressKey(Key.DirectionUp) }
+        continueCard(1).assertIsFocused()
+            .assertContentDescriptionEquals("Continue Watching. Heat, 1995, 2 hours and 7 minutes remaining")
+        latestCard(1).assertContentDescriptionEquals("Recently Added Movies. Heat, 1995")
+    }
+
+    @Test
+    fun theSectionIsSpokenAgainWhenTheSpineHandsBackTheRememberedCard() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+        continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
+        continueCard(2).assertIsFocused()
+            .assertContentDescriptionEquals("Arrival, 2016, 58 minutes remaining")
+
+        pressBack()
+        composeRule.onNodeWithContentDescription("Home").assertIsFocused()
+        composeRule.onNodeWithContentDescription("Home")
+            .performKeyInput { pressKey(Key.DirectionRight) }
+
+        // Restored focus is an entry like any other: the remembered card names its section.
+        continueCard(2).assertIsFocused()
+            .assertContentDescriptionEquals("Continue Watching. Arrival, 2016, 58 minutes remaining")
     }
 
     @Test
@@ -767,3 +870,6 @@ class HomeRailBehaviorTest {
         showCard(12).assertIsFocused()
     }
 }
+
+/** One frame at the test clock's 60Hz: the wait starts after the swapped node's first frame. */
+private const val FRAME_MS = 16L

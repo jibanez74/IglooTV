@@ -1064,6 +1064,7 @@ private fun ContentPane(
         when (currentDestination) {
             IglooDestination.Home -> HomeRails(
                 home = home,
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 mutationNotice = mutationNotice,
                 progressSyncError = progressSyncError,
                 onRetryProgressSync = onRetryProgressSync,
@@ -1197,6 +1198,7 @@ private enum class VideoPlayOrigin { MovieDetails, ContinueWatchingRail }
 @Composable
 private fun HomeRails(
     home: HomeUiState,
+    spokenAccessibilityEnabled: Boolean,
     mutationNotice: String?,
     progressSyncError: String?,
     onRetryProgressSync: () -> Unit,
@@ -1222,10 +1224,12 @@ private fun HomeRails(
     val continueEntryRequester = remember { FocusRequester() }
     // The hero's one target outlives Loading -> Loaded and every page turn, so this matters only
     // when the hero hides while focused: the requester then sits on the Continue rail's anchor.
-    val onHeroFocus = rememberRefocusAfterSwap(home.hero) { contentStartRequester.requestFocus() }
+    val onHeroFocus = rememberRefocusAfterSwap(home.hero, spokenAccessibilityEnabled) {
+        contentStartRequester.requestFocus()
+    }
     // A Retry that clears while focused leaves focus on nothing; it goes back to the card the
     // player closed onto, the same hand-back the details page's Retry makes.
-    val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError) {
+    val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError, spokenAccessibilityEnabled) {
         if (progressSyncError == null &&
             !railReturnRequesters.getValue(HomeRail.ContinueWatching).requestFocusSafely()
         ) {
@@ -1280,6 +1284,7 @@ private fun HomeRails(
 
         IglooMediaRail(
             announceSectionTitle = true,
+            screenReader = spokenAccessibilityEnabled,
             contentInset = contentInset,
             title = "Continue Watching",
             state = home.continueWatching,
@@ -1323,6 +1328,7 @@ private fun HomeRails(
 
         IglooMediaRail(
             announceSectionTitle = true,
+            screenReader = spokenAccessibilityEnabled,
             contentInset = contentInset,
             title = "Recently Added Movies",
             state = home.latestMovies,
@@ -1351,6 +1357,7 @@ private fun HomeRails(
 
         IglooMediaRail(
             announceSectionTitle = true,
+            screenReader = spokenAccessibilityEnabled,
             contentInset = contentInset,
             title = "Recently Added Shows",
             state = home.latestShows,
@@ -1378,6 +1385,7 @@ private fun HomeRails(
 
         IglooMediaRail(
             announceSectionTitle = true,
+            screenReader = spokenAccessibilityEnabled,
             contentInset = contentInset,
             title = "Recently Added Albums",
             state = home.latestAlbums,
@@ -1408,6 +1416,7 @@ private fun HomeRails(
 
         IglooMediaRail(
             announceSectionTitle = true,
+            screenReader = spokenAccessibilityEnabled,
             contentInset = contentInset,
             title = "Now Playing in Theaters",
             state = home.inTheaters,
