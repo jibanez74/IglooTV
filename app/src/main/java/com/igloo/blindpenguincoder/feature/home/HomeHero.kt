@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -56,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
+import com.igloo.blindpenguincoder.CONFIRM_KEYS
 import com.igloo.blindpenguincoder.core.design.IglooEasing
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -63,10 +63,13 @@ import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
+import com.igloo.blindpenguincoder.core.design.overMediaSideScrim
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
+import com.igloo.blindpenguincoder.core.ui.SkeletonStub
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.insetHorizontally
 import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.feature.shared.DetailChip
 
@@ -158,7 +161,7 @@ fun HomeHero(
                         if (event.type == KeyEventType.KeyDown) onPageChange(target.kind)
                         true
                     }
-                    openMovie != null && event.key in ACTIVATION_KEYS -> {
+                    openMovie != null && event.key in CONFIRM_KEYS -> {
                         if (event.type == KeyEventType.KeyUp) openMovie()
                         true
                     }
@@ -269,10 +272,7 @@ fun HomeHero(
  * screen-reader user there is a page to the right; a lone page has no position to give.
  */
 internal fun heroPageDescription(hero: HomeHero, index: Int, count: Int): String {
-    val feature = when (hero.kind) {
-        HomeHeroKind.Movie -> "Recently added movie"
-        HomeHeroKind.Show -> "Recently added TV show"
-    }
+    val feature = "$RECENTLY_ADDED ${hero.kind.noun}"
     return listOfNotNull(
         if (count > 1) "$feature, ${index + 1} of $count" else feature,
         hero.title,
@@ -328,19 +328,15 @@ private fun HeroArtLayer(
             modifier = Modifier.matchParentSize(),
         )
         // Over-media literals per section 3.2. The side scrim carries the text column against
-        // busy art — the detail hero's stops, because the old card ramp decays to almost nothing
-        // across a full-bleed panel. The bottom one carries the title and the page dots. Both
-        // fill with matchParentSize and put their fade in the stops: the hero sits in a
-        // verticalScroll, so a fractional height would measure against an unbounded maximum.
+        // busy art — the detail hero's, because the old card ramp decays to almost nothing across
+        // a full-bleed panel. The bottom one carries the title and the page dots. Both fill with
+        // matchParentSize and put their fade in the stops: the hero sits in a verticalScroll, so
+        // a fractional height would measure against an unbounded maximum.
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .background(
-                    Brush.horizontalGradient(
-                        0f to Color.Black.copy(alpha = 0.80f),
-                        0.65f to Color.Black.copy(alpha = 0.55f),
-                        1f to Color.Black.copy(alpha = 0f),
-                    ),
+                    overMediaSideScrim(),
                 ),
         )
         Box(
@@ -434,10 +430,7 @@ private fun HeroPlate(
  */
 @Composable
 private fun HeroEyebrow(kind: HomeHeroKind, overMedia: Boolean) {
-    val label = when (kind) {
-        HomeHeroKind.Movie -> "Recently added · Movie"
-        HomeHeroKind.Show -> "Recently added · TV Show"
-    }
+    val label = "$RECENTLY_ADDED · ${kind.noun}"
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
@@ -552,7 +545,6 @@ private fun Modifier.heroTextPlate(
     overMedia: Boolean,
     contentInset: PaddingValues,
 ): Modifier {
-    val direction = LocalLayoutDirection.current
     val ground = if (overMedia) OVER_MEDIA_CONTROL_FILL else IglooTheme.colors.muted
     val fill by animateColorAsState(
         targetValue = if (focused) ground else ground.copy(alpha = 0f),
@@ -560,11 +552,8 @@ private fun Modifier.heroTextPlate(
         label = "heroPlateGround",
     )
     return this
-        .padding(
-            start = contentInset.calculateStartPadding(direction),
-            end = contentInset.calculateEndPadding(direction),
-            bottom = IglooTheme.layout.safeAreaVertical,
-        )
+        .insetHorizontally(contentInset)
+        .padding(bottom = IglooTheme.layout.safeAreaVertical)
         .widthIn(max = HERO_TEXT_MAX_WIDTH.scaled())
         .focusRing(
             focused = focused,
@@ -584,7 +573,6 @@ private fun HeroSkeletonPlate(
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
-    val stubShape = RoundedCornerShape(IglooTheme.radius.sm)
     Column(
         modifier = modifier.heroTextPlate(
             focused = focused,
@@ -593,31 +581,22 @@ private fun HeroSkeletonPlate(
         ),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
-        Box(
-            modifier = Modifier
-                .width(160.dp.scaled())
-                .heightIn(min = 14.dp.scaled())
-                .background(colors.border, stubShape),
-        )
-        Box(
-            modifier = Modifier
-                .width(300.dp.scaled())
-                .heightIn(min = 40.dp.scaled())
-                .background(colors.border, stubShape),
-        )
-        Box(
-            modifier = Modifier
-                .width(200.dp.scaled())
-                .heightIn(min = 18.dp.scaled())
-                .background(colors.border, stubShape),
-        )
+        SkeletonStub(height = 14.dp, fill = colors.border, modifier = Modifier.width(160.dp.scaled()))
+        SkeletonStub(height = 40.dp, fill = colors.border, modifier = Modifier.width(300.dp.scaled()))
+        SkeletonStub(height = 18.dp, fill = colors.border, modifier = Modifier.width(200.dp.scaled()))
     }
 }
 
 private const val LOADING_DESCRIPTION = "Loading featured titles"
 
-/** The keys `clickable` presses on; see the focusable in [HomeHero]. */
-private val ACTIVATION_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
+/** What every page is featured as; the eyebrow upper-cases it, the announcement speaks it. */
+private const val RECENTLY_ADDED = "Recently added"
+
+private val HomeHeroKind.noun: String
+    get() = when (this) {
+        HomeHeroKind.Movie -> "movie"
+        HomeHeroKind.Show -> "TV show"
+    }
 
 /**
  * Contains text, so a minimum, not a fixed height (section 2.6); one-off per section 2.8.

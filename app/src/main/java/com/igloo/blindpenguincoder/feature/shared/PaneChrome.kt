@@ -33,6 +33,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooTab
 import com.igloo.blindpenguincoder.core.ui.IglooTabRow
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.formatCount
+import com.igloo.blindpenguincoder.core.ui.insetHorizontally
 import com.igloo.blindpenguincoder.core.ui.withRequester
 
 /** What a pane's tab strip draws, speaks and is addressed by for one section — one lookup, not three. */
@@ -177,13 +178,9 @@ internal fun <T> PaneTabRow(
     onPressTab: (T) -> Unit,
     onFocusChanged: (String, Boolean) -> Unit,
 ) {
-    val direction = LocalLayoutDirection.current
     IglooTabRow(
         modifier = Modifier
-            .padding(
-                start = contentInset.calculateStartPadding(direction),
-                end = contentInset.calculateEndPadding(direction),
-            )
+            .insetHorizontally(contentInset)
             .testTag(testTag),
     ) {
         tabs.forEachIndexed { index, tab ->

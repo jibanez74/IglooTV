@@ -4,13 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -18,13 +15,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
-import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.GRID_PREFETCH_ROWS
@@ -37,6 +32,7 @@ import com.igloo.blindpenguincoder.feature.shared.PaneGridSkeleton
 import com.igloo.blindpenguincoder.feature.shared.PaneHeader
 import com.igloo.blindpenguincoder.feature.shared.PaneRefreshButton
 import com.igloo.blindpenguincoder.feature.shared.PaneTabRow
+import com.igloo.blindpenguincoder.feature.shared.PosterItemCard
 import com.igloo.blindpenguincoder.feature.shared.paneCardlessAnchor
 import com.igloo.blindpenguincoder.feature.shared.paneCountLine
 import com.igloo.blindpenguincoder.feature.shared.showingCountLine
@@ -185,7 +181,8 @@ fun LibraryScreen(
             focusOwnership = focusOwnership,
             silentReconcileGeneration = state.silentReconcileGeneration,
             containsItem = LibraryContent::containsItem,
-        )
+                    screenReader = spokenAccessibilityEnabled,
+)
 
         when (content) {
             // The Genres tab waiting on its list is a skeleton like any other wait: the grid it
@@ -244,10 +241,8 @@ fun LibraryScreen(
                 cardTag = { kind.cardTag(it.id) },
                 cardAspect = IglooTheme.layout.posterAspect,
             ) { item, modifier ->
-                IglooPosterCard(
-                    title = item.title,
-                    subtitle = item.year?.toString(),
-                    imageUrl = item.posterUrl,
+                PosterItemCard(
+                    item = item,
                     onClick = onItemSelected?.let { open -> { open(item.id) } },
                     // Unspecified so the card fills its grid cell rather than taking the rail's
                     // fixed card width and leaving ragged gutters.

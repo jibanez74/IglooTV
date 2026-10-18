@@ -25,6 +25,9 @@ enum class RatingTier { Strong, Fair, Weak }
 /** What the badge paints: its number and the tier that colors it. */
 data class RatingBadgeSpec(val label: String, val tier: RatingTier)
 
+/** The badge's one spoken form, wherever it joins a sentence: "Rated 7.9 out of 10". */
+fun RatingBadgeSpec.spoken(): String = "Rated $label out of 10"
+
 /**
  * Scores carry more decimals than the badge shows one of, so the tier is read off the rounded
  * value: taking it off the raw score would paint 6.951 in the middle tier under a "7.0" label.

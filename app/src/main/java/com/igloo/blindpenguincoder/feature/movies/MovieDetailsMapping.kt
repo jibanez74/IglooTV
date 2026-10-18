@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
+import com.igloo.blindpenguincoder.core.ui.spoken
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import com.igloo.blindpenguincoder.images.youtubeThumbnailUrl
@@ -137,7 +138,7 @@ internal fun metadataDescription(
     runtimeMinutes: Long?,
     releaseDateText: String?,
 ): String = listOfNotNull(
-    ratingBadge?.let { "Rated ${it.label} out of 10" },
+    ratingBadge?.spoken(),
     certification,
     *mediaBadges.map { spokenBadge(it) }.toTypedArray(),
     runtimeMinutes?.let { formatSpokenTime(it * 60.0) },

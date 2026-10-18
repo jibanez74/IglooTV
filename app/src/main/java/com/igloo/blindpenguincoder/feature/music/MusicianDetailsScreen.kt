@@ -26,7 +26,6 @@ import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
-import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
@@ -197,13 +196,10 @@ private fun MusicianDetailsContent(
                 contentInset = PaddingValues(horizontal = layout.safeAreaHorizontal),
                 cardAspect = layout.albumAspect,
             ) { album, itemModifier, aspect ->
-                IglooPosterCard(
-                    title = album.title,
-                    subtitle = album.subtitle,
-                    imageUrl = album.coverUrl,
+                AlbumCard(
+                    album = album,
                     onClick = { onOpenAlbum(album.id) },
                     aspect = aspect,
-                    fallbackIcon = IglooIcons.Music,
                     modifier = itemModifier
                         .focusProperties {
                             up = upFromRail ?: Cancel

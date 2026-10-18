@@ -576,16 +576,21 @@ it for a ≤1.5:1 effect.
   held scroll, when the d-pad moves into a row that is not on screen yet (`AnnouncedLazyMove`,
   §8.3). So does the shell's first request, when it replaces the sign-in or PIN screen: asked in
   the anchor's first frame, the focus went unannounced and TalkBack for TV parked its cursor on
-  the profile avatar. And so does every state-swap handoff (`rememberRefocusAfterSwap`): a rail
-  or details page whose focused skeleton gives way to content re-lands focus on the new anchor
-  after the same wait; nothing holds focus in the meantime. Overlays that
+  the profile avatar. And so does every state-swap handoff: a rail or details page whose focused
+  skeleton gives way to content (`rememberRefocusAfterSwap`), and a pane grid whose content is
+  replaced or resolves out of its skeleton (`PaneFocusHandoffCoordinator`), re-land focus on the
+  new anchor after the same wait; nothing holds focus in the meantime. Overlays that
   cover part of the screen solve the same problem another way (§9.3).
-- **No live region on a focus target.** Compose reports every focus change as a content change
-  on the node, and TalkBack speaks any content change on a live-region node — so a focusable
-  empty state or skeleton anchor that was also a polite region was re-read each time focus came
-  or went. A focused node needs none: TalkBack already speaks a change to the description of the
-  node under its cursor, which is how loading → empty and a hero page turn are heard (§11.3.1).
-  Live regions stay on text that cannot take focus (`IglooInlineError`'s message, `IglooNotice`).
+- **No live region on a focus target reached through an announced handoff.** Compose reports
+  every focus change as a content change on the node, and TalkBack speaks any content change on
+  a live-region node — so a focusable empty state or skeleton anchor that was also a polite
+  region was re-read each time focus came or went. A node focused through the wait above needs
+  none: TalkBack speaks the focus, and then any change to the description of the node under its
+  cursor, which is how loading → empty and a hero page turn are heard (§11.3.1). The one place
+  a live region still rides a focus target is an overlay that focuses its skeleton or pending
+  line in its first frame (`DetailsHero`, `TrackRowSkeleton`, `IglooConfirmDialog`), where it is
+  what makes that unannounced focus heard. Live regions otherwise stay on text that cannot take
+  focus (`IglooInlineError`'s message, `IglooNotice`).
 - Order matters: `Modifier.clickable` and `Modifier.onFocusChanged` are order-sensitive. Put
   focus observation *outside* the clickable so it sees the same focus state the indication does.
 
@@ -841,7 +846,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooRadioListDialog` | The scrimmed radio-list dialog behind Playback Settings and the player's track and chapter menus: the `IglooConfirmDialog` recipe (§9.3) around one flat, scrolling list of `IglooRadioRow`s and a pinned Done. The caller draws the rows, applying `rowFocus(n)` to row `n`, which walks up/down and onto Done and cancels every other direction; entry focus lands on `entryIndex`. |
 | `IglooPinnedError` | A screen's full-screen error: `IglooInlineError` centred in the safe area at `dialogWidth`, its one action pinned in every direction because the host is still composed underneath. Assertive — it is the only region on screen. |
 | `ProgressTrack` | The one thin progress bar: 4dp, a ground and a fill, square where it sits flush on an edge (poster card, seek bar) and `rounded` where it stands free (the resume strip, the popularity meter). |
-| `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. |
+| `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. A card whose text sits over the art hoists its `rememberArtworkState` so the §3.2 treatment follows the decode (the In Theaters card). |
 | `SectionHeading` | The one section heading style (`titleMedium`, `foreground`, `heading()`): every details section and every Home rail. |
 
 The details overlays share their hero from `feature/shared` — `DetailsHero` (the full-bleed

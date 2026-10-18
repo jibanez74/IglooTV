@@ -154,7 +154,7 @@ fun <T> IglooMediaRail(
     val insetEnd = contentInset.calculateEndPadding(direction)
     // Everything that is not the scroll surface owes the gutter: the heading and every
     // non-scrolling state are text, and text stays inside the overscan inset.
-    val insetModifier = Modifier.padding(start = insetStart, end = insetEnd)
+    val insetModifier = Modifier.insetHorizontally(contentInset)
 
     Column(
         modifier = modifier.onFocusChanged {

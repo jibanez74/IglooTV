@@ -16,6 +16,7 @@ import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.orKeepContent
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
+import com.igloo.blindpenguincoder.core.ui.spoken
 import com.igloo.blindpenguincoder.data.model.ContinueWatchingItem
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.LatestShow
@@ -608,7 +609,7 @@ internal fun heroMetadataDescription(
     year: String?,
     spokenExtent: String?,
 ): String? = listOfNotNull(
-    ratingBadge?.let { "Rated ${it.label} out of 10" },
+    ratingBadge?.spoken(),
     certification,
     year,
     spokenExtent,

@@ -631,7 +631,7 @@ class HomeRailBehaviorTest {
         // detail page for that TMDB movie (section 11.4.2).
         theaterCard(21)
             .performScrollTo()
-            .assertContentDescriptionEquals("Now Playing in Theaters. Heat 2, 2026, rated 7.9 out of 10")
+            .assertContentDescriptionEquals("Now Playing in Theaters. Heat 2, 2026, Rated 7.9 out of 10")
             .assertHasClickAction()
             .requestFocus()
         theaterCard(21).performKeyInput { pressKey(Key.DirectionCenter) }

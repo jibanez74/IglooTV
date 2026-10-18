@@ -27,8 +27,10 @@ touch — every site now passes `interactionSource = null` instead of rememberin
 reads — and deliberately stopped short of a `Modifier.iglooSelectable(...)`: the sites differ in
 where the ring sits (the node itself, or a child such as the poster or avatar), in the disabled
 fallback (`focusable()`, nothing, or `clickable(enabled =)`), and in the semantics, so one
-modifier would need a flag for each. Revisit only if the clickable configuration must change in
-one place.
+modifier would need a flag for each. The two media cards (`IglooPosterCard.kt`,
+`InTheatersCard.kt`) were the one identical pair and share `mediaCardInteraction` since the
+2026-10-18 Home review; the other ten stand. Revisit only if the clickable configuration must
+change in one place.
 
 ### 1.4 `IglooTabRow` hand-rolls what `iglooSurface` does
 
