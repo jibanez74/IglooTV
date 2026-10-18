@@ -39,6 +39,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.mediaSectionDescription
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 
 /**
@@ -67,6 +68,10 @@ fun InTheatersCard(
     var imageFailed by remember(movie.posterUrl) { mutableStateOf(false) }
     val overMedia = movie.posterUrl != null && !imageFailed
     val ratingBadge = movie.rating?.let { ratingBadgeSpec(it) }
+    val spokenDescription = mediaSectionDescription(
+        listOfNotNull(movie.title, movie.year, ratingBadge?.let { "rated ${it.label} out of 10" })
+            .joinToString(", "),
+    )
 
     Box(
         modifier = modifier
@@ -85,11 +90,7 @@ fun InTheatersCard(
                 },
             )
             .clearAndSetSemantics {
-                contentDescription = listOfNotNull(
-                    movie.title,
-                    movie.year,
-                    ratingBadge?.let { "rated ${it.label} out of 10" },
-                ).joinToString(", ")
+                contentDescription = spokenDescription
                 if (onClick != null) {
                     role = Role.Button
                     onClick(label = "Open ${movie.title}") {

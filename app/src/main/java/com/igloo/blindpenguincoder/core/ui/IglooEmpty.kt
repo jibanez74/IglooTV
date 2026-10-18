@@ -69,6 +69,7 @@ internal fun IglooFocusableEmpty(
     contentAlignment: Alignment = Alignment.TopStart,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val spokenDescription = mediaSectionDescription(message)
     Box(
         modifier = modifier
             // An opaque fill, so the focus glow cannot show through the surface: with a
@@ -80,7 +81,7 @@ internal fun IglooFocusableEmpty(
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .clearAndSetSemantics {
-                contentDescription = message
+                contentDescription = spokenDescription
                 liveRegion = LiveRegionMode.Polite
             }
             .padding(contentPadding),

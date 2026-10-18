@@ -310,7 +310,7 @@ class HomeRailBehaviorTest {
         setShellContent(IglooRailState.Loaded(emptyList()))
 
         composeRule.onNodeWithContentDescription(
-            "Nothing in progress yet. Movies and episodes you start watching appear here.",
+            "Continue Watching. Nothing in progress yet. Movies and episodes you start watching appear here.",
         ).assertIsFocused()
     }
 
@@ -322,7 +322,7 @@ class HomeRailBehaviorTest {
         // poster image nor the caption texts exist as separate announceable nodes — in either
         // rail, even though the same movie appears in both.
         latestCard(1)
-            .assertContentDescriptionEquals("Heat, 1995")
+            .assertContentDescriptionEquals("Recently Added Movies. Heat, 1995")
             .assert(hasClickAction())
         composeRule.onAllNodesWithText("Heat").assertCountEquals(0)
     }
@@ -334,7 +334,7 @@ class HomeRailBehaviorTest {
         // Design-system section 12: a continue-watching card announces title, year, and
         // progress in its one cleared node.
         continueCard(1)
-            .assertContentDescriptionEquals("Heat, 1995, 2 hours and 7 minutes remaining")
+            .assertContentDescriptionEquals("Continue Watching. Heat, 1995, 2 hours and 7 minutes remaining")
             .assert(hasClickAction())
         composeRule.onAllNodesWithText("2 hours and 7 minutes remaining").assertCountEquals(0)
     }
@@ -346,7 +346,7 @@ class HomeRailBehaviorTest {
         // The show's name leads, the episode is named in the subtitle, and the only action an
         // episode has is to resume — there is no details page to open.
         continueEpisodeCard(900)
-            .assertContentDescriptionEquals("Severance, S1 E3 · In Perpetuity, 42 minutes remaining")
+            .assertContentDescriptionEquals("Continue Watching. Severance, S1 E3 · In Perpetuity, 42 minutes remaining")
             .assert(hasClickAction())
         composeRule.onAllNodesWithText("42 minutes remaining").assertCountEquals(0)
         assertEquals(
@@ -387,7 +387,7 @@ class HomeRailBehaviorTest {
         // "double tap to Open Heat" would promise a screen reader an action nobody implements.
         // It stays focusable, because the rails' focus model needs every card to be a landing site.
         continueCard(1)
-            .assertContentDescriptionEquals("Heat, 1995, 2 hours and 7 minutes remaining")
+            .assertContentDescriptionEquals("Continue Watching. Heat, 1995, 2 hours and 7 minutes remaining")
             .assertHasNoClickAction()
         continueCard(1).assertIsFocused()
         continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
@@ -474,7 +474,7 @@ class HomeRailBehaviorTest {
         showCard(40).performKeyInput { pressKey(Key.DirectionDown) }
 
         composeRule.onNodeWithContentDescription(
-            "No albums in your library yet. Add a music folder on the server and run a scan.",
+            "Recently Added Albums. No albums in your library yet. Add a music folder on the server and run a scan.",
         ).assertIsFocused()
     }
 
@@ -486,7 +486,7 @@ class HomeRailBehaviorTest {
         // nodes. The action is "Open", because pressing opens the album detail overlay.
         albumCard(11)
             .performScrollTo()
-            .assertContentDescriptionEquals("Help!, The Beatles")
+            .assertContentDescriptionEquals("Recently Added Albums. Help!, The Beatles")
             .assertHasClickAction()
             .requestFocus()
         albumCard(11).performKeyInput { pressKey(Key.DirectionCenter) }
@@ -504,7 +504,7 @@ class HomeRailBehaviorTest {
         // movie cards keep — while staying focusable as a rail landing site.
         albumCard(11)
             .performScrollTo()
-            .assertContentDescriptionEquals("Help!, The Beatles")
+            .assertContentDescriptionEquals("Recently Added Albums. Help!, The Beatles")
             .assertHasNoClickAction()
     }
 
@@ -581,7 +581,7 @@ class HomeRailBehaviorTest {
         albumCard(11).performKeyInput { pressKey(Key.DirectionDown) }
 
         composeRule.onNodeWithContentDescription(
-            "No movies are playing in theaters right now. Check back later.",
+            "Now Playing in Theaters. No movies are playing in theaters right now. Check back later.",
         ).assertIsFocused()
     }
 
@@ -594,7 +594,7 @@ class HomeRailBehaviorTest {
         // detail page for that TMDB movie (section 11.4.2).
         theaterCard(21)
             .performScrollTo()
-            .assertContentDescriptionEquals("Heat 2, 2026, rated 7.9 out of 10")
+            .assertContentDescriptionEquals("Now Playing in Theaters. Heat 2, 2026, rated 7.9 out of 10")
             .assertHasClickAction()
             .requestFocus()
         theaterCard(21).performKeyInput { pressKey(Key.DirectionCenter) }
@@ -610,7 +610,7 @@ class HomeRailBehaviorTest {
 
         theaterCard(23)
             .performScrollTo()
-            .assertContentDescriptionEquals("Unrated")
+            .assertContentDescriptionEquals("Now Playing in Theaters. Unrated")
     }
 
     @Test
@@ -672,7 +672,7 @@ class HomeRailBehaviorTest {
         showsState = IglooRailState.Loaded(emptyList())
         composeRule.waitForIdle()
         val empty = composeRule.onNodeWithContentDescription(
-            "No shows in your library yet. Add a shows folder on the server and run a scan.",
+            "Recently Added Shows. No shows in your library yet. Add a shows folder on the server and run a scan.",
         )
         empty.assertIsFocused().assertHasNoClickAction()
         empty.performKeyInput { pressKey(Key.DirectionDown) }
@@ -694,7 +694,7 @@ class HomeRailBehaviorTest {
         setShellContent(IglooRailState.Loaded(continueMovies))
         showCard(40).performScrollTo().requestFocus()
         showCard(40).assertIsFocused()
-            .assertContentDescriptionEquals("Severance, 2022")
+            .assertContentDescriptionEquals("Recently Added Shows. Severance, 2022")
             .assertHasNoClickAction()
         assertFalse(showCard(40).fetchSemanticsNode().config.contains(SemanticsProperties.Role))
         composeRule.onAllNodesWithText("Severance").assertCountEquals(0)
@@ -709,13 +709,13 @@ class HomeRailBehaviorTest {
         assertEquals(emptyList<Long>(), resumedEpisodes)
         assertEquals(emptyList<Long>(), albumsOpened)
         assertEquals(emptyList<Long>(), theatersOpened)
-        showCard(7).assertContentDescriptionEquals("Untitled Show").assertHasNoClickAction()
+        showCard(7).assertContentDescriptionEquals("Recently Added Shows. Untitled Show").assertHasNoClickAction()
     }
 
     /** The exported Android tree must contain one focused, inert card, without caption stops. */
     private fun assertShowCardInPlatformTree() {
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val expected = listOf(Triple("Severance, 2022", false, true))
+        val expected = listOf(Triple("Recently Added Shows. Severance, 2022", false, true))
         val deadline = SystemClock.uptimeMillis() + 5_000
         var found: List<Triple<String, Boolean, Boolean>>
         do {
@@ -732,7 +732,11 @@ class HomeRailBehaviorTest {
         into: MutableList<Triple<String, Boolean, Boolean>>,
     ) {
         val spoken = node.contentDescription?.toString() ?: node.text?.toString()
-        if (spoken != null && (spoken.startsWith("Severance") || spoken == "2022")) {
+        if (spoken != null && (
+                spoken.startsWith("Recently Added Shows. Severance") ||
+                    spoken.startsWith("Severance") || spoken == "2022"
+                )
+        ) {
             into += Triple(spoken, node.isClickable, node.isFocused)
         }
         for (i in 0 until node.childCount) node.getChild(i)?.let { collectShowNodes(it, into) }

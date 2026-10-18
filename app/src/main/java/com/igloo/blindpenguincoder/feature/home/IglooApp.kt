@@ -1279,6 +1279,7 @@ private fun HomeRails(
         }
 
         IglooMediaRail(
+            announceSectionTitle = true,
             contentInset = contentInset,
             title = "Continue Watching",
             state = home.continueWatching,
@@ -1321,6 +1322,7 @@ private fun HomeRails(
         }
 
         IglooMediaRail(
+            announceSectionTitle = true,
             contentInset = contentInset,
             title = "Recently Added Movies",
             state = home.latestMovies,
@@ -1348,6 +1350,7 @@ private fun HomeRails(
         }
 
         IglooMediaRail(
+            announceSectionTitle = true,
             contentInset = contentInset,
             title = "Recently Added Shows",
             state = home.latestShows,
@@ -1374,6 +1377,7 @@ private fun HomeRails(
         }
 
         IglooMediaRail(
+            announceSectionTitle = true,
             contentInset = contentInset,
             title = "Recently Added Albums",
             state = home.latestAlbums,
@@ -1403,6 +1407,7 @@ private fun HomeRails(
         }
 
         IglooMediaRail(
+            announceSectionTitle = true,
             contentInset = contentInset,
             title = "Now Playing in Theaters",
             state = home.inTheaters,

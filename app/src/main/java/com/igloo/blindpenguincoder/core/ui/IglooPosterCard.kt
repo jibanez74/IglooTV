@@ -81,6 +81,9 @@ fun IglooPosterCard(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
+    val spokenDescription = mediaSectionDescription(
+        semanticLabel ?: listOfNotNull(title, subtitle, progress?.description).joinToString(", "),
+    )
 
     Column(
         horizontalAlignment = if (centerText) Alignment.CenterHorizontally else Alignment.Start,
@@ -99,8 +102,7 @@ fun IglooPosterCard(
                 },
             )
             .clearAndSetSemantics {
-                contentDescription = semanticLabel
-                    ?: listOfNotNull(title, subtitle, progress?.description).joinToString(", ")
+                contentDescription = spokenDescription
                 if (onClick != null) {
                     role = Role.Button
                     onClick(label = actionLabel ?: "Open $title") {

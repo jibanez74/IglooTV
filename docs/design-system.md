@@ -1469,6 +1469,11 @@ library hides its page unconditionally.
 Each rail is one `IglooMediaRail` over one endpoint, loaded by its own cancellable job so the
 rails fail, retry, and refresh independently (§12's polite live regions depend on that).
 
+Home rails include their section title in each card and empty-state announcement. The visible
+heading alone is not reachable through TV screen-reader input focus. For example, a card reads
+"Recently Added Movies. Heat, 1995"; Continue Watching also retains its progress description.
+This uses the existing card focus targets and preserves rail navigation and return focus.
+
 | Rail | Endpoint | Card | Empty copy |
 |---|---|---|---|
 | Continue Watching | `GET /api/continue-watching` (movies and TV episodes, in server order) | poster + progress bar; fully spoken remaining time in card semantics only. A movie card opens its details; an episode card wears the **show's** poster (`TvShows` glyph fallback) with the show name over `S1 E3 · Episode name`, announces "Resume {show} S1 E3", and resumes straight into the player — there is no show details screen yet. The rail's `Long` key folds the kind into the low bit (`id * 2`, `id * 2 + 1`) because a movie id and an episode id can collide. | "Nothing in progress yet. Movies and episodes you start watching appear here." |
