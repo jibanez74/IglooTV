@@ -2,6 +2,10 @@ package com.igloo.blindpenguincoder.feature.shared
 
 import com.igloo.blindpenguincoder.core.ui.countNoun
 import com.igloo.blindpenguincoder.core.ui.formatCount
+import com.igloo.blindpenguincoder.core.ui.formatRemainingTime
+import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
+import com.igloo.blindpenguincoder.core.ui.formatSpokenTimeThroughSeconds
+import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import com.igloo.blindpenguincoder.images.youtubeThumbnailUrl
@@ -40,6 +44,25 @@ data class ExtraVideoUi(
     val typeLabel: String,
     val thumbnailUrl: String?,
     val key: String,
+)
+
+/**
+ * The thin strip under a hero's Play — a movie's, or a show's Resume — present only while a
+ * resume position is worth showing. [resumeStateDescription] is what the button carries as
+ * state, because the caption under it is plain text a TV screen reader never reaches.
+ */
+data class ProgressUi(
+    val fraction: Float,
+    val remainingTimeLabel: String,
+    val resumeStateDescription: String,
+)
+
+/** The strip for a saved position: "45m left" on screen, the exact point and remainder spoken. */
+internal fun resumeProgressUi(progressSec: Double, durationSec: Double): ProgressUi = ProgressUi(
+    fraction = progressFraction(progressSec, durationSec),
+    remainingTimeLabel = formatRemainingTime(progressSec, durationSec),
+    resumeStateDescription = "Resume from ${formatSpokenTimeThroughSeconds(progressSec)}; " +
+        formatSpokenRemainingTime(progressSec, durationSec),
 )
 
 /** A cast credit as [castMembers] reads it, from any source's cast list. */

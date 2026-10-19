@@ -2,12 +2,10 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -17,34 +15,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIconButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
-import com.igloo.blindpenguincoder.core.ui.IglooText
-import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.feature.shared.DetailsHeroInfo
 import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
 import com.igloo.blindpenguincoder.feature.shared.HeroSingleActionRow
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
+import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
 
 /**
  * The hero's content block (docs/design-system.md section 11.4): poster left; title, tagline,
@@ -318,65 +310,3 @@ private fun LibraryActionRow(
 private val TOGGLE_WATCHED_LABELS = listOf("Watch", "Watched")
 private val TOGGLE_LIKE_LABELS = listOf("Like", "Liked")
 
-/**
- * The thin resume strip and its remaining-time caption. The strip itself stays silent; Play's
- * state carries the exact resume point and spoken remaining time. The longest caption reserves
- * the column's intrinsic width; both Play and the strip fill it, so the strip stays exactly as
- * wide as the button it belongs to. The top gap clears Play's focus ring at its 1.05x scale.
- *
- * The slot is composed even with no [progress] — invisible and silent — because the progress
- * request lands after first paint and toggling Watched removes the strip: either would reflow
- * the bottom-anchored hero under the user's eye if the strip's height came and went. The
- * skeleton reserves the same slot so the loading→loaded swap does not move Play.
- */
-@Composable
-internal fun ResumeProgress(
-    progress: ProgressUi?,
-    overMedia: Boolean,
-) {
-    val colors = IglooTheme.colors
-    val visible = progress != null
-    Column(
-        modifier = Modifier
-            .padding(top = IglooTheme.spacing.sm)
-            .alpha(if (visible) 1f else 0f)
-            .then(if (visible) Modifier else Modifier.clearAndSetSemantics {}),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
-    ) {
-        ProgressTrack(
-            fraction = progress?.fraction ?: 0f,
-            ground = if (overMedia) OVER_MEDIA_TRACK else colors.muted,
-            fill = colors.primary,
-            modifier = if (visible) Modifier.testTag("details_resume_track") else Modifier,
-            rounded = true,
-        )
-        Box {
-            // Keep the longest caption in layout from first paint so a late progress response
-            // cannot resize Play's column. Its width remains typography- and locale-derived.
-            IglooText(
-                text = RESUME_CAPTION_WIDTH_RESERVATION,
-                style = IglooTheme.typography.label.overMedia(overMedia),
-                color = Color.Transparent,
-                modifier = Modifier.clearAndSetSemantics {},
-                maxLines = 1,
-                softWrap = false,
-            )
-            if (progress != null) {
-                IglooText(
-                    text = progress.remainingTimeLabel,
-                    style = IglooTheme.typography.label.overMedia(overMedia),
-                    color = if (overMedia) {
-                        OVER_MEDIA_SECONDARY
-                    } else {
-                        colors.mutedForeground
-                    },
-                    modifier = Modifier.testTag("details_resume_caption"),
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
-        }
-    }
-}
-
-private const val RESUME_CAPTION_WIDTH_RESERVATION = "Less than 1m left"

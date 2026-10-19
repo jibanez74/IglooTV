@@ -105,7 +105,8 @@ internal class AnnouncedSectionMove<K : Any>(
         }
         val origin = focusedSection()
         inFlight?.cancel()
-        inFlight = scope.launch { travel(origin, target, forward, revealFirst = !isOnScreen(target)) }
+        val revealFirst = !isOnScreen(target)
+        inFlight = scope.launch { travel(origin, target, forward, revealFirst) }
     }
 
     private suspend fun travel(origin: K?, target: K, forward: Boolean, revealFirst: Boolean) {
@@ -176,7 +177,9 @@ internal class AnnouncedSectionColumn(
         },
         isOnScreen = { key ->
             // Unclipped: a section scrolled out of the column must still report where it is.
-            val bounds = present(key)?.coordinates?.takeIf { it.isAttached }?.unclippedBoundsInRoot()
+            val bounds = present(key)?.coordinates
+                ?.takeIf { it.isAttached }
+                ?.unclippedBoundsInRoot()
             val visible = viewport?.takeIf { it.isAttached }?.unclippedBoundsInRoot()
             if (bounds == null || visible == null) {
                 true

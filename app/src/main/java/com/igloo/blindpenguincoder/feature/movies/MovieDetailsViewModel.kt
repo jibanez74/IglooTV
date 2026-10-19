@@ -7,12 +7,8 @@ import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
-import com.igloo.blindpenguincoder.core.ui.formatRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
-import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
-import com.igloo.blindpenguincoder.core.ui.formatSpokenTimeThroughSeconds
 import com.igloo.blindpenguincoder.core.ui.joinedLine
-import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
@@ -26,10 +22,12 @@ import com.igloo.blindpenguincoder.feature.shared.CastMemberUi
 import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
+import com.igloo.blindpenguincoder.feature.shared.ProgressUi
 import com.igloo.blindpenguincoder.feature.shared.VideoSource
 import com.igloo.blindpenguincoder.feature.shared.castMembers
 import com.igloo.blindpenguincoder.feature.shared.errorOrKeep
 import com.igloo.blindpenguincoder.feature.shared.heroInfoDescription
+import com.igloo.blindpenguincoder.feature.shared.resumeProgressUi
 import com.igloo.blindpenguincoder.feature.shared.youTubeExtraVideos
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
@@ -61,13 +59,6 @@ data class AboutUi(
         get() = production == null && language == null && budget == null && revenue == null &&
             status == null
 }
-
-/** The thin strip under the actions; present only while a resume position is worth showing. */
-data class ProgressUi(
-    val fraction: Float,
-    val remainingTimeLabel: String,
-    val resumeStateDescription: String,
-)
 
 /**
  * The details screen, render-ready: `SqlNull*` wrappers unwrapped, image URLs built, badges
@@ -683,13 +674,7 @@ class MovieDetailsViewModel(
         val progress = progressRead.value
         val progressSec = resumePositionSec(progress) ?: return null
         val durationSec = progress?.durationSec ?: return null
-        return ProgressUi(
-            fraction = progressFraction(progressSec, durationSec),
-            remainingTimeLabel = formatRemainingTime(progressSec, durationSec),
-            resumeStateDescription =
-                "Resume from ${formatSpokenTimeThroughSeconds(progressSec)}; " +
-                    formatSpokenRemainingTime(progressSec, durationSec),
-        )
+        return resumeProgressUi(progressSec, durationSec)
     }
 
     private fun mediaBadges(tech: MovieTechnicalDetailsData): List<String> = buildList {

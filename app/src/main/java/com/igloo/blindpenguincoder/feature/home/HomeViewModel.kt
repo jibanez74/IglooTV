@@ -8,10 +8,9 @@ import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
-import com.igloo.blindpenguincoder.core.ui.countNoun
 import com.igloo.blindpenguincoder.core.ui.formatEpisodeCode
-import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
+import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.orKeepContent
 import com.igloo.blindpenguincoder.core.ui.progressFraction
@@ -37,11 +36,14 @@ import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.music.toCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.posterItem
+import com.igloo.blindpenguincoder.feature.shows.formatSeasonCount
+import com.igloo.blindpenguincoder.feature.shows.formatSpokenSeasonCount
+import com.igloo.blindpenguincoder.feature.shows.numberedSeasons
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
-import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -565,8 +567,7 @@ class HomeViewModel(
         val ratingBadge = show.voteAverage.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
         val certification = show.certification.orNullIfBlank()
         val year = show.premiereYear.orNull()?.takeIf { it > 0 }?.toString()
-        // Specials are season 0 and do not count as a season, the way every catalogue counts.
-        val seasons = details.seasons.count { it.seasonNumber > 0 }.toLong().takeIf { it > 0 }
+        val seasons = details.seasons.numberedSeasons().size.toLong().takeIf { it > 0 }
         return HomeHero(
             kind = HomeHeroKind.Show,
             id = show.id,
@@ -576,12 +577,12 @@ class HomeViewModel(
             year = year,
             certification = certification,
             ratingBadge = ratingBadge,
-            extent = seasons?.let { "$it ${countNoun(it, "Season")}" },
+            extent = seasons?.let { formatSeasonCount(it) },
             metadataDescription = heroMetadataDescription(
                 ratingBadge = ratingBadge,
                 certification = certification,
                 year = year,
-                spokenExtent = seasons?.let { "$it ${countNoun(it, "season")}" },
+                spokenExtent = seasons?.let { formatSpokenSeasonCount(it) },
             ),
         )
     }

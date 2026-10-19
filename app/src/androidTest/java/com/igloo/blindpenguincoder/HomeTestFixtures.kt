@@ -7,10 +7,13 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.AudioStream
-import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.MusicStats
 import com.igloo.blindpenguincoder.data.model.SortOrder
+import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
+import com.igloo.blindpenguincoder.data.model.TrackListItem
+import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
 import com.igloo.blindpenguincoder.feature.home.HomeContinueItem
 import com.igloo.blindpenguincoder.feature.home.HomeHero
 import com.igloo.blindpenguincoder.feature.home.HomeHeroKind
@@ -22,20 +25,16 @@ import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.movies.AboutUi
-import com.igloo.blindpenguincoder.feature.shared.CastMemberUi
-import com.igloo.blindpenguincoder.feature.shared.CrewEntry
-import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSettingsUi
-import com.igloo.blindpenguincoder.feature.movies.ProgressUi
+import com.igloo.blindpenguincoder.feature.shared.ProgressUi
 import com.igloo.blindpenguincoder.feature.movies.playbackSettingsUi
-import com.igloo.blindpenguincoder.data.model.MusicStats
-import com.igloo.blindpenguincoder.data.model.SqlNullInt64
-import com.igloo.blindpenguincoder.data.model.TrackListItem
 import com.igloo.blindpenguincoder.feature.music.AlbumArtistUi
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
+import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUi
+import com.igloo.blindpenguincoder.feature.music.AlbumDiscUi
 import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicTab
 import com.igloo.blindpenguincoder.feature.music.MusicUiState
@@ -43,20 +42,28 @@ import com.igloo.blindpenguincoder.feature.music.MusicianCardUi
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsUi
 import com.igloo.blindpenguincoder.feature.music.TracksEntry
 import com.igloo.blindpenguincoder.feature.music.tracksEntries
-import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUi
-import com.igloo.blindpenguincoder.feature.music.AlbumDiscUi
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.CastMemberUi
+import com.igloo.blindpenguincoder.feature.shared.CrewEntry
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
 import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
-import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
+import com.igloo.blindpenguincoder.feature.shows.EpisodeUi
+import com.igloo.blindpenguincoder.feature.shows.PlayTargetUi
+import com.igloo.blindpenguincoder.feature.shows.SeasonUi
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUi
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
-import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
-import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
+import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 
 /**
  * Poster-less movies for shell-level tests: the placeholder path renders deterministically
@@ -494,6 +501,136 @@ internal val testCast = listOf(
     CastMemberUi(id = 101, name = "Al Pacino", character = "Vincent Hanna", photoUrl = null),
     CastMemberUi(id = 102, name = "Robert De Niro", character = "Neil McCauley", photoUrl = null),
     CastMemberUi(id = 103, name = "Val Kilmer", character = "Chris Shiherlis", photoUrl = null),
+)
+
+/** A show page's cast: the show rail carries each credit's episode count. */
+internal val testShowCast = listOf(
+    CastMemberUi(
+        id = 101,
+        name = "Adam Scott",
+        character = "Mark Scout",
+        photoUrl = null,
+        episodeCountText = "19 episodes",
+    ),
+    CastMemberUi(
+        id = 102,
+        name = "Britt Lower",
+        character = "Helly R.",
+        photoUrl = null,
+        episodeCountText = "19 episodes",
+    ),
+)
+
+internal fun testSeason(number: Long, episodes: Long): SeasonUi {
+    val label = if (number == 0L) "Specials" else "Season $number"
+    val noun = if (episodes == 1L) "episode" else "episodes"
+    return SeasonUi(
+        number = number,
+        label = label,
+        chipText = "$label · $episodes",
+        chipDescription = "$label, $episodes $noun",
+    )
+}
+
+/** Two numbered seasons and the specials, last, as the server orders them. */
+internal val testSeasons = listOf(testSeason(1, 3), testSeason(2, 2), testSeason(0, 1))
+
+internal fun testEpisode(
+    id: Long,
+    number: Long,
+    name: String,
+    watched: Boolean = false,
+    progressFraction: Float? = null,
+    overview: String? = "$name, the episode.",
+): EpisodeUi = EpisodeUi(
+    id = id,
+    title = "$number. $name",
+    stillUrl = null,
+    metaLine = "57m · February 17, 2022" + if (progressFraction != null) " · 45m left" else "",
+    overview = overview,
+    watched = watched,
+    progressFraction = progressFraction,
+    description = listOfNotNull(
+        "Episode $number, $name",
+        "57 minutes, aired February 17, 2022",
+        when {
+            watched -> "Watched"
+            progressFraction != null -> "45 minutes remaining"
+            else -> null
+        },
+        overview?.trimEnd('.'),
+    ).joinToString(". "),
+)
+
+/** Season 1: watched, resumable, untouched — so the hero resumes episode 2. */
+internal val testEpisodes = listOf(
+    testEpisode(id = 901, number = 1, name = "Good News About Hell", watched = true),
+    testEpisode(id = 902, number = 2, name = "Half Loop", progressFraction = 0.2f),
+    testEpisode(id = 903, number = 3, name = "In Perpetuity"),
+)
+
+internal val testSeasonTwoEpisodes = listOf(
+    testEpisode(id = 911, number = 1, name = "Hello, Ms. Cobel"),
+    testEpisode(id = 912, number = 2, name = "Goodbye, Mrs. Selvig"),
+)
+
+internal val testPlayTarget = PlayTargetUi(
+    label = "Resume S1 E2",
+    spokenLabel = "Resume season 1, episode 2, Half Loop",
+)
+
+/** Image-less like the movie fixtures: every artwork path falls back to a glyph. */
+internal fun testShowDetails(
+    id: Long = 40,
+    title: String = "Severance",
+    seasons: List<SeasonUi> = testSeasons,
+    keyCrew: List<CrewEntry> = listOf(CrewEntry("Creator", "Dan Erickson")),
+    cast: List<CastMemberUi> = testShowCast,
+    extraVideos: List<ExtraVideoUi> = testExtraVideos,
+    about: List<FactUi> = listOf(
+        FactUi("Network", "Apple TV+"),
+        FactUi("Status", "Returning Series"),
+        FactUi("First aired", "February 17, 2022"),
+    ),
+) = ShowDetailsUi(
+    id = id,
+    title = title,
+    tagline = "Please enjoy each fact equally.",
+    backdropUrl = null,
+    posterUrl = null,
+    ratingBadge = ratingBadgeSpec(8.4),
+    certification = "TV-MA",
+    status = "Returning Series",
+    extentLine = "2 Seasons · 5 Episodes · 2022–2025",
+    metadataDescription = "Rated 8.4 out of 10, TV-MA, Returning Series, 2 seasons, " +
+        "5 episodes, aired 2022 to 2025",
+    genresLine = "Drama · Mystery",
+    overview = "Mark leads a team of office workers whose memories have been split.",
+    seasons = seasons,
+    keyCrew = keyCrew,
+    cast = cast,
+    extraVideos = extraVideos,
+    about = about,
+)
+
+/** An open show page on its first season, loaded. */
+internal fun testShowDetailsState(
+    details: DetailsState<ShowDetailsUi> = DetailsState.Loaded(testShowDetails()),
+    selectedSeason: Long? = 1,
+    episodes: IglooRailState<EpisodeUi> = IglooRailState.Loaded(testEpisodes),
+    playTarget: PlayTargetUi? = testPlayTarget,
+) = ShowDetailsUiState(
+    openShowId = 40,
+    details = details,
+    selectedSeason = selectedSeason,
+    episodes = episodes,
+    playTarget = playTarget,
+)
+
+internal val inertShowDetailsActions = ShowDetailsActions(
+    onRetry = {},
+    onSelectSeason = {},
+    onRetrySeason = {},
 )
 
 /** An album-page row: index gutter, genre subtitle, no album to go to, the album's artist. */

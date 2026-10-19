@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
@@ -50,6 +52,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.overMediaSideScrim
@@ -58,6 +61,7 @@ import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.focusRing
@@ -206,25 +210,28 @@ internal fun HeroReadingStop(
     requester: FocusRequester,
     downRequester: FocusRequester,
     description: String,
+    modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     Column(
-        modifier = if (enabled) {
-            Modifier.readingStopTarget(
-                tag = tag,
-                focused = focused,
-                requester = requester,
-                upRequester = null,
-                downRequester = downRequester,
-                onFocusChanged = { focused = it },
-                description = description,
-                radius = IglooTheme.radius.lg,
-                overMedia = overMedia,
-            )
-        } else {
-            Modifier
-        },
+        modifier = modifier.then(
+            if (enabled) {
+                Modifier.readingStopTarget(
+                    tag = tag,
+                    focused = focused,
+                    requester = requester,
+                    upRequester = null,
+                    downRequester = downRequester,
+                    onFocusChanged = { focused = it },
+                    description = description,
+                    radius = IglooTheme.radius.lg,
+                    overMedia = overMedia,
+                )
+            } else {
+                Modifier
+            },
+        ),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         content = content,
     )
@@ -280,6 +287,7 @@ internal fun DetailsHeroInfo(
     readingStop: Boolean,
     requester: FocusRequester,
     downRequester: FocusRequester,
+    modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
     HeroReadingStop(
@@ -289,6 +297,7 @@ internal fun DetailsHeroInfo(
         requester = requester,
         downRequester = downRequester,
         description = readingStopDescription,
+        modifier = modifier,
     ) {
         HeroTitle(title, overMedia)
         if (tagline != null) {
@@ -335,7 +344,8 @@ internal fun DetailsHeroInfo(
  * page's Play/Resume. It is the entry anchor through [requester] and, where pressing opens an
  * overlay, the node that overlay restores focus to through [returnRequester] — two requesters on
  * one button, the same pairing a rail's card carries. A null [onClick] draws the button inert
- * until its action exists (the [IglooButton] contract).
+ * until its action exists (the [IglooButton] contract). [belowButton] stacks under the button at
+ * its width — the show page's resume strip — and [stateDescription] is spoken with the label.
  *
  * Every direction out is pinned but down: the shell is still composed under the overlay, and
  * the row's only control has no horizontal neighbour of its own.
@@ -352,25 +362,34 @@ internal fun HeroSingleActionRow(
     modifier: Modifier = Modifier,
     returnRequester: FocusRequester? = null,
     onFocused: () -> Unit = {},
+    stateDescription: String? = null,
+    belowButton: (@Composable () -> Unit)? = null,
 ) {
     Row(modifier = modifier) {
-        IglooButton(
-            text = text,
-            onClick = onClick,
-            icon = IglooIcons.Play,
-            semanticLabel = semanticLabel,
-            modifier = Modifier
-                .testTag(tag)
-                .focusRequester(requester)
-                .withRequester(returnRequester)
-                .focusProperties {
-                    up = upRequester
-                    left = Cancel
-                    right = Cancel
-                    down = downRequester ?: Cancel
-                }
-                .onFocusChanged { if (it.isFocused) onFocused() },
-        )
+        // The column is as wide as its widest child, and the button fills it, so whatever stacks
+        // below reads as the button's own and cannot resize the row when it changes.
+        Column(modifier = Modifier.width(IntrinsicSize.Max)) {
+            IglooButton(
+                text = text,
+                onClick = onClick,
+                icon = IglooIcons.Play,
+                semanticLabel = semanticLabel,
+                stateDescription = stateDescription,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(tag)
+                    .focusRequester(requester)
+                    .withRequester(returnRequester)
+                    .focusProperties {
+                        up = upRequester
+                        left = Cancel
+                        right = Cancel
+                        down = downRequester ?: Cancel
+                    }
+                    .onFocusChanged { if (it.isFocused) onFocused() },
+            )
+            belowButton?.invoke()
+        }
     }
 }
 
@@ -490,6 +509,69 @@ internal fun DetailsHeroSkeleton(
         }
     }
 }
+
+/**
+ * The thin resume strip and its remaining-time caption. The strip itself stays silent; Play's
+ * state carries the exact resume point and spoken remaining time. The longest caption reserves
+ * the column's intrinsic width; both Play and the strip fill it, so the strip stays exactly as
+ * wide as the button it belongs to. The top gap clears Play's focus ring at its 1.05x scale.
+ *
+ * The slot is composed even with no [progress] — invisible and silent — because the progress can
+ * land after first paint, a toggle can remove it and a season switch retargets it: any of those
+ * would reflow the bottom-anchored hero under the user's eye if the strip's height came and went.
+ * The skeleton reserves the same slot so the loading→loaded swap does not move Play.
+ */
+@Composable
+internal fun ResumeProgress(
+    progress: ProgressUi?,
+    overMedia: Boolean,
+) {
+    val colors = IglooTheme.colors
+    val visible = progress != null
+    Column(
+        modifier = Modifier
+            .padding(top = IglooTheme.spacing.sm)
+            .alpha(if (visible) 1f else 0f)
+            .then(if (visible) Modifier else Modifier.clearAndSetSemantics {}),
+        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
+    ) {
+        ProgressTrack(
+            fraction = progress?.fraction ?: 0f,
+            ground = if (overMedia) OVER_MEDIA_TRACK else colors.muted,
+            fill = colors.primary,
+            modifier = if (visible) Modifier.testTag("details_resume_track") else Modifier,
+            rounded = true,
+        )
+        Box {
+            // Keep the longest caption in layout from first paint so a late progress response
+            // cannot resize Play's column. Its width remains typography- and locale-derived.
+            IglooText(
+                text = RESUME_CAPTION_WIDTH_RESERVATION,
+                style = IglooTheme.typography.label.overMedia(overMedia),
+                color = Color.Transparent,
+                modifier = Modifier.clearAndSetSemantics {},
+                maxLines = 1,
+                softWrap = false,
+            )
+            if (progress != null) {
+                IglooText(
+                    text = progress.remainingTimeLabel,
+                    style = IglooTheme.typography.label.overMedia(overMedia),
+                    color = if (overMedia) {
+                        OVER_MEDIA_SECONDARY
+                    } else {
+                        colors.mutedForeground
+                    },
+                    modifier = Modifier.testTag("details_resume_caption"),
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+        }
+    }
+}
+
+private const val RESUME_CAPTION_WIDTH_RESERVATION = "Less than 1m left"
 
 /** About 60% of the reference viewport's height (section 8.1); contains text, so a minimum. */
 private val HERO_MIN_HEIGHT = 320.dp

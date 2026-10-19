@@ -21,6 +21,7 @@ import com.igloo.blindpenguincoder.data.repository.watchProgressJson
 import com.igloo.blindpenguincoder.data.repository.watchedUpdateJson
 import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.ProgressUi
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData

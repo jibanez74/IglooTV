@@ -139,7 +139,7 @@ internal fun FadeClampedText(
     )
 }
 
-/** Credits in rows of three label-over-name pairs: a movie's director and writers, a show's creators. */
+/** Credits in rows of three label-over-name pairs: a movie's director and writers, or creators. */
 @Composable
 internal fun KeyCrewSection(
     crew: List<CrewEntry>,
@@ -273,6 +273,7 @@ internal fun CastSection(
     entryRequester: FocusRequester,
     upRequester: FocusRequester?,
     downRequester: FocusRequester?,
+    modifier: Modifier = Modifier,
 ) {
     DetailsRailSection(
         title = "Cast",
@@ -282,6 +283,7 @@ internal fun CastSection(
         entryRequester = entryRequester,
         upRequester = upRequester,
         downRequester = downRequester,
+        modifier = modifier,
     ) { member, itemModifier, aspect ->
         IglooPosterCard(
             title = member.name,
@@ -313,6 +315,7 @@ internal fun ExtraVideosSection(
     downRequester: FocusRequester?,
     returnRequester: FocusRequester?,
     onPlayExtra: ((ExtraVideoUi) -> Unit)?,
+    modifier: Modifier = Modifier,
 ) {
     DetailsRailSection(
         title = "Extra Videos",
@@ -322,6 +325,7 @@ internal fun ExtraVideosSection(
         entryRequester = entryRequester,
         upRequester = upRequester,
         downRequester = downRequester,
+        modifier = modifier,
         returnRequester = returnRequester,
         cardAspect = IglooTheme.layout.wideAspect,
         cardWidth = IglooTheme.layout.wideCardWidth,
