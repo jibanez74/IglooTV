@@ -10,12 +10,14 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTopPositionInRootIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
@@ -365,5 +367,15 @@ class AlbumDetailsFocusTest {
         retry.assertIsFocused()
         retry.performKeyInput { pressKey(Key.DirectionRight) }
         retry.assertIsFocused()
+    }
+
+    /** Entry focus on Play Album must not scroll the hero away (section 11.4.1, Focus). */
+    @Test
+    fun theHeroStaysWholeWhenPlayTakesEntryFocus() {
+        setShellContent()
+        openAlbumCard(11)
+
+        composeRule.onNodeWithTag("album_play").assertIsFocused()
+        composeRule.onNodeWithTag("details_hero").assertTopPositionInRootIsEqualTo(0.dp)
     }
 }

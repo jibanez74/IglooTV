@@ -10,12 +10,15 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTopPositionInRootIsEqualTo
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
@@ -31,6 +34,7 @@ import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testTheaterMovieDetails
 import com.igloo.blindpenguincoder.testTheaterMovies
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -240,5 +244,35 @@ class TheaterMovieDetailsTest {
         overview.assertIsFocused()
         overview.performKeyInput { pressKey(Key.DirectionUp) }
         heroInfo.assertIsFocused()
+    }
+
+    /**
+     * Compose's TV bring-into-view parks a focused node 30% down the viewport. Play Trailer sits
+     * low in a bottom-anchored hero, so that rule scrolled the poster's top off the screen on
+     * entry (docs/design-system.md section 11.4.1, Focus). Focus inside the hero shows the hero
+     * whole instead, while the sections below keep the platform's pivot.
+     */
+    @Test
+    fun theHeroStaysWholeWhileItsActionHoldsFocus() {
+        setShellContent()
+        openFromTheatersRail()
+        composeRule.onNodeWithTag("details_play_trailer").assertIsFocused()
+
+        composeRule.onNodeWithTag("details_hero").assertTopPositionInRootIsEqualTo(0.dp)
+        val artworkTop = composeRule.onNodeWithTag("details_hero_artwork").getUnclippedBoundsInRoot().top
+        assertTrue("the poster should sit inside the safe area, not at $artworkTop", artworkTop > 0.dp)
+
+        // Down into the cast rail: the platform pivot still moves the page.
+        composeRule.onNodeWithTag("details_play_trailer").performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("cast_card_101").assertIsFocused()
+        val heroTop = composeRule.onNodeWithTag("details_hero").getUnclippedBoundsInRoot().top
+        assertTrue("the cast rail should pivot the hero up, not leave it at $heroTop", heroTop < 0.dp)
+
+        // Up again: the hero returns whole rather than parking Play Trailer 30% down.
+        composeRule.onNodeWithTag("cast_card_101").performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("details_play_trailer").assertIsFocused()
+        composeRule.onNodeWithTag("details_hero").assertTopPositionInRootIsEqualTo(0.dp)
     }
 }

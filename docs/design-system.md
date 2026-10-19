@@ -1375,7 +1375,8 @@ column scrolls just far enough to show one whole row past it on each side
 TalkBack for TV does not follow focus onto it (the same cause as the grid entry in
 `docs/known-issues.md`). This replaces Compose's TV default, which parks every focused row 30%
 down the viewport. That scrolled the resting rail on every destination below Home and cut the
-rows above it in half. `LocalBringIntoViewSpec` is experimental, and this is its only use.
+rows above it in half. `LocalBringIntoViewSpec` is experimental; its only other use is the
+details pages' hero rule (§11.4.1, Focus).
 
 ### 11.3 Home
 
@@ -1805,6 +1806,20 @@ its own cards, so Like → down into cast → up lands back on Like. Crossing be
 rides the same memory: up from the extras targets the cast rail's entry requester, which the
 rail keeps parked on its last-focused card. Back closes the overlay and
 restores focus to the card that opened it, via the rail's `returnRequester` (§6.3).
+
+**The hero stays whole while focus is in it.** Every details page scrolls through
+`DetailsScrollColumn` (`feature/shared/`), which gives the column a bring-into-view rule of its
+own: a focus target whose top lies inside the hero scrolls the page back to its start, and
+everything below the hero — and every rail inside the column — goes through the platform's spec
+unchanged. Compose's TV default parks a focused node 30% down the viewport (§11.2). The hero is
+bottom-anchored, so its action sits low in it, and parking that action at 30% scrolled the hero up
+by however much taller it is than its content block: the library movie and show pages lost
+exactly the safe area above the poster, and the in-theaters page, whose block is one button with
+no resume strip, lost the top of the poster itself (seen on the Shield, 2026-10-19, and
+reproduced on the emulator at 80dp of scroll). The hero is the page's opening and is shown whole
+whenever focus is in it — on entry and on the way back up from the sections, where the same pivot
+used to park Play 30% down again. A hero taller than the viewport cannot be shown whole and is
+left to the platform.
 
 **More menu.** The row's fourth action is the icon-only `IglooIconButton` trigger ("More
 options"), and pressing it opens an `IglooMenu` (§9.1) anchored to the trigger's reported
@@ -2656,6 +2671,16 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-19 — The details hero stays whole while focus is in it (§11.4.1, §11.2).**
+
+- Every details page's scrolling column now goes through `DetailsScrollColumn`, whose
+  bring-into-view rule scrolls back to the top for any target inside the hero and defers to the
+  platform's TV pivot for everything else, rails included. The pivot used to park the hero's
+  action 30% down the viewport and scroll the hero's top off with it; the in-theaters page lost
+  the top of its poster (the Shield finding recorded in `docs/known-issues.md`), the library
+  movie and show pages the safe area above it. The hero and its artwork carry `details_hero` and
+  `details_hero_artwork` so the geometry is pinned by test on the movie, show and album pages.
 
 **2026-10-19 — The TV show details page (§11.4.3, §9.1, §11.3, §11.4, §11.4.1–2, §11.5.1–2, §12).**
 

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -47,6 +46,7 @@ import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.feature.shared.DetailChip
+import com.igloo.blindpenguincoder.feature.shared.DetailsScrollColumn
 import com.igloo.blindpenguincoder.feature.shared.TrackRowMenu
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
@@ -178,12 +178,7 @@ internal fun MusicDetailsBody(
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-    ) {
-        hero()
+    DetailsScrollColumn(scrollState = rememberScrollState(), hero = hero) {
         if (notice != null) {
             IglooNotice(
                 text = notice,
