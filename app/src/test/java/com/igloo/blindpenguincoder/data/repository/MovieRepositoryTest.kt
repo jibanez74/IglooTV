@@ -425,7 +425,7 @@ class MovieRepositoryTest {
                 movieDetailsJson(
                     cast = listOf(castMemberJson(artistName = "Al Pacino", character = "Vincent Hanna")),
                     crew = listOf(crewMemberJson(job = "Director", artistName = "Michael Mann")),
-                    genres = listOf(movieGenreJson(tag = "Crime")),
+                    genres = listOf(genreJson(tag = "Crime")),
                     productionCompanies = listOf(productionCompanyJson(name = "Regency Enterprises")),
                     extraVideos = listOf(extraVideoJson(title = "Heat - Trailer")),
                 ),

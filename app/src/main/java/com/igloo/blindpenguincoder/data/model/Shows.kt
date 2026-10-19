@@ -111,33 +111,110 @@ data class LatestShowsData(
 )
 
 /**
- * Payload of `ShowDetailsEnvelope.data`, reduced to what the Home hero reads: the show and its
- * seasons, whose count the hero prints. Credits, creators, genres, networks, companies and extra
- * videos are left to `ignoreUnknownKeys` until a show details screen reads them.
+ * Payload of `ShowDetailsEnvelope.data`: everything the show details screen and the Home hero's
+ * show page read. `crew` is left to `ignoreUnknownKeys` — the page names only the creators.
  */
 @Serializable
 data class ShowDetailsData(
     val show: Show,
     val seasons: List<ShowSeasonSummary>,
+    val cast: List<ShowCastCredit>,
+    val creators: List<ShowPerson>,
+    val genres: List<Genre>,
+    val networks: List<ShowNetwork>,
+    @SerialName("production_companies") val productionCompanies: List<ProductionCompany>,
+    @SerialName("extra_videos") val extraVideos: List<ExtraVideo>,
 )
 
 /**
- * The stored show, as far as the Home hero reads it. The scraper writes TMDB's "no data" as a
- * valid zero, so callers guard every number against zero as well as null.
+ * The stored show. The scraper writes TMDB's "no data" as a valid zero, so callers guard every
+ * number against zero as well as null. `tmdb_id`, `origin_countries` and `vote_count` are left to
+ * `ignoreUnknownKeys`.
  */
 @Serializable
 data class Show(
     val id: Long,
     val name: String,
+    @SerialName("original_name") val originalName: SqlNullString,
     @SerialName("premiere_year") val premiereYear: SqlNullInt64,
     val overview: SqlNullString,
-    val certification: SqlNullString,
+    val tagline: SqlNullString,
+    val language: SqlNullString,
+    @SerialName("first_air_date") val firstAirDate: SqlNullString,
+    @SerialName("last_air_date") val lastAirDate: SqlNullString,
+    val status: SqlNullString,
+    val type: SqlNullString,
+    @SerialName("poster_path") val posterPath: SqlNullString,
     @SerialName("backdrop_path") val backdropPath: SqlNullString,
     @SerialName("vote_average") val voteAverage: SqlNullFloat64,
+    val certification: SqlNullString,
+    /** What TMDB knows of, against which the library's own seasons are counted ("2 of 3"). */
+    @SerialName("tmdb_season_count") val tmdbSeasonCount: SqlNullInt64,
+    @SerialName("tmdb_episode_count") val tmdbEpisodeCount: SqlNullInt64,
 )
 
-/** One season the library holds; season 0 is the specials, which the hero does not count. */
+/**
+ * One season the library holds, in the server's order: by number, specials (season 0) last.
+ * Specials do not count as a season. The season's own name, overview, air date and poster are
+ * left to `ignoreUnknownKeys` — the page labels seasons itself, as the web client does.
+ */
 @Serializable
 data class ShowSeasonSummary(
     @SerialName("season_number") val seasonNumber: Long,
+    @SerialName("available_episode_count") val availableEpisodeCount: Long,
+)
+
+/**
+ * One cast credit, in billing order. One artist can hold several roles, so neither
+ * `artist_id` nor `credit_id` is read as the card's identity; the ids are left to
+ * `ignoreUnknownKeys`.
+ */
+@Serializable
+data class ShowCastCredit(
+    val character: String,
+    @SerialName("cast_order") val castOrder: Long,
+    @SerialName("episode_count") val episodeCount: Long,
+    @SerialName("artist_name") val artistName: String,
+    @SerialName("artist_profile") val artistProfile: SqlNullString,
+)
+
+/** A show's creator; the Key Crew band names them and nothing more. */
+@Serializable
+data class ShowPerson(
+    val name: String,
+)
+
+/** A network that aired the show; drawn as text, so the logo is left to `ignoreUnknownKeys`. */
+@Serializable
+data class ShowNetwork(
+    val name: String,
+)
+
+/**
+ * Payload of `ShowSeasonEpisodesEnvelope.data`. The `season` summary repeats what the details
+ * route already sent, so it is left to `ignoreUnknownKeys`.
+ */
+@Serializable
+data class ShowSeasonEpisodesData(
+    val episodes: List<ShowEpisode>,
+)
+
+/**
+ * One episode of a season, with the caller's progress. Progress is null until a save or a mark;
+ * marking watched (or a save at 95% or more) sets [watched] and resets the position.
+ * `vote_average` and `vote_count` are left to `ignoreUnknownKeys`.
+ */
+@Serializable
+data class ShowEpisode(
+    val id: Long,
+    @SerialName("episode_number") val episodeNumber: Long,
+    val name: String,
+    val overview: SqlNullString,
+    @SerialName("air_date") val airDate: SqlNullString,
+    @SerialName("still_path") val stillPath: SqlNullString,
+    /** Minutes, from TMDB. */
+    @SerialName("tmdb_runtime") val tmdbRuntime: SqlNullInt64,
+    @SerialName("progress_sec") val progressSec: SqlNullFloat64,
+    @SerialName("duration_sec") val durationSec: SqlNullFloat64,
+    val watched: Boolean,
 )

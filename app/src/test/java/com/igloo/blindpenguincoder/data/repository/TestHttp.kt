@@ -247,53 +247,125 @@ fun latestShowsJson(vararg shows: String): String =
     """{"error":false,"message":"latest shows","data":{"shows":[${shows.joinToString(",")}]}}"""
 
 /** One `ShowSeasonSummary`, in the contract's full shape. */
-fun showSeasonSummaryJson(seasonNumber: Long, id: Long = seasonNumber + 100): String =
+fun showSeasonSummaryJson(
+    seasonNumber: Long,
+    id: Long = seasonNumber + 100,
+    availableEpisodes: Long = 9,
+): String =
     """{"id":$id,"season_number":$seasonNumber,"name":"Season $seasonNumber",""" +
         """"overview":${sqlNullStringJson(null)},"air_date":${sqlNullStringJson(null)},""" +
         """"poster_path":${sqlNullStringJson(null)},"tmdb_episode_count":${sqlNullInt64Json(9)},""" +
-        """"available_episode_count":9}"""
+        """"available_episode_count":$availableEpisodes}"""
 
 /**
  * A `GET /shows/details/{id}` body. The show carries every field the contract requires, so the
- * fixture exercises `ignoreUnknownKeys` the way the live route does; the credit arrays are empty.
+ * fixture exercises `ignoreUnknownKeys` the way the live route does; the related lists default to
+ * empty, and `crew` always is (the client does not read it).
  */
 fun showDetailsJson(
     id: Long = 40,
     name: String = "Severance",
+    originalName: String? = name,
     backdropPath: String? = "/severance-backdrop.jpg",
+    posterPath: String? = "/severance.jpg",
     overview: String? = "Mark leads a team of office workers whose memories have been split.",
+    tagline: String? = null,
     premiereYear: Long? = 2022,
     certification: String? = "TV-MA",
     voteAverage: Double? = 8.4,
+    language: String? = "en",
+    firstAirDate: String? = "2022-02-17",
+    lastAirDate: String? = null,
+    status: String? = "Returning Series",
+    type: String? = "Scripted",
+    tmdbSeasonCount: Long? = 2,
+    tmdbEpisodeCount: Long? = 19,
     seasons: List<String> = listOf(showSeasonSummaryJson(1), showSeasonSummaryJson(2)),
+    cast: List<String> = emptyList(),
+    creators: List<String> = emptyList(),
+    genres: List<String> = emptyList(),
+    networks: List<String> = emptyList(),
+    productionCompanies: List<String> = emptyList(),
+    extraVideos: List<String> = emptyList(),
 ): String = """
     {"error":false,"message":"show details","data":{
       "show":{
         "id":$id,"name":"$name",
-        "original_name":${sqlNullStringJson(name)},
+        "original_name":${sqlNullStringJson(originalName)},
         "premiere_year":${sqlNullInt64Json(premiereYear)},
         "tmdb_id":${sqlNullInt64Json(95396)},
         "overview":${sqlNullStringJson(overview)},
-        "tagline":${sqlNullStringJson(null)},
-        "language":${sqlNullStringJson("en")},
+        "tagline":${sqlNullStringJson(tagline)},
+        "language":${sqlNullStringJson(language)},
         "origin_countries":${sqlNullStringJson("US")},
-        "first_air_date":${sqlNullStringJson("2022-02-17")},
-        "last_air_date":${sqlNullStringJson(null)},
-        "status":${sqlNullStringJson("Returning Series")},
-        "type":${sqlNullStringJson("Scripted")},
-        "poster_path":${sqlNullStringJson("/severance.jpg")},
+        "first_air_date":${sqlNullStringJson(firstAirDate)},
+        "last_air_date":${sqlNullStringJson(lastAirDate)},
+        "status":${sqlNullStringJson(status)},
+        "type":${sqlNullStringJson(type)},
+        "poster_path":${sqlNullStringJson(posterPath)},
         "backdrop_path":${sqlNullStringJson(backdropPath)},
         "vote_average":${sqlNullFloat64Json(voteAverage)},
         "vote_count":${sqlNullInt64Json(1200)},
         "certification":${sqlNullStringJson(certification)},
-        "tmdb_season_count":${sqlNullInt64Json(2)},
-        "tmdb_episode_count":${sqlNullInt64Json(19)}
+        "tmdb_season_count":${sqlNullInt64Json(tmdbSeasonCount)},
+        "tmdb_episode_count":${sqlNullInt64Json(tmdbEpisodeCount)}
       },
       "seasons":[${seasons.joinToString(",")}],
-      "cast":[],"crew":[],"creators":[],"genres":[],"networks":[],
-      "production_companies":[],"extra_videos":[]
+      "cast":[${cast.joinToString(",")}],"crew":[],
+      "creators":[${creators.joinToString(",")}],
+      "genres":[${genres.joinToString(",")}],
+      "networks":[${networks.joinToString(",")}],
+      "production_companies":[${productionCompanies.joinToString(",")}],
+      "extra_videos":[${extraVideos.joinToString(",")}]
     }}
 """.trimIndent()
+
+/** One `ShowCastCredit`, in the contract's full shape. */
+fun showCastCreditJson(
+    artistId: Long = 3,
+    artistName: String = "Adam Scott",
+    character: String = "Mark Scout",
+    castOrder: Long = 0,
+    episodeCount: Long = 19,
+    profilePath: String? = "/adam-scott.jpg",
+): String = """{"credit_id":"credit-$artistId-$castOrder","artist_id":$artistId,""" +
+    """"character":"$character","cast_order":$castOrder,"episode_count":$episodeCount,""" +
+    """"tmdb_id":${artistId + 1000},"artist_name":"$artistName",""" +
+    """"artist_profile":${sqlNullStringJson(profilePath)}}"""
+
+/** One `ShowPerson` (a creator), in the contract's full shape. */
+fun showPersonJson(id: Long = 2, name: String = "Dan Erickson"): String =
+    """{"id":$id,"tmdb_id":${id + 1000},"name":"$name","profile":${sqlNullStringJson(null)}}"""
+
+/** One `ShowNetwork`, in the contract's full shape. */
+fun showNetworkJson(id: Long = 1, name: String = "Apple TV+"): String =
+    """{"id":$id,"name":"$name","logo":${sqlNullStringJson("/apple.png")},""" +
+        """"country":${sqlNullStringJson(null)}}"""
+
+/** One `ShowEpisode` of a season list, in the contract's full shape. */
+fun showEpisodeJson(
+    id: Long = 900,
+    episodeNumber: Long = 1,
+    name: String = "Good News About Hell",
+    overview: String? = "Mark is promoted to department chief.",
+    airDate: String? = "2022-02-17",
+    stillPath: String? = "/still-1.jpg",
+    runtimeMinutes: Long? = 57,
+    progressSec: Double? = null,
+    durationSec: Double? = null,
+    watched: Boolean = false,
+): String = """{"id":$id,"episode_number":$episodeNumber,"name":"$name",""" +
+    """"overview":${sqlNullStringJson(overview)},"air_date":${sqlNullStringJson(airDate)},""" +
+    """"still_path":${sqlNullStringJson(stillPath)},"tmdb_runtime":${sqlNullInt64Json(runtimeMinutes)},""" +
+    """"vote_average":${sqlNullFloat64Json(8.1)},"vote_count":${sqlNullInt64Json(120)},""" +
+    """"progress_sec":${sqlNullFloat64Json(progressSec)},""" +
+    """"duration_sec":${sqlNullFloat64Json(durationSec)},"watched":$watched}"""
+
+/** A `GET /shows/{id}/seasons/{n}/episodes` body; the season summary is the one the client ignores. */
+fun showSeasonEpisodesJson(seasonNumber: Long = 1, vararg episodes: String): String =
+    """{"error":false,"message":"season episodes","data":{""" +
+        """"season":${showSeasonSummaryJson(seasonNumber, availableEpisodes = episodes.size.toLong())},""" +
+        """"episodes":[${episodes.joinToString(",")}]}}"""
 
 /** One `GET /continue-watching` movie entry: the latest-movie shape plus a kind and progress. */
 fun continueWatchingMovieJson(
@@ -697,7 +769,7 @@ fun crewMemberJson(
     artistName: String = "Michael Mann",
 ): String = """{"id":$id,"job":"$job","department":"$department","artist_name":"$artistName"}"""
 
-fun movieGenreJson(id: Long = 1, tag: String = "Crime"): String = """{"id":$id,"tag":"$tag"}"""
+fun genreJson(id: Long = 1, tag: String = "Crime"): String = """{"id":$id,"tag":"$tag"}"""
 
 fun productionCompanyJson(
     id: Long = 1,

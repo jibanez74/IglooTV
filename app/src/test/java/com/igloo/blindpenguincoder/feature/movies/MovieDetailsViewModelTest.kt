@@ -11,7 +11,7 @@ import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.likeStatusJson
 import com.igloo.blindpenguincoder.data.repository.likeToggleJson
 import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
-import com.igloo.blindpenguincoder.data.repository.movieGenreJson
+import com.igloo.blindpenguincoder.data.repository.genreJson
 import com.igloo.blindpenguincoder.data.repository.productionCompanyJson
 import com.igloo.blindpenguincoder.data.repository.subtitleJson
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
@@ -1527,7 +1527,7 @@ class MovieDetailsViewModelTest {
                 crewMemberJson(id = 1, job = "Director", department = "Directing", artistName = "Michael Mann"),
                 crewMemberJson(id = 2, job = "Writer", department = "Writing", artistName = "Michael Mann"),
             ),
-            genres = listOf(movieGenreJson(id = 1, tag = "Crime"), movieGenreJson(id = 2, tag = "Drama")),
+            genres = listOf(genreJson(id = 1, tag = "Crime"), genreJson(id = 2, tag = "Drama")),
             productionCompanies = listOf(
                 productionCompanyJson(id = 1, name = "Regency Enterprises"),
                 productionCompanyJson(id = 2, name = "Forward Pass"),
