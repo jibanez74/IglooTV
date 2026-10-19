@@ -198,9 +198,9 @@ internal fun HeroArtwork(
 
 /**
  * The hero's prose as one reading stop. TV TalkBack follows input focus and never traverses
- * plain text, so while a screen reader runs the whole block is a focus target — reachable by
- * pressing up from the action row — that speaks [description] in a single announcement. Without
- * one it stays what it always was: text the d-pad passes by.
+ * plain text, so while a screen reader runs the whole block is a focus target — the page's entry
+ * anchor, and reachable again by pressing up from the action row — that speaks [description] in
+ * a single announcement. Without one it stays what it always was: text the d-pad passes by.
  */
 @Composable
 internal fun HeroReadingStop(
@@ -263,9 +263,9 @@ internal fun HeroGenresLine(text: String, overMedia: Boolean) {
 /**
  * The hero's prose: title, tagline, metadata row, genres. TV TalkBack follows input focus and
  * never traverses plain text, so while a screen reader runs ([readingStop]) this whole block is
- * one reading stop — reachable by pressing up from the action row — that speaks
- * [readingStopDescription] in a single announcement. Without one it stays what it always was:
- * text the d-pad passes by. Tag `details_hero_info` on every page.
+ * one reading stop — the page's entry anchor then, and reachable again by pressing up from the
+ * action row — that speaks [readingStopDescription] in a single announcement. Without one it
+ * stays what it always was: text the d-pad passes by. Tag `details_hero_info` on every page.
  *
  * The metadata row is visually a row of chips but one TalkBack stop: a run of two-character
  * announcements would be noise, so it speaks [metadataDescription], the sentence the page's view

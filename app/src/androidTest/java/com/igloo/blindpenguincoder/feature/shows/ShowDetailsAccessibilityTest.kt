@@ -26,7 +26,6 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
-import com.igloo.blindpenguincoder.testEpisodes
 import com.igloo.blindpenguincoder.testSeason
 import com.igloo.blindpenguincoder.testShowDetails
 import com.igloo.blindpenguincoder.testShowDetailsState

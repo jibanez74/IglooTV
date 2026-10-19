@@ -9,11 +9,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.ui.AnnouncedSection
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
+import com.igloo.blindpenguincoder.core.ui.announcedSection
 import com.igloo.blindpenguincoder.core.ui.insetHorizontally
 import com.igloo.blindpenguincoder.feature.shared.ChipSpec
 import com.igloo.blindpenguincoder.feature.shared.DetailsRailSection
@@ -48,8 +51,9 @@ internal fun ShowSeasonsSection(
     episodesRequester: FocusRequester,
     episodesUpRequester: FocusRequester?,
     episodesDownRequester: FocusRequester?,
-    chipsModifier: Modifier,
-    episodesModifier: Modifier,
+    chipsSection: AnnouncedSection,
+    episodesSection: AnnouncedSection,
+    onEpisodesFocusChanged: (Boolean) -> Unit,
     onPressSeason: (Long) -> Unit,
     onRetrySeason: () -> Unit,
 ) {
@@ -66,7 +70,7 @@ internal fun ShowSeasonsSection(
             }
         }
         Column(
-            modifier = chipsModifier,
+            modifier = Modifier.announcedSection(chipsSection),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         ) {
             SectionHeading("Seasons", Modifier.insetHorizontally(contentInset))
@@ -95,7 +99,9 @@ internal fun ShowSeasonsSection(
             entryRequester = episodesRequester,
             upRequester = episodesUpRequester,
             downRequester = episodesDownRequester,
-            modifier = episodesModifier,
+            modifier = Modifier
+                .announcedSection(episodesSection)
+                .onFocusChanged { onEpisodesFocusChanged(it.hasFocus) },
             cardAspect = IglooTheme.layout.wideAspect,
             cardWidth = IglooTheme.layout.wideCardWidth,
             screenReader = screenReader,

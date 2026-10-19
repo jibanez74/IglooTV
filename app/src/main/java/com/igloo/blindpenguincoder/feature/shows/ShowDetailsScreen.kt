@@ -254,9 +254,9 @@ private fun ShowDetailsContent(
                 actionRequester = requesterOf(ShowSection.Action),
                 actionUpRequester = above(ShowSection.Action),
                 actionDownRequester = below(ShowSection.Action),
-                heroInfoModifier = tracked(ShowSection.HeroInfo),
-                actionModifier = tracked(ShowSection.Action)
-                    .onFocusChanged { onActionFocus(it.hasFocus) },
+                heroInfoSection = sectionColumn.section(ShowSection.HeroInfo),
+                actionSection = sectionColumn.section(ShowSection.Action),
+                onActionFocusChanged = onActionFocus,
                 modifier = heroHeaderModifier(),
             )
         }
@@ -288,9 +288,9 @@ private fun ShowDetailsContent(
                 episodesRequester = requesterOf(ShowSection.Episodes),
                 episodesUpRequester = above(ShowSection.Episodes),
                 episodesDownRequester = below(ShowSection.Episodes),
-                chipsModifier = tracked(ShowSection.Seasons),
-                episodesModifier = tracked(ShowSection.Episodes)
-                    .onFocusChanged { onEpisodesFocus(it.hasFocus) },
+                chipsSection = sectionColumn.section(ShowSection.Seasons),
+                episodesSection = sectionColumn.section(ShowSection.Episodes),
+                onEpisodesFocusChanged = onEpisodesFocus,
                 onPressSeason = onPressSeason,
                 onRetrySeason = actions.onRetrySeason,
             )

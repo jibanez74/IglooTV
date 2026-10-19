@@ -15,12 +15,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.ui.AnnouncedSection
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.core.ui.announcedSection
 import com.igloo.blindpenguincoder.feature.shared.DetailsHeroInfo
 import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
 import com.igloo.blindpenguincoder.feature.shared.HeroSingleActionRow
@@ -51,8 +54,9 @@ internal fun ShowDetailsHeader(
     actionRequester: FocusRequester,
     actionUpRequester: FocusRequester?,
     actionDownRequester: FocusRequester?,
-    heroInfoModifier: Modifier,
-    actionModifier: Modifier,
+    heroInfoSection: AnnouncedSection,
+    actionSection: AnnouncedSection,
+    onActionFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -84,10 +88,15 @@ internal fun ShowDetailsHeader(
                 readingStop = spokenAccessibilityEnabled,
                 requester = heroInfoRequester,
                 downRequester = heroInfoDownRequester ?: Cancel,
-                modifier = heroInfoModifier,
+                modifier = Modifier.announcedSection(heroInfoSection),
             )
             if (show.seasons.isNotEmpty()) {
-                Box(modifier = actionModifier.padding(top = IglooTheme.spacing.sm)) {
+                Box(
+                    modifier = Modifier
+                        .announcedSection(actionSection)
+                        .onFocusChanged { onActionFocusChanged(it.hasFocus) }
+                        .padding(top = IglooTheme.spacing.sm),
+                ) {
                     if (playTarget != null) {
                         HeroSingleActionRow(
                             text = playTarget.label,
