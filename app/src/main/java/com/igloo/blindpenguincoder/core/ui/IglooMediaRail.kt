@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import kotlinx.coroutines.delay
 
 /** What a media rail renders. An empty [Loaded] list is the empty state, not an error. */
 sealed interface IglooRailState<out T> {
@@ -139,6 +141,19 @@ fun <T> IglooMediaRail(
     // the entry card sheds it unfocused, silently; leaving the rail restores it everywhere.
     var focusedKey by remember { mutableStateOf<Long?>(null) }
     var enteredOnKey by remember { mutableStateOf<Long?>(null) }
+    // "Unfocused, silently" needs one more beat: TalkBack moves its cursor off a card some tens
+    // of milliseconds after input focus leaves it, and a description change that lands before
+    // then is read out as if the card were new — and can swallow the next card's announcement.
+    // So the card focus most recently left keeps the description it was read with until a batch
+    // has certainly passed, whatever the rule says it should carry now.
+    var leftCard by remember { mutableStateOf<Pair<Long, Boolean>?>(null) }
+    val prefixedAsComposed = remember { mutableMapOf<Long, Boolean>() }
+    LaunchedEffect(leftCard) {
+        if (leftCard != null) {
+            delay(ANNOUNCED_LINE_WAIT_MS)
+            leftCard = null
+        }
+    }
 
     val anchorModifier = Modifier
         .focusRequester(localAnchor)
@@ -242,9 +257,10 @@ fun <T> IglooMediaRail(
                 ) {
                     itemsIndexed(state.items, key = { _, item -> itemKey(item) }) { index, item ->
                         val key = itemKey(item)
-                        val spokenTitle = title.takeIf {
-                            announceSectionTitle && (focusedKey == null || key == enteredOnKey)
-                        }
+                        val prefixed = leftCard?.takeIf { it.first == key }?.second
+                            ?: (focusedKey == null || key == enteredOnKey)
+                        prefixedAsComposed[key] = prefixed
+                        val spokenTitle = title.takeIf { announceSectionTitle && prefixed }
                         CompositionLocalProvider(LocalMediaSectionTitle provides spokenTitle) {
                             itemContent(
                                 item,
@@ -261,6 +277,8 @@ fun <T> IglooMediaRail(
                                             enteredOnKey = if (focusedKey == null) key else null
                                             focusedKey = key
                                             onItemFocused(key)
+                                        } else {
+                                            prefixedAsComposed[key]?.let { leftCard = key to it }
                                         }
                                     },
                                 cardAspect,

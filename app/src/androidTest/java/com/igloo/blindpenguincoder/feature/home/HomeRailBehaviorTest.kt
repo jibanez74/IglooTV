@@ -41,6 +41,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
+import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_LINE_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
@@ -804,28 +805,67 @@ class HomeRailBehaviorTest {
         continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
         continueCard(2).assertIsFocused()
             .assertContentDescriptionEquals("Arrival, 2016, 58 minutes remaining")
-        continueCard(1).assertContentDescriptionEquals("Heat, 1995, 2 hours and 7 minutes remaining")
         assertPlatformTreeHolds(
             expected = listOf(Triple("Arrival, 2016, 58 minutes remaining", true, true)),
         ) { spoken -> spoken.contains("58 minutes remaining") }
+        // The card just left keeps the description it was read with until TalkBack's cursor has
+        // certainly moved on: a change before that is spoken as if the card were new.
+        continueCard(1)
+            .assertContentDescriptionEquals("Continue Watching. Heat, 1995, 2 hours and 7 minutes remaining")
+        settleLeftCard()
+        continueCard(1).assertContentDescriptionEquals("Heat, 1995, 2 hours and 7 minutes remaining")
 
         continueCard(2).performKeyInput { pressKey(Key.DirectionLeft) }
         continueCard(1).assertIsFocused()
             .assertContentDescriptionEquals("Heat, 1995, 2 hours and 7 minutes remaining")
+        settleLeftCard()
 
         // Leaving the rail puts the title back on every card, so the next entry — wherever it
         // lands — is announced; the rail entered next announces itself the same way.
         continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
         latestCard(1).assertIsFocused()
             .assertContentDescriptionEquals("Recently Added Movies. Heat, 1995")
+        continueCard(2).assertContentDescriptionEquals("Continue Watching. Arrival, 2016, 58 minutes remaining")
+        continueCard(1).assertContentDescriptionEquals("Heat, 1995, 2 hours and 7 minutes remaining")
+        settleLeftCard()
         continueCard(1)
             .assertContentDescriptionEquals("Continue Watching. Heat, 1995, 2 hours and 7 minutes remaining")
-        continueCard(2).assertContentDescriptionEquals("Continue Watching. Arrival, 2016, 58 minutes remaining")
 
         latestCard(1).performKeyInput { pressKey(Key.DirectionUp) }
         continueCard(1).assertIsFocused()
             .assertContentDescriptionEquals("Continue Watching. Heat, 1995, 2 hours and 7 minutes remaining")
+        settleLeftCard()
         latestCard(1).assertContentDescriptionEquals("Recently Added Movies. Heat, 1995")
+    }
+
+    /**
+     * A rail below the fold is composed but not on screen, so Compose would focus its card
+     * unannounced (see AnnouncedSectionMove): under a screen reader the move reveals the rail,
+     * waits for a snapshot, and only then focuses into it.
+     */
+    @Test
+    fun underAScreenReaderAMoveIntoARailBelowTheFoldWaitsUntilItCanBeHeard() {
+        setShellContent(IglooRailState.Loaded(continueMovies), spokenAccessibilityEnabled = true)
+        continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.mainClock.advanceTimeBy(SECTION_MOVE_MS)
+        latestCard(1).assertIsFocused()
+
+        composeRule.mainClock.autoAdvance = false
+        latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
+        repeat(2) { composeRule.mainClock.advanceTimeByFrame() }
+        latestCard(1).assertIsFocused()
+        showCard(40).assertIsNotFocused()
+
+        composeRule.mainClock.advanceTimeBy(SECTION_MOVE_MS)
+        composeRule.mainClock.autoAdvance = true
+        showCard(40).assertIsFocused()
+            .assertContentDescriptionEquals("Recently Added Shows. Severance, 2022")
+    }
+
+    /** Lets the card focus most recently left take the description the rule now gives it. */
+    private fun settleLeftCard() {
+        composeRule.mainClock.advanceTimeBy(ANNOUNCED_LINE_WAIT_MS + FRAME_MS)
+        composeRule.waitForIdle()
     }
 
     @Test
@@ -837,6 +877,7 @@ class HomeRailBehaviorTest {
 
         pressBack()
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
+        settleLeftCard()
         composeRule.onNodeWithContentDescription("Home")
             .performKeyInput { pressKey(Key.DirectionRight) }
 
@@ -873,3 +914,6 @@ class HomeRailBehaviorTest {
 
 /** One frame at the test clock's 60Hz: the wait starts after the swapped node's first frame. */
 private const val FRAME_MS = 16L
+
+/** Reveal scroll, snapshot wait, held focus and settle scroll: generous, so timing never flakes. */
+private const val SECTION_MOVE_MS = 3_000L

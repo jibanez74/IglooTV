@@ -574,7 +574,10 @@ it for a ≤1.5:1 effect.
   already moved. With no screen reader, focus moves at once. The rail's cross-branch switch
   (Home → Movies) uses it (§11.2), and the pane grids apply the same wait at row scale, with a
   held scroll, when the d-pad moves into a row that is not on screen yet (`AnnouncedLazyMove`,
-  §8.3). So does the shell's first request, when it replaces the sign-in or PIN screen: asked in
+  §8.3); Home's column does the same at section scale when the d-pad moves into a rail below
+  the fold (`AnnouncedSectionMove`, §11.3.2) — the snapshot holds only what is on screen, so a
+  composed-but-scrolled-away card focused by Compose's own move is as silent as a new one, and
+  TalkBack for TV then re-reads the card just left. So does the shell's first request, when it replaces the sign-in or PIN screen: asked in
   the anchor's first frame, the focus went unannounced and TalkBack for TV parked its cursor on
   the profile avatar. And so does every state-swap handoff: a rail or details page whose focused
   skeleton gives way to content (`rememberRefocusAfterSwap`), and a pane grid whose content is
@@ -1494,9 +1497,20 @@ the rail reaches a card that speaks itself alone — "Arrival, 2016" — because
 reads a card as focus lands on it and afterwards speaks only a change to the node under its
 cursor: `IglooMediaRail` keeps the title on every card while none of its cards is focused, keeps
 it on the entry card alone once one is, and puts it back everywhere when focus leaves, so each
-change lands on an unfocused node and is silent (`announceSectionTitle`). The skeleton and the
-error Retry name their section in their own labels. Details-page rails leave this off; their
+change lands on an unfocused node and is silent (`announceSectionTitle`). "Unfocused" is
+measured by TalkBack's cursor, not by input focus: the cursor follows some tens of milliseconds
+behind, and a description changed in that gap is read out as if the card were new (and can
+swallow the next card's announcement — seen on the emulator), so the card focus most recently
+left keeps the description it was read with for one accessibility batch
+(`ANNOUNCED_LINE_WAIT_MS`) before taking the one the rule gives it. The skeleton and the error
+Retry name their section in their own labels. Details-page rails leave this off; their
 surroundings already name them.
+
+Up and Down between sections are announced moves under a screen reader (§6.3): when the next
+rail (or the hero, or the progress Retry) is not yet on screen, the press reveals part of it with
+the current card still on screen, waits one accessibility batch, focuses its entry anchor with
+the scroll held, then lets the section settle (`AnnouncedSectionMove`). A target already on
+screen is left to Compose's own move, which is announced in that case.
 
 | Rail | Endpoint | Card | Empty copy |
 |---|---|---|---|

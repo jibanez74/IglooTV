@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +18,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -26,6 +29,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
@@ -38,7 +42,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -56,6 +66,7 @@ import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
+import com.igloo.blindpenguincoder.core.ui.AnnouncedSectionMove
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooConfirmDialog
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
@@ -1222,9 +1233,73 @@ private fun HomeRails(
     // takes it back when the hero hides (section 11.3.1). heroVisible gates both attachment
     // sites in the same composition, so the requester is never on two nodes at once.
     val heroVisible = home.hero !is HomeHeroState.Hidden
+    // One set of tools per section that can hold focus — the hero, the progress Retry and each
+    // rail — so a vertical move under a screen reader can reveal, focus and settle the next one
+    // (AnnouncedSectionMove); the tools outlive the sections' coming and going.
+    val sectionTools = remember { mutableMapOf<Any, HomeSectionTools>() }
+    fun tools(key: Any) = sectionTools.getOrPut(key) { HomeSectionTools(key) }
+    val sections = buildList {
+        if (heroVisible) add(tools(HERO_SECTION))
+        if (progressSyncError != null) add(tools(RETRY_SECTION))
+        HomeRail.entries.forEach { add(tools(it)) }
+    }
+    // Read through holders: the move helper is remembered once and must see this composition.
+    val currentSections by rememberUpdatedState(sections)
+    val currentHeroVisible by rememberUpdatedState(heroVisible)
+    val currentScreenReader by rememberUpdatedState(spokenAccessibilityEnabled)
     // The hero's d-pad down target: attached to the Continue rail's entry anchor in every rail
     // state, so down always lands where spine re-entry would.
-    val continueEntryRequester = remember { FocusRequester() }
+    val continueEntryRequester = tools(HomeRail.ContinueWatching).entry
+    val scrollState = rememberScrollState()
+    var columnCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val moveScope = rememberCoroutineScope()
+    val sectionMove = remember {
+        AnnouncedSectionMove(
+            scope = moveScope,
+            scrollable = scrollState,
+            screenReader = { currentScreenReader },
+            focusedSection = { currentSections.indexOfFirst { it.hasFocus } },
+            sectionCount = { currentSections.size },
+            isOnScreen = { index ->
+                // Unclipped: a section scrolled out of the column must still report where it is.
+                val section = currentSections[index].coordinates?.takeIf { it.isAttached }?.unclippedBoundsInRoot()
+                val viewport = columnCoordinates?.takeIf { it.isAttached }?.unclippedBoundsInRoot()
+                if (section == null || viewport == null) {
+                    true
+                } else {
+                    // A rail's heading leads its cards; the part that takes focus is below it.
+                    val targetTop = section.top + section.height * SECTION_HEADING_FRACTION
+                    targetTop < viewport.bottom && section.bottom > viewport.top
+                }
+            },
+            reveal = { index, forward ->
+                val tools = currentSections[index]
+                val size = tools.coordinates?.size
+                if (size == null) {
+                    tools.bringIntoView.bringIntoView()
+                } else {
+                    val height = size.height.toFloat()
+                    val shown = height * SECTION_REVEAL_FRACTION
+                    val rect = if (forward) {
+                        Rect(0f, 0f, size.width.toFloat(), shown)
+                    } else {
+                        Rect(0f, height - shown, size.width.toFloat(), height)
+                    }
+                    tools.bringIntoView.bringIntoView(rect)
+                }
+            },
+            settle = { index -> currentSections[index].bringIntoView.bringIntoView() },
+            requesterFor = { index ->
+                val tools = currentSections[index]
+                when {
+                    // The pane's entry anchor rides the hero, or the first rail in its absence.
+                    tools.key == HERO_SECTION -> contentStartRequester
+                    tools.key == HomeRail.ContinueWatching && !currentHeroVisible -> contentStartRequester
+                    else -> tools.entry
+                }
+            },
+        )
+    }
     // The hero's one target outlives Loading -> Loaded and every page turn, so this matters only
     // when the hero hides while focused: the requester then sits on the Continue rail's anchor.
     val onHeroFocus = rememberRefocusAfterSwap(home.hero, spokenAccessibilityEnabled) {
@@ -1243,7 +1318,9 @@ private fun HomeRails(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .onGloballyPositioned { columnCoordinates = it }
+            .onPreviewKeyEvent(sectionMove::onPreviewKey)
+            .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
     ) {
         // Inside the scroll and above the hero: it is text, so it owes the inset, and it scrolls
@@ -1263,7 +1340,7 @@ private fun HomeRails(
                 onOpenMovie = openMovie?.let { open ->
                     { movieId -> open(DetailsOrigin.Hero, movieId) }
                 },
-                modifier = Modifier.onFocusChanged { onHeroFocus(it.hasFocus) },
+                modifier = Modifier.homeSection(tools(HERO_SECTION)).onFocusChanged { onHeroFocus(it.hasFocus) },
             )
         }
 
@@ -1272,7 +1349,8 @@ private fun HomeRails(
             ProgressSyncRetry(
                 message = progressSyncError,
                 onRetry = onRetryProgressSync,
-                retryModifier = Modifier
+                retryModifier = Modifier.homeSection(tools(RETRY_SECTION))
+                    .focusRequester(tools(RETRY_SECTION).entry)
                     .focusProperties {
                         left = navigationRequester
                         right = FocusRequester.Cancel
@@ -1292,6 +1370,7 @@ private fun HomeRails(
             returnRequesters = railReturnRequesters,
             onRetry = onRetryRail,
             screenReader = spokenAccessibilityEnabled,
+            tools = ::tools,
         )
 
         HomeRailSection(
@@ -1300,6 +1379,8 @@ private fun HomeRails(
             itemKey = { it.railKey },
             wiring = wiring,
             entryRequester = if (heroVisible) continueEntryRequester else contentStartRequester,
+            // The section tools' own requester is this one; the first rail hands its anchor to
+            // the pane's entry instead when the hero is away.
         ) { item, itemModifier, cardAspect ->
             when (item) {
                 is HomeContinueItem.Movie -> PosterItemCard(
@@ -1393,7 +1474,38 @@ private class HomeRailWiring(
     val returnRequesters: Map<HomeRail, FocusRequester>,
     val onRetry: (HomeRail) -> Unit,
     val screenReader: Boolean,
+    val tools: (HomeRail) -> HomeSectionTools,
 )
+
+/**
+ * What a vertical move under a screen reader needs from a Home section: where it is, whether it
+ * holds focus, a way to scroll part of it on screen and a requester on its focus target.
+ */
+private class HomeSectionTools(val key: Any) {
+    val entry = FocusRequester()
+    val bringIntoView = BringIntoViewRequester()
+    var coordinates: LayoutCoordinates? = null
+    var hasFocus by mutableStateOf(false)
+}
+
+/** Lets [tools] see where this section is and whether it holds focus, and scroll it on screen. */
+@OptIn(ExperimentalFoundationApi::class)
+private fun Modifier.homeSection(tools: HomeSectionTools): Modifier = this
+    .bringIntoViewRequester(tools.bringIntoView)
+    .onGloballyPositioned { tools.coordinates = it }
+    .onFocusChanged { tools.hasFocus = it.hasFocus }
+
+private fun LayoutCoordinates.unclippedBoundsInRoot(): Rect =
+    Rect(positionInRoot(), size.toSize())
+
+private const val HERO_SECTION = "hero"
+private const val RETRY_SECTION = "retry"
+
+/** How much of a section is heading and gap before its focus target, as a fraction of it. */
+private const val SECTION_HEADING_FRACTION = 0.3f
+
+/** How much of the next section a screen-reader move shows before focusing into it. */
+private const val SECTION_REVEAL_FRACTION = 0.6f
 
 /**
  * One Home rail (section 11.3.2): an [IglooMediaRail] that speaks its section on entry, keeps
@@ -1411,6 +1523,7 @@ private fun <T> HomeRailSection(
     itemContent: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
 ) {
     val copy = rail.copy
+    val tools = wiring.tools(rail)
     IglooMediaRail(
         announceSectionTitle = true,
         screenReader = wiring.screenReader,
@@ -1418,7 +1531,8 @@ private fun <T> HomeRailSection(
         title = copy.title,
         state = state,
         itemKey = itemKey,
-        entryRequester = entryRequester,
+        entryRequester = entryRequester ?: tools.entry,
+        modifier = Modifier.homeSection(tools),
         leftFocusRequester = wiring.leftFocusRequester,
         lastFocusedKey = wiring.lastFocusedByRail[rail],
         onItemFocused = { wiring.lastFocusedByRail[rail] = it },
