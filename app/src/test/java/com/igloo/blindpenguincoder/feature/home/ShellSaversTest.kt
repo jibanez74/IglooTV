@@ -19,6 +19,7 @@ class ShellSaversTest {
         for (origin in listOf(
             DetailsOrigin.Hero,
             DetailsOrigin.MoviesGrid,
+            DetailsOrigin.ShowsGrid,
             DetailsOrigin.Music,
             DetailsOrigin.Rail(HomeRail.LatestAlbums),
             null,

@@ -107,6 +107,9 @@ import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.PosterItemCard
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsScreen
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
@@ -126,6 +129,9 @@ internal sealed interface DetailsOrigin {
     /** The Movies grid. No payload: the grid's own focus memory names the cell, not the origin. */
     data object MoviesGrid : DetailsOrigin
 
+    /** The TV Shows grid, on the Movies grid's terms. */
+    data object ShowsGrid : DetailsOrigin
+
     /** The Music pane, whichever tab: its selected surface parks the return requester itself. */
     data object Music : DetailsOrigin
 
@@ -137,6 +143,7 @@ internal sealed interface DetailsOrigin {
                     is Rail -> origin.rail.name
                     Hero -> HERO
                     MoviesGrid -> MOVIES_GRID
+                    ShowsGrid -> SHOWS_GRID
                     Music -> MUSIC
                     null -> NONE
                 }
@@ -146,6 +153,7 @@ internal sealed interface DetailsOrigin {
                     NONE -> null
                     HERO -> Hero
                     MOVIES_GRID -> MoviesGrid
+                    SHOWS_GRID -> ShowsGrid
                     MUSIC -> Music
                     // An unknown name is a rail a newer build renamed: no origin, not a crash.
                     else -> HomeRail.entries.firstOrNull { it.name == saved }?.let(::Rail)
@@ -155,6 +163,7 @@ internal sealed interface DetailsOrigin {
 
         private const val HERO = "hero"
         private const val MOVIES_GRID = "movies_grid"
+        private const val SHOWS_GRID = "shows_grid"
         private const val MUSIC = "music"
         private const val NONE = "none"
     }
@@ -224,6 +233,9 @@ fun IglooApp(
     musicActions: MusicActions,
     details: MovieDetailsUiState,
     detailsActions: MovieDetailsActions,
+    showDetails: ShowDetailsUiState,
+    showDetailsActions: ShowDetailsActions,
+    onShowSelected: ((Long) -> Unit)?,
     albumDetails: AlbumDetailsUiState,
     onRetryAlbumDetails: () -> Unit,
     onAlbumSelected: ((Long) -> Unit)?,
@@ -274,6 +286,8 @@ fun IglooApp(
     // The grid's sibling of railReturnRequesters: parked on the Movies grid's entry cell in
     // every grid state, so Back out of details lands on the card that opened it.
     val moviesReturnRequester = remember { FocusRequester() }
+    // The TV Shows grid's twin of the Movies one.
+    val showsReturnRequester = remember { FocusRequester() }
     // The Music pane's sibling of the two above: its selected surface parks it on the entry
     // item — on the Tracks tab, on the remembered control of the entry row — so Back out of
     // an overlay and a player's close both land exactly where the user left.
@@ -287,12 +301,14 @@ fun IglooApp(
         mutableStateOf<DetailsOrigin?>(null)
     }
     val detailsOpen = details.openMovieId != null
+    // The show overlay is another occupant of the one details slot, under the same exclusivity.
+    val showOpen = showDetails.openShowId != null
     // The album overlay shares the one details slot (section 11.5.1): the host's open callbacks
     // keep the detail view models mutually exclusive, so at most one of these is ever true.
     val albumOpen = albumDetails.openAlbumId != null
     // The fourth occupant, under the same exclusivity.
     val musicianOpen = musicianDetails.openMusicianId != null
-    val anyDetailsOpen = detailsOpen || albumOpen || musicianOpen
+    val anyDetailsOpen = detailsOpen || showOpen || albumOpen || musicianOpen
     // The trailer player is the third overlay layer (shell -> details -> player); the host owns
     // its existence and its focus restore, the same contract the details overlay lives under.
     var trailerRequest by rememberSaveable(stateSaver = TrailerRequest.Saver) {
@@ -505,6 +521,7 @@ fun IglooApp(
             select(tmdbId)
         }
     }
+    val openShow = withOrigin(onShowSelected)
     val openAlbum = withOrigin(onAlbumSelected)
     val openMusician = withOrigin(onMusicianSelected)
 
@@ -525,6 +542,8 @@ fun IglooApp(
                 .takeIf { currentDestination == IglooDestination.Home }
             DetailsOrigin.MoviesGrid -> moviesReturnRequester
                 .takeIf { currentDestination == IglooDestination.Movies }
+            DetailsOrigin.ShowsGrid -> showsReturnRequester
+                .takeIf { currentDestination == IglooDestination.TvShows }
             DetailsOrigin.Music -> musicReturnRequester
                 .takeIf { currentDestination == IglooDestination.Music }
             else -> null
@@ -577,10 +596,12 @@ fun IglooApp(
             onResumeEpisode = onResumeEpisode,
             openMovie = openMovie,
             openTheaterMovie = openTheaterMovie,
+            openShow = openShow,
             openAlbum = openAlbum,
             openMusician = openMusician,
             railReturnRequesters = railReturnRequesters,
             moviesReturnRequester = moviesReturnRequester,
+            showsReturnRequester = showsReturnRequester,
             musicReturnRequester = musicReturnRequester,
             // The rail stays open behind the dialog: the row that opened it must still be legible,
             // so the focus it gets back on cancel is not a surprise.
@@ -660,6 +681,15 @@ fun IglooApp(
                     // Same-slot replacement, origin untouched (see the musician layer above).
                     onOpenMusician = onMusicianSelected,
                     playReturnRequester = albumPlayReturnRequester,
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                )
+            }
+        } else if (showOpen) {
+            // Nothing launches from the show page yet, so no player ever covers it.
+            DetailsLayer(hiddenFromAccessibility = false) {
+                ShowDetailsScreen(
+                    state = showDetails,
+                    actions = showDetailsActions,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
@@ -825,10 +855,12 @@ private fun IglooShell(
     onResumeEpisode: (Long) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
+    openShow: ((DetailsOrigin, Long) -> Unit)?,
     openAlbum: ((DetailsOrigin, Long) -> Unit)?,
     openMusician: ((DetailsOrigin, Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     moviesReturnRequester: FocusRequester,
+    showsReturnRequester: FocusRequester,
     musicReturnRequester: FocusRequester,
     railExpanded: Boolean,
     scrimmed: Boolean,
@@ -897,10 +929,12 @@ private fun IglooShell(
                 onResumeEpisode = onResumeEpisode,
                 openMovie = openMovie,
                 openTheaterMovie = openTheaterMovie,
+                openShow = openShow,
                 openAlbum = openAlbum,
                 openMusician = openMusician,
                 railReturnRequesters = railReturnRequesters,
                 moviesReturnRequester = moviesReturnRequester,
+                showsReturnRequester = showsReturnRequester,
                 musicReturnRequester = musicReturnRequester,
                 contentStartRequester = contentStartRequester,
                 navigationRequesters = navigationRequesters,
@@ -985,10 +1019,12 @@ private fun ContentPane(
     onResumeEpisode: (Long) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
+    openShow: ((DetailsOrigin, Long) -> Unit)?,
     openAlbum: ((DetailsOrigin, Long) -> Unit)?,
     openMusician: ((DetailsOrigin, Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     moviesReturnRequester: FocusRequester,
+    showsReturnRequester: FocusRequester,
     musicReturnRequester: FocusRequester,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
@@ -1079,6 +1115,7 @@ private fun ContentPane(
                 onResumeEpisode = onResumeEpisode,
                 openMovie = openMovie,
                 openTheaterMovie = openTheaterMovie,
+                openShow = openShow,
                 openAlbum = openAlbum,
                 railReturnRequesters = railReturnRequesters,
                 contentStartRequester = contentStartRequester,
@@ -1115,13 +1152,12 @@ private fun ContentPane(
                 gridState = showsGridState,
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequesters.getValue(IglooDestination.TvShows),
-                // Nothing opens from this pane yet, so nothing ever asks to return to it.
-                returnRequester = null,
+                returnRequester = showsReturnRequester,
                 lastFocusedId = lastFocusedShowId,
                 onItemFocused = { lastFocusedShowId = it },
-                // No show details screen yet: the cards are inert on press (section 10's
-                // actionless-anchor contract) rather than announcing an action that does nothing.
-                onItemSelected = null,
+                onItemSelected = openShow?.let { open ->
+                    { showId -> open(DetailsOrigin.ShowsGrid, showId) }
+                },
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
@@ -1213,6 +1249,7 @@ private fun HomeRails(
     onResumeEpisode: (Long) -> Unit,
     openMovie: ((DetailsOrigin, Long) -> Unit)?,
     openTheaterMovie: ((Long) -> Unit)?,
+    openShow: ((DetailsOrigin, Long) -> Unit)?,
     openAlbum: ((DetailsOrigin, Long) -> Unit)?,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     contentStartRequester: FocusRequester,
@@ -1289,6 +1326,9 @@ private fun HomeRails(
                 contentInset = contentInset,
                 onOpenMovie = openMovie?.let { open ->
                     { movieId -> open(DetailsOrigin.Hero, movieId) }
+                },
+                onOpenShow = openShow?.let { open ->
+                    { showId -> open(DetailsOrigin.Hero, showId) }
                 },
                 modifier = Modifier.announcedSection(tools(HERO_SECTION)).onFocusChanged { onHeroFocus(it.hasFocus) },
             )
@@ -1375,10 +1415,9 @@ private fun HomeRails(
             itemKey = { it.id },
             wiring = wiring,
         ) { show, itemModifier, cardAspect ->
-            // No show details screen yet: the card is a landing site that announces no action.
             PosterItemCard(
                 item = show,
-                onClick = null,
+                onClick = railOpener(openShow, HomeRail.LatestShows, show.id),
                 aspect = cardAspect,
                 fallbackIcon = IglooIcons.TvShows,
                 modifier = itemModifier.testTag("show_card_${show.id}"),

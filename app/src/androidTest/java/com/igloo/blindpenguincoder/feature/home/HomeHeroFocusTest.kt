@@ -60,6 +60,7 @@ class HomeHeroFocusTest {
 
     private var heroState by mutableStateOf<HomeHeroState>(HomeHeroState.Loading)
     private val opened = mutableListOf<Long>()
+    private val showsOpened = mutableListOf<Long>()
     private var hostActivity: Activity? = null
 
     private val bothPages = HomeHeroState.Loaded(listOf(testHero, testShowHero))
@@ -74,9 +75,11 @@ class HomeHeroFocusTest {
     private fun setShellContent(
         initialHero: HomeHeroState,
         canOpenMovies: Boolean = false,
+        canOpenShows: Boolean = false,
     ) {
         heroState = initialHero
         opened.clear()
+        showsOpened.clear()
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
@@ -89,6 +92,7 @@ class HomeHeroFocusTest {
                         latestShows = IglooRailState.Loaded(testHomeShows),
                     ),
                     onMovieSelected = if (canOpenMovies) { id -> opened += id } else null,
+                    onShowSelected = if (canOpenShows) { id -> showsOpened += id } else null,
                 )
             }
         }
@@ -310,7 +314,7 @@ class HomeHeroFocusTest {
 
     @Test
     fun eachPageAnnouncesItsFeatureAndPlaceAsOneNode() {
-        setShellContent(bothPages, canOpenMovies = true)
+        setShellContent(bothPages, canOpenMovies = true, canOpenShows = true)
 
         hero().assertContentDescriptionEquals(moviePageDescription).assertHasClickAction()
         // The words on the plate are the target's to speak, not nodes of their own.
@@ -318,9 +322,7 @@ class HomeHeroFocusTest {
 
         press(Key.DirectionRight)
 
-        // No show details screen yet: the show page announces no action rather than one that
-        // does nothing.
-        hero().assertContentDescriptionEquals(showPageDescription).assertHasNoClickAction()
+        hero().assertContentDescriptionEquals(showPageDescription).assertHasClickAction()
         composeRule.onAllNodesWithText("Severance").assertCountEquals(0)
     }
 
@@ -332,17 +334,27 @@ class HomeHeroFocusTest {
     }
 
     @Test
-    fun selectOpensTheMoviePageAndDoesNothingOnTheShowPage() {
-        setShellContent(bothPages, canOpenMovies = true)
+    fun withNothingToOpenTheShowPageAnnouncesNoAction() {
+        setShellContent(bothPages, canOpenMovies = true, canOpenShows = false)
+        press(Key.DirectionRight)
+
+        hero().assertContentDescriptionEquals(showPageDescription).assertHasNoClickAction()
+    }
+
+    /** Each page opens its own details page: the movie's, then the show's. */
+    @Test
+    fun selectOpensWhicheverPageIsShowing() {
+        setShellContent(bothPages, canOpenMovies = true, canOpenShows = true)
         press(Key.DirectionRight)
 
         press(Key.DirectionCenter)
+        assertEquals(listOf(testShowHero.id), showsOpened)
         assertEquals(emptyList<Long>(), opened)
-        hero().assertIsFocused()
 
         press(Key.DirectionLeft)
         press(Key.Enter)
         assertEquals(listOf(testHero.id), opened)
+        assertEquals(listOf(testShowHero.id), showsOpened)
     }
 
     @Test
