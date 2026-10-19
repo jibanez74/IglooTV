@@ -75,6 +75,7 @@ internal fun MovieDetailsHeader(
     // Up from the action row reaches the hero's reading stop only while a screen reader runs;
     // otherwise the row keeps its pinned top edge and the stop is never composed as a target.
     val actionUpRequester = if (spokenAccessibilityEnabled) heroInfoRequester else Cancel
+    val hasActionRow = actions is MovieDetailsActions.Library || onPlayTrailer != null
 
     Row(
         modifier = modifier,
@@ -104,7 +105,9 @@ internal fun MovieDetailsHeader(
                 overMedia = overMedia,
                 readingStop = spokenAccessibilityEnabled,
                 requester = heroInfoRequester,
-                downRequester = primaryRequester,
+                // Down from the summary is the primary action, or with no action row (an
+                // in-theaters movie without a trailer) the first section below.
+                downRequester = if (hasActionRow) primaryRequester else downRequester ?: Cancel,
             )
             val actionRowModifier = Modifier.padding(top = IglooTheme.spacing.sm)
             when (actions) {

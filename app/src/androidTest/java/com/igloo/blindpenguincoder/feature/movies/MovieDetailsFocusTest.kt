@@ -340,22 +340,25 @@ class MovieDetailsFocusTest {
     }
 
     /**
-     * With a spoken screen reader running the vertical chain gains the reading stops (TV
-     * TalkBack follows input focus and never reaches plain text): up from the action row climbs
-     * to the hero prose, and down walks Overview and Key Crew before the cast rail.
+     * With a spoken screen reader running the page lands on the hero prose — where TalkBack
+     * settles once the skeleton gives way, so the entry anchor is put there on purpose — and the
+     * vertical chain gains the reading stops (TV TalkBack follows input focus and never reaches
+     * plain text): down reaches the action row, then Overview and Key Crew before the cast rail.
      */
     @Test
     fun theReadingStopsJoinTheChainWhileAScreenReaderRuns() {
         setShellContent(loadedState(), spokenAccessibilityEnabled = true)
 
         val play = composeRule.onNodeWithTag("details_play")
-        play.assertIsFocused()
-
-        // Up from the action row reads the hero prose; up from there pins.
-        play.performKeyInput { pressKey(Key.DirectionUp) }
         val heroInfo = composeRule.onNodeWithTag("details_hero_info")
         heroInfo.assertIsFocused()
+
+        // Up from the hero prose pins; up from the action row climbs back to it.
         heroInfo.performKeyInput { pressKey(Key.DirectionUp) }
+        heroInfo.assertIsFocused()
+        heroInfo.performKeyInput { pressKey(Key.DirectionDown) }
+        play.assertIsFocused()
+        play.performKeyInput { pressKey(Key.DirectionUp) }
         heroInfo.assertIsFocused()
 
         // Down returns to the primary action, then the chain walks every section in order.

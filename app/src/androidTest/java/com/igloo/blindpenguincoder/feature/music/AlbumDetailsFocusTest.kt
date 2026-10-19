@@ -137,6 +137,19 @@ class AlbumDetailsFocusTest {
         composeRule.onNodeWithTag("album_play").assertIsFocused()
     }
 
+    /** Under a screen reader the page lands on the hero summary; Play Album is one press down. */
+    @Test
+    fun underAScreenReaderThePageLandsOnTheHeroSummary() {
+        setShellContent(loadedState(), spokenAccessibilityEnabled = true)
+
+        val summary = composeRule.onNodeWithTag("album_hero_info")
+        summary.assertIsFocused()
+        summary.performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("album_play").assertIsFocused()
+        composeRule.onNodeWithTag("album_play").performKeyInput { pressKey(Key.DirectionUp) }
+        summary.assertIsFocused()
+    }
+
     @Test
     fun theSkeletonHoldsTheAnchorThroughTheLoadedSwap() {
         setShellContent(openLoads = { DetailsState.Loading })

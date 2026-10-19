@@ -216,12 +216,12 @@ class TheaterMovieDetailsTest {
     }
 
     /**
-     * The gated variant of the no-trailer anchor: with a screen reader running the Overview
-     * reading stop is the page's first section, so entry lands there and up climbs to the hero
-     * prose instead of pinning — there is still content above to hear.
+     * The gated variant of the no-trailer anchor: with a screen reader running the hero prose
+     * takes the entry anchor, as on every details page, and with no action row below it down
+     * goes straight to the Overview stop — and back up to the prose.
      */
     @Test
-    fun withNoTrailerAndAScreenReaderTheOverviewStopTakesTheEntryAnchor() {
+    fun withNoTrailerAndAScreenReaderTheHeroProseTakesTheEntryAnchor() {
         setShellContent(
             testTheaterMovieDetails(heroTrailer = null),
             spokenAccessibilityEnabled = true,
@@ -230,16 +230,15 @@ class TheaterMovieDetailsTest {
         openFromTheatersRail()
 
         composeRule.onNodeWithTag("details_play_trailer").assertDoesNotExist()
-        val overview = composeRule.onNodeWithTag("details_overview_stop")
-        overview.assertIsFocused()
-
-        overview.performKeyInput { pressKey(Key.DirectionUp) }
         val heroInfo = composeRule.onNodeWithTag("details_hero_info")
         heroInfo.assertIsFocused()
         heroInfo.performKeyInput { pressKey(Key.DirectionUp) }
         heroInfo.assertIsFocused()
 
         heroInfo.performKeyInput { pressKey(Key.DirectionDown) }
+        val overview = composeRule.onNodeWithTag("details_overview_stop")
         overview.assertIsFocused()
+        overview.performKeyInput { pressKey(Key.DirectionUp) }
+        heroInfo.assertIsFocused()
     }
 }

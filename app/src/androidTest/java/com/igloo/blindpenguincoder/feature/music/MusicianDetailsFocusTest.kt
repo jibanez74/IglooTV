@@ -132,6 +132,23 @@ class MusicianDetailsFocusTest {
         composeRule.onNodeWithTag("musician_play_all").assertIsFocused()
     }
 
+    /** Under a screen reader the page lands on the hero summary; Play all is one press down. */
+    @Test
+    fun underAScreenReaderThePageLandsOnTheHeroSummary() {
+        setShellContent(
+            MusicianDetailsUiState(
+                openMusicianId = 2,
+                details = DetailsState.Loaded(testMusicianDetails(id = 2)),
+            ),
+            spokenAccessibilityEnabled = true,
+        )
+
+        val summary = composeRule.onNodeWithTag("musician_hero_info")
+        summary.assertIsFocused()
+        summary.performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("musician_play_all").assertIsFocused()
+    }
+
     @Test
     fun theSkeletonHoldsTheAnchorThroughTheLoadedSwap() {
         setShellContent(openLoads = { DetailsState.Loading })
