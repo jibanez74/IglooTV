@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
+import com.igloo.blindpenguincoder.core.design.focusFill
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.core.ui.focusRing
@@ -58,7 +59,7 @@ internal fun Modifier.readingStopTarget(
             fill = when {
                 !focused -> Color.Transparent
                 overMedia -> OVER_MEDIA_CONTROL_FILL
-                else -> colors.card.copy(alpha = 0.72f)
+                else -> colors.focusFill()
             },
             scaleOnFocus = false,
         )

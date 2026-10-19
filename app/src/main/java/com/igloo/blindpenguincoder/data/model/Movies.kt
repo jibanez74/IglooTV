@@ -132,9 +132,9 @@ data class MovieDetailsData(
     val movie: Movie,
     val cast: List<MovieCastMember>,
     val crew: List<MovieCrewMember>,
-    val genres: List<MovieGenre>,
-    @SerialName("production_companies") val productionCompanies: List<MovieProductionCompany>,
-    @SerialName("extra_videos") val extraVideos: List<MovieExtraVideo>,
+    val genres: List<Genre>,
+    @SerialName("production_companies") val productionCompanies: List<ProductionCompany>,
+    @SerialName("extra_videos") val extraVideos: List<ExtraVideo>,
 )
 
 @Serializable
@@ -151,25 +151,6 @@ data class MovieCrewMember(
     val job: String,
     val department: String,
     @SerialName("artist_name") val artistName: String,
-)
-
-@Serializable
-data class MovieGenre(
-    val tag: String,
-)
-
-@Serializable
-data class MovieProductionCompany(
-    val name: String,
-)
-
-@Serializable
-data class MovieExtraVideo(
-    val id: Long,
-    val title: String,
-    val key: String,
-    val type: String,
-    val site: String,
 )
 
 /** Payload of `MovieTechnicalDetailsEnvelope.data`. */

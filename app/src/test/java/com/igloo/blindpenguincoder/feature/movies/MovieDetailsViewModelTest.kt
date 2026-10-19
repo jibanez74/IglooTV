@@ -2,24 +2,26 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import com.igloo.blindpenguincoder.core.ui.RatingTier
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.audioStreamJson
 import com.igloo.blindpenguincoder.data.repository.castMemberJson
 import com.igloo.blindpenguincoder.data.repository.crewMemberJson
 import com.igloo.blindpenguincoder.data.repository.extraVideoJson
+import com.igloo.blindpenguincoder.data.repository.genreJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.likeStatusJson
 import com.igloo.blindpenguincoder.data.repository.likeToggleJson
 import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
-import com.igloo.blindpenguincoder.data.repository.movieGenreJson
 import com.igloo.blindpenguincoder.data.repository.productionCompanyJson
 import com.igloo.blindpenguincoder.data.repository.subtitleJson
-import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
 import com.igloo.blindpenguincoder.data.repository.technicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.videoStreamJson
 import com.igloo.blindpenguincoder.data.repository.watchProgressJson
 import com.igloo.blindpenguincoder.data.repository.watchedUpdateJson
+import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.ProgressUi
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
@@ -29,12 +31,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -1527,7 +1529,7 @@ class MovieDetailsViewModelTest {
                 crewMemberJson(id = 1, job = "Director", department = "Directing", artistName = "Michael Mann"),
                 crewMemberJson(id = 2, job = "Writer", department = "Writing", artistName = "Michael Mann"),
             ),
-            genres = listOf(movieGenreJson(id = 1, tag = "Crime"), movieGenreJson(id = 2, tag = "Drama")),
+            genres = listOf(genreJson(id = 1, tag = "Crime"), genreJson(id = 2, tag = "Drama")),
             productionCompanies = listOf(
                 productionCompanyJson(id = 1, name = "Regency Enterprises"),
                 productionCompanyJson(id = 2, name = "Forward Pass"),

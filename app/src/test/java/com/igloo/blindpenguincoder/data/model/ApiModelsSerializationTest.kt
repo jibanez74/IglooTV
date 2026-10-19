@@ -328,6 +328,143 @@ class ApiModelsSerializationTest {
         }
     }
 
+    /**
+     * `GET /shows/details/{id}` as the live route sends it (Friends, trimmed): the related lists
+     * decode in server order, and `crew`, the season names and the ids nobody reads ride along
+     * unmodelled.
+     */
+    @Test
+    fun decodesShowDetailsRelatedLists() {
+        val null64 = """{"Int64": 0, "Valid": false}"""
+        val nullString = """{"String": "", "Valid": false}"""
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "show": {"id": 1, "name": "Friends",
+                         "original_name": {"String": "Friends", "Valid": true},
+                         "premiere_year": {"Int64": 1994, "Valid": true},
+                         "tmdb_id": {"Int64": 1668, "Valid": true},
+                         "overview": {"String": "Six young people.", "Valid": true},
+                         "tagline": {"String": "I'll be there for you.", "Valid": true},
+                         "language": {"String": "en", "Valid": true},
+                         "origin_countries": {"String": "[\"US\"]", "Valid": true},
+                         "first_air_date": {"String": "1994-09-22", "Valid": true},
+                         "last_air_date": {"String": "2004-05-06", "Valid": true},
+                         "status": {"String": "Ended", "Valid": true},
+                         "type": {"String": "Scripted", "Valid": true},
+                         "poster_path": {"String": "/friends.jpg", "Valid": true},
+                         "backdrop_path": {"String": "/friends-backdrop.jpg", "Valid": true},
+                         "vote_average": {"Float64": 8.4, "Valid": true},
+                         "vote_count": {"Int64": 9462, "Valid": true},
+                         "certification": {"String": "TV-14", "Valid": true},
+                         "tmdb_season_count": {"Int64": 10, "Valid": true},
+                         "tmdb_episode_count": {"Int64": 228, "Valid": true}},
+                "seasons": [
+                  {"id": 1, "season_number": 1, "name": "Season 1", "overview": $nullString,
+                   "air_date": {"String": "1994-09-22", "Valid": true}, "poster_path": $nullString,
+                   "tmdb_episode_count": {"Int64": 24, "Valid": true}, "available_episode_count": 24},
+                  {"id": 11, "season_number": 0, "name": "Specials", "overview": $nullString,
+                   "air_date": $nullString, "poster_path": $nullString,
+                   "tmdb_episode_count": $null64, "available_episode_count": 2}
+                ],
+                "cast": [{"credit_id": "525710bd", "artist_id": 3, "character": "Rachel Green",
+                          "cast_order": 0, "episode_count": 228, "tmdb_id": 4491,
+                          "artist_name": "Jennifer Aniston",
+                          "artist_profile": {"String": "/aniston.jpg", "Valid": true}}],
+                "crew": [{"credit_id": "5f15c3f4", "artist_id": 705, "department": "Art",
+                          "job": "Art Direction", "episode_count": 19, "tmdb_id": 1548119,
+                          "artist_name": "Joe Stewart", "artist_profile": $nullString}],
+                "creators": [{"id": 2, "tmdb_id": 1216352, "name": "David Crane",
+                              "profile": $nullString}],
+                "genres": [{"id": 13, "tag": "Comedy"}],
+                "networks": [{"id": 1, "name": "NBC",
+                              "logo": {"String": "/nbc.png", "Valid": true},
+                              "country": {"String": "US", "Valid": true}}],
+                "production_companies": [{"id": 2, "name": "Warner Bros. Television"}],
+                "extra_videos": [{"id": 1, "title": "Friends Theme Song", "key": "s2TyVQGoCYo",
+                                  "type": "other", "site": "youtube"}]
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<ShowDetailsData>>(body).data!!
+
+        assertEquals("I'll be there for you.", data.show.tagline.orNull())
+        assertEquals("Ended", data.show.status.orNull())
+        assertEquals("2004-05-06", data.show.lastAirDate.orNull())
+        assertEquals(228L, data.show.tmdbEpisodeCount.orNull())
+        assertEquals(listOf(1L, 0L), data.seasons.map { it.seasonNumber })
+        assertEquals(listOf(24L, 2L), data.seasons.map { it.availableEpisodeCount })
+        assertEquals(
+            ShowCastCredit(
+                character = "Rachel Green",
+                castOrder = 0,
+                episodeCount = 228,
+                artistName = "Jennifer Aniston",
+                artistProfile = SqlNullString("/aniston.jpg", true),
+            ),
+            data.cast.single(),
+        )
+        assertEquals(listOf("David Crane"), data.creators.map { it.name })
+        assertEquals(listOf("Comedy"), data.genres.map { it.tag })
+        assertEquals(listOf("NBC"), data.networks.map { it.name })
+        assertEquals(listOf("Warner Bros. Television"), data.productionCompanies.map { it.name })
+        assertEquals("s2TyVQGoCYo", data.extraVideos.single().key)
+    }
+
+    /**
+     * `GET /shows/{id}/seasons/{n}/episodes`: progress fields are null until a save or a mark, a
+     * save fills both, and the season summary and votes ride along unmodelled.
+     */
+    @Test
+    fun decodesShowSeasonEpisodesWithNullProgress() {
+        val body = """
+            {
+              "error": false,
+              "data": {
+                "season": {"id": 1, "season_number": 1, "name": "Season 1",
+                           "overview": {"String": "", "Valid": false},
+                           "air_date": {"String": "", "Valid": false},
+                           "poster_path": {"String": "", "Valid": false},
+                           "tmdb_episode_count": {"Int64": 13, "Valid": true},
+                           "available_episode_count": 2},
+                "episodes": [
+                  {"id": 703, "episode_number": 1, "name": "Holiday Knights",
+                   "overview": {"String": "Harley and Ivy go shopping.", "Valid": true},
+                   "air_date": {"String": "1997-09-13", "Valid": true},
+                   "still_path": {"String": "/still.jpg", "Valid": true},
+                   "tmdb_runtime": {"Int64": 21, "Valid": true},
+                   "vote_average": {"Float64": 7.3, "Valid": true},
+                   "vote_count": {"Int64": 15, "Valid": true},
+                   "progress_sec": {"Float64": 689.5, "Valid": true},
+                   "duration_sec": {"Float64": 1292.0, "Valid": true}, "watched": false},
+                  {"id": 704, "episode_number": 2, "name": "Sins of the Father",
+                   "overview": {"String": "", "Valid": false},
+                   "air_date": {"String": "", "Valid": false},
+                   "still_path": {"String": "", "Valid": false},
+                   "tmdb_runtime": {"Int64": 0, "Valid": false},
+                   "vote_average": {"Float64": 0, "Valid": false},
+                   "vote_count": {"Int64": 0, "Valid": false},
+                   "progress_sec": {"Float64": 0, "Valid": false},
+                   "duration_sec": {"Float64": 0, "Valid": false}, "watched": true}
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val episodes = json.decodeFromString<ApiEnvelope<ShowSeasonEpisodesData>>(body).data!!.episodes
+
+        assertEquals(listOf(703L, 704L), episodes.map { it.id })
+        assertEquals(689.5, requireNotNull(episodes[0].progressSec.orNull()), 0.0)
+        assertEquals(1292.0, requireNotNull(episodes[0].durationSec.orNull()), 0.0)
+        assertEquals(21L, episodes[0].tmdbRuntime.orNull())
+        assertFalse(episodes[0].watched)
+        assertNull(episodes[1].progressSec.orNull())
+        assertNull(episodes[1].stillPath.orNull())
+        assertTrue(episodes[1].watched)
+    }
+
     /** `GET /shows/episodes/{id}/technical-details`: the same stream rows, keyed by `file_id`. */
     @Test
     fun decodesShowEpisodeTechnicalDetails() {

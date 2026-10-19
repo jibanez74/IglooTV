@@ -39,6 +39,8 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.shared.DetailsHero
 import com.igloo.blindpenguincoder.feature.shared.DetailsHeroSkeleton
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
+import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
 import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 
 /**
@@ -104,7 +106,8 @@ enum class VideoLaunchSite { ExtrasRail, Hero }
  * ([com.igloo.blindpenguincoder.feature.home.IglooApp]), which also fences the shell's focusables
  * while this is open — the screen itself only anchors entry focus: the hero's primary action
  * (or the state's stand-in for it) is the first focused element, and where an in-theaters movie
- * has no trailer to play, the first section below takes that anchor instead.
+ * has no trailer to play, the first section below takes that anchor instead. Under a screen
+ * reader the hero's summary stop takes it, above the actions.
  *
  * The backdrop opts out of the safe area (section 2.5); chrome and text keep the inset.
  *
@@ -388,7 +391,8 @@ private fun DetailsContent(
     // because the shell composed underneath would be a candidate.
     val watchedRequester = remember { FocusRequester() }
     val likeRequester = remember { FocusRequester() }
-    val heroInfoRequester = remember { FocusRequester() }
+    val heroInfoStop = remember { FocusRequester() }
+    val primaryAction = remember { FocusRequester() }
     val overviewStop = remember { FocusRequester() }
     val keyCrewStop = remember { FocusRequester() }
     val castEntry = remember { FocusRequester() }
@@ -398,28 +402,33 @@ private fun DetailsContent(
     val hasCast = movie.cast.isNotEmpty()
     val hasExtras = movie.extraVideos.isNotEmpty()
     val hasAbout = !movie.about.isEmpty
-    // With no action row there is nothing in the header to anchor entry focus on, so the first
-    // section below owns the anchor: the screen's requester *is* that section's entry requester,
-    // which lands entry focus there and leaves every edge wired at the section untouched. With
-    // the reading stops in, the Overview stop is always that first section; without them the
-    // anchor attaches to nothing at all on a page that is only prose, which is why the entry
-    // request is made safely.
-    val sectionAnchor = entryRequester.takeIf { !hasHeroActions }
     val stops = spokenAccessibilityEnabled
-    val overviewRequester = if (sectionAnchor != null && stops) sectionAnchor else overviewStop
-    val castEntryRequester =
-        if (sectionAnchor != null && !stops && hasCast) sectionAnchor else castEntry
+    // Under a screen reader the hero's summary stop owns the entry anchor (section 11.4.1): the
+    // skeleton giving way drops focus, Android hands it to the first focusable — the summary —
+    // and TalkBack for TV settles there, deaf to a move to Play that follows the pane-title
+    // change. Landing on the summary on purpose keeps TalkBack and input focus together, and
+    // says what the page is before what it can do; Play is one press down.
+    val heroInfoRequester = if (stops) entryRequester else heroInfoStop
+    val primaryRequester = if (stops) primaryAction else entryRequester
+    // With no action row and no reading stops there is nothing in the header to anchor entry
+    // focus on, so the first section below owns the anchor: the screen's requester *is* that
+    // section's entry requester, which lands entry focus there and leaves every edge wired at
+    // the section untouched. On a page that is only prose the anchor attaches to nothing at
+    // all, which is why the entry request is made safely.
+    val sectionAnchor = entryRequester.takeIf { !hasHeroActions && !stops }
+    val overviewRequester = overviewStop
+    val castEntryRequester = if (sectionAnchor != null && hasCast) sectionAnchor else castEntry
     val extrasEntryRequester =
-        if (sectionAnchor != null && !stops && !hasCast && hasExtras) sectionAnchor else extrasEntry
+        if (sectionAnchor != null && !hasCast && hasExtras) sectionAnchor else extrasEntry
     val aboutRequester =
-        if (sectionAnchor != null && !stops && !hasCast && !hasExtras) sectionAnchor else about
+        if (sectionAnchor != null && !hasCast && !hasExtras) sectionAnchor else about
     // Up from the sections returns to whichever action the user left, not unconditionally to the
     // primary one — the same focus memory the cast rail keeps for its own cards. While the hero
     // has no actions the reading-stop chain climbs to the hero info stop instead, and with the
     // stops out too it stays null, so up from the first section stays on the screen instead of
     // pointing at a requester attached to nothing.
-    var lastFocusedAction by remember(hasHeroActions) {
-        mutableStateOf(entryRequester.takeIf { hasHeroActions })
+    var lastFocusedAction by remember(hasHeroActions, stops) {
+        mutableStateOf(primaryRequester.takeIf { hasHeroActions })
     }
     val belowProgressError = when {
         stops -> overviewRequester
@@ -460,7 +469,7 @@ private fun DetailsContent(
                 onPlayTrailer = onPlayTrailer,
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 heroInfoRequester = heroInfoRequester,
-                primaryRequester = entryRequester,
+                primaryRequester = primaryRequester,
                 heroTrailerReturnRequester = heroTrailerReturnRequester,
                 watchedRequester = watchedRequester,
                 likeRequester = likeRequester,

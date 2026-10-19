@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.focusFill
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
@@ -252,7 +253,7 @@ private fun KeypadKey(
             .focusRing(
                 focused = focused,
                 radius = IglooTheme.radius.lg,
-                fill = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
+                fill = if (focused) colors.focusFill() else Color.Transparent,
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(

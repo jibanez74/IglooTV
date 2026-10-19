@@ -12,7 +12,6 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHasClickAction
-import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -30,14 +29,14 @@ import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testShowGridItems
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
  * What the TV Shows pane says out loud (design-system.md section 12): the "show" wording on
- * every announcement the Movies suite pins, and a card that names itself without promising an
- * action it cannot perform.
+ * every announcement the Movies suite pins, and a card that names itself and opens its show.
  */
 @RunWith(AndroidJUnit4::class)
 class ShowsGridAccessibilityTest {
@@ -56,7 +55,7 @@ class ShowsGridAccessibilityTest {
         composeRule.setContent {
             IglooTheme {
                 columns = IglooTheme.layout.gridColumns
-                TestIglooApp(shows = showsState)
+                TestIglooApp(shows = showsState, onShowSelected = {})
             }
         }
         composeRule.waitForIdle()
@@ -73,15 +72,20 @@ class ShowsGridAccessibilityTest {
         composeRule.waitForIdle()
     }
 
-    /** Inert until show details exist: the name and year, but no role and no "Open" action. */
+    /** One stop speaking the name and year, a button whose action opens the show's page. */
     @Test
-    fun eachCardIsOneStopWithoutAnAction() {
+    fun eachCardIsOneStopThatOpensItsShow() {
         setContent()
 
-        composeRule.onNodeWithTag("show_card_1")
+        val card = composeRule.onNodeWithTag("show_card_1")
+        card
             .assertContentDescriptionEquals("Show 1, 2001")
-            .assertHasNoClickAction()
-            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Role))
+            .assertHasClickAction()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        assertEquals(
+            "Open Show 1",
+            card.fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label,
+        )
     }
 
     @Test

@@ -8,7 +8,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -27,7 +26,11 @@ import com.igloo.blindpenguincoder.feature.library.LibraryFilter
 import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
 import com.igloo.blindpenguincoder.testLibraryState
+import com.igloo.blindpenguincoder.testShowDetails
+import com.igloo.blindpenguincoder.testShowDetailsState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -49,12 +52,16 @@ class ShowsGridBehaviorTest {
     val composeRule = createComposeRule()
 
     private var showsState by mutableStateOf(testLibraryState(LibraryKind.Shows))
+    private var showDetailsState by mutableStateOf(ShowDetailsUiState())
+    private val openedShows = mutableListOf<Long>()
     private val selectedTabs = mutableListOf<LibraryTab>()
     private val selectedGenres = mutableListOf<LibraryFilter.Genre>()
     private var hostActivity: Activity? = null
 
     private fun setContent(initial: LibraryUiState = testLibraryState(LibraryKind.Shows)) {
         showsState = initial
+        showDetailsState = ShowDetailsUiState()
+        openedShows.clear()
         selectedTabs.clear()
         selectedGenres.clear()
         composeRule.setContent {
@@ -73,6 +80,14 @@ class ShowsGridBehaviorTest {
                         onSelectGenre = { selectedGenres += it },
                         onToggleSort = {},
                     ),
+                    showDetails = showDetailsState,
+                    onShowSelected = { id ->
+                        openedShows += id
+                        showDetailsState = testShowDetailsState(
+                            details = DetailsState.Loaded(testShowDetails(id = id)),
+                        )
+                    },
+                    onCloseDetails = { showDetailsState = ShowDetailsUiState() },
                 )
             }
         }
@@ -208,23 +223,28 @@ class ShowsGridBehaviorTest {
         assertEquals(listOf(LibraryFilter.Genre(id = 7, tag = "Comedy")), selectedGenres)
     }
 
-    // --- inert cards --------------------------------------------------------------------------
+    // --- opening a show -------------------------------------------------------------------------
 
     /**
-     * There is no show details screen yet: a card is a focus target with no action, the same
-     * contract as an empty rail (section 10), so pressing it opens nothing.
+     * A card opens its show's details page (section 11.4.3), and Back puts focus back on the
+     * card that led away — not the grid's first card, which a weaker restore would land on.
      */
     @Test
-    fun aCardPressOpensNothing() {
+    fun aCardPressOpensTheShowAndBackRestoresTheCard() {
         setContent()
         card(1).performKeyInput { pressKey(Key.DirectionRight) }
         card(2).assertIsFocused()
 
-        card(2).assertHasNoClickAction()
         card(2).performKeyInput { pressKey(Key.DirectionCenter) }
 
+        assertEquals(listOf(2L), openedShows)
+        composeRule.onNodeWithTag("show_details").assertExists()
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
+
+        pressBack()
+
+        composeRule.onNodeWithTag("show_details").assertDoesNotExist()
         card(2).assertIsFocused()
-        composeRule.onNodeWithTag("details_layer").assertDoesNotExist()
     }
 
     // --- the shell around the pane ------------------------------------------------------------

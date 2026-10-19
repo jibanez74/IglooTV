@@ -99,9 +99,9 @@ import com.igloo.blindpenguincoder.feature.shared.DetailChip
  * bleeding surface for the same reason a backdrop may bleed and a word may not: a 3dp ring traced
  * round the panel would sit in the overscan margin, the one place section 2.5 says a TV may crop.
  *
- * A null [onOpenMovie] keeps the movie page a focus target but drops the button role and the
- * "Open …" action, the same contract as an inert poster card. The show page never has one: there
- * is no show details screen to open yet.
+ * Each page opens its own details page — [onOpenMovie] the movie's, [onOpenShow] the show's. A
+ * null opener keeps that page a focus target but drops the button role and the "Open …" action,
+ * the same contract as an inert poster card.
  */
 @Composable
 fun HomeHero(
@@ -113,6 +113,7 @@ fun HomeHero(
     downFocusRequester: FocusRequester,
     contentInset: PaddingValues,
     onOpenMovie: ((Long) -> Unit)?,
+    onOpenShow: ((Long) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     // A null page is the Loading skeleton, standing where the first page will land.
@@ -127,8 +128,13 @@ fun HomeHero(
     val activePage = pages[activeIndex]
     val arts = pages.mapIndexed { index, page -> key(index) { rememberHeroArt(page?.backdropUrl) } }
     val transition = updateTransition(targetState = activeIndex, label = "heroPage")
-    val openMovie = activePage?.takeIf { it.kind == HomeHeroKind.Movie }
-        ?.let { movie -> onOpenMovie?.let { open -> { open(movie.id) } } }
+    val openPage = activePage?.let { page ->
+        val open = when (page.kind) {
+            HomeHeroKind.Movie -> onOpenMovie
+            HomeHeroKind.Show -> onOpenShow
+        }
+        open?.let { { it(page.id) } }
+    }
 
     Box(
         modifier = modifier
@@ -161,15 +167,15 @@ fun HomeHero(
                         if (event.type == KeyEventType.KeyDown) onPageChange(target.kind)
                         true
                     }
-                    openMovie != null && event.key in CONFIRM_KEYS -> {
-                        if (event.type == KeyEventType.KeyUp) openMovie()
+                    openPage != null && event.key in CONFIRM_KEYS -> {
+                        if (event.type == KeyEventType.KeyUp) openPage()
                         true
                     }
                     else -> false
                 }
             }
             // Always focusable, never clickable, with the press handled above: the two are
-            // different modifier nodes, and the skeleton turning into the movie page under focus
+            // different modifier nodes, and the skeleton turning into a page under focus
             // would otherwise swap one for the other and drop focus on the floor. Select, Enter
             // and keypad Enter open on release, as clickable does; TalkBack's click goes through
             // the semantics action.
@@ -183,10 +189,10 @@ fun HomeHero(
                 // its cursor is on, which covers a turn and a load under focus; a live region
                 // would add a re-read whenever focus came or went, since every focus change
                 // reports a content change on the node.
-                if (openMovie != null && activePage != null) {
+                if (openPage != null && activePage != null) {
                     role = Role.Button
                     onClick(label = "Open ${activePage.title}") {
-                        openMovie()
+                        openPage()
                         true
                     }
                 }

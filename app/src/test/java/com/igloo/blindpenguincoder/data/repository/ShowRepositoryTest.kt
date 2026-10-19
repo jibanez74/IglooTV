@@ -212,6 +212,77 @@ class ShowRepositoryTest {
     }
 
     @Test
+    fun `show details decode cast, creators, genres, networks, companies and extras`() = runTest {
+        val http = TestHttp {
+            jsonResponse(
+                showDetailsJson(
+                    tagline = "Please enjoy each fact equally.",
+                    cast = listOf(showCastCreditJson(), showCastCreditJson(artistId = 4, castOrder = 1)),
+                    creators = listOf(showPersonJson()),
+                    genres = listOf(genreJson(tag = "Drama")),
+                    networks = listOf(showNetworkJson()),
+                    productionCompanies = listOf(productionCompanyJson(name = "Red Hour")),
+                    extraVideos = listOf(extraVideoJson(title = "Severance - Trailer")),
+                ),
+            )
+        }
+
+        val data = (http.showRepository.showDetails(40) as ApiResult.Success).value
+
+        assertEquals("Please enjoy each fact equally.", data.show.tagline.orNull())
+        assertEquals("Returning Series", data.show.status.orNull())
+        assertEquals("/severance.jpg", data.show.posterPath.orNull())
+        assertEquals(listOf(0L, 1L), data.cast.map { it.castOrder })
+        assertEquals("Mark Scout", data.cast.first().character)
+        assertEquals(19L, data.cast.first().episodeCount)
+        assertEquals(listOf("Dan Erickson"), data.creators.map { it.name })
+        assertEquals(listOf("Drama"), data.genres.map { it.tag })
+        assertEquals(listOf("Apple TV+"), data.networks.map { it.name })
+        assertEquals(listOf("Red Hour"), data.productionCompanies.map { it.name })
+        assertEquals(listOf("Severance - Trailer"), data.extraVideos.map { it.title })
+    }
+
+    @Test
+    fun `season episodes hit the contract path and decode progress and watched`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(
+                showSeasonEpisodesJson(
+                    2,
+                    showEpisodeJson(id = 910, episodeNumber = 1, progressSec = 600.0, durationSec = 3300.0),
+                    showEpisodeJson(id = 911, episodeNumber = 2, stillPath = null, watched = true),
+                ),
+            )
+        }
+        http.profiles.setPending("igd_test")
+
+        val result = http.showRepository.seasonEpisodes(showId = 40, seasonNumber = 2)
+
+        val captured = requireNotNull(request)
+        assertEquals("/api/shows/40/seasons/2/episodes", captured.url.encodedPath)
+        assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+        val episodes = (result as ApiResult.Success).value
+        assertEquals(listOf(910L, 911L), episodes.map { it.id })
+        assertEquals(600.0, requireNotNull(episodes[0].progressSec.orNull()), 0.0)
+        assertEquals(57L, episodes[0].tmdbRuntime.orNull())
+        assertNull(episodes[1].stillPath.orNull())
+        assertTrue(episodes[1].watched)
+    }
+
+    @Test
+    fun `a missing season fails with its status`() = runTest {
+        val http = TestHttp {
+            jsonResponse("""{"error":true,"message":"season not found"}""", HttpStatusCode.NotFound)
+        }
+
+        val result = http.showRepository.seasonEpisodes(showId = 40, seasonNumber = 9)
+
+        val error = (result as ApiResult.Failure).error
+        assertEquals(404, (error as AppError.Api).status)
+    }
+
+    @Test
     fun `a missing show fails with its status`() = runTest {
         val http = TestHttp {
             jsonResponse("""{"error":true,"message":"show not found"}""", HttpStatusCode.NotFound)

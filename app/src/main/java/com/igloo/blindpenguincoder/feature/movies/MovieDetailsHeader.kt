@@ -2,12 +2,10 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -17,38 +15,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.font.FontStyle
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIconButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
-import com.igloo.blindpenguincoder.core.ui.IglooText
-import com.igloo.blindpenguincoder.core.ui.ProgressTrack
-import com.igloo.blindpenguincoder.core.ui.RatingBadge
-import com.igloo.blindpenguincoder.feature.shared.DetailChip
+import com.igloo.blindpenguincoder.core.ui.joinedLine
+import com.igloo.blindpenguincoder.feature.shared.DetailsHeroInfo
 import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
-import com.igloo.blindpenguincoder.feature.shared.HeroGenresLine
-import com.igloo.blindpenguincoder.feature.shared.HeroReadingStop
-import com.igloo.blindpenguincoder.feature.shared.HeroTitle
+import com.igloo.blindpenguincoder.feature.shared.HeroSingleActionRow
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
+import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
 
 /**
  * The hero's content block (docs/design-system.md section 11.4): poster left; title, tagline,
@@ -87,6 +75,7 @@ internal fun MovieDetailsHeader(
     // Up from the action row reaches the hero's reading stop only while a screen reader runs;
     // otherwise the row keeps its pinned top edge and the stop is never composed as a target.
     val actionUpRequester = if (spokenAccessibilityEnabled) heroInfoRequester else Cancel
+    val hasActionRow = actions is MovieDetailsActions.Library || onPlayTrailer != null
 
     Row(
         modifier = modifier,
@@ -104,12 +93,21 @@ internal fun MovieDetailsHeader(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         ) {
-            HeroInfo(
-                movie = movie,
+            DetailsHeroInfo(
+                title = movie.title,
+                tagline = movie.tagline,
+                ratingBadge = movie.ratingBadge,
+                chips = listOfNotNull(movie.certification) + movie.mediaBadges,
+                plainLine = joinedLine(listOfNotNull(movie.runtimeText, movie.releaseDateText), " · "),
+                metadataDescription = movie.metadataDescription,
+                genresLine = movie.genresLine,
+                readingStopDescription = movie.heroInfoDescription,
                 overMedia = overMedia,
                 readingStop = spokenAccessibilityEnabled,
                 requester = heroInfoRequester,
-                downRequester = primaryRequester,
+                // Down from the summary is the primary action, or with no action row (an
+                // in-theaters movie without a trailer) the first section below.
+                downRequester = if (hasActionRow) primaryRequester else downRequester ?: Cancel,
             )
             val actionRowModifier = Modifier.padding(top = IglooTheme.spacing.sm)
             when (actions) {
@@ -131,14 +129,20 @@ internal fun MovieDetailsHeader(
                     modifier = actionRowModifier,
                 )
 
+                // The in-theaters row is Play Trailer alone, composed only when TMDB lists a
+                // trailer (section 11.4.2). "Play", not the poster default's "Open": the
+                // announced action has to say what pressing does (section 12).
                 is MovieDetailsActions.Theater -> if (onPlayTrailer != null) {
-                    TrailerActionRow(
-                        onPlayTrailer = onPlayTrailer,
-                        playRequester = primaryRequester,
+                    HeroSingleActionRow(
+                        text = "Play Trailer",
+                        semanticLabel = "Play Trailer",
+                        onClick = onPlayTrailer,
+                        tag = "details_play_trailer",
+                        requester = primaryRequester,
                         returnRequester = heroTrailerReturnRequester,
                         upRequester = actionUpRequester,
                         downRequester = downRequester,
-                        onActionFocused = onActionFocused,
+                        onFocused = { onActionFocused(primaryRequester) },
                         modifier = actionRowModifier,
                     )
                 }
@@ -167,132 +171,6 @@ internal fun MovieDetailsHeader(
                 )
             }
         }
-    }
-}
-
-/**
- * The hero's prose: title, tagline, metadata chips, genres. TV TalkBack follows input focus and
- * never traverses plain text, so while a screen reader runs this whole block is one reading stop
- * — reachable by pressing up from the action row — that speaks everything in a single
- * announcement. Without one it stays what it always was: text the d-pad passes by.
- */
-@Composable
-private fun HeroInfo(
-    movie: MovieDetailsUi,
-    overMedia: Boolean,
-    readingStop: Boolean,
-    requester: FocusRequester,
-    downRequester: FocusRequester,
-) {
-    val colors = IglooTheme.colors
-    HeroReadingStop(
-        enabled = readingStop,
-        tag = "details_hero_info",
-        overMedia = overMedia,
-        requester = requester,
-        downRequester = downRequester,
-        description = movie.heroInfoDescription,
-    ) {
-        HeroTitle(movie.title, overMedia)
-        if (movie.tagline != null) {
-            IglooText(
-                text = "“${movie.tagline}”",
-                style = IglooTheme.typography.bodyLarge
-                    .copy(fontStyle = FontStyle.Italic)
-                    .overMedia(overMedia),
-                color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
-                maxLines = 1,
-            )
-        }
-        MetadataRow(movie = movie, overMedia = overMedia)
-        if (movie.genresLine != null) HeroGenresLine(movie.genresLine, overMedia)
-    }
-}
-
-/**
- * Rating badge, certification, media badges, runtime, and release date — visually a row of
- * chips, but one TalkBack stop: eight consecutive two-character announcements would be noise, so
- * the one sentence the row speaks is composed at mapping time by [metadataDescription].
- */
-@Composable
-private fun MetadataRow(
-    movie: MovieDetailsUi,
-    overMedia: Boolean,
-) {
-    val colors = IglooTheme.colors
-    Row(
-        modifier = Modifier.clearAndSetSemantics {
-            contentDescription = movie.metadataDescription
-        },
-        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (movie.ratingBadge != null) {
-            RatingBadge(
-                spec = movie.ratingBadge,
-                radius = IglooTheme.radius.pill,
-                verticalPadding = IglooTheme.spacing.xs,
-            )
-        }
-        if (movie.certification != null) {
-            DetailChip(text = movie.certification, overMedia = overMedia)
-        }
-        movie.mediaBadges.forEach { badge ->
-            DetailChip(text = badge, overMedia = overMedia)
-        }
-        val plainLine = listOfNotNull(movie.runtimeText, movie.releaseDateText)
-        if (plainLine.isNotEmpty()) {
-            IglooText(
-                text = plainLine.joinToString(" · "),
-                style = IglooTheme.typography.label.overMedia(overMedia),
-                color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
-                maxLines = 1,
-                modifier = Modifier.padding(start = IglooTheme.spacing.xs),
-            )
-        }
-    }
-}
-
-/**
- * The in-theaters hero's whole action row: one Primary button, composed only when TMDB lists a
- * trailer to play (section 11.4.2). It is the entry anchor through [playRequester] and the node
- * the trailer player restores focus to through [returnRequester] — two requesters on one button,
- * the same pairing a rail's card carries.
- *
- * Every direction out is pinned but down, for the reason the library row pins its own edges: the
- * shell is still composed under this overlay, and the row's only control has no horizontal
- * neighbour of its own.
- */
-@Composable
-private fun TrailerActionRow(
-    onPlayTrailer: () -> Unit,
-    playRequester: FocusRequester,
-    returnRequester: FocusRequester,
-    upRequester: FocusRequester,
-    downRequester: FocusRequester?,
-    onActionFocused: (FocusRequester) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(modifier = modifier) {
-        IglooButton(
-            text = "Play Trailer",
-            onClick = onPlayTrailer,
-            icon = IglooIcons.Play,
-            // "Play", not the poster default's "Open": the announced action has to say what
-            // pressing does (section 12), and pressing opens the trailer player.
-            semanticLabel = "Play Trailer",
-            modifier = Modifier
-                .testTag("details_play_trailer")
-                .focusRequester(playRequester)
-                .focusRequester(returnRequester)
-                .focusProperties {
-                    up = upRequester
-                    left = Cancel
-                    right = Cancel
-                    down = downRequester ?: Cancel
-                }
-                .onFocusChanged { if (it.isFocused) onActionFocused(playRequester) },
-        )
     }
 }
 
@@ -435,65 +313,3 @@ private fun LibraryActionRow(
 private val TOGGLE_WATCHED_LABELS = listOf("Watch", "Watched")
 private val TOGGLE_LIKE_LABELS = listOf("Like", "Liked")
 
-/**
- * The thin resume strip and its remaining-time caption. The strip itself stays silent; Play's
- * state carries the exact resume point and spoken remaining time. The longest caption reserves
- * the column's intrinsic width; both Play and the strip fill it, so the strip stays exactly as
- * wide as the button it belongs to. The top gap clears Play's focus ring at its 1.05x scale.
- *
- * The slot is composed even with no [progress] — invisible and silent — because the progress
- * request lands after first paint and toggling Watched removes the strip: either would reflow
- * the bottom-anchored hero under the user's eye if the strip's height came and went. The
- * skeleton reserves the same slot so the loading→loaded swap does not move Play.
- */
-@Composable
-internal fun ResumeProgress(
-    progress: ProgressUi?,
-    overMedia: Boolean,
-) {
-    val colors = IglooTheme.colors
-    val visible = progress != null
-    Column(
-        modifier = Modifier
-            .padding(top = IglooTheme.spacing.sm)
-            .alpha(if (visible) 1f else 0f)
-            .then(if (visible) Modifier else Modifier.clearAndSetSemantics {}),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
-    ) {
-        ProgressTrack(
-            fraction = progress?.fraction ?: 0f,
-            ground = if (overMedia) OVER_MEDIA_TRACK else colors.muted,
-            fill = colors.primary,
-            modifier = if (visible) Modifier.testTag("details_resume_track") else Modifier,
-            rounded = true,
-        )
-        Box {
-            // Keep the longest caption in layout from first paint so a late progress response
-            // cannot resize Play's column. Its width remains typography- and locale-derived.
-            IglooText(
-                text = RESUME_CAPTION_WIDTH_RESERVATION,
-                style = IglooTheme.typography.label.overMedia(overMedia),
-                color = Color.Transparent,
-                modifier = Modifier.clearAndSetSemantics {},
-                maxLines = 1,
-                softWrap = false,
-            )
-            if (progress != null) {
-                IglooText(
-                    text = progress.remainingTimeLabel,
-                    style = IglooTheme.typography.label.overMedia(overMedia),
-                    color = if (overMedia) {
-                        OVER_MEDIA_SECONDARY
-                    } else {
-                        colors.mutedForeground
-                    },
-                    modifier = Modifier.testTag("details_resume_caption"),
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
-        }
-    }
-}
-
-private const val RESUME_CAPTION_WIDTH_RESERVATION = "Less than 1m left"

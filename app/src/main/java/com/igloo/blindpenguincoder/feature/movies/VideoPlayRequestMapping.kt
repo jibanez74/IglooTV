@@ -106,9 +106,12 @@ internal fun primaryVideoStream(videoStreams: List<VideoStream>): VideoStream? =
  * "start from the beginning without asking". One definition serves both the details screen's
  * progress strip and the player's resume prompt.
  */
-internal fun resumePositionSec(progress: WatchProgress?): Double? {
-    val progressSec = progress?.progressSec ?: return null
-    val durationSec = progress.durationSec ?: return null
+internal fun resumePositionSec(progress: WatchProgress?): Double? =
+    resumePositionSec(progress?.progressSec, progress?.durationSec)
+
+/** [resumePositionSec] over a bare position and duration, as a season's episode list carries them. */
+internal fun resumePositionSec(progressSec: Double?, durationSec: Double?): Double? {
+    if (progressSec == null || durationSec == null) return null
     if (!progressSec.isFinite() || !durationSec.isFinite()) return null
     if (progressSec < RESUME_MIN_SEC || durationSec <= 0) return null
     if (progressSec / durationSec >= RESUME_MAX_RATIO) return null

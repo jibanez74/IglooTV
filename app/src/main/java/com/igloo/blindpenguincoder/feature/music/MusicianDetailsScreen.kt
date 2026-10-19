@@ -130,15 +130,22 @@ private fun MusicianDetailsContent(
     val hasHeroActions = musician.tracks.isNotEmpty()
     val hasAlbums = musician.albums.isNotEmpty()
 
-    val heroInfoRequester = remember { FocusRequester() }
+    val heroInfoStop = remember { FocusRequester() }
+    val primaryAction = remember { FocusRequester() }
     val shuffleRequester = remember { FocusRequester() }
     val albumsEntryRequester = remember { FocusRequester() }
     val factsStop = remember { FocusRequester() }
-    // Entry: Play all; with no tracks, the rail; with neither, the facts panel.
-    val albumsEntry = if (!hasHeroActions && hasAlbums) entryRequester else albumsEntryRequester
-    val factsRequester = if (!hasHeroActions && !hasAlbums) entryRequester else factsStop
-    var lastFocusedAction by remember(hasHeroActions) {
-        mutableStateOf(entryRequester.takeIf { hasHeroActions })
+    // Entry: under a screen reader the hero's summary stop, as on every details page (section
+    // 11.4.1); otherwise Play all; with no tracks, the rail; with neither, the facts panel.
+    val summaryFirst = spokenAccessibilityEnabled
+    val heroInfoRequester = if (summaryFirst) entryRequester else heroInfoStop
+    val primaryRequester = if (summaryFirst) primaryAction else entryRequester
+    val albumsEntry =
+        if (!summaryFirst && !hasHeroActions && hasAlbums) entryRequester else albumsEntryRequester
+    val factsRequester =
+        if (!summaryFirst && !hasHeroActions && !hasAlbums) entryRequester else factsStop
+    var lastFocusedAction by remember(hasHeroActions, summaryFirst) {
+        mutableStateOf(primaryRequester.takeIf { hasHeroActions })
     }
     var lastFocusedAlbumId by rememberSaveable { mutableStateOf<Long?>(null) }
     val firstRowPlay = trackRequesters.firstOrNull()?.play
@@ -164,7 +171,7 @@ private fun MusicianDetailsContent(
                     hasHeroActions = hasHeroActions,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                     heroInfoRequester = heroInfoRequester,
-                    primaryRequester = entryRequester,
+                    primaryRequester = primaryRequester,
                     playReturnRequester = playReturnRequester.takeIf { playLaunchSite == PlayLaunchSite.Primary },
                     shuffleRequester = shuffleRequester,
                     shuffleReturnRequester = playReturnRequester.takeIf { playLaunchSite == PlayLaunchSite.Shuffle },
@@ -286,7 +293,8 @@ private fun MusicianHeader(
                 tag = "musician_hero_info",
                 overMedia = overMedia,
                 requester = heroInfoRequester,
-                downRequester = primaryRequester,
+                // With no action row, down from the summary is the first section below.
+                downRequester = if (hasHeroActions) primaryRequester else downRequester,
                 description = musician.heroInfoDescription,
             ) {
                 HeroTitle(musician.name, overMedia)

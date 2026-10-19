@@ -118,9 +118,15 @@ private fun AlbumDetailsContent(
     // -> facts panel — and, while a screen reader runs, the hero info reading stop above the
     // actions. Nothing is left to a spatial search, because the shell composed underneath would
     // be a candidate.
-    val heroInfoRequester = remember { FocusRequester() }
+    val heroInfoStop = remember { FocusRequester() }
+    val primaryAction = remember { FocusRequester() }
     val shuffleRequester = remember { FocusRequester() }
     val factsStop = remember { FocusRequester() }
+    // Under a screen reader the hero's summary stop owns the entry anchor, as on every details
+    // page (section 11.4.1): it is where TalkBack settles once the skeleton gives way.
+    val summaryFirst = spokenAccessibilityEnabled
+    val heroInfoRequester = if (summaryFirst) entryRequester else heroInfoStop
+    val primaryRequester = if (summaryFirst) primaryAction else entryRequester
     // Chips are focus targets only with a musician screen to open and a real id to open it on.
     val actionableArtists = onOpenMusician != null && album.artists.all { it.id != null }
     val artistRequesters = remember(album.artists.size, actionableArtists) {
@@ -128,13 +134,14 @@ private fun AlbumDetailsContent(
     }
     var playLaunchSite by rememberPlayLaunchSite()
     val playReturnRow = playLaunchSite.rowIn(trackRows)
-    // With no action row the facts panel owns the entry anchor: the screen's requester *is* the
-    // panel's, which lands entry focus there with every edge wired at the panel untouched.
-    val factsRequester = if (hasHeroActions) factsStop else entryRequester
+    // With no action row (and no summary stop) the facts panel owns the entry anchor: the
+    // screen's requester *is* the panel's, which lands entry focus there with every edge wired
+    // at the panel untouched.
+    val factsRequester = if (hasHeroActions || summaryFirst) factsStop else entryRequester
     // Up from the rows and the panel returns to whichever action the user left, not
     // unconditionally to Play Album — the same focus memory the movie action row keeps.
-    var lastFocusedAction by remember(hasHeroActions) {
-        mutableStateOf(entryRequester.takeIf { hasHeroActions })
+    var lastFocusedAction by remember(hasHeroActions, summaryFirst) {
+        mutableStateOf(primaryRequester.takeIf { hasHeroActions })
     }
     val belowActions = artistRequesters.firstOrNull() ?: trackRequesters.firstOrNull()?.play ?: factsRequester
     val upFromBelow = when {
@@ -154,7 +161,7 @@ private fun AlbumDetailsContent(
                     hasHeroActions = hasHeroActions,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                     heroInfoRequester = heroInfoRequester,
-                    primaryRequester = entryRequester,
+                    primaryRequester = primaryRequester,
                     playReturnRequester = playReturnRequester.takeIf { playLaunchSite == PlayLaunchSite.Primary },
                     shuffleRequester = shuffleRequester,
                     shuffleReturnRequester = playReturnRequester.takeIf { playLaunchSite == PlayLaunchSite.Shuffle },

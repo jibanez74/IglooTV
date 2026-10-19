@@ -1,18 +1,20 @@
 package com.igloo.blindpenguincoder.feature.home
 
+import android.app.Activity
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
-import android.app.Activity
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
@@ -22,9 +24,9 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isFocused
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -35,8 +37,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.Dp
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -49,11 +51,11 @@ import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueEpisode
 import com.igloo.blindpenguincoder.testContinueItems
 import com.igloo.blindpenguincoder.testContinueMovies
-import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testHomeMovies
+import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testTheaterMovies
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -95,6 +97,7 @@ class HomeRailBehaviorTest {
     private val resumedEpisodes = mutableListOf<Long>()
     private val theatersOpened = mutableListOf<Long>()
     private val albumsOpened = mutableListOf<Long>()
+    private val showsOpened = mutableListOf<Long>()
     private var expandedWidth: Dp = Dp.Unspecified
     private var hostActivity: Activity? = null
 
@@ -107,6 +110,7 @@ class HomeRailBehaviorTest {
         onMovieSelected: ((Long) -> Unit)? = { opened += it },
         onTheaterMovieSelected: ((Long) -> Unit)? = { theatersOpened += it },
         onAlbumSelected: ((Long) -> Unit)? = { albumsOpened += it },
+        onShowSelected: ((Long) -> Unit)? = { showsOpened += it },
         spokenAccessibilityEnabled: Boolean = false,
     ) {
         continueState = initialContinue
@@ -122,6 +126,7 @@ class HomeRailBehaviorTest {
         opened.clear()
         theatersOpened.clear()
         albumsOpened.clear()
+        showsOpened.clear()
         resumedEpisodes.clear()
         composeRule.setContent {
             val context = LocalContext.current
@@ -152,6 +157,7 @@ class HomeRailBehaviorTest {
                     onMovieSelected = onMovieSelected,
                     onTheaterMovieSelected = onTheaterMovieSelected,
                     onAlbumSelected = onAlbumSelected,
+                    onShowSelected = onShowSelected,
                     onResumeEpisode = { resumedEpisodes += it },
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
@@ -728,32 +734,42 @@ class HomeRailBehaviorTest {
     }
 
     @Test
-    fun showCardsSpeakNameAndOptionalYearAsOneInertStop() {
+    fun showCardsSpeakNameAndOptionalYearAndOpenTheShow() {
         setShellContent(IglooRailState.Loaded(continueMovies))
         showCard(40).performScrollTo().requestFocus()
         showCard(40).assertIsFocused()
             .assertContentDescriptionEquals("Recently Added Shows. Severance, 2022")
-            .assertHasNoClickAction()
-        assertFalse(showCard(40).fetchSemanticsNode().config.contains(SemanticsProperties.Role))
+            .assertHasClickAction()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        assertEquals(
+            "Open Severance",
+            showCard(40).fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label,
+        )
         composeRule.onAllNodesWithText("Severance").assertCountEquals(0)
         composeRule.onAllNodesWithText("2022").assertCountEquals(0)
         assertShowCardInPlatformTree()
-        showCard(40).performKeyInput {
-            pressKey(Key.DirectionCenter)
-            pressKey(Key.Enter)
-        }
-        showCard(40).assertIsFocused()
+        showCard(40).performKeyInput { pressKey(Key.DirectionCenter) }
+        assertEquals(listOf(40L), showsOpened)
         assertEquals(emptyList<Long>(), opened)
         assertEquals(emptyList<Long>(), resumedEpisodes)
         assertEquals(emptyList<Long>(), albumsOpened)
         assertEquals(emptyList<Long>(), theatersOpened)
         // Focus is inside the rail and did not enter on this card: it speaks itself alone.
-        showCard(7).assertContentDescriptionEquals("Untitled Show").assertHasNoClickAction()
+        showCard(7).assertContentDescriptionEquals("Untitled Show").assertHasClickAction()
     }
 
-    /** The exported Android tree must contain one focused, inert card, without caption stops. */
+    /** With no show page to open, a card is a landing site that announces no action. */
+    @Test
+    fun withNothingToOpenAShowCardAnnouncesNoAction() {
+        setShellContent(IglooRailState.Loaded(continueMovies), onShowSelected = null)
+        showCard(40).performScrollTo().requestFocus()
+        showCard(40).assertIsFocused().assertHasNoClickAction()
+        assertFalse(showCard(40).fetchSemanticsNode().config.contains(SemanticsProperties.Role))
+    }
+
+    /** The exported Android tree must contain one focused, clickable card, without caption stops. */
     private fun assertShowCardInPlatformTree() = assertPlatformTreeHolds(
-        expected = listOf(Triple("Recently Added Shows. Severance, 2022", false, true)),
+        expected = listOf(Triple("Recently Added Shows. Severance, 2022", true, true)),
     ) { spoken -> spoken.contains("Severance") || spoken == "2022" }
 
     /**

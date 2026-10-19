@@ -80,7 +80,8 @@ internal fun AlbumDetailsHeader(
                 overMedia = overMedia,
                 readingStop = spokenAccessibilityEnabled,
                 requester = heroInfoRequester,
-                downRequester = primaryRequester,
+                // With no action row, down from the summary is the first section below.
+                downRequester = if (hasHeroActions) primaryRequester else downRequester,
             )
             if (hasHeroActions) {
                 MusicHeroActionRow(

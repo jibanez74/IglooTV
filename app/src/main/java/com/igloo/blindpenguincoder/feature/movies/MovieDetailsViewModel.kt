@@ -7,12 +7,8 @@ import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
-import com.igloo.blindpenguincoder.core.ui.formatRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
-import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
-import com.igloo.blindpenguincoder.core.ui.formatSpokenTimeThroughSeconds
 import com.igloo.blindpenguincoder.core.ui.joinedLine
-import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
@@ -21,47 +17,34 @@ import com.igloo.blindpenguincoder.data.model.WatchProgress
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
+import com.igloo.blindpenguincoder.feature.shared.CastCredit
+import com.igloo.blindpenguincoder.feature.shared.CastMemberUi
+import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
+import com.igloo.blindpenguincoder.feature.shared.ProgressUi
+import com.igloo.blindpenguincoder.feature.shared.VideoSource
+import com.igloo.blindpenguincoder.feature.shared.castMembers
 import com.igloo.blindpenguincoder.feature.shared.errorOrKeep
+import com.igloo.blindpenguincoder.feature.shared.heroInfoDescription
+import com.igloo.blindpenguincoder.feature.shared.resumeProgressUi
+import com.igloo.blindpenguincoder.feature.shared.youTubeExtraVideos
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
-import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.languageDisplayName
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-/** One credit line in the Key Crew band: `"Director"` over `"Michael Mann"`. */
-data class CrewEntry(val job: String, val name: String)
-
-/** A cast member ready for the rail card; [photoUrl] is the w185 profile through the proxy. */
-data class CastMemberUi(
-    val id: Long,
-    val name: String,
-    val character: String?,
-    val photoUrl: String?,
-)
-
-/**
- * An extra video ready for the rail card; [thumbnailUrl] is the authenticated YouTube proxy and
- * [key] is the YouTube video id the trailer player plays.
- */
-data class ExtraVideoUi(
-    val id: Long,
-    val title: String,
-    val typeLabel: String,
-    val thumbnailUrl: String?,
-    val key: String,
-)
 
 /** The fine-print rows at the page's end; every field may be absent. */
 data class AboutUi(
@@ -76,13 +59,6 @@ data class AboutUi(
         get() = production == null && language == null && budget == null && revenue == null &&
             status == null
 }
-
-/** The thin strip under the actions; present only while a resume position is worth showing. */
-data class ProgressUi(
-    val fraction: Float,
-    val remainingTimeLabel: String,
-    val resumeStateDescription: String,
-)
 
 /**
  * The details screen, render-ready: `SqlNull*` wrappers unwrapped, image URLs built, badges
@@ -127,19 +103,9 @@ data class MovieDetailsUi(
      */
     val playbackSettings: PlaybackSettingsUi? = null,
 ) {
-    /**
-     * Everything the hero's text column says, as the one sentence its screen-reader reading stop
-     * announces (TV TalkBack never traverses plain text). The genre separators become commas —
-     * "·" is a pause the eye takes and a symbol a screen reader stumbles over — and each part
-     * sheds its own trailing period so a tagline that ends in one doesn't double up in the join.
-     */
+    /** Everything the hero's text column says, as its reading stop announces it. */
     val heroInfoDescription: String
-        get() = listOfNotNull(
-            title,
-            tagline,
-            metadataDescription.takeIf { it.isNotBlank() },
-            genresLine?.replace(" · ", ", "),
-        ).joinToString(". ") { it.trimEnd('.', ' ') }
+        get() = heroInfoDescription(title, tagline, metadataDescription, genresLine)
 }
 
 /** [openMovieId] is the overlay's existence: null means closed and [details] is meaningless. */
@@ -708,13 +674,7 @@ class MovieDetailsViewModel(
         val progress = progressRead.value
         val progressSec = resumePositionSec(progress) ?: return null
         val durationSec = progress?.durationSec ?: return null
-        return ProgressUi(
-            fraction = progressFraction(progressSec, durationSec),
-            remainingTimeLabel = formatRemainingTime(progressSec, durationSec),
-            resumeStateDescription =
-                "Resume from ${formatSpokenTimeThroughSeconds(progressSec)}; " +
-                    formatSpokenRemainingTime(progressSec, durationSec),
-        )
+        return resumeProgressUi(progressSec, durationSec)
     }
 
     private fun mediaBadges(tech: MovieTechnicalDetailsData): List<String> = buildList {

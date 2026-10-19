@@ -40,9 +40,13 @@ class ShowApi(
     suspend fun latestShows(): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/shows/latest")
 
-    /** One show with its seasons and credits; backs the Home hero's show page. */
+    /** One show with its seasons and credits; backs the show details page and the Home hero. */
     suspend fun showDetails(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/shows/details/$id")
+
+    /** One season's episodes in episode order, each with the caller's progress. */
+    suspend fun seasonEpisodes(showId: Long, seasonNumber: Long): HttpResponse =
+        client.get("${serverUrl.require().apiBaseUrl}/shows/$showId/seasons/$seasonNumber/episodes")
 
     /** Library-wide counts; today just the total number of shows. */
     suspend fun showStats(): HttpResponse =

@@ -11,7 +11,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
@@ -26,6 +25,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.width
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
@@ -37,6 +37,7 @@ import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.ProgressUi
 import com.igloo.blindpenguincoder.testAuthUser
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -339,22 +340,25 @@ class MovieDetailsFocusTest {
     }
 
     /**
-     * With a spoken screen reader running the vertical chain gains the reading stops (TV
-     * TalkBack follows input focus and never reaches plain text): up from the action row climbs
-     * to the hero prose, and down walks Overview and Key Crew before the cast rail.
+     * With a spoken screen reader running the page lands on the hero prose — where TalkBack
+     * settles once the skeleton gives way, so the entry anchor is put there on purpose — and the
+     * vertical chain gains the reading stops (TV TalkBack follows input focus and never reaches
+     * plain text): down reaches the action row, then Overview and Key Crew before the cast rail.
      */
     @Test
     fun theReadingStopsJoinTheChainWhileAScreenReaderRuns() {
         setShellContent(loadedState(), spokenAccessibilityEnabled = true)
 
         val play = composeRule.onNodeWithTag("details_play")
-        play.assertIsFocused()
-
-        // Up from the action row reads the hero prose; up from there pins.
-        play.performKeyInput { pressKey(Key.DirectionUp) }
         val heroInfo = composeRule.onNodeWithTag("details_hero_info")
         heroInfo.assertIsFocused()
+
+        // Up from the hero prose pins; up from the action row climbs back to it.
         heroInfo.performKeyInput { pressKey(Key.DirectionUp) }
+        heroInfo.assertIsFocused()
+        heroInfo.performKeyInput { pressKey(Key.DirectionDown) }
+        play.assertIsFocused()
+        play.performKeyInput { pressKey(Key.DirectionUp) }
         heroInfo.assertIsFocused()
 
         // Down returns to the primary action, then the chain walks every section in order.

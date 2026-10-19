@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder
 import android.content.Context
 import androidx.compose.runtime.Composable
 import com.igloo.blindpenguincoder.data.model.AuthUser
+import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.feature.home.HomeRail
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
@@ -18,12 +19,13 @@ import com.igloo.blindpenguincoder.feature.music.MusicUiState
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
-import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
-import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
+import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.queue.InertMusicQueueFetcher
-import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
 import kotlinx.coroutines.flow.Flow
@@ -64,6 +66,9 @@ internal fun TestIglooApp(
     musicActions: MusicActions = inertMusicActions,
     details: MovieDetailsUiState = MovieDetailsUiState(),
     detailsActions: MovieDetailsActions = inertDetailsActions,
+    showDetails: ShowDetailsUiState = ShowDetailsUiState(),
+    showDetailsActions: ShowDetailsActions = inertShowDetailsActions,
+    onShowSelected: ((Long) -> Unit)? = null,
     albumDetails: AlbumDetailsUiState = AlbumDetailsUiState(),
     onRetryAlbumDetails: () -> Unit = {},
     onAlbumSelected: ((Long) -> Unit)? = null,
@@ -111,6 +116,9 @@ internal fun TestIglooApp(
         musicActions = musicActions,
         details = details,
         detailsActions = detailsActions,
+        showDetails = showDetails,
+        showDetailsActions = showDetailsActions,
+        onShowSelected = onShowSelected,
         albumDetails = albumDetails,
         onRetryAlbumDetails = onRetryAlbumDetails,
         onAlbumSelected = onAlbumSelected,

@@ -50,6 +50,8 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.MusicViewModel
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.TrackLikesViewModel
@@ -255,6 +257,13 @@ fun IglooRoot(container: IglooAppContainer) {
                         sessionViewModel(authenticatedSessionOwner, "album-details") {
                             AlbumDetailsViewModel(container.musicRepository)
                         }
+                    val showDetailsViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "show-details") {
+                            ShowDetailsViewModel(
+                                container.showRepository,
+                                container.serverUrlProvider,
+                            )
+                        }
                     // Session-scoped like the Movies grid: the three tabs' pages and scroll
                     // positions survive a Music -> Home -> Music trip.
                     val musicViewModel = sessionViewModel(authenticatedSessionOwner, "music") {
@@ -270,11 +279,12 @@ fun IglooRoot(container: IglooAppContainer) {
                         sessionViewModel(authenticatedSessionOwner, "track-likes") {
                             TrackLikesViewModel(container.musicRepository)
                         }
-                    // The one details slot is single-path: opening any page closes the other
-                    // three first, and each close is idempotent on an already-closed page.
+                    // The one details slot is single-path: opening any page closes the others
+                    // first, and each close is idempotent on an already-closed page.
                     val closeAllDetails: () -> Unit = {
                         detailsViewModel.close()
                         theaterDetailsViewModel.close()
+                        showDetailsViewModel.close()
                         albumDetailsViewModel.close()
                         musicianDetailsViewModel.close()
                     }
@@ -293,6 +303,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         homeViewModel,
                         detailsViewModel,
                         theaterDetailsViewModel,
+                        showDetailsViewModel,
                         albumDetailsViewModel,
                         musicianDetailsViewModel,
                         trackLikesViewModel,
@@ -304,6 +315,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         homeViewModel.refresh()
                         detailsViewModel.refresh()
                         theaterDetailsViewModel.refresh()
+                        showDetailsViewModel.refresh()
                         albumDetailsViewModel.refresh()
                         musicianDetailsViewModel.refresh()
                         trackLikesViewModel.refresh()
@@ -326,6 +338,14 @@ fun IglooRoot(container: IglooAppContainer) {
                     val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()
                     val theaterDetails by theaterDetailsViewModel.uiState
                         .collectAsStateWithLifecycle()
+                    val showDetails by showDetailsViewModel.uiState.collectAsStateWithLifecycle()
+                    val showDetailsActions = remember(showDetailsViewModel) {
+                        ShowDetailsActions(
+                            onRetry = showDetailsViewModel::retry,
+                            onSelectSeason = showDetailsViewModel::selectSeason,
+                            onRetrySeason = showDetailsViewModel::retrySeason,
+                        )
+                    }
                     val albumDetails by albumDetailsViewModel.uiState
                         .collectAsStateWithLifecycle()
                     val musicianDetails by musicianDetailsViewModel.uiState.collectAsStateWithLifecycle()
@@ -410,6 +430,9 @@ fun IglooRoot(container: IglooAppContainer) {
                         onMovieSelected = openDetails(detailsViewModel::open),
                         onTheaterMovieSelected = openDetails(theaterDetailsViewModel::open),
                         onAlbumSelected = openDetails(albumDetailsViewModel::open),
+                        showDetails = showDetails,
+                        showDetailsActions = showDetailsActions,
+                        onShowSelected = openDetails(showDetailsViewModel::open),
                         // Back does not ask which one was up: closing a closed page is a no-op.
                         onCloseDetails = closeAllDetails,
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },

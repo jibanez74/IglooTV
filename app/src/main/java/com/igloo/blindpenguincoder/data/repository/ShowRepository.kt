@@ -6,10 +6,12 @@ import com.igloo.blindpenguincoder.data.api.ShowApi
 import com.igloo.blindpenguincoder.data.model.LatestShow
 import com.igloo.blindpenguincoder.data.model.LatestShowsData
 import com.igloo.blindpenguincoder.data.model.ShowDetailsData
+import com.igloo.blindpenguincoder.data.model.ShowEpisode
 import com.igloo.blindpenguincoder.data.model.ShowEpisodePlaybackData
 import com.igloo.blindpenguincoder.data.model.ShowEpisodeTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.ShowGenreWithCount
 import com.igloo.blindpenguincoder.data.model.ShowGenresData
+import com.igloo.blindpenguincoder.data.model.ShowSeasonEpisodesData
 import com.igloo.blindpenguincoder.data.model.ShowsLibraryData
 import com.igloo.blindpenguincoder.data.model.ShowsStatsData
 import com.igloo.blindpenguincoder.data.model.SortOrder
@@ -43,6 +45,11 @@ class ShowRepository(
 
     suspend fun showDetails(id: Long): ApiResult<ShowDetailsData> =
         envelopeData("show details") { api.showDetails(id) }
+
+    suspend fun seasonEpisodes(showId: Long, seasonNumber: Long): ApiResult<List<ShowEpisode>> =
+        envelopeData<ShowSeasonEpisodesData>("season episodes") {
+            api.seasonEpisodes(showId, seasonNumber)
+        }.map { it.episodes }
 
     suspend fun showStats(): ApiResult<ShowsStatsData> =
         envelopeData("show stats") { api.showStats() }
