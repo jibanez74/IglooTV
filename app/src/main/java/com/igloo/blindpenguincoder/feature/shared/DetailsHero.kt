@@ -110,6 +110,7 @@ internal fun DetailsHero(
 
     Box(
         modifier = Modifier
+            .testTag("details_hero")
             .fillMaxWidth()
             .heightIn(min = HERO_MIN_HEIGHT.scaled()),
     ) {
@@ -187,6 +188,7 @@ internal fun HeroArtwork(
 ) {
     Box(
         modifier = Modifier
+            .testTag("details_hero_artwork")
             .width(IglooTheme.layout.posterWidth)
             .aspectRatio(aspect)
             .iglooSurface(radius = radius, fill = IglooTheme.colors.muted),

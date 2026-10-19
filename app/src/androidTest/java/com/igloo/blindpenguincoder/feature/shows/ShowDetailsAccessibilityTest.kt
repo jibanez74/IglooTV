@@ -15,12 +15,14 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTopPositionInRootIsEqualTo
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -346,4 +348,13 @@ class ShowDetailsAccessibilityTest {
     /** What TalkBack offers as "double tap to …" — it must match what the press actually does. */
     private fun SemanticsNodeInteraction.clickActionLabel(): String? =
         fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label
+
+    /** Entry focus on Play/Resume must not scroll the hero away (section 11.4.1, Focus). */
+    @Test
+    fun theHeroStaysWholeWhenPlayTakesEntryFocus() {
+        setContent()
+
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
+        composeRule.onNodeWithTag("details_hero").assertTopPositionInRootIsEqualTo(0.dp)
+    }
 }

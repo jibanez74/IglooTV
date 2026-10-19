@@ -2,14 +2,12 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +36,7 @@ import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.shared.DetailsHero
 import com.igloo.blindpenguincoder.feature.shared.DetailsHeroSkeleton
+import com.igloo.blindpenguincoder.feature.shared.DetailsScrollColumn
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
 import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
@@ -454,41 +453,40 @@ private fun DetailsContent(
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+    DetailsScrollColumn(
+        scrollState = rememberScrollState(),
+        hero = {
+            DetailsHero(imageUrl = movie.backdropUrl, backdropTag = "details_backdrop") { overMedia ->
+                MovieDetailsHeader(
+                    movie = movie,
+                    overMedia = overMedia,
+                    actions = actions,
+                    onPlay = onPlay,
+                    playReturnRequester = playReturnRequester,
+                    onPlayTrailer = onPlayTrailer,
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                    heroInfoRequester = heroInfoRequester,
+                    primaryRequester = primaryRequester,
+                    heroTrailerReturnRequester = heroTrailerReturnRequester,
+                    watchedRequester = watchedRequester,
+                    likeRequester = likeRequester,
+                    moreRequester = moreRequester,
+                    downRequester = belowActions,
+                    onActionFocused = { lastFocusedAction = it },
+                    onOpenMoreMenu = onOpenMoreMenu,
+                    onMoreAnchorPositioned = onMoreAnchorPositioned,
+                    mutationNotice = mutationNotice,
+                    progressSyncError = progressSyncError,
+                    onRetryProgressSync = onRetryProgressSync,
+                    progressRetryRequester = progressRetryRequester,
+                    progressRetryUpRequester = lastFocusedAction,
+                    progressRetryDownRequester = belowProgressError,
+                    onProgressRetryFocusChanged = onProgressRetryFocus,
+                    modifier = heroHeaderModifier(),
+                )
+            }
+        },
     ) {
-        DetailsHero(imageUrl = movie.backdropUrl, backdropTag = "details_backdrop") { overMedia ->
-            MovieDetailsHeader(
-                movie = movie,
-                overMedia = overMedia,
-                actions = actions,
-                onPlay = onPlay,
-                playReturnRequester = playReturnRequester,
-                onPlayTrailer = onPlayTrailer,
-                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
-                heroInfoRequester = heroInfoRequester,
-                primaryRequester = primaryRequester,
-                heroTrailerReturnRequester = heroTrailerReturnRequester,
-                watchedRequester = watchedRequester,
-                likeRequester = likeRequester,
-                moreRequester = moreRequester,
-                downRequester = belowActions,
-                onActionFocused = { lastFocusedAction = it },
-                onOpenMoreMenu = onOpenMoreMenu,
-                onMoreAnchorPositioned = onMoreAnchorPositioned,
-                mutationNotice = mutationNotice,
-                progressSyncError = progressSyncError,
-                onRetryProgressSync = onRetryProgressSync,
-                progressRetryRequester = progressRetryRequester,
-                progressRetryUpRequester = lastFocusedAction,
-                progressRetryDownRequester = belowProgressError,
-                onProgressRetryFocusChanged = onProgressRetryFocus,
-                modifier = heroHeaderModifier(),
-            )
-        }
-
         MovieDetailsSections(
             movie = movie,
             spokenAccessibilityEnabled = spokenAccessibilityEnabled,

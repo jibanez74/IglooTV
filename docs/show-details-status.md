@@ -77,7 +77,8 @@ focus restored everywhere — and three things were fixed from it:
   leading-edge fade (`core/ui/LeadingEdgeFade.kt`).
 
 One finding outside the branch, the in-theaters movie page's poster clipped at the top of the
-screen, is recorded in `docs/known-issues.md` for a later pass.
+screen, was recorded in `docs/known-issues.md` and fixed on `fix/known-issues` (2026-10-19): every
+details hero stays whole while focus is in it (design-system §11.4.1, Focus).
 
 ## How it was verified
 

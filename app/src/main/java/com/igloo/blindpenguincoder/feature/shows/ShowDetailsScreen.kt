@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +38,7 @@ import com.igloo.blindpenguincoder.feature.shared.AboutSection
 import com.igloo.blindpenguincoder.feature.shared.CastSection
 import com.igloo.blindpenguincoder.feature.shared.DetailsHero
 import com.igloo.blindpenguincoder.feature.shared.DetailsHeroSkeleton
+import com.igloo.blindpenguincoder.feature.shared.DetailsScrollColumn
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideosSection
 import com.igloo.blindpenguincoder.feature.shared.KeyCrewSection
@@ -236,31 +236,30 @@ private fun ShowDetailsContent(
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .then(sectionColumn.modifier)
-            .verticalScroll(scrollState),
+    DetailsScrollColumn(
+        scrollState = scrollState,
+        modifier = sectionColumn.modifier,
+        hero = {
+            DetailsHero(imageUrl = show.backdropUrl, backdropTag = "details_backdrop") { overMedia ->
+                ShowDetailsHeader(
+                    show = show,
+                    episodes = state.episodes,
+                    playTarget = state.playTarget,
+                    overMedia = overMedia,
+                    spokenAccessibilityEnabled = stops,
+                    heroInfoRequester = requesterOf(ShowSection.HeroInfo),
+                    heroInfoDownRequester = below(ShowSection.HeroInfo),
+                    actionRequester = requesterOf(ShowSection.Action),
+                    actionUpRequester = above(ShowSection.Action),
+                    actionDownRequester = below(ShowSection.Action),
+                    heroInfoSection = sectionColumn.section(ShowSection.HeroInfo),
+                    actionSection = sectionColumn.section(ShowSection.Action),
+                    onActionFocusChanged = onActionFocus,
+                    modifier = heroHeaderModifier(),
+                )
+            }
+        },
     ) {
-        DetailsHero(imageUrl = show.backdropUrl, backdropTag = "details_backdrop") { overMedia ->
-            ShowDetailsHeader(
-                show = show,
-                episodes = state.episodes,
-                playTarget = state.playTarget,
-                overMedia = overMedia,
-                spokenAccessibilityEnabled = stops,
-                heroInfoRequester = requesterOf(ShowSection.HeroInfo),
-                heroInfoDownRequester = below(ShowSection.HeroInfo),
-                actionRequester = requesterOf(ShowSection.Action),
-                actionUpRequester = above(ShowSection.Action),
-                actionDownRequester = below(ShowSection.Action),
-                heroInfoSection = sectionColumn.section(ShowSection.HeroInfo),
-                actionSection = sectionColumn.section(ShowSection.Action),
-                onActionFocusChanged = onActionFocus,
-                modifier = heroHeaderModifier(),
-            )
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()

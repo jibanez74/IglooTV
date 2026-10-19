@@ -8,28 +8,6 @@ Smaller things — duplication, organisation, coverage gaps and polish — live 
 
 ---
 
-## Movie hero: the poster is clipped at the top of the screen
-
-**Found:** 2026-10-19, Shield at 4K, during the show details UI review.
-**Status:** open. Not fixed on `feature/show-details`; it is a movie-page symptom and the branch
-was already under review.
-**Files:** `app/src/main/java/com/igloo/blindpenguincoder/feature/shared/DetailsHero.kt`
-(`heroHeaderModifier`, the bottom-anchored hero), `feature/movies/MovieDetailsHeader.kt` (the
-in-theaters action block).
-
-Open "Animals" (an in-theaters title) from Home's Playing in Theaters rail: the poster's top edge
-sits above the screen — no rounded top corners are visible — while the title, tagline and
-"Play Trailer" sit where the show page's do. The show hero does not show this: it keeps the
-movie's resume-strip footprint under its action in every state (§11.4.3), so its content block is
-taller and the bottom-anchored hero leaves the poster room. A movie whose action row is a single
-button with no strip is shorter than its poster, so the poster overhangs the hero's top.
-
-Likely fix: let the hero's height follow the taller of poster and content (or reserve the strip's
-footprint on the movie page too, as the show page does) rather than anchoring the content to the
-bottom and letting the poster overhang. Check a library movie with a resume strip and a
-Play + Trailer row before changing anything, and confirm on `dev` first: the shared hero pieces
-moved on `feature/show-details`, so make sure this is not a regression from that move.
-
 ## Rejected: album cover URLs are absolute and must not be "resolved"
 
 **Found:** 2026-08-13, raised as a home-screen review comment and investigated.
