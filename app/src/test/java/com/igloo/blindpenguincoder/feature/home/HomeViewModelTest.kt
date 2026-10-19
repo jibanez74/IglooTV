@@ -39,6 +39,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -685,6 +686,55 @@ class HomeViewModelTest {
         assertEquals(PlaybackMediaRef.Episode(900), request.media)
     }
 
+    @Test
+    fun `a refresh abandons a preparation still in flight`() = runTest {
+        var launched = false
+        val release = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
+            episode = {
+                release.await()
+                jsonResponse(episodePlaybackJson())
+            },
+        )
+        val viewModel = viewModel(http)
+        val watcher = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.playRequests.collect { launched = true }
+        }
+
+        viewModel.resumeEpisode(900)
+        viewModel.refresh()
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(launched)
+        assertNull(viewModel.uiState.value.playbackNotice)
+        watcher.cancel()
+    }
+
+    @Test
+    fun `an address cleared before preparation finishes reads as a notice, not a crash`() =
+        runTest {
+            var launched = false
+            lateinit var http: TestHttp
+            http = routedHttp(
+                episodeProgress = {
+                    http.serverUrl.set(null)
+                    jsonResponse(watchProgressJson(progressSec = 600.0, durationSec = 3300.0))
+                },
+            )
+            val viewModel = viewModel(http)
+            val watcher =
+                backgroundScope.launch { viewModel.playRequests.collect { launched = true } }
+
+            viewModel.resumeEpisode(900)
+            val notice = viewModel.uiState.first { it.playbackNotice != null }.playbackNotice
+
+            assertTrue(notice!!.startsWith("Couldn't prepare playback: "))
+            assertFalse(launched)
+            watcher.cancel()
+        }
+
     /**
      * Home has no Playback Settings to point the user at, so a Direct request the device cannot
      * decode is relaunched as Remux instead of being refused with unreachable guidance.
@@ -846,6 +896,26 @@ class HomeViewModelTest {
 
         viewModel(http).awaitHiddenHero()
     }
+
+    /**
+     * The session keeps the address set while Home is composed; a sign-out that clears it between
+     * a response and its mapping must fail the load, not throw out of the coroutine.
+     */
+    @Test
+    fun `an address cleared before a response is mapped fails the rail and hides the hero`() =
+        runTest {
+            lateinit var http: TestHttp
+            http = routedHttp(
+                latest = {
+                    http.serverUrl.set(null)
+                    jsonResponse(latestMoviesJson())
+                },
+            )
+            val viewModel = viewModel(http)
+
+            viewModel.awaitLatestError()
+            viewModel.awaitHiddenHero()
+        }
 
     @Test
     fun `a failed details fetch hides the hero but leaves the rail standing`() = runTest {

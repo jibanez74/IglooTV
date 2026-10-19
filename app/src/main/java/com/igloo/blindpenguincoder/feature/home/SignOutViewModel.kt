@@ -44,8 +44,9 @@ class SignOutViewModel(
         _uiState.update { SignOutUiState(pending = it.pending) }
     }
 
+    /** Only answers the confirmation [request] put up; nothing signs out without being asked. */
     fun confirm() {
-        if (_uiState.value.pending) return
+        if (!_uiState.value.confirming || _uiState.value.pending) return
         _uiState.update { it.copy(pending = true) }
         viewModelScope.launch {
             try {
