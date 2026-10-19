@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooFilterChip
+import com.igloo.blindpenguincoder.core.ui.leadingEdgeFade
 import com.igloo.blindpenguincoder.core.ui.withRequester
 
 /** One chip of a [SelectableChipRow]: what it draws, what TalkBack hears, and its identity. */
@@ -63,15 +64,20 @@ internal fun SelectableChipRow(
     val anchorKey = selectedKey?.takeIf { key -> chips.any { it.key == key } }
         ?: chips.first().key
 
+    val insetStart = contentInset.calculateStartPadding(direction)
     Row(
         modifier = modifier
             .fillMaxWidth()
+            // Painted on the surface, not the scrolled content, so a chip scrolled past the
+            // gutter dissolves under the spine the way a rail's card does, instead of being cut
+            // off at the physical edge (Friends' ten seasons at 4K, 2026-10-19).
+            .leadingEdgeFade(insetStart)
             // The gutter sits inside the scroll surface (section 8.3): the modifier order puts
             // the padding in the scrolled content, so the last chip can scroll past the panel
             // edge instead of stopping short of it.
             .horizontalScroll(rememberScrollState())
             .padding(
-                start = contentInset.calculateStartPadding(direction),
+                start = insetStart,
                 end = contentInset.calculateEndPadding(direction),
             )
             .testTag(rowTag),

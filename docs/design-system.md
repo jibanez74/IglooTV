@@ -242,7 +242,7 @@ and are the vocabulary — reuse them rather than inventing neighbors:
 
 | Alpha | On | Meaning |
 |---|---|---|
-| `0.72f` | `card` | **Focused fill** — the standard focus background |
+| `0.72f` | `card` | **Focused fill** — the standard focus background, always through `colors.focusFill(ground)`, which composites it over the control's ground (see §6.1) |
 | `0.96f` | `card` | Focused fill on an already-elevated card |
 | `0.18f` | `primary` | **Selected** (persistent state, distinct from focus) |
 | `0.40f` | `primary` / `destructive` | Disabled control |
@@ -464,9 +464,19 @@ none of that exists here. Every hover affordance becomes a focus affordance.
 | Ring width (focused) | 3dp, `colors.ring` | No |
 | Border width (at rest) | 1dp, `colors.border` | No |
 | Separator (focused) | 1dp gap between ring and fill, showing the surface behind | No |
-| Fill (focused) | `colors.card @ 0.72` | — |
+| Fill (focused) | `colors.card @ 0.72`, composited over the ground via `colors.focusFill()` | — |
 | Scale | 1.05×, over `standard` (§7) | No |
 | Glow | `colors.ring`, 16dp elevation, over `standard` | No |
+
+The focused fill is handed to `focusRing` **opaque**: `IglooColors.focusFill(ground)` composites
+`card @ 0.72` over the surface the control rests on (the canvas by default, `sidebar` for the nav
+spine's rows). The glow is a `shadowElevation` on the same layer, and the platform draws that
+shadow *under* the layer, so a translucent fill lets it through as a lighter band across the
+control and a dark bar along its bottom edge — visible at 4K on a focused season chip and a focused
+nav row (2026-10-19). Over a token ground the composite is the colour the alpha produced anyway.
+The §3.2 over-media ground stays translucent, because there the ground *is* the artwork. The nav
+spine's selected `primary @ 0.18` row is composited over `sidebar` for the same reason: it is a
+focus target too.
 
 Ring and rest widths are unscaled on purpose: a 2.6dp ring at Compact reads mushy, and a
 hairline must stay a hairline at every scale.
@@ -2048,7 +2058,9 @@ Genres picker's `SelectableChipRow`, because `IglooTabRow` never scrolls and ten
 them changes nothing, and OK selects the season, reads it if it is not cached, retargets the hero,
 and hands focus down to the season's first episode — or to the rail's loading anchor, which hands
 on to the first card when the season lands. Pressing the selected chip just moves into the rail.
-A single-season show draws no chip row; the rail's heading names the season.
+A single-season show draws no chip row; the rail's heading names the season. The row carries the
+rails' leading-edge fade (`leadingEdgeFade`, §8.3): a chip scrolled past the gutter dissolves into
+the canvas instead of being cut at the physical edge.
 
 **Episodes.** One rail per selected season, headed "Season 1" or "Specials", keyed by season so
 a switch starts its focus memory over. It speaks its heading once, on entry ("Season 2. Episode
@@ -2056,8 +2068,9 @@ a switch starts its focus memory over. It speaks its heading once, on entry ("Se
 own loading ("Loading Season 2"), Retry and empty ("No episodes of Season 2 are in this library.")
 states, all pinned like its cards. An **episode card** (`EpisodeCard`) is `wideCardWidth` at 16:9:
 the still (TV glyph fallback) carrying the focus treatment, a progress bar on its bottom edge while
-resumable and a check top-end once watched; below it the title ("1. Pilot", `bodyLarge`, two
-lines), one ellipsized meta line ("23m · September 22, 1994 · 11m left", `label`) and the overview
+resumable and a check top-end once watched; below it the title ("1. Pilot", `bodyLarge`, **two
+lines reserved** so a wrapping title never pushes a card's rows below its neighbours'), one
+ellipsized meta line ("23m · September 22, 1994 · 11m left", `label`) and the overview
 clamped to three lines with the overview's fade (`bodyMedium`, `foreground` — prose). It is one
 node speaking everything it draws: "Episode 1, Pilot. 23 minutes, aired September 22, 1994.
 Watched. {overview}".
@@ -2661,6 +2674,11 @@ forgot to change the code.**
 - `rememberSpokenAccessibilityEnabled` re-reads after each reported change once the service has
   had time to bind, and on every resume: TalkBack switched on with the app open used to leave
   every screen in its sighted layout until a restart.
+- From the 4K review of the page (§6.1, §8.3, §11.4.3): the focused fill is composited over its
+  ground through `IglooColors.focusFill` everywhere, because the glow's shadow showed through the
+  translucent `card @ 0.72` on chips and nav rows; episode cards reserve two title lines so a
+  wrapping title no longer misaligns the rail; and the chip row takes the rails' leading-edge
+  fade (now `core/ui/LeadingEdgeFade.kt`) instead of cutting a scrolled chip at the screen edge.
 
 **2026-10-14 — Recently Added Shows joins Home (§11.3).**
 

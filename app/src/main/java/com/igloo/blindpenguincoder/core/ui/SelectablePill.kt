@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.focusFill
 
 /**
  * The body shared by [IglooFilterChip] and [IglooTab] (docs/design-system.md section 9.1): one
@@ -50,7 +51,7 @@ internal fun SelectablePill(
     var focused by remember { mutableStateOf(false) }
     val background = when {
         selected -> colors.primary
-        focused -> colors.card.copy(alpha = 0.72f)
+        focused -> colors.focusFill()
         else -> Color.Transparent
     }
     val foreground = when {

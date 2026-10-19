@@ -32,6 +32,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.focusFill
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
@@ -169,8 +171,12 @@ fun NavigationRail(
                         iconTint = { _ -> if (selected) colors.sidebarPrimary else colors.foreground },
                         fill = { focused ->
                             when {
-                                selected -> colors.primary.copy(alpha = 0.18f)
-                                focused -> colors.card.copy(alpha = 0.72f)
+                                // Composited for the reason `focusFill` records: the selected
+                                // row is a focus target too, and the glow's shadow showed
+                                // through the translucent `primary @ 0.18` as a lighter band.
+                                selected ->
+                                    colors.primary.copy(alpha = 0.18f).compositeOver(colors.sidebar)
+                                focused -> colors.focusFill(colors.sidebar)
                                 else -> Color.Transparent
                             }
                         },
@@ -216,7 +222,9 @@ fun NavigationRail(
             actionLabel = "Switch profile",
             labelColor = colors.foreground,
             iconTint = { focused -> if (focused) colors.ring else colors.mutedForeground },
-            fill = { focused -> if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent },
+            fill = { focused ->
+                if (focused) colors.focusFill(colors.sidebar) else Color.Transparent
+            },
             labelFade = labelFade,
             onClick = onSwitchProfile,
             modifier = Modifier
@@ -234,7 +242,9 @@ fun NavigationRail(
             actionLabel = "Sign out",
             labelColor = colors.foreground,
             iconTint = { focused -> if (focused) colors.destructive else colors.mutedForeground },
-            fill = { focused -> if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent },
+            fill = { focused ->
+                if (focused) colors.focusFill(colors.sidebar) else Color.Transparent
+            },
             labelFade = labelFade,
             onClick = onSignOut,
             modifier = Modifier

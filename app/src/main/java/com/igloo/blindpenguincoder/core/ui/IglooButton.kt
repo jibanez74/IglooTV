@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
+import com.igloo.blindpenguincoder.core.design.focusFill
 import com.igloo.blindpenguincoder.core.design.recessedPrimary
 import com.igloo.blindpenguincoder.core.design.recessedPrimaryContent
 
@@ -86,7 +87,7 @@ fun IglooButton(
         }
         IglooButtonVariant.Ghost -> when {
             overMedia -> OVER_MEDIA_CONTROL_FILL
-            focused -> colors.card.copy(alpha = 0.72f)
+            focused -> colors.focusFill()
             else -> Color.Transparent
         }
         IglooButtonVariant.Destructive ->
@@ -193,7 +194,7 @@ fun IglooIconButton(
     var focused by remember { mutableStateOf(false) }
     val background = when {
         overMedia -> OVER_MEDIA_CONTROL_FILL
-        focused -> colors.card.copy(alpha = 0.72f)
+        focused -> colors.focusFill()
         else -> Color.Transparent
     }
     val foreground = if (overMedia) Color.White else colors.foreground

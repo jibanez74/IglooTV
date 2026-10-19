@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.focusFill
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooAvatar
@@ -241,7 +242,7 @@ private fun Tile(
     // Cross-fades on the same micro driver focusRing uses for its own fill, so the tile's
     // backing and the avatar's ring arrive together instead of one snapping ahead of the other.
     val fill by animateColorAsState(
-        targetValue = if (focused) colors.card.copy(alpha = 0.72f) else Color.Transparent,
+        targetValue = if (focused) colors.focusFill() else Color.Transparent,
         animationSpec = iglooTween(IglooMotion.MICRO_MS),
         label = "tileFill",
     )

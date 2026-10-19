@@ -61,6 +61,24 @@ extra-video rows are now one model each for movies and shows. `ShowDetailsViewMo
 page in Loading until the details and the first season have settled, keeps what is on screen
 through a failed refresh, and drops late answers for a show or season the user has left.
 
+**A 4K review pass of the page (2026-10-19, Shield, TalkBack off per capture)** walked The New
+Batman Adventures, Superman: The Animated Series and Friends, every section, the chip press, the
+rail ends and Back to Home and to the grid. The page held up — stable hero across season switches,
+focus restored everywhere — and three things were fixed from it:
+
+- *Focused chips looked smudged.* The focus glow is an elevation shadow on the same layer as the
+  control, and Android draws it under the layer, so it showed through the translucent `card @ 0.72`
+  focus fill as a lighter band and a dark bar along the bottom — on season chips, the Genres
+  picker and the sidebar's rows alike. Every ghost focus fill now goes through
+  `IglooColors.focusFill(ground)`, which composites the same alpha over the control's ground.
+- *Episode cards misaligned when a title wrapped.* Cards now reserve two title lines, so the meta
+  line and overview sit on the same rows across the rail.
+- *The season chip row cut a scrolled chip at the screen edge.* It now carries the rails'
+  leading-edge fade (`core/ui/LeadingEdgeFade.kt`).
+
+One finding outside the branch, the in-theaters movie page's poster clipped at the top of the
+screen, is recorded in `docs/known-issues.md` for a later pass.
+
 ## How it was verified
 
 - **JVM**: 1,039 tests pass (`./gradlew :app:testDebugUnitTest`), including the new
@@ -82,6 +100,14 @@ through a failed refresh, and drops late answers for a show or season the user h
   trip; TalkBack was switched on with the app open and the reading stops appeared. A 4K visual
   check of the hero, chips and episode rail was taken with TalkBack off. The session survived the
   reinstalls; TalkBack, its log level and logd were restored afterwards.
+
+- **Review-pass fixes** (2026-10-19, later the same day): JVM 1,039/1,039 and lint 0 errors again;
+  on the Shield, the seven suites around the touched pieces pass, **136/136**
+  (`IglooButtonSemanticsTest`, `IglooMediaRailFadeTest`, `NavigationRailBehaviorTest`,
+  `ShowDetailsAccessibilityTest`, `ShowDetailsFocusTest`, `IglooTabRowTest`,
+  `MoviesGridBehaviorTest`), and 4K crops of a focused unselected season chip, the focused
+  selected sidebar row, Friends' scrolled chip row and its season 10 rail show the smudge gone,
+  the fade in place and the cards' rows aligned.
 
 ## What could not be verified
 

@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.core.design
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 
 @Immutable
@@ -110,3 +111,20 @@ private fun contrastRatio(a: Color, b: Color): Float {
     return (lighter + 0.05f) / (darker + 0.05f)
 }
 
+/** Alpha of the section 6.1 focused fill: `card` over whatever ground the control rests on. */
+private const val FOCUS_FILL_ALPHA = 0.72f
+
+/**
+ * The section 6.1 focused fill — `card @ 0.72` — already composited over [ground], the surface
+ * the control rests on: the canvas by default, `sidebar` for the nav spine's rows.
+ *
+ * Composited here rather than handed to the painter translucent on purpose. The focus glow is a
+ * `shadowElevation` on the same layer, and the platform draws that shadow *under* the layer, so
+ * through a translucent fill it shows as a lighter band across the control and a dark bar along
+ * its bottom edge (seen at 4K on the season chips and the nav rows, 2026-10-19). Over a token
+ * ground the composite is the colour the alpha produced anyway; only the leak goes. The §3.2
+ * over-media ground is a different fill and stays translucent, because there the ground *is*
+ * the artwork.
+ */
+fun IglooColors.focusFill(ground: Color = background): Color =
+    card.copy(alpha = FOCUS_FILL_ALPHA).compositeOver(ground)

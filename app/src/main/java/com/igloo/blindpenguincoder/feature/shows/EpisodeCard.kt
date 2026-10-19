@@ -99,11 +99,15 @@ internal fun EpisodeCard(
                 )
             }
         }
+        // Two lines reserved, not just allowed: a title that wraps must not push its meta line
+        // and overview below the neighbours' (Friends S10 E1 beside E2 at 4K, 2026-10-19). The
+        // rail's rows stay aligned and a short title leaves its second line empty.
         IglooText(
             text = episode.title,
             style = IglooTheme.typography.bodyLarge,
             color = colors.foreground,
-            maxLines = 2,
+            maxLines = EPISODE_TITLE_LINES,
+            minLines = EPISODE_TITLE_LINES,
         )
         if (episode.metaLine != null) {
             IglooText(
@@ -151,3 +155,6 @@ private fun WatchedCheck(overMedia: Boolean, modifier: Modifier = Modifier) {
 
 /** The home hero's card clamp (section 4.1): a rail card must not grow with its synopsis. */
 private const val EPISODE_OVERVIEW_MAX_LINES = 3
+
+/** Title lines every episode card reserves, so the rail's meta and overview rows line up. */
+private const val EPISODE_TITLE_LINES = 2
