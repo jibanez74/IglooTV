@@ -188,8 +188,10 @@ class HomeViewModel(
      */
     fun refresh() {
         // The refresh owns the notice: a preparation from before the app left the foreground
-        // must not post one, or open a player, behind the cleared state.
+        // must not post one, or open a player, behind the cleared state — nor may one already
+        // built but not yet delivered, which a recreated host would otherwise pick up.
         resumeJob?.cancel()
+        playRequestChannel.tryReceive()
         _uiState.update { it.copy(playbackNotice = null) }
         loadContinueWatching(userInitiated = false)
         loadLatestMovies(userInitiated = false)
@@ -220,9 +222,10 @@ class HomeViewModel(
         }
         launchLoad(HomeRail.ContinueWatching) {
             // Server order is the contract (most recently watched first) — do not re-sort.
-            val next = movies.continueWatching().toRailState { inProgress, apiBaseUrl ->
-                inProgress.mapNotNull { item -> toContinueItem(item, apiBaseUrl) }
-            }
+            val next = movies.continueWatching().withApiBaseUrl()
+                .toRailState { (inProgress, apiBaseUrl) ->
+                    inProgress.mapNotNull { item -> toContinueItem(item, apiBaseUrl) }
+                }
             _uiState.update {
                 it.copy(
                     continueWatching = next.orKeepContent(
@@ -297,10 +300,8 @@ class HomeViewModel(
             val progress = async { shows.episodeWatchProgress(episodeId) }
             playback.await().flatMap { header ->
                 technical.await().flatMap { file ->
-                    progress.await().flatMap { saved ->
-                        apiBaseUrl().map { apiBaseUrl ->
-                            toEpisodePlayRequest(episodeId, header, file, saved, apiBaseUrl)
-                        }
+                    progress.await().withApiBaseUrl().map { (saved, apiBaseUrl) ->
+                        toEpisodePlayRequest(episodeId, header, file, saved, apiBaseUrl)
                     }
                 }
             }.also { prepared ->
@@ -363,7 +364,7 @@ class HomeViewModel(
         }
         launchLoad(HomeRail.LatestMovies) {
             val result = movies.latestMovies()
-            val next = result.toRailState { latest, apiBaseUrl ->
+            val next = result.withApiBaseUrl().toRailState { (latest, apiBaseUrl) ->
                 latest.map { movie ->
                     posterItem(
                         id = movie.id,
@@ -389,7 +390,7 @@ class HomeViewModel(
         }
         launchLoad(HomeRail.LatestShows) {
             val result = shows.latestShows()
-            val next = result.toRailState { latest, apiBaseUrl ->
+            val next = result.withApiBaseUrl().toRailState { (latest, apiBaseUrl) ->
                 // Preserve the server's newest-first order and cap of 12.
                 latest.map { show ->
                     posterItem(
@@ -416,7 +417,7 @@ class HomeViewModel(
         launchLoad(HomeRail.LatestAlbums) {
             // Server order is the contract (newest first) — do not re-sort. SimpleAlbum carries
             // no timestamp, so the route's own order is the only recency the client can show.
-            val next = music.latestAlbums().toRailState { albums, _ -> albums.map { it.toCardUi() } }
+            val next = music.latestAlbums().toRailState { albums -> albums.map { it.toCardUi() } }
             _uiState.update {
                 it.copy(latestAlbums = next.orKeepContent(it.latestAlbums, keep = !userInitiated))
             }
@@ -428,27 +429,28 @@ class HomeViewModel(
             _uiState.update { it.copy(inTheaters = IglooRailState.Loading) }
         }
         launchLoad(HomeRail.InTheaters) {
-            val next = movies.moviesInTheaters().toRailState { theater, apiBaseUrl ->
-                theater
-                    // The TMDB route's order is not a contract the way the library rails' is;
-                    // newest release first, matching the web client's own client-side sort.
-                    // "YYYY-MM-DD" dates sort correctly as strings.
-                    .sortedByDescending { it.releaseDate }
-                    .map { movie ->
-                        HomeTheaterMovie(
-                            id = movie.id.toLong(),
-                            title = movie.title,
-                            year = movie.releaseDate.take(4).takeIf { it.length == 4 },
-                            posterUrl = tmdbImageUrl(
-                                apiBaseUrl = apiBaseUrl,
-                                size = TmdbImageSize.W500,
-                                path = movie.posterPath,
-                            ),
-                            // TMDB sends 0 for an unrated movie; the card must not badge "0.0".
-                            rating = movie.voteAverage.takeIf { it > 0 },
-                        )
-                    }
-            }
+            val next = movies.moviesInTheaters().withApiBaseUrl()
+                .toRailState { (theater, apiBaseUrl) ->
+                    theater
+                        // The TMDB route's order is not a contract the way the library rails' is;
+                        // newest release first, matching the web client's own client-side sort.
+                        // "YYYY-MM-DD" dates sort correctly as strings.
+                        .sortedByDescending { it.releaseDate }
+                        .map { movie ->
+                            HomeTheaterMovie(
+                                id = movie.id.toLong(),
+                                title = movie.title,
+                                year = movie.releaseDate.take(4).takeIf { it.length == 4 },
+                                posterUrl = tmdbImageUrl(
+                                    apiBaseUrl = apiBaseUrl,
+                                    size = TmdbImageSize.W500,
+                                    path = movie.posterPath,
+                                ),
+                                // TMDB sends 0 for an unrated movie; the card must not badge "0.0".
+                                rating = movie.voteAverage.takeIf { it > 0 },
+                            )
+                        }
+                }
             _uiState.update {
                 it.copy(inTheaters = next.orKeepContent(it.inTheaters, keep = !userInitiated))
             }
@@ -475,8 +477,8 @@ class HomeViewModel(
                 return
             }
         }
-        val hero = movies.movieDetails(newest.id).flatMap { details ->
-            apiBaseUrl().map { toMovieHero(details.movie, it) }
+        val hero = movies.movieDetails(newest.id).withApiBaseUrl().map { (details, apiBaseUrl) ->
+            toMovieHero(details.movie, apiBaseUrl)
         }
         when (hero) {
             is ApiResult.Success -> setFeature(HomeHeroKind.Movie, Feature.Loaded(hero.value))
@@ -499,8 +501,8 @@ class HomeViewModel(
                 return
             }
         }
-        val hero = shows.showDetails(newest.id).flatMap { details ->
-            apiBaseUrl().map { toShowHero(details, it) }
+        val hero = shows.showDetails(newest.id).withApiBaseUrl().map { (details, apiBaseUrl) ->
+            toShowHero(details, apiBaseUrl)
         }
         when (hero) {
             is ApiResult.Success -> setFeature(HomeHeroKind.Show, Feature.Loaded(hero.value))
@@ -535,22 +537,22 @@ class HomeViewModel(
         loads[rail] = viewModelScope.launch { block() }
     }
 
-    private fun <T, R> ApiResult<T>.toRailState(
-        map: (T, apiBaseUrl: String) -> List<R>,
-    ): IglooRailState<R> =
-        when (val mapped = flatMap { value -> apiBaseUrl().map { map(value, it) } }) {
-            is ApiResult.Success -> IglooRailState.Loaded(mapped.value)
-            is ApiResult.Failure -> IglooRailState.Error(mapped.error.toLibraryDisplayMessage())
+    private fun <T, R> ApiResult<T>.toRailState(map: (T) -> List<R>): IglooRailState<R> =
+        when (this) {
+            is ApiResult.Success -> IglooRailState.Loaded(map(value))
+            is ApiResult.Failure -> IglooRailState.Error(error.toLibraryDisplayMessage())
         }
 
     /**
-     * The address a response's paths resolve against. The session keeps it set while Home is
-     * composed, but a sign-out can clear it between a response and its mapping; that reads as a
-     * failed load rather than an exception thrown out of the coroutine.
+     * Pairs a response with the address its paths resolve against. The session keeps it set
+     * while Home is composed, but a sign-out can clear it between a response and its mapping;
+     * that reads as a failed load rather than an exception thrown out of the coroutine. Only
+     * mappings that build URLs take it — album covers arrive absolute.
      */
-    private fun apiBaseUrl(): ApiResult<String> =
-        serverUrl.current.value?.let { ApiResult.Success(it.apiBaseUrl) }
+    private fun <T> ApiResult<T>.withApiBaseUrl(): ApiResult<Pair<T, String>> = flatMap { value ->
+        serverUrl.current.value?.let { ApiResult.Success(value to it.apiBaseUrl) }
             ?: ApiResult.Failure(AppError.Unexpected("Server address cleared mid-load"))
+    }
 
     private fun toMovieHero(movie: Movie, apiBaseUrl: String): HomeHero {
         val ratingBadge = movie.criticRating?.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)

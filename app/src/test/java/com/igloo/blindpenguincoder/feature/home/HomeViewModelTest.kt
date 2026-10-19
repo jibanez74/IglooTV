@@ -43,6 +43,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -713,6 +714,19 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `a refresh drops a play request built but not yet delivered`() = runTest {
+        val http = routedHttp(engineDispatcher = UnconfinedTestDispatcher(testScheduler))
+        val viewModel = viewModel(http)
+
+        // No collector: the host was not composed when the preparation finished.
+        viewModel.resumeEpisode(900)
+        advanceUntilIdle()
+        viewModel.refresh()
+
+        assertNull(withTimeoutOrNull(1_000) { viewModel.playRequests.first() })
+    }
+
+    @Test
     fun `an address cleared before preparation finishes reads as a notice, not a crash`() =
         runTest {
             var launched = false
@@ -916,6 +930,40 @@ class HomeViewModelTest {
             viewModel.awaitLatestError()
             viewModel.awaitHiddenHero()
         }
+
+    @Test
+    fun `an address cleared before the hero's details are mapped hides the hero`() = runTest {
+        var detailsRequests = 0
+        lateinit var http: TestHttp
+        http = routedHttp(
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson())) },
+            details = {
+                detailsRequests += 1
+                http.serverUrl.set(null)
+                jsonResponse(movieDetailsJson())
+            },
+        )
+        val viewModel = viewModel(http)
+
+        assertEquals(1, viewModel.awaitLatest().items.size)
+        viewModel.awaitHiddenHero()
+        assertEquals(1, detailsRequests)
+    }
+
+    /** Album covers arrive absolute, so the rail needs no address to map its response. */
+    @Test
+    fun `an address cleared before the albums are mapped still loads the albums`() = runTest {
+        lateinit var http: TestHttp
+        http = routedHttp(
+            albums = {
+                http.serverUrl.set(null)
+                jsonResponse(latestAlbumsJson(simpleAlbumJson()))
+            },
+        )
+        val viewModel = viewModel(http)
+
+        assertEquals(1, viewModel.awaitAlbums().items.size)
+    }
 
     @Test
     fun `a failed details fetch hides the hero but leaves the rail standing`() = runTest {
