@@ -21,7 +21,15 @@ import com.igloo.blindpenguincoder.data.model.WatchProgress
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
+import com.igloo.blindpenguincoder.feature.shared.CastCredit
+import com.igloo.blindpenguincoder.feature.shared.CastMemberUi
+import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
+import com.igloo.blindpenguincoder.feature.shared.VideoSource
+import com.igloo.blindpenguincoder.feature.shared.castMembers
+import com.igloo.blindpenguincoder.feature.shared.heroInfoDescription
+import com.igloo.blindpenguincoder.feature.shared.youTubeExtraVideos
 import com.igloo.blindpenguincoder.feature.shared.errorOrKeep
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
@@ -39,29 +47,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-/** One credit line in the Key Crew band: `"Director"` over `"Michael Mann"`. */
-data class CrewEntry(val job: String, val name: String)
-
-/** A cast member ready for the rail card; [photoUrl] is the w185 profile through the proxy. */
-data class CastMemberUi(
-    val id: Long,
-    val name: String,
-    val character: String?,
-    val photoUrl: String?,
-)
-
-/**
- * An extra video ready for the rail card; [thumbnailUrl] is the authenticated YouTube proxy and
- * [key] is the YouTube video id the trailer player plays.
- */
-data class ExtraVideoUi(
-    val id: Long,
-    val title: String,
-    val typeLabel: String,
-    val thumbnailUrl: String?,
-    val key: String,
-)
 
 /** The fine-print rows at the page's end; every field may be absent. */
 data class AboutUi(
@@ -127,19 +112,9 @@ data class MovieDetailsUi(
      */
     val playbackSettings: PlaybackSettingsUi? = null,
 ) {
-    /**
-     * Everything the hero's text column says, as the one sentence its screen-reader reading stop
-     * announces (TV TalkBack never traverses plain text). The genre separators become commas —
-     * "·" is a pause the eye takes and a symbol a screen reader stumbles over — and each part
-     * sheds its own trailing period so a tagline that ends in one doesn't double up in the join.
-     */
+    /** Everything the hero's text column says, as its reading stop announces it. */
     val heroInfoDescription: String
-        get() = listOfNotNull(
-            title,
-            tagline,
-            metadataDescription.takeIf { it.isNotBlank() },
-            genresLine?.replace(" · ", ", "),
-        ).joinToString(". ") { it.trimEnd('.', ' ') }
+        get() = heroInfoDescription(title, tagline, metadataDescription, genresLine)
 }
 
 /** [openMovieId] is the overlay's existence: null means closed and [details] is meaningless. */

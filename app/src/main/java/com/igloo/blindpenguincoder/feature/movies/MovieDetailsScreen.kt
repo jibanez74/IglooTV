@@ -39,6 +39,7 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.shared.DetailsHero
 import com.igloo.blindpenguincoder.feature.shared.DetailsHeroSkeleton
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
 import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 
 /**

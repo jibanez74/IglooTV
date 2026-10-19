@@ -58,6 +58,9 @@ data class PosterCardProgress(
  * announced action must match what pressing actually does). [semanticLabel] replaces the default
  * "title, subtitle" announcement when the visible pair does not read well as a sentence.
  *
+ * [detail] is an optional third line under [subtitle] — a cast card's "228 episodes" — in the
+ * same quiet tier, and joins the spoken sentence after it.
+ *
  * [artworkRadius] is the artwork's corner: `radius.lg` for posters and covers, `radius.pill` for
  * a musician thumbnail, which the focus ring resolves to a circle (section 8.2). A circle wants
  * its text centred beneath it, which is what [centerText] does.
@@ -69,6 +72,7 @@ fun IglooPosterCard(
     imageUrl: String?,
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    detail: String? = null,
     actionLabel: String? = null,
     semanticLabel: String? = null,
     progress: PosterCardProgress? = null,
@@ -81,7 +85,8 @@ fun IglooPosterCard(
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
     val spokenDescription = mediaSectionDescription(
-        semanticLabel ?: listOfNotNull(title, subtitle, progress?.description).joinToString(", "),
+        semanticLabel ?: listOfNotNull(title, subtitle, detail, progress?.description)
+            .joinToString(", "),
     )
 
     Column(
@@ -130,6 +135,14 @@ fun IglooPosterCard(
         if (subtitle != null) {
             IglooText(
                 text = subtitle,
+                style = IglooTheme.typography.label.copy(textAlign = textAlign),
+                color = colors.mutedForeground,
+                maxLines = 1,
+            )
+        }
+        if (detail != null) {
+            IglooText(
+                text = detail,
                 style = IglooTheme.typography.label.copy(textAlign = textAlign),
                 color = colors.mutedForeground,
                 maxLines = 1,

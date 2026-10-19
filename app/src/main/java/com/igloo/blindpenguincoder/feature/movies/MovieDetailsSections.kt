@@ -1,57 +1,26 @@
 package com.igloo.blindpenguincoder.feature.movies
 
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.scaled
-import com.igloo.blindpenguincoder.core.ui.IglooIcons
-import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
-import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
-import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.core.ui.IglooText
-import com.igloo.blindpenguincoder.core.ui.SectionHeading
+import com.igloo.blindpenguincoder.feature.shared.AboutSection
+import com.igloo.blindpenguincoder.feature.shared.CastSection
+import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
+import com.igloo.blindpenguincoder.feature.shared.ExtraVideosSection
 import com.igloo.blindpenguincoder.feature.shared.FactUi
-import com.igloo.blindpenguincoder.feature.shared.FactsSection
-import com.igloo.blindpenguincoder.feature.shared.readingStopTarget
+import com.igloo.blindpenguincoder.feature.shared.KeyCrewSection
+import com.igloo.blindpenguincoder.feature.shared.OverviewSection
 
 /**
- * Everything below the hero: overview, key crew, the cast and extra-videos rails, and the
- * fine-print about block. All of it sits past the backdrop's fade, on the token canvas, so
- * nothing here carries the section 3.2 over-media treatment. Sections with nothing to show are
- * skipped entirely rather than rendering empty shells.
- *
- * Overview and Key Crew are prose, not targets, for a sighted d-pad user: they sit between the
- * hero and the cast rail, so moving down from the actions scrolls them into view on the way. But
- * TV TalkBack follows input focus and never reaches plain text, so while a screen reader runs
- * they join the vertical chain as reading stops — the About panel's pattern, which *is* always a
- * focus target because it sits below the last rail and content a d-pad can never scroll to may
- * as well not be on the page (the same reason section 10's empty rail is focusable).
+ * Everything below the movie hero, in the movie page's order: overview, key crew, the cast and
+ * extra-videos rails, and the fine-print about block — the shared details sections
+ * (`feature/shared/DetailsSections.kt`) wired into one vertical chain. Sections with nothing to
+ * show are skipped entirely rather than rendering empty shells.
  */
 @Composable
 internal fun MovieDetailsSections(
@@ -140,7 +109,7 @@ internal fun MovieDetailsSections(
         if (hasAbout) {
             AboutSection(
                 title = movie.title,
-                about = movie.about,
+                facts = movie.about.facts(),
                 modifier = Modifier.padding(contentInset),
                 requester = aboutRequester,
                 upRequester = above(aboutRequester),
@@ -149,299 +118,11 @@ internal fun MovieDetailsSections(
     }
 }
 
-@Composable
-private fun OverviewSection(
-    overview: String?,
-    readingStop: Boolean,
-    requester: FocusRequester,
-    upRequester: FocusRequester?,
-    downRequester: FocusRequester?,
-    modifier: Modifier = Modifier,
-) {
-    val colors = IglooTheme.colors
-    var clamped by remember(overview) { mutableStateOf(false) }
-    var focused by remember { mutableStateOf(false) }
-    val fadeHeight = OVERVIEW_FADE_HEIGHT.scaled()
-    // Rendered even with nothing to say (web parity): a movie without an overview reads as
-    // "none available", not as a page with a piece missing — and the reading stop says the same.
-    val text = overview ?: "No overview available."
-    Column(
-        modifier = modifier.then(
-            if (readingStop) {
-                Modifier.readingStopTarget(
-                    tag = "details_overview_stop",
-                    focused = focused,
-                    requester = requester,
-                    upRequester = upRequester,
-                    downRequester = downRequester,
-                    onFocusChanged = { focused = it },
-                    description = "Overview. $text",
-                )
-            } else {
-                Modifier
-            },
-        ),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-    ) {
-        SectionHeading("Overview")
-        IglooText(
-            text = text,
-            style = IglooTheme.typography.bodyMedium,
-            // foreground, not mutedForeground: prose the user came to read has to clear the
-            // section 12 body contrast target. The visual clamp is not an accessibility clamp —
-            // the semantics tree carries the whole string.
-            color = if (overview != null) colors.foreground else colors.mutedForeground,
-            maxLines = OVERVIEW_MAX_LINES,
-            // A clamped synopsis fades out instead of ellipsizing: an ellipsis mid-sentence
-            // pretends the cut is deliberate punctuation, while the fade says plainly that the
-            // prose continues past what fits. The alpha-zero stop comes from the color itself —
-            // Color.Transparent is black at zero and would gray the token fade.
-            overflow = TextOverflow.Clip,
-            onTextLayout = { clamped = it.hasVisualOverflow },
-            modifier = Modifier
-                .widthIn(max = SECTION_PROSE_MAX_WIDTH.scaled())
-                .drawWithContent {
-                    drawContent()
-                    if (clamped) {
-                        val fadePx = fadeHeight.toPx()
-                        drawRect(
-                            brush = Brush.verticalGradient(
-                                0f to colors.background.copy(alpha = 0f),
-                                1f to colors.background,
-                                startY = size.height - fadePx,
-                                endY = size.height,
-                            ),
-                            topLeft = Offset(0f, size.height - fadePx),
-                            size = Size(size.width, fadePx),
-                        )
-                    }
-                },
-        )
-    }
-}
-
-/** Director first, then the writing credits, in rows of three label-over-name pairs. */
-@Composable
-private fun KeyCrewSection(
-    crew: List<CrewEntry>,
-    readingStop: Boolean,
-    requester: FocusRequester,
-    upRequester: FocusRequester?,
-    downRequester: FocusRequester?,
-    modifier: Modifier = Modifier,
-) {
-    val colors = IglooTheme.colors
-    var focused by remember { mutableStateOf(false) }
-    Column(
-        modifier = modifier.then(
-            if (readingStop) {
-                Modifier.readingStopTarget(
-                    tag = "details_key_crew_stop",
-                    focused = focused,
-                    requester = requester,
-                    upRequester = upRequester,
-                    downRequester = downRequester,
-                    onFocusChanged = { focused = it },
-                    description = "Key Crew. " +
-                        crew.joinToString(". ") { "${it.job}: ${it.name}" },
-                )
-            } else {
-                Modifier
-            },
-        ),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-    ) {
-        SectionHeading("Key Crew")
-        crew.chunked(CREW_COLUMNS).forEach { rowEntries ->
-            Row(
-                // The overview's measure, so adjacent prose sections share one right edge
-                // instead of the crew columns stretching a name across the whole pane.
-                modifier = Modifier
-                    .widthIn(max = SECTION_PROSE_MAX_WIDTH.scaled())
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xl),
-            ) {
-                rowEntries.forEach { entry ->
-                    Column(modifier = Modifier.weight(1f)) {
-                        IglooText(
-                            text = entry.job,
-                            style = IglooTheme.typography.label,
-                            color = colors.mutedForeground,
-                            maxLines = 1,
-                        )
-                        IglooText(
-                            text = entry.name,
-                            style = IglooTheme.typography.bodyMedium,
-                            color = colors.foreground,
-                            maxLines = 1,
-                        )
-                    }
-                }
-                // Pad the last row, so a lone director does not stretch across the pane.
-                repeat(CREW_COLUMNS - rowEntries.size) {
-                    Column(modifier = Modifier.weight(1f)) {}
-                }
-            }
-        }
-    }
-}
-
-/**
- * A detail-screen rail: the rail primitive with a state that is always Loaded, so per-rail
- * focus memory, the one-anchor invariant, and the entry requester come for free. Each caller
- * decides whether its cards act: the cast has no destination yet and stays inert, while the
- * extras open the trailer player.
- *
- * Every direction out of the rail is pinned. The shell is still composed underneath this
- * overlay, so an unpinned edge would let a spatial focus search land on a card the user cannot
- * see (the same reason section 9.3's dialog pins all four directions). Up and down go to the
- * neighbouring sections rather than whichever target wins a beam heuristic — the same
- * hand-wiring the home hero uses for its down target.
- */
-@Composable
-private fun <T> DetailsRailSection(
-    title: String,
-    items: List<T>,
-    itemKey: (T) -> Long,
-    contentInset: PaddingValues,
-    entryRequester: FocusRequester,
-    upRequester: FocusRequester?,
-    downRequester: FocusRequester?,
-    returnRequester: FocusRequester? = null,
-    cardAspect: Float = IglooTheme.layout.posterAspect,
-    cardWidth: Dp = IglooTheme.layout.posterWidth,
-    card: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
-) {
-    var lastFocusedId by rememberSaveable { mutableStateOf<Long?>(null) }
-    IglooMediaRail(
-        title = title,
-        state = IglooRailState.Loaded(items),
-        itemKey = itemKey,
-        entryRequester = entryRequester,
-        // The overlay owns the whole screen; there is no spine to exit to on the left.
-        leftFocusRequester = Cancel,
-        lastFocusedKey = lastFocusedId,
-        onItemFocused = { lastFocusedId = it },
-        contentInset = contentInset,
-        returnRequester = returnRequester,
-        cardAspect = cardAspect,
-        cardWidth = cardWidth,
-    ) { item, itemModifier, aspect ->
-        card(
-            item,
-            itemModifier.focusProperties {
-                up = upRequester ?: Cancel
-                down = downRequester ?: Cancel
-            },
-            aspect,
-        )
-    }
-}
-
-@Composable
-private fun CastSection(
-    cast: List<CastMemberUi>,
-    contentInset: PaddingValues,
-    entryRequester: FocusRequester,
-    upRequester: FocusRequester?,
-    downRequester: FocusRequester?,
-) {
-    DetailsRailSection(
-        title = "Cast",
-        items = cast,
-        itemKey = { it.id },
-        contentInset = contentInset,
-        entryRequester = entryRequester,
-        upRequester = upRequester,
-        downRequester = downRequester,
-    ) { member, itemModifier, aspect ->
-        IglooPosterCard(
-            title = member.name,
-            subtitle = member.character,
-            imageUrl = member.photoUrl,
-            onClick = null,
-            aspect = aspect,
-            fallbackIcon = IglooIcons.Person,
-            modifier = itemModifier.testTag("cast_card_${member.id}"),
-        )
-    }
-}
-
-/**
- * The §8.2 wide-card rail: 16:9 thumbnails through the YouTube proxy, the video's type as the
- * card's one context line. Activating a card opens the trailer player overlay (section 11.8.1),
- * so each announces "Play {title}" — the honest verb, where the default "Open" promises a page.
- * [returnRequester] rides the rail's last-focused card, so closing the player restores focus to
- * the exact card that launched it.
- */
-@Composable
-private fun ExtraVideosSection(
-    videos: List<ExtraVideoUi>,
-    contentInset: PaddingValues,
-    entryRequester: FocusRequester,
-    upRequester: FocusRequester?,
-    downRequester: FocusRequester?,
-    returnRequester: FocusRequester,
-    onPlayExtra: (ExtraVideoUi) -> Unit,
-) {
-    DetailsRailSection(
-        title = "Extra Videos",
-        items = videos,
-        itemKey = { it.id },
-        contentInset = contentInset,
-        entryRequester = entryRequester,
-        upRequester = upRequester,
-        downRequester = downRequester,
-        returnRequester = returnRequester,
-        cardAspect = IglooTheme.layout.wideAspect,
-        cardWidth = IglooTheme.layout.wideCardWidth,
-    ) { video, itemModifier, aspect ->
-        IglooPosterCard(
-            title = video.title,
-            subtitle = video.typeLabel,
-            imageUrl = video.thumbnailUrl,
-            onClick = { onPlayExtra(video) },
-            actionLabel = "Play ${video.title}",
-            aspect = aspect,
-            width = IglooTheme.layout.wideCardWidth,
-            modifier = itemModifier.testTag("extra_card_${video.id}"),
-        )
-    }
-}
-
-/** The fine print, on the [FactsSection] treatment every details page shares. */
-@Composable
-private fun AboutSection(
-    title: String,
-    about: AboutUi,
-    requester: FocusRequester,
-    upRequester: FocusRequester?,
-    modifier: Modifier = Modifier,
-) {
-    val facts = listOfNotNull(
-        about.production?.let { FactUi("Production", it) },
-        about.status?.let { FactUi("Status", it) },
-        about.language?.let { FactUi("Original language", it) },
-        about.budget?.let { FactUi("Budget", it) },
-        about.revenue?.let { FactUi("Revenue", it) },
-    )
-    FactsSection(
-        heading = "About $title",
-        tag = "details_about",
-        facts = facts,
-        description = "About $title. " + facts.joinToString(". ") { "${it.label}: ${it.value}" },
-        requester = requester,
-        upRequester = upRequester,
-        valueMaxLines = 2,
-        modifier = modifier,
-    )
-}
-
-/** Readable measure for bodyMedium prose — roughly 70 characters a line. */
-private val SECTION_PROSE_MAX_WIDTH = 620.dp
-
-/** About one bodyMedium line, so the fade dissolves the last visible line's descenders. */
-private val OVERVIEW_FADE_HEIGHT = 22.dp
-
-private const val OVERVIEW_MAX_LINES = 6
-private const val CREW_COLUMNS = 3
+/** The movie's fine print, as facts rows; each row is dropped when the movie has no value. */
+private fun AboutUi.facts(): List<FactUi> = listOfNotNull(
+    production?.let { FactUi("Production", it) },
+    status?.let { FactUi("Status", it) },
+    language?.let { FactUi("Original language", it) },
+    budget?.let { FactUi("Budget", it) },
+    revenue?.let { FactUi("Revenue", it) },
+)

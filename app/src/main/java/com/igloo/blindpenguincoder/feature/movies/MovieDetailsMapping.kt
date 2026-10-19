@@ -3,22 +3,21 @@ package com.igloo.blindpenguincoder.feature.movies
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.spoken
-import com.igloo.blindpenguincoder.images.TmdbImageSize
-import com.igloo.blindpenguincoder.images.tmdbImageUrl
-import com.igloo.blindpenguincoder.images.youtubeThumbnailUrl
+import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import java.text.NumberFormat
 import java.util.Locale
 
 /**
- * The wire-to-[MovieDetailsUi] rules both detail view models share: the library movie
+ * The wire-to-[MovieDetailsUi] rules both movie detail view models share: the library movie
  * ([MovieDetailsViewModel]) and the TMDB in-theaters movie ([TheaterMovieDetailsViewModel]) draw
  * from different endpoints but render the same screen, so every rule about what that screen shows
- * — how crew is chosen, how extras are sorted and labelled, what the metadata row speaks — lives
- * here once instead of being reimplemented per source.
+ * — how crew is chosen, what the metadata row speaks — lives here once instead of being
+ * reimplemented per source. The cast and extras rules every details page shares live in
+ * `feature/shared/DetailsMapping.kt`.
  *
- * The two sources are bridged by the small intermediates below rather than by a common wire
- * model: their payloads have nothing else in common, and a shared model would exist only to be
- * mapped into twice.
+ * The two sources are bridged by small intermediates rather than by a common wire model: their
+ * payloads have nothing else in common, and a shared model would exist only to be mapped into
+ * twice.
  */
 
 /** A crew credit as [keyCrew] reads it, from either source's crew list. */
@@ -26,25 +25,6 @@ internal data class CrewCredit(
     val job: String,
     val department: String,
     val name: String,
-)
-
-/** A cast credit as [castMembers] reads it, from either source's cast list. */
-internal data class CastCredit(
-    val id: Long,
-    val name: String,
-    val character: String,
-    val profilePath: String?,
-    /** The billing order; the rail shows the top of it. */
-    val order: Long,
-)
-
-/** A video as [youTubeExtraVideos] reads it, from either source's video list. */
-internal data class VideoSource(
-    val id: Long,
-    val title: String,
-    val type: String,
-    val site: String,
-    val key: String,
 )
 
 /** Director(s) first, then up to three writing credits under their actual jobs (web parity). */
@@ -58,71 +38,6 @@ internal fun keyCrew(crew: List<CrewCredit>): List<CrewEntry> {
         .distinct()
         .take(WRITER_LIMIT)
     return (directors + writers).distinct()
-}
-
-/** The top [CAST_LIMIT] of the billing, a blank character left out. */
-internal fun castMembers(cast: List<CastCredit>, apiBaseUrl: String): List<CastMemberUi> = cast
-    .sortedBy { it.order }
-    .take(CAST_LIMIT)
-    .map {
-        CastMemberUi(
-            id = it.id,
-            name = it.name,
-            character = it.character.takeIf { character -> character.isNotBlank() },
-            photoUrl = tmdbImageUrl(apiBaseUrl, TmdbImageSize.W185, it.profilePath),
-        )
-    }
-
-/**
- * YouTube extras only — the backend has no thumbnail proxy for other sites (web parity) —
- * re-sorted trailers first, then special features, then the rest, with a case-insensitive title
- * tie-break. The library API's `ORDER BY type, title` is alphabetical, which puts trailers last;
- * the rail wants them leading, and TMDB's order carries no meaning of its own either.
- */
-internal fun youTubeExtraVideos(
-    videos: List<VideoSource>,
-    apiBaseUrl: String,
-): List<ExtraVideoUi> = videos
-    .filter { normalizedVideoValue(it.site) == "youtube" }
-    .sortedWith(
-        compareBy<VideoSource> { extraVideoSortRank(it.type) }
-            .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title },
-    )
-    .map {
-        ExtraVideoUi(
-            id = it.id,
-            title = it.title,
-            typeLabel = extraVideoTypeLabel(it.type),
-            thumbnailUrl = youtubeThumbnailUrl(apiBaseUrl, it.key),
-            key = it.key,
-        )
-    }
-
-/** Both sources spell their values differently around case and separators; this levels them. */
-internal fun normalizedVideoValue(value: String): String =
-    value.trim().lowercase(Locale.US).replace('-', '_')
-
-/** Trailers, then special features, then the rest; unknown types sort last (web parity). */
-private fun extraVideoSortRank(type: String): Int = when (normalizedVideoValue(type)) {
-    "trailer" -> 0
-    "special_feature" -> 1
-    "other" -> 2
-    else -> 3
-}
-
-/**
- * The library DB constrains `type` to the three known values. Anything else is TMDB's own
- * free-form type ("Featurette", "Behind the Scenes"), which arrives already titled, so only the
- * snake_case values need splitting and nothing is lower-cased on the way through.
- */
-private fun extraVideoTypeLabel(type: String): String = when (normalizedVideoValue(type)) {
-    "trailer" -> "Trailer"
-    "special_feature" -> "Special feature"
-    "other" -> "Other"
-    else -> type.trim()
-        .split('_')
-        .filter { it.isNotBlank() }
-        .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase(Locale.US) } }
 }
 
 /**
@@ -158,6 +73,5 @@ internal fun formatUsd(amount: Double): String =
         .apply { maximumFractionDigits = 0 }
         .format(amount)
 
-/** Ten cast members, three writing credits: the same caps the web client's sections use. */
-private const val CAST_LIMIT = 10
+/** Three writing credits: the same cap the web client's Key Crew band uses. */
 private const val WRITER_LIMIT = 3

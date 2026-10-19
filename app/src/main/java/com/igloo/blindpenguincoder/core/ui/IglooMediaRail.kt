@@ -77,6 +77,11 @@ fun <T> IglooRailState<T>.orKeepContent(
  * [returnRequester] rides the same anchor in every state: an overlay opened from this rail
  * requests it on close, so Back lands on the card that led away (section 6.3) — or on the
  * rail's surviving anchor when the list changed underneath.
+ *
+ * [upFocusRequester] and [downFocusRequester] pin the vertical edges for a rail whose neighbours
+ * are hand-wired (a details page's sections). They apply to every card and to whichever anchor
+ * the state holds — skeleton cell, Retry or empty box — so no state leaves an edge to a spatial
+ * search. Null leaves the edge spatial, which is what the Home column wants.
  */
 @Composable
 fun <T> IglooMediaRail(
@@ -88,6 +93,8 @@ fun <T> IglooMediaRail(
     lastFocusedKey: Long?,
     onItemFocused: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    upFocusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
     /**
      * The pane's gutter (section 8.3). The heading and the non-scrolling states take it as
      * padding; the `LazyRow` takes it as `contentPadding`, so the scroll surface spans the whole
@@ -162,6 +169,8 @@ fun <T> IglooMediaRail(
         .focusProperties {
             left = leftFocusRequester
             right = FocusRequester.Cancel
+            upFocusRequester?.let { up = it }
+            downFocusRequester?.let { down = it }
         }
 
     val direction = LocalLayoutDirection.current
@@ -271,6 +280,8 @@ fun <T> IglooMediaRail(
                                     .focusProperties {
                                         if (index == 0) left = leftFocusRequester
                                         if (index == state.items.lastIndex) right = FocusRequester.Cancel
+                                        upFocusRequester?.let { up = it }
+                                        downFocusRequester?.let { down = it }
                                     }
                                     .onFocusChanged {
                                         if (it.isFocused) {

@@ -22,9 +22,9 @@ import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.movies.AboutUi
-import com.igloo.blindpenguincoder.feature.movies.CastMemberUi
-import com.igloo.blindpenguincoder.feature.movies.CrewEntry
-import com.igloo.blindpenguincoder.feature.movies.ExtraVideoUi
+import com.igloo.blindpenguincoder.feature.shared.CastMemberUi
+import com.igloo.blindpenguincoder.feature.shared.CrewEntry
+import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
