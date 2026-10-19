@@ -1254,15 +1254,21 @@ private fun HomeRails(
     var columnCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val moveScope = rememberCoroutineScope()
     val sectionMove = remember {
-        AnnouncedSectionMove(
+        // Each step resolves its section by key, so one that came or went mid-move is found or
+        // found missing rather than mistaken for its neighbour.
+        fun section(key: Any) = currentSections.firstOrNull { it.key == key }
+        AnnouncedSectionMove<Any>(
             scope = moveScope,
             scrollable = scrollState,
             screenReader = { currentScreenReader },
-            focusedSection = { currentSections.indexOfFirst { it.hasFocus } },
-            sectionCount = { currentSections.size },
-            isOnScreen = { index ->
+            focusedSection = { currentSections.firstOrNull { it.hasFocus }?.key },
+            neighbourOf = { key, forward ->
+                val index = currentSections.indexOfFirst { it.key == key }
+                if (index < 0) null else currentSections.getOrNull(index + if (forward) 1 else -1)?.key
+            },
+            isOnScreen = { key ->
                 // Unclipped: a section scrolled out of the column must still report where it is.
-                val section = currentSections[index].coordinates?.takeIf { it.isAttached }?.unclippedBoundsInRoot()
+                val section = section(key)?.coordinates?.takeIf { it.isAttached }?.unclippedBoundsInRoot()
                 val viewport = columnCoordinates?.takeIf { it.isAttached }?.unclippedBoundsInRoot()
                 if (section == null || viewport == null) {
                     true
@@ -1272,8 +1278,8 @@ private fun HomeRails(
                     targetTop < viewport.bottom && section.bottom > viewport.top
                 }
             },
-            reveal = { index, forward ->
-                val tools = currentSections[index]
+            reveal = { key, forward ->
+                val tools = section(key) ?: return@AnnouncedSectionMove
                 val size = tools.coordinates?.size
                 if (size == null) {
                     tools.bringIntoView.bringIntoView()
@@ -1288,14 +1294,14 @@ private fun HomeRails(
                     tools.bringIntoView.bringIntoView(rect)
                 }
             },
-            settle = { index -> currentSections[index].bringIntoView.bringIntoView() },
-            requesterFor = { index ->
-                val tools = currentSections[index]
+            settle = { key -> section(key)?.bringIntoView?.bringIntoView() },
+            requesterFor = { key ->
                 when {
+                    section(key) == null -> null
                     // The pane's entry anchor rides the hero, or the first rail in its absence.
-                    tools.key == HERO_SECTION -> contentStartRequester
-                    tools.key == HomeRail.ContinueWatching && !currentHeroVisible -> contentStartRequester
-                    else -> tools.entry
+                    key == HERO_SECTION -> contentStartRequester
+                    key == HomeRail.ContinueWatching && !currentHeroVisible -> contentStartRequester
+                    else -> tools(key).entry
                 }
             },
         )

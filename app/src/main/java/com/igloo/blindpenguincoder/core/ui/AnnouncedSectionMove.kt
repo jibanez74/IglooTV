@@ -29,21 +29,26 @@ import kotlinx.coroutines.launch
  * is left to Compose, whose move is announced in that case. With no screen reader every press is
  * left to Compose.
  *
- * The lambdas read live state, so one instance outlives recompositions and can swallow key
- * repeats while a move is in flight.
+ * Sections are named by stable keys, not positions: one can appear or go (a Retry row) while a
+ * move is in flight, and every step resolves its section afresh — a target that is gone by then
+ * ends the move. The lambdas read live state, so one instance outlives recompositions and can
+ * swallow key repeats while a move is in flight.
  */
-internal class AnnouncedSectionMove(
+internal class AnnouncedSectionMove<K : Any>(
     private val scope: CoroutineScope,
     private val scrollable: ScrollableState,
     private val screenReader: () -> Boolean,
-    private val focusedSection: () -> Int,
-    private val sectionCount: () -> Int,
+    /** The section holding focus, or null. */
+    private val focusedSection: () -> K?,
+    /** The section after (forward) or before this one, or null at either end. */
+    private val neighbourOf: (key: K, forward: Boolean) -> K?,
     /** Whether the section's focus target is at least partly on screen. */
-    private val isOnScreen: (index: Int) -> Boolean,
+    private val isOnScreen: (key: K) -> Boolean,
     /** Shows part of the section — its leading part when moving forward, trailing when back. */
-    private val reveal: suspend (index: Int, forward: Boolean) -> Unit,
-    private val settle: suspend (index: Int) -> Unit,
-    private val requesterFor: (index: Int) -> FocusRequester?,
+    private val reveal: suspend (key: K, forward: Boolean) -> Unit,
+    private val settle: suspend (key: K) -> Unit,
+    /** The section's focus target, or null once the section is gone. */
+    private val requesterFor: (key: K) -> FocusRequester?,
 ) {
     private var inFlight: Job? = null
 
@@ -59,18 +64,17 @@ internal class AnnouncedSectionMove(
             else -> return false
         }
         if (inFlight?.isActive == true) return true
-        val origin = focusedSection()
-        if (origin < 0) return false
-        val target = origin + if (forward) 1 else -1
-        if (target < 0 || target >= sectionCount()) return false
+        val origin = focusedSection() ?: return false
+        val target = neighbourOf(origin, forward) ?: return false
         if (isOnScreen(target)) return false
         inFlight = scope.launch {
             reveal(target, forward)
             awaitAccessibilitySnapshot(ANNOUNCED_LINE_WAIT_MS)
             val now = focusedSection()
             if (now != origin && now != target) return@launch
+            val requester = requesterFor(target) ?: return@launch
             scrollable.scroll(MutatePriority.PreventUserInput) {
-                requesterFor(target)?.requestFocusSafely()
+                requester.requestFocusSafely()
                 delay(ANNOUNCED_LINE_WAIT_MS)
             }
             settle(target)

@@ -133,7 +133,9 @@ fun <C : PaneContent> PaneFocusHandoffCoordinator(
         memory.silentReconcileGeneration = silentReconcileGeneration
         suspend fun handOff(requester: FocusRequester) {
             if (screenReader) awaitAccessibilitySnapshot(ANNOUNCED_FOCUS_WAIT_MS)
-            requester.requestFocusSafely()
+            // Re-read after the wait: a tab the user reached meanwhile keeps focus (tabs select
+            // on focus, so pulling it into the content would break the strip's traversal).
+            if (!focusOwnership.tabFocused) requester.requestFocusSafely()
         }
 
         when {
