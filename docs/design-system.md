@@ -574,10 +574,26 @@ it for a ≤1.5:1 effect.
   already moved. With no screen reader, focus moves at once. The rail's cross-branch switch
   (Home → Movies) uses it (§11.2), and the pane grids apply the same wait at row scale, with a
   held scroll, when the d-pad moves into a row that is not on screen yet (`AnnouncedLazyMove`,
-  §8.3). So does the shell's first request, when it replaces the sign-in or PIN screen: asked in
+  §8.3); Home's column does the same at section scale when the d-pad moves into a rail below
+  the fold (`AnnouncedSectionMove`, §11.3.2) — the snapshot holds only what is on screen, so a
+  composed-but-scrolled-away card focused by Compose's own move is as silent as a new one, and
+  TalkBack for TV then re-reads the card just left. So does the shell's first request, when it replaces the sign-in or PIN screen: asked in
   the anchor's first frame, the focus went unannounced and TalkBack for TV parked its cursor on
-  the profile avatar. Overlays that
+  the profile avatar. And so does every state-swap handoff: a rail or details page whose focused
+  skeleton gives way to content (`rememberRefocusAfterSwap`), and a pane grid whose content is
+  replaced or resolves out of its skeleton (`PaneFocusHandoffCoordinator`), re-land focus on the
+  new anchor after the same wait; nothing holds focus in the meantime. Overlays that
   cover part of the screen solve the same problem another way (§9.3).
+- **No live region on a focus target reached through an announced handoff.** Compose reports
+  every focus change as a content change on the node, and TalkBack speaks any content change on
+  a live-region node — so a focusable empty state or skeleton anchor that was also a polite
+  region was re-read each time focus came or went. A node focused through the wait above needs
+  none: TalkBack speaks the focus, and then any change to the description of the node under its
+  cursor, which is how loading → empty and a hero page turn are heard (§11.3.1). The one place
+  a live region still rides a focus target is an overlay that focuses its skeleton or pending
+  line in its first frame (`DetailsHero`, `TrackRowSkeleton`, `IglooConfirmDialog`), where it is
+  what makes that unannounced focus heard. Live regions otherwise stay on text that cannot take
+  focus (`IglooInlineError`'s message, `IglooNotice`).
 - Order matters: `Modifier.clickable` and `Modifier.onFocusChanged` are order-sensitive. Put
   focus observation *outside* the clickable so it sees the same focus state the indication does.
 
@@ -829,11 +845,11 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
 | `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg` by default and `artworkRadius = radius.pill` for a musician's circle — §8.2's circle is a radius the focus ring clamps, not a second component — with `centerText` for the text under it and `semanticLabel` when "Title, Year" is not the sentence to read, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose fully spoken remaining-time description joins the cleared node ("Title, Year, 2 hours and 20 minutes remaining", §12) so the bar can never render unannounced. The description is semantic only; no numeric percentage or remaining-time caption renders on the card. |
 | `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), the minimal `IglooFocusableEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). Takes the pane's `contentInset` and splits it by node per §8.3 — heading and non-scrolling states pad, the `LazyRow` carries it as `contentPadding` so cards bleed off the panel edge. |
-| `IglooFocusableEmpty` | §10 empty state, minimal variant only: faded icon + one line, as the pane's focusable anchor announcing the line politely. The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
+| `IglooFocusableEmpty` | §10 empty state, minimal variant only: faded icon + one line, as the pane's focusable anchor announcing the line when focused — no live region (§6.3). The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
 | `IglooRadioListDialog` | The scrimmed radio-list dialog behind Playback Settings and the player's track and chapter menus: the `IglooConfirmDialog` recipe (§9.3) around one flat, scrolling list of `IglooRadioRow`s and a pinned Done. The caller draws the rows, applying `rowFocus(n)` to row `n`, which walks up/down and onto Done and cancels every other direction; entry focus lands on `entryIndex`. |
 | `IglooPinnedError` | A screen's full-screen error: `IglooInlineError` centred in the safe area at `dialogWidth`, its one action pinned in every direction because the host is still composed underneath. Assertive — it is the only region on screen. |
 | `ProgressTrack` | The one thin progress bar: 4dp, a ground and a fill, square where it sits flush on an edge (poster card, seek bar) and `rounded` where it stands free (the resume strip, the popularity meter). |
-| `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. |
+| `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. A card whose text sits over the art hoists its `rememberArtworkState` so the §3.2 treatment follows the decode (the In Theaters card). |
 | `SectionHeading` | The one section heading style (`titleMedium`, `foreground`, `heading()`): every details section and every Home rail. |
 
 The details overlays share their hero from `feature/shared` — `DetailsHero` (the full-bleed
@@ -983,7 +999,10 @@ Build these **once** as shared composables. Three states, one recipe each.
   `Polite` anywhere several can appear at once (the §11.3 rails fail independently), so the
   announcements queue instead of cutting each other off.
 
-All three announce themselves to TalkBack when they replace content (§12).
+All three announce themselves to TalkBack when they replace content (§12): the skeleton and the
+empty state because the pane's anchor is focused through the swap and TalkBack speaks what the
+node under its cursor now says (§6.3's announced handoff), the error through its message's live
+region.
 
 **A pending mutation is shown on the control that started it** — a picker tile (§11.1.1), a submit
 button, a dialog's action row (§9.3) — never as an app-wide overlay. The app-wide pending screen is
@@ -1238,6 +1257,12 @@ IME, which §11.6 reserves for search and login.
 Text entry on a remote is painful. Quick-connect pairing is the primary path; email/password is
 the fallback.
 
+With spoken accessibility enabled, the pairing characters and the two sign-in actions form one
+explicit focus sequence: characters 1–6, email/password, then Change server (or Back to profiles).
+Right/Down advance and Left/Up reverse, stopping at the ends. Each character announces its
+position and either a spelling word ("Letter B, as in Bravo") or a digit name ("Digit eight").
+Initial code focus waits for the accessibility snapshot so VoiceView can follow it.
+
 When this screen is reached by adding a user rather than by first-time setup, the "Change
 server" slot becomes **Back to profiles** — changing the server wipes every stored profile, so
 offering it mid-add is a trap. **Back takes that same slot's action**, and only then: during
@@ -1462,6 +1487,30 @@ library hides its page unconditionally.
 
 Each rail is one `IglooMediaRail` over one endpoint, loaded by its own cancellable job so the
 rails fail, retry, and refresh independently (§12's polite live regions depend on that).
+
+**The section is spoken once, on entry.** The visible heading is not reachable through TV
+screen-reader input focus (§12), so the rail's title rides the description of the node focus
+enters the rail on: the card the d-pad, the spine or a closing overlay lands on reads
+"Recently Added Movies. Heat, 1995" (Continue Watching keeps its progress description), and the
+empty state always reads "Continue Watching. Nothing in progress yet…". A sideways move inside
+the rail reaches a card that speaks itself alone — "Arrival, 2016" — because TalkBack for TV
+reads a card as focus lands on it and afterwards speaks only a change to the node under its
+cursor: `IglooMediaRail` keeps the title on every card while none of its cards is focused, keeps
+it on the entry card alone once one is, and puts it back everywhere when focus leaves, so each
+change lands on an unfocused node and is silent (`announceSectionTitle`). "Unfocused" is
+measured by TalkBack's cursor, not by input focus: the cursor follows some tens of milliseconds
+behind, and a description changed in that gap is read out as if the card were new (and can
+swallow the next card's announcement — seen on the emulator), so the card focus most recently
+left keeps the description it was read with for one accessibility batch
+(`ANNOUNCED_LINE_WAIT_MS`) before taking the one the rule gives it. The skeleton and the error
+Retry name their section in their own labels. Details-page rails leave this off; their
+surroundings already name them.
+
+Up and Down between sections are announced moves under a screen reader (§6.3): when the next
+rail (or the hero, or the progress Retry) is not yet on screen, the press reveals part of it with
+the current card still on screen, waits one accessibility batch, focuses its entry anchor with
+the scroll held, then lets the section settle (`AnnouncedSectionMove`). A target already on
+screen is left to Compose's own move, which is announced in that case.
 
 | Rail | Endpoint | Card | Empty copy |
 |---|---|---|---|

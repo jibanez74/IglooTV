@@ -439,8 +439,11 @@ fun IglooRoot(container: IglooAppContainer) {
 internal fun splashVisible(booted: Boolean, holdElapsed: Boolean): Boolean =
     !booted || !holdElapsed
 
-/** What `Modifier.clickable` treats as a press — the keys that would activate an unseen control. */
-private val CONFIRM_KEYS = setOf(
+/**
+ * What `Modifier.clickable` treats as a press — the keys that would activate an unseen control,
+ * and the keys a `focusable` that handles its own press must answer to.
+ */
+internal val CONFIRM_KEYS = setOf(
     Key.DirectionCenter,
     Key.Enter,
     Key.NumPadEnter,

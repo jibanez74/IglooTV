@@ -44,6 +44,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooMenu
 import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.SkeletonStub
 import com.igloo.blindpenguincoder.core.ui.focusRing
 
 /** The three controls of a track row, left to right. */
@@ -286,7 +287,6 @@ fun TrackRowSkeleton(
     anchorModifier: Modifier? = null,
 ) {
     val colors = IglooTheme.colors
-    val stubShape = RoundedCornerShape(IglooTheme.radius.sm)
     val controlShape = RoundedCornerShape(IglooTheme.radius.lg)
     var focused by remember { mutableStateOf(false) }
     Row(
@@ -319,25 +319,10 @@ fun TrackRowSkeleton(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.45f)
-                    .height(14.dp.scaled())
-                    .background(colors.muted, stubShape),
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.3f)
-                    .height(10.dp.scaled())
-                    .background(colors.muted, stubShape),
-            )
+            SkeletonStub(height = 14.dp, modifier = Modifier.fillMaxWidth(0.45f))
+            SkeletonStub(height = 10.dp, modifier = Modifier.fillMaxWidth(0.3f))
         }
-        Box(
-            modifier = Modifier
-                .width(36.dp.scaled())
-                .height(10.dp.scaled())
-                .background(colors.muted, stubShape),
-        )
+        SkeletonStub(height = 10.dp, modifier = Modifier.width(36.dp.scaled()))
         repeat(2) {
             Box(
                 modifier = Modifier

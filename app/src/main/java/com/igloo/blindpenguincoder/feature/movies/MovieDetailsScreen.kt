@@ -164,7 +164,7 @@ fun MovieDetailsScreen(
 
     // Keyed on the state's class — a Loaded republish (a toggle, a badge arriving) must not yank
     // focus back to the action row.
-    val onScreenFocus = rememberRefocusAfterSwap(state::class) {
+    val onScreenFocus = rememberRefocusAfterSwap(state::class, spokenAccessibilityEnabled) {
         entryRequester.requestFocusSafely()
     }
 
@@ -439,7 +439,7 @@ private fun DetailsContent(
         stops -> heroInfoRequester
         else -> null
     }
-    val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError) {
+    val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError, spokenAccessibilityEnabled) {
         if (progressSyncError == null) lastFocusedAction?.requestFocusSafely()
     }
     var entered by remember { mutableStateOf(false) }

@@ -48,6 +48,7 @@ import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
+import com.igloo.blindpenguincoder.core.design.overMediaSideScrim
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooText
@@ -126,11 +127,7 @@ internal fun DetailsHero(
                     .matchParentSize()
                     .graphicsLayer { alpha = backdropAlpha }
                     .background(
-                        Brush.horizontalGradient(
-                            0f to Color.Black.copy(alpha = 0.80f),
-                            0.65f to Color.Black.copy(alpha = 0.55f),
-                            1f to Color.Black.copy(alpha = 0f),
-                        ),
+                        overMediaSideScrim(),
                     ),
             )
             Box(

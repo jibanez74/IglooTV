@@ -53,6 +53,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooQrCode
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.requestFocusAnnounced
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 
 @Composable
@@ -106,11 +107,12 @@ internal fun QuickConnectContent(
      * (section 11.1.3); defaulted, so the layout test's resting-state measurement is unaffected.
      */
     notice: String? = null,
+    spokenAccessibilityEnabled: Boolean = rememberSpokenAccessibilityEnabled(),
 ) {
     val switchFocus = remember { FocusRequester() }
     val changeServerFocus = remember { FocusRequester() }
+    val lastCharacterFocus = remember { FocusRequester() }
     val approvalUrl = remember(serverOrigin) { buildQuickConnectApprovalUrl(serverOrigin) }
-    val spokenAccessibilityEnabled = rememberSpokenAccessibilityEnabled()
 
     AuthSurface(
         title = "Sign in to Igloo",
@@ -149,8 +151,8 @@ internal fun QuickConnectContent(
                 PairingCode(
                     phase = phase,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
-                    leftBoundaryFocus = switchFocus,
-                    rightBoundaryFocus = changeServerFocus,
+                    rightBoundaryFocus = switchFocus,
+                    lastCharacterFocus = lastCharacterFocus,
                 )
                 IglooText(
                     text = "Scan the QR code to open Account settings. Sign in through your " +
@@ -175,7 +177,16 @@ internal fun QuickConnectContent(
                 modifier = Modifier
                     .weight(1f)
                     .focusRequester(switchFocus)
-                    .focusProperties { right = changeServerFocus },
+                    .focusProperties {
+                        if (spokenAccessibilityEnabled && phase is QuickConnectPhase.CodeReady) {
+                            left = lastCharacterFocus
+                            up = lastCharacterFocus
+                            previous = lastCharacterFocus
+                            down = changeServerFocus
+                            next = changeServerFocus
+                        }
+                        right = changeServerFocus
+                    },
                 semanticLabel = "Use email and password instead",
             )
             IglooButton(
@@ -185,7 +196,16 @@ internal fun QuickConnectContent(
                 modifier = Modifier
                     .weight(1f)
                     .focusRequester(changeServerFocus)
-                    .focusProperties { left = switchFocus },
+                    .focusProperties {
+                        left = switchFocus
+                        if (spokenAccessibilityEnabled && phase is QuickConnectPhase.CodeReady) {
+                            up = switchFocus
+                            previous = switchFocus
+                            right = FocusRequester.Cancel
+                            down = FocusRequester.Cancel
+                            next = FocusRequester.Cancel
+                        }
+                    },
                 semanticLabel = leaveActionSemanticLabel(canCancel),
             )
         }
@@ -239,6 +259,7 @@ internal fun PairingCode(
     spokenAccessibilityEnabled: Boolean,
     leftBoundaryFocus: FocusRequester? = null,
     rightBoundaryFocus: FocusRequester? = null,
+    lastCharacterFocus: FocusRequester? = null,
 ) {
     val colors = IglooTheme.colors
     var hasPresentedAccessibleCode by remember { mutableStateOf(false) }
@@ -265,6 +286,7 @@ internal fun PairingCode(
                     onPresented = { hasPresentedAccessibleCode = true },
                     leftBoundaryFocus = leftBoundaryFocus,
                     rightBoundaryFocus = rightBoundaryFocus,
+                    lastCharacterFocus = lastCharacterFocus,
                 )
             } else {
                 IglooText(
@@ -306,6 +328,7 @@ private fun AccessiblePairingCode(
     onPresented: () -> Unit,
     leftBoundaryFocus: FocusRequester?,
     rightBoundaryFocus: FocusRequester?,
+    lastCharacterFocus: FocusRequester?,
 ) {
     val colors = IglooTheme.colors
     val focusManager = LocalFocusManager.current
@@ -314,32 +337,37 @@ private fun AccessiblePairingCode(
     val characterSpacing = with(LocalDensity.current) {
         IglooTheme.typography.displayCode.letterSpacing.toDp()
     }
-    val focusRequesters = remember(code.length) {
-        List(code.length) { FocusRequester() }
+    val focusRequesters = remember(code.length, lastCharacterFocus) {
+        List(code.length) { index ->
+            if (index == code.lastIndex && lastCharacterFocus != null) lastCharacterFocus
+            else FocusRequester()
+        }
     }
     var firstCharacterDescription by remember { mutableStateOf<String?>(null) }
     var arrivalFocusReceived by remember { mutableStateOf(false) }
     var focusedIndex by remember(code.length) { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(code) {
-        val firstCharacter = code.firstOrNull() ?: return@LaunchedEffect
+        if (code.isEmpty()) return@LaunchedEffect
+        val firstCharacter = pairingCharacterDescription(code, 0)
         onPresented()
         // Re-anchors on every rotation, including from elsewhere on the screen. That looks like
         // focus theft and was nearly "fixed" as such, but it is deliberate and asserted by
         // PairingCodeAccessibilityTest: the code the user is being read has just stopped being
         // valid, so leaving them on a stale one is the worse failure.
         firstCharacterDescription = if (isReplacement) {
-            "Pairing code changed. Focus moved to the first character. $firstCharacter."
+            "Pairing code changed. Focus moved to the first character. $firstCharacter"
         } else {
             "Pairing code ready. Focus moved to the first character. " +
-                "Use Left and Right to review each character. $firstCharacter."
+                "Use Right or Down to move forward, Left or Up to move back. $firstCharacter"
         }
         arrivalFocusReceived = false
 
         withFrameNanos { }
         focusManager.clearFocus(force = true)
-        withFrameNanos { }
-        focusRequesters.first().requestFocus()
+        // VoiceView needs the character in Compose's accessibility snapshot before it can
+        // follow input focus. A single frame can leave its cursor on the whole window.
+        focusRequesters.first().requestFocusAnnounced(screenReader = true)
     }
 
     Row(
@@ -380,24 +408,24 @@ private fun AccessiblePairingCode(
                     )
                     .padding(IglooTheme.spacing.xs)
                     .focusProperties {
-                        if (index > 0) {
-                            left = focusRequesters[index - 1]
-                        } else if (leftBoundaryFocus != null) {
-                            left = leftBoundaryFocus
-                        }
-                        if (index < focusRequesters.lastIndex) {
-                            right = focusRequesters[index + 1]
-                        } else if (rightBoundaryFocus != null) {
-                            right = rightBoundaryFocus
-                        }
+                        val before = focusRequesters.getOrNull(index - 1)
+                            ?: leftBoundaryFocus ?: FocusRequester.Cancel
+                        val after = focusRequesters.getOrNull(index + 1)
+                            ?: rightBoundaryFocus ?: FocusRequester.Cancel
+                        left = before
+                        up = before
+                        previous = before
+                        right = after
+                        down = after
+                        next = after
                     }
                     .focusable()
                     .testTag("pairing_code_character_$index")
                     .semantics {
                         contentDescription = if (index == 0) {
-                            firstCharacterDescription ?: character.toString()
+                            firstCharacterDescription ?: pairingCharacterDescription(code, index)
                         } else {
-                            character.toString()
+                            pairingCharacterDescription(code, index)
                         }
                         traversalIndex = index.toFloat()
                     },
@@ -405,3 +433,23 @@ private fun AccessiblePairingCode(
         }
     }
 }
+
+/** Positions distinguish repeated characters; spelling words distinguish similar letter sounds. */
+internal fun pairingCharacterDescription(code: String, index: Int): String {
+    val character = code[index].uppercaseChar()
+    val value = when (character) {
+        in 'A'..'Z' -> "Letter $character, as in ${PAIRING_LETTER_WORDS[character - 'A']}."
+        in '0'..'9' -> "Digit ${PAIRING_DIGIT_WORDS[character - '0']}."
+        else -> "$character."
+    }
+    return "Character ${index + 1} of ${code.length}. $value"
+}
+
+private val PAIRING_LETTER_WORDS = listOf(
+    "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India",
+    "Juliett", "Kilo", "Lima", "Mike", "November", "Oscar", "Papa", "Quebec", "Romeo",
+    "Sierra", "Tango", "Uniform", "Victor", "Whiskey", "X-ray", "Yankee", "Zulu",
+)
+private val PAIRING_DIGIT_WORDS = listOf(
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+)

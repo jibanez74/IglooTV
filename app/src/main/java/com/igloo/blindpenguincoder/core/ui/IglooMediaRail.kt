@@ -13,7 +13,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -29,11 +32,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import kotlinx.coroutines.delay
 
 /** What a media rail renders. An empty [Loaded] list is the empty state, not an error. */
 sealed interface IglooRailState<out T> {
@@ -99,6 +102,14 @@ fun <T> IglooMediaRail(
     emptyText: String = "Nothing to show",
     onRetry: () -> Unit = {},
     returnRequester: FocusRequester? = null,
+    /**
+     * Speak [title] once, on the node focus enters this rail on (section 11.3.2): the empty state
+     * always, a card only when it is the first the user lands on from outside. Off for a rail
+     * whose surroundings already name it, such as a details page's sections.
+     */
+    announceSectionTitle: Boolean = false,
+    /** Under a screen reader, a state swap's focus handoff waits until it can be heard. */
+    screenReader: Boolean = rememberSpokenAccessibilityEnabled(),
     cardAspect: Float = IglooTheme.layout.posterAspect,
     // The skeleton takes both geometry values, so it is shaped by the same tokens as the card
     // it replaces — the grid-matching rule (section 8.2) holds structurally instead of by
@@ -118,8 +129,30 @@ fun <T> IglooMediaRail(
     }
 
     // A focused skeleton disposing must hand focus to the new state's anchor.
-    val onRailFocus = rememberRefocusAfterSwap(state) {
+    val onRailFocus = rememberRefocusAfterSwap(state, screenReader) {
         (entryKey?.let(itemRequesters::getValue) ?: localAnchor).requestFocus()
+    }
+
+    // The section is spoken once, on entry (section 11.3.2). TalkBack for TV reads a card's
+    // description as focus lands on it and afterwards speaks only a change to the node its cursor
+    // is on, so the title rides the description of every card while no card here is focused —
+    // whichever one the user lands on from outside is already prefixed — and stays on that entry
+    // card alone once focus is inside. A sideways move reaches a card that never carried it, and
+    // the entry card sheds it unfocused, silently; leaving the rail restores it everywhere.
+    var focusedKey by remember { mutableStateOf<Long?>(null) }
+    var enteredOnKey by remember { mutableStateOf<Long?>(null) }
+    // "Unfocused, silently" needs one more beat: TalkBack moves its cursor off a card some tens
+    // of milliseconds after input focus leaves it, and a description change that lands before
+    // then is read out as if the card were new — and can swallow the next card's announcement.
+    // So the card focus most recently left keeps the description it was read with until a batch
+    // has certainly passed, whatever the rule says it should carry now.
+    var leftCard by remember { mutableStateOf<Pair<Long, Boolean>?>(null) }
+    val prefixedAsComposed = remember { mutableMapOf<Long, Boolean>() }
+    LaunchedEffect(leftCard) {
+        if (leftCard != null) {
+            delay(ANNOUNCED_LINE_WAIT_MS)
+            leftCard = null
+        }
     }
 
     val anchorModifier = Modifier
@@ -136,10 +169,16 @@ fun <T> IglooMediaRail(
     val insetEnd = contentInset.calculateEndPadding(direction)
     // Everything that is not the scroll surface owes the gutter: the heading and every
     // non-scrolling state are text, and text stays inside the overscan inset.
-    val insetModifier = Modifier.padding(start = insetStart, end = insetEnd)
+    val insetModifier = Modifier.insetHorizontally(contentInset)
 
     Column(
-        modifier = modifier.onFocusChanged { onRailFocus(it.hasFocus) },
+        modifier = modifier.onFocusChanged {
+            onRailFocus(it.hasFocus)
+            if (!it.hasFocus) {
+                focusedKey = null
+                enteredOnKey = null
+            }
+        },
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
         SectionHeading(title, insetModifier)
@@ -171,13 +210,18 @@ fun <T> IglooMediaRail(
             )
 
             is IglooRailState.Loaded -> if (state.items.isEmpty()) {
-                IglooFocusableEmpty(
-                    anchorModifier = anchorModifier,
-                    icon = emptyIcon,
-                    message = emptyText,
-                    contentPadding = IglooTheme.spacing.xl,
-                    modifier = insetModifier,
-                )
+                // The rail's only node, so every visit is an entry: always prefixed.
+                CompositionLocalProvider(
+                    LocalMediaSectionTitle provides title.takeIf { announceSectionTitle },
+                ) {
+                    IglooFocusableEmpty(
+                        anchorModifier = anchorModifier,
+                        icon = emptyIcon,
+                        message = emptyText,
+                        contentPadding = IglooTheme.spacing.xl,
+                        modifier = insetModifier,
+                    )
+                }
             } else {
                 // Created scrolled to the entry card so a rail rebuilt on returning to this
                 // destination has the remembered card composed — a focus requester can only
@@ -213,19 +257,33 @@ fun <T> IglooMediaRail(
                 ) {
                     itemsIndexed(state.items, key = { _, item -> itemKey(item) }) { index, item ->
                         val key = itemKey(item)
-                        itemContent(
-                            item,
-                            Modifier
-                                .focusRequester(itemRequesters.getValue(key))
-                                .withRequester(entryRequester.takeIf { key == entryKey })
-                                .withRequester(returnRequester.takeIf { key == entryKey })
-                                .focusProperties {
-                                    if (index == 0) left = leftFocusRequester
-                                    if (index == state.items.lastIndex) right = FocusRequester.Cancel
-                                }
-                                .onFocusChanged { if (it.isFocused) onItemFocused(key) },
-                            cardAspect,
-                        )
+                        val prefixed = leftCard?.takeIf { it.first == key }?.second
+                            ?: (focusedKey == null || key == enteredOnKey)
+                        prefixedAsComposed[key] = prefixed
+                        val spokenTitle = title.takeIf { announceSectionTitle && prefixed }
+                        CompositionLocalProvider(LocalMediaSectionTitle provides spokenTitle) {
+                            itemContent(
+                                item,
+                                Modifier
+                                    .focusRequester(itemRequesters.getValue(key))
+                                    .withRequester(entryRequester.takeIf { key == entryKey })
+                                    .withRequester(returnRequester.takeIf { key == entryKey })
+                                    .focusProperties {
+                                        if (index == 0) left = leftFocusRequester
+                                        if (index == state.items.lastIndex) right = FocusRequester.Cancel
+                                    }
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            enteredOnKey = if (focusedKey == null) key else null
+                                            focusedKey = key
+                                            onItemFocused(key)
+                                        } else {
+                                            prefixedAsComposed[key]?.let { leftCard = key to it }
+                                        }
+                                    },
+                                cardAspect,
+                            )
+                        }
                     }
                 }
             }

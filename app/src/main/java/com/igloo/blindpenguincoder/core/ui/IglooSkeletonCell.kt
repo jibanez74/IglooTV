@@ -16,10 +16,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.hideFromAccessibility
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -42,8 +41,6 @@ internal fun IglooSkeletonCell(
     modifier: Modifier = Modifier,
     artworkRadius: Dp = IglooTheme.radius.lg,
 ) {
-    val colors = IglooTheme.colors
-    val stubShape = RoundedCornerShape(IglooTheme.radius.sm)
     Column(
         modifier = modifier.cardWidth(cardWidth),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
@@ -55,28 +52,37 @@ internal fun IglooSkeletonCell(
                 .focusRing(
                     focused = focused,
                     radius = artworkRadius,
-                    fill = colors.muted,
+                    fill = IglooTheme.colors.muted,
                 ),
         )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .height(14.dp.scaled())
-                .background(colors.muted, stubShape),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.5f)
-                .height(10.dp.scaled())
-                .background(colors.muted, stubShape),
-        )
+        SkeletonStub(height = 14.dp, modifier = Modifier.fillMaxWidth(0.9f))
+        SkeletonStub(height = 10.dp, modifier = Modifier.fillMaxWidth(0.5f))
     }
 }
 
 /**
+ * One text-shaped block of a skeleton — a title or caption that has not arrived — [height]
+ * tall before UI scale, as wide as the caller's [modifier] makes it, on [fill] with the small
+ * radius. Every skeleton draws its text through this so the stubs read as one family.
+ */
+@Composable
+internal fun SkeletonStub(
+    height: Dp,
+    modifier: Modifier = Modifier,
+    fill: Color = IglooTheme.colors.muted,
+) {
+    Box(
+        modifier = modifier
+            .height(height.scaled())
+            .background(fill, RoundedCornerShape(IglooTheme.radius.sm)),
+    )
+}
+
+/**
  * The one skeleton cell that is real to focus and TalkBack: the anchor a loading surface keeps
- * alive so the pane always has somewhere to land, announcing [loadingLabel] politely. The other
- * cells of the surface are [IglooSkeletonTextureCell]s.
+ * alive so the pane always has somewhere to land, announcing [loadingLabel] when focused. No
+ * live region, for the reason [IglooFocusableEmpty] gives. The other cells of the surface are
+ * [IglooSkeletonTextureCell]s.
  */
 @Composable
 internal fun IglooSkeletonAnchorCell(
@@ -95,10 +101,7 @@ internal fun IglooSkeletonAnchorCell(
         modifier = anchorModifier
             .onFocusChanged { focused = it.isFocused }
             .focusable()
-            .semantics {
-                contentDescription = loadingLabel
-                liveRegion = LiveRegionMode.Polite
-            },
+            .semantics { contentDescription = loadingLabel },
     )
 }
 

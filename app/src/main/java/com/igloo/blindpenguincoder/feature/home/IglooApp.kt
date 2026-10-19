@@ -4,14 +4,13 @@ import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -19,6 +18,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -28,6 +29,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
@@ -40,7 +42,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -58,18 +66,21 @@ import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
+import com.igloo.blindpenguincoder.core.ui.AnnouncedSectionMove
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooConfirmDialog
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooScrim
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.PosterCardProgress
 import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
+import com.igloo.blindpenguincoder.core.ui.insetHorizontally
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusAnnounced
@@ -86,6 +97,7 @@ import com.igloo.blindpenguincoder.feature.music.AlbumDetailsScreen
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.MusicActions
 import com.igloo.blindpenguincoder.feature.music.MusicScreen
+import com.igloo.blindpenguincoder.feature.music.AlbumCard
 import com.igloo.blindpenguincoder.feature.music.MusicTab
 import com.igloo.blindpenguincoder.feature.music.MusicUiState
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsScreen
@@ -101,6 +113,7 @@ import com.igloo.blindpenguincoder.feature.player.MusicPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.ProgressSyncUiState
 import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.PosterItemCard
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
@@ -114,7 +127,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
 /** Which surface opened the details overlay, so Back can put focus back where it came from. */
-private sealed interface DetailsOrigin {
+internal sealed interface DetailsOrigin {
     data object Hero : DetailsOrigin
     data class Rail(val rail: HomeRail) : DetailsOrigin
 
@@ -142,7 +155,8 @@ private sealed interface DetailsOrigin {
                     HERO -> Hero
                     MOVIES_GRID -> MoviesGrid
                     MUSIC -> Music
-                    else -> Rail(HomeRail.valueOf(saved))
+                    // An unknown name is a rail a newer build renamed: no origin, not a crash.
+                    else -> HomeRail.entries.firstOrNull { it.name == saved }?.let(::Rail)
                 }
             },
         )
@@ -158,7 +172,7 @@ private sealed interface DetailsOrigin {
  * launched from, saveable so the overlay survives activity recreation (the trailer itself
  * restarts — a WebView cannot be parceled, and a trailer losing its position is an accepted
  * trade). */
-private data class TrailerRequest(
+internal data class TrailerRequest(
     val key: String,
     val title: String,
     val typeLabel: String,
@@ -174,15 +188,14 @@ private data class TrailerRequest(
                 }
             },
             restore = { saved ->
-                if (saved.isEmpty()) {
+                // Four slots or nothing; an unknown launch site means no overlay, not a crash.
+                val origin = saved.getOrNull(3)?.let { name ->
+                    VideoLaunchSite.entries.firstOrNull { it.name == name }
+                }
+                if (saved.size < 4 || origin == null) {
                     null
                 } else {
-                    TrailerRequest(
-                        key = saved[0],
-                        title = saved[1],
-                        typeLabel = saved[2],
-                        origin = VideoLaunchSite.valueOf(saved[3]),
-                    )
+                    TrailerRequest(key = saved[0], title = saved[1], typeLabel = saved[2], origin = origin)
                 }
             },
         )
@@ -1000,8 +1013,9 @@ private fun ContentPane(
             save = { map -> map.flatMap { (rail, id) -> listOf(rail.name, id) } },
             restore = { saved ->
                 mutableStateMapOf<HomeRail, Long>().apply {
-                    saved.chunked(2).forEach { (rail, id) ->
-                        put(HomeRail.valueOf(rail as String), id as Long)
+                    saved.chunked(2).forEach { (name, id) ->
+                        // A rail a newer build renamed simply loses its memory.
+                        HomeRail.entries.firstOrNull { it.name == name }?.let { put(it, id as Long) }
                     }
                 }
             },
@@ -1064,6 +1078,7 @@ private fun ContentPane(
         when (currentDestination) {
             IglooDestination.Home -> HomeRails(
                 home = home,
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 mutationNotice = mutationNotice,
                 progressSyncError = progressSyncError,
                 onRetryProgressSync = onRetryProgressSync,
@@ -1197,6 +1212,7 @@ private enum class VideoPlayOrigin { MovieDetails, ContinueWatchingRail }
 @Composable
 private fun HomeRails(
     home: HomeUiState,
+    spokenAccessibilityEnabled: Boolean,
     mutationNotice: String?,
     progressSyncError: String?,
     onRetryProgressSync: () -> Unit,
@@ -1217,15 +1233,87 @@ private fun HomeRails(
     // takes it back when the hero hides (section 11.3.1). heroVisible gates both attachment
     // sites in the same composition, so the requester is never on two nodes at once.
     val heroVisible = home.hero !is HomeHeroState.Hidden
+    // One set of tools per section that can hold focus — the hero, the progress Retry and each
+    // rail — so a vertical move under a screen reader can reveal, focus and settle the next one
+    // (AnnouncedSectionMove); the tools outlive the sections' coming and going.
+    val sectionTools = remember { mutableMapOf<Any, HomeSectionTools>() }
+    fun tools(key: Any) = sectionTools.getOrPut(key) { HomeSectionTools(key) }
+    val sections = buildList {
+        if (heroVisible) add(tools(HERO_SECTION))
+        if (progressSyncError != null) add(tools(RETRY_SECTION))
+        HomeRail.entries.forEach { add(tools(it)) }
+    }
+    // Read through holders: the move helper is remembered once and must see this composition.
+    val currentSections by rememberUpdatedState(sections)
+    val currentHeroVisible by rememberUpdatedState(heroVisible)
+    val currentScreenReader by rememberUpdatedState(spokenAccessibilityEnabled)
     // The hero's d-pad down target: attached to the Continue rail's entry anchor in every rail
     // state, so down always lands where spine re-entry would.
-    val continueEntryRequester = remember { FocusRequester() }
+    val continueEntryRequester = tools(HomeRail.ContinueWatching).entry
+    val scrollState = rememberScrollState()
+    var columnCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val moveScope = rememberCoroutineScope()
+    val sectionMove = remember {
+        // Each step resolves its section by key, so one that came or went mid-move is found or
+        // found missing rather than mistaken for its neighbour.
+        fun section(key: Any) = currentSections.firstOrNull { it.key == key }
+        AnnouncedSectionMove<Any>(
+            scope = moveScope,
+            scrollable = scrollState,
+            screenReader = { currentScreenReader },
+            focusedSection = { currentSections.firstOrNull { it.hasFocus }?.key },
+            neighbourOf = { key, forward ->
+                val index = currentSections.indexOfFirst { it.key == key }
+                if (index < 0) null else currentSections.getOrNull(index + if (forward) 1 else -1)?.key
+            },
+            isOnScreen = { key ->
+                // Unclipped: a section scrolled out of the column must still report where it is.
+                val section = section(key)?.coordinates?.takeIf { it.isAttached }?.unclippedBoundsInRoot()
+                val viewport = columnCoordinates?.takeIf { it.isAttached }?.unclippedBoundsInRoot()
+                if (section == null || viewport == null) {
+                    true
+                } else {
+                    // A rail's heading leads its cards; the part that takes focus is below it.
+                    val targetTop = section.top + section.height * SECTION_HEADING_FRACTION
+                    targetTop < viewport.bottom && section.bottom > viewport.top
+                }
+            },
+            reveal = { key, forward ->
+                val tools = section(key) ?: return@AnnouncedSectionMove
+                val size = tools.coordinates?.size
+                if (size == null) {
+                    tools.bringIntoView.bringIntoView()
+                } else {
+                    val height = size.height.toFloat()
+                    val shown = height * SECTION_REVEAL_FRACTION
+                    val rect = if (forward) {
+                        Rect(0f, 0f, size.width.toFloat(), shown)
+                    } else {
+                        Rect(0f, height - shown, size.width.toFloat(), height)
+                    }
+                    tools.bringIntoView.bringIntoView(rect)
+                }
+            },
+            settle = { key -> section(key)?.bringIntoView?.bringIntoView() },
+            requesterFor = { key ->
+                when {
+                    section(key) == null -> null
+                    // The pane's entry anchor rides the hero, or the first rail in its absence.
+                    key == HERO_SECTION -> contentStartRequester
+                    key == HomeRail.ContinueWatching && !currentHeroVisible -> contentStartRequester
+                    else -> tools(key).entry
+                }
+            },
+        )
+    }
     // The hero's one target outlives Loading -> Loaded and every page turn, so this matters only
     // when the hero hides while focused: the requester then sits on the Continue rail's anchor.
-    val onHeroFocus = rememberRefocusAfterSwap(home.hero) { contentStartRequester.requestFocus() }
+    val onHeroFocus = rememberRefocusAfterSwap(home.hero, spokenAccessibilityEnabled) {
+        contentStartRequester.requestFocus()
+    }
     // A Retry that clears while focused leaves focus on nothing; it goes back to the card the
     // player closed onto, the same hand-back the details page's Retry makes.
-    val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError) {
+    val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError, spokenAccessibilityEnabled) {
         if (progressSyncError == null &&
             !railReturnRequesters.getValue(HomeRail.ContinueWatching).requestFocusSafely()
         ) {
@@ -1236,7 +1324,9 @@ private fun HomeRails(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .onGloballyPositioned { columnCoordinates = it }
+            .onPreviewKeyEvent(sectionMove::onPreviewKey)
+            .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
     ) {
         // Inside the scroll and above the hero: it is text, so it owes the inset, and it scrolls
@@ -1256,7 +1346,7 @@ private fun HomeRails(
                 onOpenMovie = openMovie?.let { open ->
                     { movieId -> open(DetailsOrigin.Hero, movieId) }
                 },
-                modifier = Modifier.onFocusChanged { onHeroFocus(it.hasFocus) },
+                modifier = Modifier.homeSection(tools(HERO_SECTION)).onFocusChanged { onHeroFocus(it.hasFocus) },
             )
         }
 
@@ -1265,7 +1355,8 @@ private fun HomeRails(
             ProgressSyncRetry(
                 message = progressSyncError,
                 onRetry = onRetryProgressSync,
-                retryModifier = Modifier
+                retryModifier = Modifier.homeSection(tools(RETRY_SECTION))
+                    .focusRequester(tools(RETRY_SECTION).entry)
                     .focusProperties {
                         left = navigationRequester
                         right = FocusRequester.Cancel
@@ -1278,29 +1369,29 @@ private fun HomeRails(
             )
         }
 
-        IglooMediaRail(
+        val wiring = HomeRailWiring(
             contentInset = contentInset,
-            title = "Continue Watching",
+            leftFocusRequester = navigationRequester,
+            lastFocusedByRail = lastFocusedByRail,
+            returnRequesters = railReturnRequesters,
+            onRetry = onRetryRail,
+            screenReader = spokenAccessibilityEnabled,
+            tools = ::tools,
+        )
+
+        HomeRailSection(
+            rail = HomeRail.ContinueWatching,
             state = home.continueWatching,
             itemKey = { it.railKey },
+            wiring = wiring,
             entryRequester = if (heroVisible) continueEntryRequester else contentStartRequester,
-            leftFocusRequester = navigationRequester,
-            lastFocusedKey = lastFocusedByRail[HomeRail.ContinueWatching],
-            onItemFocused = { lastFocusedByRail[HomeRail.ContinueWatching] = it },
-            loadingLabel = "Loading continue watching",
-            emptyIcon = IglooIcons.Movies,
-            emptyText = "Nothing in progress yet. Movies and episodes you start watching appear here.",
-            onRetry = { onRetryRail(HomeRail.ContinueWatching) },
-            returnRequester = railReturnRequesters.getValue(HomeRail.ContinueWatching),
+            // The section tools' own requester is this one; the first rail hands its anchor to
+            // the pane's entry instead when the hero is away.
         ) { item, itemModifier, cardAspect ->
             when (item) {
-                is HomeContinueItem.Movie -> IglooPosterCard(
-                    title = item.movie.title,
-                    subtitle = item.movie.year?.toString(),
-                    imageUrl = item.movie.posterUrl,
-                    onClick = openMovie?.let { open ->
-                        { open(DetailsOrigin.Rail(HomeRail.ContinueWatching), item.movie.id) }
-                    },
+                is HomeContinueItem.Movie -> PosterItemCard(
+                    item = item.movie,
+                    onClick = railOpener(openMovie, HomeRail.ContinueWatching, item.movie.id),
                     progress = PosterCardProgress(item.progressFraction, item.progressDescription),
                     aspect = cardAspect,
                     modifier = itemModifier.testTag("continue_card_${item.movie.id}"),
@@ -1320,52 +1411,29 @@ private fun HomeRails(
             }
         }
 
-        IglooMediaRail(
-            contentInset = contentInset,
-            title = "Recently Added Movies",
+        HomeRailSection(
+            rail = HomeRail.LatestMovies,
             state = home.latestMovies,
             itemKey = { it.id },
-            entryRequester = null,
-            leftFocusRequester = navigationRequester,
-            lastFocusedKey = lastFocusedByRail[HomeRail.LatestMovies],
-            onItemFocused = { lastFocusedByRail[HomeRail.LatestMovies] = it },
-            loadingLabel = "Loading recently added movies",
-            emptyIcon = IglooIcons.Movies,
-            emptyText = "No movies in your library yet. Add a movies folder on the server and run a scan.",
-            onRetry = { onRetryRail(HomeRail.LatestMovies) },
-            returnRequester = railReturnRequesters.getValue(HomeRail.LatestMovies),
+            wiring = wiring,
         ) { movie, itemModifier, cardAspect ->
-            IglooPosterCard(
-                title = movie.title,
-                subtitle = movie.year?.toString(),
-                imageUrl = movie.posterUrl,
-                onClick = openMovie?.let { open ->
-                    { open(DetailsOrigin.Rail(HomeRail.LatestMovies), movie.id) }
-                },
+            PosterItemCard(
+                item = movie,
+                onClick = railOpener(openMovie, HomeRail.LatestMovies, movie.id),
                 aspect = cardAspect,
                 modifier = itemModifier.testTag("poster_card_${movie.id}"),
             )
         }
 
-        IglooMediaRail(
-            contentInset = contentInset,
-            title = "Recently Added Shows",
+        HomeRailSection(
+            rail = HomeRail.LatestShows,
             state = home.latestShows,
             itemKey = { it.id },
-            entryRequester = null,
-            leftFocusRequester = navigationRequester,
-            lastFocusedKey = lastFocusedByRail[HomeRail.LatestShows],
-            onItemFocused = { lastFocusedByRail[HomeRail.LatestShows] = it },
-            loadingLabel = "Loading recently added shows",
-            emptyIcon = IglooIcons.TvShows,
-            emptyText = "No shows in your library yet. Add a shows folder on the server and run a scan.",
-            onRetry = { onRetryRail(HomeRail.LatestShows) },
-            returnRequester = railReturnRequesters.getValue(HomeRail.LatestShows),
+            wiring = wiring,
         ) { show, itemModifier, cardAspect ->
-            IglooPosterCard(
-                title = show.title,
-                subtitle = show.year?.toString(),
-                imageUrl = show.posterUrl,
+            // No show details screen yet: the card is a landing site that announces no action.
+            PosterItemCard(
+                item = show,
                 onClick = null,
                 aspect = cardAspect,
                 fallbackIcon = IglooIcons.TvShows,
@@ -1373,49 +1441,26 @@ private fun HomeRails(
             )
         }
 
-        IglooMediaRail(
-            contentInset = contentInset,
-            title = "Recently Added Albums",
+        HomeRailSection(
+            rail = HomeRail.LatestAlbums,
             state = home.latestAlbums,
             itemKey = { it.id },
-            entryRequester = null,
-            leftFocusRequester = navigationRequester,
-            lastFocusedKey = lastFocusedByRail[HomeRail.LatestAlbums],
-            onItemFocused = { lastFocusedByRail[HomeRail.LatestAlbums] = it },
-            loadingLabel = "Loading recently added albums",
-            emptyIcon = IglooIcons.Music,
-            emptyText = MusicTab.Albums.emptyMessage(),
-            onRetry = { onRetryRail(HomeRail.LatestAlbums) },
-            returnRequester = railReturnRequesters.getValue(HomeRail.LatestAlbums),
+            wiring = wiring,
             cardAspect = IglooTheme.layout.albumAspect,
         ) { album, itemModifier, cardAspect ->
-            IglooPosterCard(
-                title = album.title,
-                subtitle = album.subtitle,
-                imageUrl = album.coverUrl,
-                onClick = openAlbum?.let { open ->
-                    { open(DetailsOrigin.Rail(HomeRail.LatestAlbums), album.id) }
-                },
+            AlbumCard(
+                album = album,
+                onClick = railOpener(openAlbum, HomeRail.LatestAlbums, album.id),
                 aspect = cardAspect,
-                fallbackIcon = IglooIcons.Music,
                 modifier = itemModifier.testTag("album_card_${album.id}"),
             )
         }
 
-        IglooMediaRail(
-            contentInset = contentInset,
-            title = "Now Playing in Theaters",
+        HomeRailSection(
+            rail = HomeRail.InTheaters,
             state = home.inTheaters,
             itemKey = { it.id },
-            entryRequester = null,
-            leftFocusRequester = navigationRequester,
-            lastFocusedKey = lastFocusedByRail[HomeRail.InTheaters],
-            onItemFocused = { lastFocusedByRail[HomeRail.InTheaters] = it },
-            loadingLabel = "Loading movies in theaters",
-            emptyIcon = IglooIcons.Movies,
-            emptyText = "No movies are playing in theaters right now. Check back later.",
-            onRetry = { onRetryRail(HomeRail.InTheaters) },
-            returnRequester = railReturnRequesters.getValue(HomeRail.InTheaters),
+            wiring = wiring,
         ) { movie, itemModifier, cardAspect ->
             InTheatersCard(
                 movie = movie,
@@ -1426,6 +1471,135 @@ private fun HomeRails(
         }
     }
 }
+
+/** What every Home rail is wired to alike; the per-rail pieces come from [HomeRail.copy]. */
+private class HomeRailWiring(
+    val contentInset: PaddingValues,
+    val leftFocusRequester: FocusRequester,
+    val lastFocusedByRail: MutableMap<HomeRail, Long>,
+    val returnRequesters: Map<HomeRail, FocusRequester>,
+    val onRetry: (HomeRail) -> Unit,
+    val screenReader: Boolean,
+    val tools: (HomeRail) -> HomeSectionTools,
+)
+
+/**
+ * What a vertical move under a screen reader needs from a Home section: where it is, whether it
+ * holds focus, a way to scroll part of it on screen and a requester on its focus target.
+ */
+private class HomeSectionTools(val key: Any) {
+    val entry = FocusRequester()
+    val bringIntoView = BringIntoViewRequester()
+    var coordinates: LayoutCoordinates? = null
+    var hasFocus by mutableStateOf(false)
+}
+
+/** Lets [tools] see where this section is and whether it holds focus, and scroll it on screen. */
+@OptIn(ExperimentalFoundationApi::class)
+private fun Modifier.homeSection(tools: HomeSectionTools): Modifier = this
+    .bringIntoViewRequester(tools.bringIntoView)
+    .onGloballyPositioned { tools.coordinates = it }
+    .onFocusChanged { tools.hasFocus = it.hasFocus }
+
+private fun LayoutCoordinates.unclippedBoundsInRoot(): Rect =
+    Rect(positionInRoot(), size.toSize())
+
+private const val HERO_SECTION = "hero"
+private const val RETRY_SECTION = "retry"
+
+/** How much of a section is heading and gap before its focus target, as a fraction of it. */
+private const val SECTION_HEADING_FRACTION = 0.3f
+
+/** How much of the next section a screen-reader move shows before focusing into it. */
+private const val SECTION_REVEAL_FRACTION = 0.6f
+
+/**
+ * One Home rail (section 11.3.2): an [IglooMediaRail] that speaks its section on entry, keeps
+ * its own focus memory in [HomeRailWiring.lastFocusedByRail], retries alone and carries its
+ * return requester. Only the first section holds the pane's [entryRequester].
+ */
+@Composable
+private fun <T> HomeRailSection(
+    rail: HomeRail,
+    state: IglooRailState<T>,
+    itemKey: (T) -> Long,
+    wiring: HomeRailWiring,
+    entryRequester: FocusRequester? = null,
+    cardAspect: Float = IglooTheme.layout.posterAspect,
+    itemContent: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
+) {
+    val copy = rail.copy
+    val tools = wiring.tools(rail)
+    IglooMediaRail(
+        announceSectionTitle = true,
+        screenReader = wiring.screenReader,
+        contentInset = wiring.contentInset,
+        title = copy.title,
+        state = state,
+        itemKey = itemKey,
+        entryRequester = entryRequester ?: tools.entry,
+        modifier = Modifier.homeSection(tools),
+        leftFocusRequester = wiring.leftFocusRequester,
+        lastFocusedKey = wiring.lastFocusedByRail[rail],
+        onItemFocused = { wiring.lastFocusedByRail[rail] = it },
+        loadingLabel = copy.loadingLabel,
+        emptyIcon = copy.emptyIcon,
+        emptyText = copy.emptyText,
+        onRetry = { wiring.onRetry(rail) },
+        returnRequester = wiring.returnRequesters.getValue(rail),
+        cardAspect = cardAspect,
+        itemContent = itemContent,
+    )
+}
+
+/** A rail's heading, its skeleton anchor's announcement, and its empty state's line and glyph. */
+private class HomeRailCopy(
+    val title: String,
+    val loadingLabel: String,
+    val emptyText: String,
+    val emptyIcon: ImageVector,
+)
+
+private val HomeRail.copy: HomeRailCopy
+    get() = when (this) {
+        HomeRail.ContinueWatching -> HomeRailCopy(
+            title = "Continue Watching",
+            loadingLabel = "Loading continue watching",
+            emptyText = "Nothing in progress yet. Movies and episodes you start watching appear here.",
+            emptyIcon = IglooIcons.Movies,
+        )
+        HomeRail.LatestMovies -> HomeRailCopy(
+            title = "Recently Added Movies",
+            loadingLabel = "Loading recently added movies",
+            emptyText = "No movies in your library yet. Add a movies folder on the server and run a scan.",
+            emptyIcon = IglooIcons.Movies,
+        )
+        HomeRail.LatestShows -> HomeRailCopy(
+            title = "Recently Added Shows",
+            loadingLabel = "Loading recently added shows",
+            emptyText = "No shows in your library yet. Add a shows folder on the server and run a scan.",
+            emptyIcon = IglooIcons.TvShows,
+        )
+        HomeRail.LatestAlbums -> HomeRailCopy(
+            title = "Recently Added Albums",
+            loadingLabel = "Loading recently added albums",
+            emptyText = MusicTab.Albums.emptyMessage(),
+            emptyIcon = IglooIcons.Music,
+        )
+        HomeRail.InTheaters -> HomeRailCopy(
+            title = "Now Playing in Theaters",
+            loadingLabel = "Loading movies in theaters",
+            emptyText = "No movies are playing in theaters right now. Check back later.",
+            emptyIcon = IglooIcons.Movies,
+        )
+    }
+
+/** A card's press, when there is a page to open: the overlay opens from [rail], for Back. */
+private fun railOpener(
+    open: ((DetailsOrigin, Long) -> Unit)?,
+    rail: HomeRail,
+    id: Long,
+): (() -> Unit)? = open?.let { { it(DetailsOrigin.Rail(rail), id) } }
 
 /**
  * The non-Home destinations, until each grows a real screen. Full-bleed like the hero, so the
@@ -1446,7 +1620,6 @@ private fun PlaceholderContent(
     navigationRequester: FocusRequester,
 ) {
     val colors = IglooTheme.colors
-    val direction = LocalLayoutDirection.current
     // Constant rather than rememberAmbientProgress(): section 7.2's one-loop carve-out names the
     // welcome screen alone, and a destination the user sits on is exactly where drift would be
     // motion in the periphery with nothing to say.
@@ -1469,11 +1642,8 @@ private fun PlaceholderContent(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(
-                    start = contentInset.calculateStartPadding(direction),
-                    end = contentInset.calculateEndPadding(direction),
-                    bottom = IglooTheme.layout.safeAreaVertical,
-                )
+                .insetHorizontally(contentInset)
+                .padding(bottom = IglooTheme.layout.safeAreaVertical)
                 .widthIn(max = PLACEHOLDER_TEXT_MAX_WIDTH.scaled())
                 .focusRing(
                     focused = focused,

@@ -52,7 +52,8 @@ class PairingCodeAccessibilityTest {
             .assertIsFocused()
             .assertContentDescriptionEquals(
                 "Pairing code ready. Focus moved to the first character. " +
-                    "Use Left and Right to review each character. A.",
+                    "Use Right or Down to move forward, Left or Up to move back. " +
+                    "Character 1 of 6. Letter A, as in Alpha.",
             )
     }
 
@@ -65,14 +66,14 @@ class PairingCodeAccessibilityTest {
         }
         composeRule.onNodeWithTag(characterTag(1))
             .assertIsFocused()
-            .assertContentDescriptionEquals("B")
+            .assertContentDescriptionEquals("Character 2 of 6. Letter B, as in Bravo.")
 
         composeRule.onNodeWithTag(characterTag(1)).performKeyInput {
             pressKey(Key.DirectionLeft)
         }
         composeRule.onNodeWithTag(characterTag(0))
             .assertIsFocused()
-            .assertContentDescriptionEquals("A")
+            .assertContentDescriptionEquals("Character 1 of 6. Letter A, as in Alpha.")
     }
 
     @Test
@@ -100,15 +101,16 @@ class PairingCodeAccessibilityTest {
             }
         }
 
-        composeRule.waitForIdle()
+        awaitFirstCharacterFocus()
         composeRule.runOnIdle { elsewhereFocus.requestFocus() }
         composeRule.onNodeWithContentDescription("Elsewhere").assertIsFocused()
 
         composeRule.runOnIdle { code.value = "XYZ789" }
+        awaitFirstCharacterFocus()
         composeRule.onNodeWithTag(characterTag(0))
             .assertIsFocused()
             .assertContentDescriptionEquals(
-                "Pairing code changed. Focus moved to the first character. X.",
+                "Pairing code changed. Focus moved to the first character. Character 1 of 6. Letter X, as in X-ray.",
             )
     }
 
@@ -126,14 +128,15 @@ class PairingCodeAccessibilityTest {
             }
         }
 
-        composeRule.waitForIdle()
+        awaitFirstCharacterFocus()
         composeRule.runOnIdle { phase.value = QuickConnectPhase.RequestingCode }
         composeRule.runOnIdle { phase.value = QuickConnectPhase.CodeReady("XYZ789") }
+        awaitFirstCharacterFocus()
 
         composeRule.onNodeWithTag(characterTag(0))
             .assertIsFocused()
             .assertContentDescriptionEquals(
-                "Pairing code changed. Focus moved to the first character. X.",
+                "Pairing code changed. Focus moved to the first character. Character 1 of 6. Letter X, as in X-ray.",
             )
     }
 
@@ -148,7 +151,11 @@ class PairingCodeAccessibilityTest {
             pressKey(Key.DirectionRight)
         }
 
-        composeRule.onAllNodesWithContentDescription("A").assertCountEquals(4)
+        listOf(0, 1, 4, 5).forEach { index ->
+            composeRule.onNodeWithTag(characterTag(index)).assertContentDescriptionEquals(
+                "Character ${index + 1} of 6. Letter A, as in Alpha.",
+            )
+        }
         repeat(6) { index ->
             composeRule.onNodeWithTag(characterTag(index)).assert(
                 SemanticsMatcher.expectValue(
@@ -191,12 +198,14 @@ class PairingCodeAccessibilityTest {
             }
         }
 
+        awaitFirstCharacterFocus()
         composeRule.onNodeWithTag(characterTag(0)).performKeyInput {
             pressKey(Key.DirectionLeft)
         }
         composeRule.onNodeWithTag("before_code").assertIsFocused()
 
         composeRule.runOnIdle { code.value = "XYZ789" }
+        awaitFirstCharacterFocus()
         composeRule.onNodeWithTag(characterTag(0)).assertIsFocused()
         repeat(5) { index ->
             composeRule.onNodeWithTag(characterTag(index))
@@ -244,6 +253,48 @@ class PairingCodeAccessibilityTest {
         action.assertIsFocused()
     }
 
+    @Test
+    fun signInControlsFollowCodeInBothDirectionsWithoutSpatialJumps() {
+        composeRule.setContent {
+            IglooTheme {
+                QuickConnectContent(
+                    phase = QuickConnectPhase.CodeReady("O0I1B8"),
+                    serverOrigin = "https://example.test",
+                    restoreError = null,
+                    canCancel = false,
+                    onRetryRestore = {},
+                    onRetryPairing = {},
+                    onSwitchToPassword = {},
+                    onLeave = {},
+                    spokenAccessibilityEnabled = true,
+                )
+            }
+        }
+        awaitFirstCharacterFocus()
+        val stops = (0..5).map { composeRule.onNodeWithTag(characterTag(it)) } + listOf(
+            composeRule.onNodeWithContentDescription("Use email and password instead"),
+            composeRule.onNodeWithContentDescription("Change server address"),
+        )
+        // Both arrow pairs traverse the same sequence, including the code/button boundary.
+        for ((forward, backward) in listOf(
+            Key.DirectionRight to Key.DirectionLeft,
+            Key.DirectionDown to Key.DirectionUp,
+        )) {
+            stops.first().performKeyInput { pressKey(backward) }
+            stops.first().assertIsFocused()
+            stops.zipWithNext().forEach { (from, to) ->
+                from.assertIsFocused().performKeyInput { pressKey(forward) }
+                to.assertIsFocused()
+            }
+            stops.last().performKeyInput { pressKey(forward) }
+            stops.last().assertIsFocused()
+            stops.asReversed().zipWithNext().forEach { (from, to) ->
+                from.assertIsFocused().performKeyInput { pressKey(backward) }
+                to.assertIsFocused()
+            }
+        }
+    }
+
     private fun showCode(
         code: String,
         spokenAccessibilityEnabled: Boolean,
@@ -257,6 +308,17 @@ class PairingCodeAccessibilityTest {
             }
         }
         composeRule.waitForIdle()
+        if (spokenAccessibilityEnabled) awaitFirstCharacterFocus()
+    }
+
+    private fun awaitFirstCharacterFocus() {
+        // The arrival deliberately waits for the platform accessibility snapshot. An idle
+        // composition alone does not mean the delayed focus handoff has completed.
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag(characterTag(0)).fetchSemanticsNodes().any {
+                it.config[SemanticsProperties.Focused]
+            }
+        }
     }
 
     private fun characterTag(index: Int): String = "pairing_code_character_$index"

@@ -263,7 +263,8 @@ fun MusicScreen(
                 firstItemRequester = firstItemRequester,
                 cardlessHandoffRequester = cardlessHandoffRequester,
                 focusOwnership = focusOwnership,
-            )
+                            screenReader = spokenAccessibilityEnabled,
+)
 
             when (content) {
                 MusicContent.Loading -> when (tab) {
@@ -362,14 +363,10 @@ fun MusicScreen(
                         retryLabel = "Retry loading more albums",
                         cardAspect = IglooTheme.layout.albumAspect,
                     ) { album, modifier ->
-                        IglooPosterCard(
-                            title = album.title,
-                            subtitle = album.subtitle,
-                            imageUrl = album.coverUrl,
+                        AlbumCard(
+                            album = album,
                             onClick = onAlbumSelected?.let { open -> { open(album.id) } },
-                            aspect = IglooTheme.layout.albumAspect,
                             width = Dp.Unspecified,
-                            fallbackIcon = IglooIcons.Music,
                             modifier = modifier,
                         )
                     }

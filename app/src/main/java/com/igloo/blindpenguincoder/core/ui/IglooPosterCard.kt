@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -81,34 +80,20 @@ fun IglooPosterCard(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
+    val spokenDescription = mediaSectionDescription(
+        semanticLabel ?: listOfNotNull(title, subtitle, progress?.description).joinToString(", "),
+    )
 
     Column(
         horizontalAlignment = if (centerText) Alignment.CenterHorizontally else Alignment.Start,
         modifier = modifier
             .cardWidth(width)
-            .onFocusChanged { focused = it.isFocused }
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = null,
-                        indication = null,
-                        onClick = onClick,
-                    )
-                } else {
-                    Modifier.focusable()
-                },
-            )
-            .clearAndSetSemantics {
-                contentDescription = semanticLabel
-                    ?: listOfNotNull(title, subtitle, progress?.description).joinToString(", ")
-                if (onClick != null) {
-                    role = Role.Button
-                    onClick(label = actionLabel ?: "Open $title") {
-                        onClick()
-                        true
-                    }
-                }
-            },
+            .mediaCardInteraction(
+                onFocusChanged = { focused = it },
+                onClick = onClick,
+                description = spokenDescription,
+                actionLabel = actionLabel ?: "Open $title",
+            ),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
         Box(
@@ -152,6 +137,39 @@ fun IglooPosterCard(
         }
     }
 }
+
+/**
+ * How a media card takes focus, a press and a screen reader, shared with the In Theaters card:
+ * focus observed outside the clickable (section 6.3), a `clickable` with no indication because
+ * the focus ring is the indication, and one cleared node reading [description]. A null [onClick]
+ * leaves a plain focus target — the rails' focus model needs every card to be a landing site —
+ * with no role and no action, because an action that does nothing is worse announced than
+ * absent.
+ */
+internal fun Modifier.mediaCardInteraction(
+    onFocusChanged: (Boolean) -> Unit,
+    onClick: (() -> Unit)?,
+    description: String,
+    actionLabel: String,
+): Modifier = this
+    .onFocusChanged { onFocusChanged(it.isFocused) }
+    .then(
+        if (onClick != null) {
+            Modifier.clickable(interactionSource = null, indication = null, onClick = onClick)
+        } else {
+            Modifier.focusable()
+        },
+    )
+    .clearAndSetSemantics {
+        contentDescription = description
+        if (onClick != null) {
+            role = Role.Button
+            onClick(label = actionLabel) {
+                onClick()
+                true
+            }
+        }
+    }
 
 /**
  * A grid cell already has a width; a rail's card does not. [Dp.Unspecified] fills the parent

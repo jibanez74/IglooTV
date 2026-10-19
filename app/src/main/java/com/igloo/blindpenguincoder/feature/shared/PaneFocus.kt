@@ -4,6 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.FocusRequester
+import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
+import com.igloo.blindpenguincoder.core.ui.awaitAccessibilitySnapshot
+import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 
 /**
@@ -96,6 +99,9 @@ private class PaneFocusHandoffMemory<C : PaneContent>(
  * select on focus, so the tab the user is standing on caused it, and pulling focus into the
  * content would make the strip impossible to traverse. The surface still returns to the top so
  * the next press down lands on its entry item.
+ *
+ * Every hand-off here lands on a node composed in this very change, so under a [screenReader] it
+ * waits until TalkBack can hear it (design-system section 6.3), as the rails' does.
  */
 @Composable
 fun <C : PaneContent> PaneFocusHandoffCoordinator(
@@ -108,6 +114,7 @@ fun <C : PaneContent> PaneFocusHandoffCoordinator(
     focusOwnership: PaneFocusOwnership,
     silentReconcileGeneration: Int = 0,
     containsItem: (C, Long) -> Boolean = { _, _ -> true },
+    screenReader: Boolean = rememberSpokenAccessibilityEnabled(),
 ) {
     val memory = remember(resetKey) {
         PaneFocusHandoffMemory(content, contentGeneration, silentReconcileGeneration)
@@ -124,15 +131,21 @@ fun <C : PaneContent> PaneFocusHandoffCoordinator(
         memory.content = content
         memory.contentGeneration = contentGeneration
         memory.silentReconcileGeneration = silentReconcileGeneration
+        suspend fun handOff(requester: FocusRequester) {
+            if (screenReader) awaitAccessibilitySnapshot(ANNOUNCED_FOCUS_WAIT_MS)
+            // Re-read after the wait: a tab the user reached meanwhile keeps focus (tabs select
+            // on focus, so pulling it into the content would break the strip's traversal).
+            if (!focusOwnership.tabFocused) requester.requestFocusSafely()
+        }
 
         when {
             contentReplaced && screenOwnedFocus -> when {
                 content.isPopulated -> {
                     scrollToTop()
-                    if (!tabFocused) firstItemRequester.requestFocusSafely()
+                    if (!tabFocused) handOff(firstItemRequester)
                 }
 
-                content.isCardless -> if (!tabFocused) cardlessHandoffRequester.requestFocusSafely()
+                content.isCardless -> if (!tabFocused) handOff(cardlessHandoffRequester)
 
                 else -> Unit
             }
@@ -141,18 +154,18 @@ fun <C : PaneContent> PaneFocusHandoffCoordinator(
                 focusedItemId != null &&
                 outgoingContent.isPopulated &&
                 !containsItem(content, focusedItemId) -> when {
-                content.isPopulated -> firstItemRequester.requestFocusSafely()
-                content.isEmpty -> cardlessHandoffRequester.requestFocusSafely()
+                content.isPopulated -> handOff(firstItemRequester)
+                content.isEmpty -> handOff(cardlessHandoffRequester)
                 else -> Unit
             }
 
             outgoingContent.isSkeleton && cardlessFocused && content.isPopulated -> {
                 scrollToTop()
-                firstItemRequester.requestFocusSafely()
+                handOff(firstItemRequester)
             }
 
             outgoingContent.isSkeleton && cardlessFocused && content.isCardless ->
-                cardlessHandoffRequester.requestFocusSafely()
+                handOff(cardlessHandoffRequester)
         }
     }
 }

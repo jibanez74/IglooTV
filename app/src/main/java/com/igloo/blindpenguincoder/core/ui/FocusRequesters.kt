@@ -82,11 +82,26 @@ internal const val ANNOUNCED_LINE_WAIT_MS = 250L
  * clearing the reported focus — once that composition applies, so the flag still says whether
  * focus was here. [refocus] then runs once the incoming state's nodes exist. Without this, a
  * focused node disposing drops focus on the floor.
+ *
+ * The incoming anchor is in its first frames, so under a [screenReader] the request waits as
+ * [requestFocusAnnounced] does; asked at once it goes unannounced and TalkBack for TV parks its
+ * cursor on a node of its own choosing. Nothing holds focus during the wait — the outgoing node
+ * took it with it — and the detach leaves the ancestors' `hasFocus` stale, so unlike the shell's
+ * first request this one cannot tell a press made during the wait from the gap and does not
+ * yield to one; it re-lands on the anchor the user was on.
  */
 @Composable
-internal fun rememberRefocusAfterSwap(key: Any?, refocus: () -> Unit): (Boolean) -> Unit {
+internal fun rememberRefocusAfterSwap(
+    key: Any?,
+    screenReader: Boolean = rememberSpokenAccessibilityEnabled(),
+    refocus: () -> Unit,
+): (Boolean) -> Unit {
     val ownsFocus = remember { mutableStateOf(false) }
     val ownedFocusAtSwap = remember(key) { ownsFocus.value }
-    LaunchedEffect(key) { if (ownedFocusAtSwap) refocus() }
+    LaunchedEffect(key) {
+        if (!ownedFocusAtSwap) return@LaunchedEffect
+        if (screenReader) awaitAccessibilitySnapshot(ANNOUNCED_FOCUS_WAIT_MS)
+        refocus()
+    }
     return remember { { focused -> ownsFocus.value = focused } }
 }

@@ -1,18 +1,12 @@
 package com.igloo.blindpenguincoder.feature.home
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,26 +14,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.role
-import coil3.compose.AsyncImage
-import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.overMedia
+import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
+import com.igloo.blindpenguincoder.core.ui.cardWidth
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.mediaCardInteraction
+import com.igloo.blindpenguincoder.core.ui.mediaSectionDescription
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
+import com.igloo.blindpenguincoder.core.ui.rememberArtworkState
+import com.igloo.blindpenguincoder.core.ui.spoken
 
 /**
  * The In Theaters rail's card (section 11.3.2): unlike [com.igloo.blindpenguincoder.core.ui.IglooPosterCard],
@@ -51,9 +41,8 @@ import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
  * both themes (section 3.1), so nothing shifts with the theme. With no poster to load — or one
  * that failed — the card drops the scrim and paints its text in theme tokens instead.
  *
- * A null [onClick] still renders a focusable card — the rails' focus model needs every card to be
- * a landing site — but it drops the button role and the "Open …" action, exactly as
- * [com.igloo.blindpenguincoder.core.ui.IglooPosterCard] does.
+ * Focus, press and announcement are the poster card's (`mediaCardInteraction`), so a null
+ * [onClick] renders the same inert landing site.
  */
 @Composable
 fun InTheatersCard(
@@ -64,40 +53,23 @@ fun InTheatersCard(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
-    var imageFailed by remember(movie.posterUrl) { mutableStateOf(false) }
-    val overMedia = movie.posterUrl != null && !imageFailed
+    val art = rememberArtworkState(movie.posterUrl)
+    val overMedia = art.showsArtwork
     val ratingBadge = movie.rating?.let { ratingBadgeSpec(it) }
+    val spokenDescription = mediaSectionDescription(
+        listOfNotNull(movie.title, movie.year, ratingBadge?.spoken()).joinToString(", "),
+    )
 
     Box(
         modifier = modifier
-            .width(IglooTheme.layout.posterWidth)
+            .cardWidth(IglooTheme.layout.posterWidth)
             .aspectRatio(aspect)
-            .onFocusChanged { focused = it.isFocused }
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = null,
-                        indication = null,
-                        onClick = onClick,
-                    )
-                } else {
-                    Modifier.focusable()
-                },
+            .mediaCardInteraction(
+                onFocusChanged = { focused = it },
+                onClick = onClick,
+                description = spokenDescription,
+                actionLabel = "Open ${movie.title}",
             )
-            .clearAndSetSemantics {
-                contentDescription = listOfNotNull(
-                    movie.title,
-                    movie.year,
-                    ratingBadge?.let { "rated ${it.label} out of 10" },
-                ).joinToString(", ")
-                if (onClick != null) {
-                    role = Role.Button
-                    onClick(label = "Open ${movie.title}") {
-                        onClick()
-                        true
-                    }
-                }
-            }
             // focusRing owns the clip, so the muted fill doubles as the image backdrop and
             // nothing here may clip over it.
             .focusRing(
@@ -107,16 +79,8 @@ fun InTheatersCard(
             ),
         contentAlignment = Alignment.Center,
     ) {
+        ArtworkOrGlyph(imageUrl = movie.posterUrl, fallbackIcon = IglooIcons.Movies, state = art)
         if (overMedia) {
-            AsyncImage(
-                model = movie.posterUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                onState = { state ->
-                    if (state is AsyncImagePainter.State.Error) imageFailed = true
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
             // Scrim under the text, lower third of the poster.
             Box(
                 modifier = Modifier
@@ -130,13 +94,6 @@ fun InTheatersCard(
                             1f to Color.Black.copy(alpha = 0.90f),
                         ),
                     ),
-            )
-        } else {
-            Image(
-                imageVector = IglooIcons.Movies,
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(colors.mutedForeground),
-                modifier = Modifier.size(IglooTheme.icons.lg),
             )
         }
 
@@ -171,4 +128,3 @@ fun InTheatersCard(
         }
     }
 }
-
