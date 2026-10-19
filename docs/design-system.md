@@ -2085,13 +2085,16 @@ network as text without its logo.
 **Focus.** One ordered list of the sections present drives both the hand-wired chain and the
 announced section move: [hero summary] → Play/Resume → [Overview] → chips → episodes → [Key Crew]
 → Cast → Extra Videos → About, the bracketed ones reading stops present only under a screen
-reader. Up from the rail lands on the selected chip, up from the chips on Play/Resume; every
-outward edge is pinned. At 540dp the chips, the rail and everything below sit under the fold, so
+reader. Up from the rail lands on the selected chip, up from the chips on Play/Resume; with no
+Play/Resume (nothing to play), a section's up goes to whichever section is present above it — the
+chips' to the Overview stop under a screen reader, otherwise nowhere, the chips then being the top
+of the chain. Every outward edge is pinned. At 540dp the chips, the rail and everything below sit under the fold, so
 the column is a `rememberAnnouncedSectionColumn` (§9.1) — a move into an off-screen section is
 revealed, waited for and then focused, so TalkBack hears it — and a chip press hands focus down
 through the same move once the new rail has composed, never from inside the press (the entry
-requester still rides the outgoing season's card then). Entry focus is Play/Resume, or under a
-screen reader the hero summary (§11.4.1 Focus).
+requester still rides the outgoing season's card then). Entry focus is the first section present:
+under a screen reader the hero summary (§11.4.1 Focus), otherwise Play/Resume, or with no
+Play/Resume whichever section comes next.
 
 **Not on the page yet.** Playing an episode or an extra, marking an episode watched (a long-press
 episode menu is planned), and the up-next hand-off. Continue Watching episode cards keep resuming
