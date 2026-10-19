@@ -84,9 +84,9 @@ exactly as Movies and Music do.
 
 ## What remains
 
-- **Show details, seasons and episodes** — the next pass. Until it lands the cards stay inert
-  and the pane has no return requester; when it lands, the host gains a `DetailsOrigin` for the
-  shows grid the way Movies has one, and the card gets its `onItemSelected`.
+- ~~**Show details, seasons and episodes**~~ — landed on `feature/show-details` (2026-10-19):
+  the cards open the show page, with `DetailsOrigin.ShowsGrid` and the pane's return requester;
+  see [show-details-status.md](show-details-status.md). Playing from that page is the next pass.
 - **Up next after an episode** — Continue Watching now renders `kind: episode` entries and a
   press resumes the episode in the player (`HomeViewModel.resumeEpisode`, over the shared
   `VideoPlaybackRepository` routes under `/shows/episodes/{id}`); when the episode ends the

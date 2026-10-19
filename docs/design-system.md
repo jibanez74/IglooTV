@@ -826,7 +826,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | Composable | Notes |
 |---|---|
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
-| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `overMedia` takes the §3.2 over-media ground and white content where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. |
+| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `overMedia` takes the §3.2 over-media ground and white content where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. A null `onClick` draws a button in its final place before its action exists (the show page's Play/Resume, §11.4.3): still a focus target, but with no `Role.Button` and no action — the `IglooIconButton` inert contract. That is not `enabled = false`, which leaves the focus tree and announces "disabled": a control that will work is not a disabled one. |
 | `IglooFilterChip` | One choice in a row of mutually exclusive filters (the Movies index's genre picker, §11.4): `heightIn(min = sizes.controlHeight)`, radius `lg`, `spacing.md` horizontal padding, `bodyMedium` label. Selection and focus compose rather than compete — selected is a `primary` fill that holds while unfocused, focus is the §6.1 ring/scale/glow over whatever fill the chip has; unselected rests as the ring's hairline border and takes the Ghost focus fill. Not an `IglooButton` variant: a selected-state fill on an unfocused node is outside the button contract. Built on the internal `SelectablePill`, which carries that body for both pills. One cleared node: `semanticLabel` replaces the drawn text ("Action · 26" speaks as "Action, 26 movies"), the selected chip announces "Selected" via state description, and `actionLabel` names the press. |
 | `IglooTabRow` / `IglooTab` | A strip of mutually exclusive sections (the Movies index, §11.4) — the web client's tab list. The row is one bordered pill on `muted @ 0.50` with a `border @ 0.50` hairline at `focus.restWidth`, radius `lg`, `spacing.xs` padding and gap, sized to its content and never scrolling (more tabs than fit the panel is too many tabs). A tab is `controlHeight` minus the row's padding, radius `md`, `spacing.md` horizontal padding, `bodyMedium` label: `primary` fill / `primaryForeground` selected, `card @ 0.72` / `foreground` focused, transparent / `mutedForeground` at rest — selection and focus compose as on the chip, but **no focus scale**, since a lifted tab would overlap the row's border. Shares `IglooFilterChip`'s `SelectablePill` body; the five differences (radius, focus scale, height inset, resting label colour, semantics) are its parameters. **Selects on focus**: d-pad landing on a tab is the switch, the Android TV convention. `onPress` is the separate, deliberate signal — TalkBack's click action, and the way back after a failed switch reverted the selection out from under a focused tab — and every caller passes it separately, because the panes' landing is debounced and a press must not wait behind it. The focused-but-unselected treatment exists for exactly that revert window and nowhere else. One cleared node with `Role.Tab`, `selected` set only when true (never false — TalkBack would say "not selected" on every other tab) and `actionLabel` on the press; the row is a `selectableGroup`. Hand-rolled on Foundation, not `androidx.tv.material3.TabRow` (§9.2), and the ground is written out rather than taken from `iglooSurface`, whose `clip` would cut the focused tab's glow at the row's bounds. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
@@ -843,8 +843,8 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
-| `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg` by default and `artworkRadius = radius.pill` for a musician's circle — §8.2's circle is a radius the focus ring clamps, not a second component — with `centerText` for the text under it and `semanticLabel` when "Title, Year" is not the sentence to read, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose fully spoken remaining-time description joins the cleared node ("Title, Year, 2 hours and 20 minutes remaining", §12) so the bar can never render unannounced. The description is semantic only; no numeric percentage or remaining-time caption renders on the card. |
-| `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), the minimal `IglooFocusableEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). Takes the pane's `contentInset` and splits it by node per §8.3 — heading and non-scrolling states pad, the `LazyRow` carries it as `contentPadding` so cards bleed off the panel edge. |
+| `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg` by default and `artworkRadius = radius.pill` for a musician's circle — §8.2's circle is a radius the focus ring clamps, not a second component — with `centerText` for the text under it and `semanticLabel` when "Title, Year" is not the sentence to read, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. An optional `detail` third line in the context line's tier (a show's cast card: "228 episodes") joins the spoken sentence. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose fully spoken remaining-time description joins the cleared node ("Title, Year, 2 hours and 20 minutes remaining", §12) so the bar can never render unannounced. The description is semantic only; no numeric percentage or remaining-time caption renders on the card. |
+| `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), the minimal `IglooFocusableEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). Takes the pane's `contentInset` and splits it by node per §8.3 — heading and non-scrolling states pad, the `LazyRow` carries it as `contentPadding` so cards bleed off the panel edge. Optional `upFocusRequester` / `downFocusRequester` pin the vertical edges for a rail between hand-wired neighbours (a details page's sections) on every card **and** on whichever anchor the state holds — skeleton cell, Retry or empty box — so no state leaves an edge to a spatial search; null leaves it spatial, as Home's column wants. |
 | `IglooFocusableEmpty` | §10 empty state, minimal variant only: faded icon + one line, as the pane's focusable anchor announcing the line when focused — no live region (§6.3). The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
 | `IglooRadioListDialog` | The scrimmed radio-list dialog behind Playback Settings and the player's track and chapter menus: the `IglooConfirmDialog` recipe (§9.3) around one flat, scrolling list of `IglooRadioRow`s and a pinned Done. The caller draws the rows, applying `rowFocus(n)` to row `n`, which walks up/down and onto Done and cancels every other direction; entry focus lands on `entryIndex`. |
 | `IglooPinnedError` | A screen's full-screen error: `IglooInlineError` centred in the safe area at `dialogWidth`, its one action pinned in every direction because the host is still composed underneath. Assertive — it is the only region on screen. |
@@ -854,9 +854,22 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 
 The details overlays share their hero from `feature/shared` — `DetailsHero` (the full-bleed
 backdrop, its two scrims and the decode-gated `overMedia` flag), `HeroArtwork`,
-`HeroReadingStop`, `HeroTitle`, `DetailChip`, `DetailsHeroSkeleton` and `FactsSection` — and the
-library and Music panes share `PaneGrid`, `PaneGridSkeleton`, `PaneTabRow`, `PaneHeader` and the
-card-less states from the same package.
+`HeroReadingStop`, `HeroTitle`, `DetailChip`, `DetailsHeroSkeleton`, `DetailsHeroInfo` (title,
+tagline, the metadata row of rating badge, chips and plain line spoken as one sentence, and the
+genres line inside the summary stop), `HeroSingleActionRow` (one Primary button, nullable press,
+optional state and an under-button slot), `ResumeProgress` (the resume strip and its reserved
+slot) and `FactsSection` — and their sections from `DetailsSections.kt`: `OverviewSection`,
+`KeyCrewSection`, `DetailsRailSection`, `CastSection`, `ExtraVideosSection` (inert with no press),
+`AboutSection` and `FadeClampedText`, the overview's fade for any clamped prose. The render models
+the video pages share (`CrewEntry`, `CastMemberUi`, `ExtraVideoUi`, `ProgressUi`) and their cast
+and extras rules live in `DetailsMapping.kt`. `SelectableChipRow` is the scrolling row of
+press-to-select chips behind the Genres picker and the show page's seasons. The library and Music
+panes share `PaneGrid`, `PaneGridSkeleton`, `PaneTabRow`, `PaneHeader` and the card-less states
+from the same package. A scrolling column whose vertical moves a screen reader must hear — Home
+and the show page — wraps its sections in `rememberAnnouncedSectionColumn`
+(`core/ui/AnnouncedSectionMove.kt`), which reveals an off-screen section, waits for a snapshot
+and focuses into it with the scroll held; its `handOff` does the same for a press that lands focus
+in another section.
 
 The app deliberately does **not** use Material theming. `IglooTheme` is the only source of
 colors, type, and dimensions.
@@ -1463,9 +1476,8 @@ what tells a screen-reader user there is a page to the right; a lone page gives 
 dots. **There is no live region.** TalkBack speaks a change to the description of the node its
 cursor is on, which covers a turn and a load under focus; a live region on top made TalkBack
 re-read the hero each time focus came or went, because Compose reports every focus change as a
-content change on the node. On the movie page the target announces "Open {title}" and opens its
-details (Back returns to it); on the show page it announces **no action** until a show details
-screen lands, like the TV Shows grid's cards. The target is `focusable` with the press handled on
+content change on the node. Each page announces "Open {title}" and opens its own details page —
+the movie's, or the show's (§11.4.3) — and Back returns to the hero. The target is `focusable` with the press handled on
 it (Select, Enter, keypad Enter on release, and the semantics click) rather than `clickable`: the
 two are different modifier nodes, and the skeleton turning into the movie page under focus would
 otherwise detach the focused node.
@@ -1514,9 +1526,9 @@ screen is left to Compose's own move, which is announced in that case.
 
 | Rail | Endpoint | Card | Empty copy |
 |---|---|---|---|
-| Continue Watching | `GET /api/continue-watching` (movies and TV episodes, in server order) | poster + progress bar; fully spoken remaining time in card semantics only. A movie card opens its details; an episode card wears the **show's** poster (`TvShows` glyph fallback) with the show name over `S1 E3 · Episode name`, announces "Resume {show} S1 E3", and resumes straight into the player — there is no show details screen yet. The rail's `Long` key folds the kind into the low bit (`id * 2`, `id * 2 + 1`) because a movie id and an episode id can collide. | "Nothing in progress yet. Movies and episodes you start watching appear here." |
+| Continue Watching | `GET /api/continue-watching` (movies and TV episodes, in server order) | poster + progress bar; fully spoken remaining time in card semantics only. A movie card opens its details; an episode card wears the **show's** poster (`TvShows` glyph fallback) with the show name over `S1 E3 · Episode name`, announces "Resume {show} S1 E3", and resumes straight into the player rather than opening the show's page (web parity: the episode is what the user was watching). The rail's `Long` key folds the kind into the low bit (`id * 2`, `id * 2 + 1`) because a movie id and an episode id can collide. | "Nothing in progress yet. Movies and episodes you start watching appear here." |
 | Recently Added Movies | `GET /api/movies/latest` | poster, year below | "No movies in your library yet. Add a movies folder on the server and run a scan." |
-| Recently Added Shows | `GET /api/shows/latest` | poster, name and optional premiere year below, `TvShows` glyph fallback; focusable with no button role or press action, like the TV Shows grid | "No shows in your library yet. Add a shows folder on the server and run a scan." |
+| Recently Added Shows | `GET /api/shows/latest` | poster, name and optional premiere year below, `TvShows` glyph fallback; announces "Open {name}" and opens the show's details page (§11.4.3), and Back returns to the card | "No shows in your library yet. Add a shows folder on the server and run a scan." |
 | Recently Added Albums | `GET /api/music/albums/latest` | `albumAspect` cover, musician below, `Music` glyph fallback | "No albums in your library yet. Add a music folder on the server and run a scan." |
 | Now Playing in Theaters | `GET /api/tmdb/movies/in-theaters` | 2:3 poster, title + year over a bottom scrim, rating badge top-right (§3.2) | "No movies are playing in theaters right now. Check back later." |
 
@@ -1667,21 +1679,22 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   with `name` for `title`, `premiere_year` for `year`, `show_count` and `total_shows`. The strip
   has **two tabs, All Shows · Genres**: the backend keeps no likes for shows, so the source
   offers no liked fetcher, the Liked tab is never drawn, and the silent reconcile path never
-  runs. Cards are the show's name over its premiere year with the TV glyph as fallback, and they
-  are **inert on press** until a show details screen exists — a focus target with no action and
-  no "Open" announcement, §10's actionless-anchor contract — so the pane has no return requester
-  and no `DetailsOrigin`. Every tag and phrase is the Movies one with the noun swapped:
+  runs. Cards are the show's name over its premiere year with the TV glyph as fallback, and a
+  press opens the show's details page (§11.4.3) — "Open {name}" — with the Movies grid's round
+  trip: `DetailsOrigin.ShowsGrid` and the pane's own return requester put focus back on the card
+  that led away. Every tag and phrase is the Movies one with the noun swapped:
   `shows_tabs`, `shows_tab_all`, `shows_genre_{id}`, `shows_grid`, `show_card_{id}`,
   "Refresh the TV show library", "Loading shows", "Showing 2 of 2 Comedy shows", "No shows found
   in your library.", "Comedy, 2 shows". The host gives it `PaneBranch.TvShows`, its own hoisted
   grid state and focus memory, and the same START-time refresh as Movies and Music.
-- **Detail** *(movies; a show has no details screen yet)* — full-bleed backdrop with a
+- **Detail** *(movies; the show page is §11.4.3)* — full-bleed backdrop with a
   `background` gradient scrim, content pulled up over it. Poster left; title, tagline, metadata
   chips, genres, and hero actions right. Hero actions: **Play**, **Watched** toggle, **Like**,
   and the icon-only **More** trigger, which opens the anchored menu (§11.4.1): Playback
   Settings, Watch Together, Technical Details, and — admin only, hidden rather than disabled —
   Identify Movie and a destructive Delete Movie behind a separator. Below: cast, chapters, extra
-  details. Play must be the first focused element on entry.
+  details. Play must be the first focused element on entry — for a sighted d-pad user; under a
+  screen reader the hero summary is (§11.4.1, Focus).
 
 #### 11.4.1 The detail screen, as built
 
@@ -1761,7 +1774,15 @@ the user's eye if the slot came and went with it. The skeleton's Play stub reser
 so the loading→loaded swap does not move the anchor focus is sitting on.
 
 **Focus.** Play takes entry focus, including through the loading→loaded swap, where the
-skeleton's Play-slot stub holds the anchor. The vertical chain — actions → cast → extra videos
+skeleton's Play-slot stub holds the anchor. **Under a screen reader the hero summary stop takes
+it instead** (see Reading stops below): traced on the Google TV emulator, the skeleton giving
+way leaves focus with no owner for a moment, Android hands it to the first focusable — the
+summary, which exists only under a screen reader — and TalkBack settles there; the move to Play
+that followed about 0.8 s after the pane-title change was ignored, leaving TalkBack's cursor on
+the summary while input focus sat on Play, so the next Down skipped Play's announcement. Landing
+on the summary on purpose keeps the two together and says what the page is before what it can
+do; Play is one press down. The same rule holds on every details page (§11.4.2, §11.4.3,
+§11.5.1, §11.5.2). The vertical chain — actions → cast → extra videos
 → about — is **hand-wired end to end**, with each section skipped when empty and its neighbours
 wired straight through, and every edge that would leave the screen is pinned to
 `FocusRequester.Cancel`: the shell underneath is still composed, and an unpinned edge lets a
@@ -1888,13 +1909,16 @@ text node above is never reached by a screen reader.
 traverses plain text the way handset TalkBack's linear navigation does, so any prose that is not
 a focus target simply does not exist for a TV screen reader. While
 `rememberSpokenAccessibilityEnabled()` reports a spoken service (`core/ui/SpokenAccessibility.kt`,
-live-updating), the page therefore adds three **reading stops** — focus targets in the About
+live-updating — it re-reads after each reported change once the service has had time to bind,
+and on every resume, because TalkBack switched on while the app runs reports its change before
+it is true, and one switched on in Settings while the app was away reports nothing), the page therefore adds three **reading stops** — focus targets in the About
 panel's §6.1 treatment (surface highlight, no scale, no action) whose one cleared announcement
 carries text the d-pad otherwise passes by:
 
-- **Hero info**, reached by pressing up from the action row (whose top edge is pinned
-  otherwise): title, tagline, the metadata sentence, and the genres with `·` spoken as commas —
-  `MovieDetailsUi.heroInfoDescription`.
+- **Hero info**, the page's entry anchor under a screen reader, and reached again by pressing up
+  from the action row (whose top edge is pinned otherwise); down from it is the action row, or
+  the first section when there is none: title, tagline, the metadata sentence, and the genres
+  with `·` spoken as commas — `heroInfoDescription` (`feature/shared/DetailsMapping.kt`).
 - **Overview** and **Key Crew**, joining the vertical chain between the actions and the cast
   rail, each folding its heading into the announcement.
 
@@ -1944,10 +1968,11 @@ the §11.8.1 player. The button is the entry anchor *and* the node the player re
 so a trailer started from the hero comes back to the hero rather than to the extras rail's card
 (§6.3). A movie TMDB lists no trailer for renders **no action row at all** — a control that takes
 focus and does nothing spends a press to teach the user it is empty (the same rule that deferred
-More) — and the entry anchor passes to the first section below: the Overview reading stop while
-a screen reader runs (§11.4.1 Reachability), else cast, else extras, else About. Up out of the
-first section is then pinned — unless the reading stops are in, where it climbs to the hero
-info stop: there is still content above to hear. A record
+More) — and the entry anchor passes to the first section below — cast, else extras, else About — or,
+while a screen reader runs, to the hero info stop as on every details page (§11.4.1 Focus), whose
+down edge then goes straight to the Overview stop. Up out of the first section is pinned without
+the reading stops and climbs to the hero info stop with them: there is still content above to
+hear. A record
 with no trailer, no cast, no extras *and* an empty About has nothing to anchor at all, which is
 why the entry request is made through `requestFocusSafely` — the page is prose the user can read
 and Back out of, not a crash. TMDB always sends `original_language` and `status`, so About carries
@@ -1972,6 +1997,92 @@ rail keys off the payload's own order, assigned before the sort.
 
 **Back** closes the overlay and restores focus to the theaters card that opened it, through that
 rail's `returnRequester` like any other rail (§6.3).
+
+#### 11.4.3 The show detail screen, as built
+
+**Shape.** The web client's `/tv-shows/{id}` page on TV: §11.4.1's overlay contract, another
+occupant of the **one details slot**, opened from a TV Shows grid card (`DetailsOrigin.ShowsGrid`
+and the pane's return requester), a Recently Added Shows card, or the Home hero's show page; Back
+restores focus to whichever led away. `ShowDetailsScreen` keeps a frame of its own (the movie
+page's — entry requester, refocus after the state swap, `paneTitle` "Show details" until the show
+loads, then its name) and builds everything else from the shared details pieces (§9.1). **This
+pass is UI and UX only**: every control the web page has is drawn in its final place and is
+reachable, but nothing plays and nothing is written. Play/Resume, the episode cards and the extra
+videos are **inert** — focusable, announced, no button role and no action (the `IglooButton` and
+`IglooPosterCard` null-press contract) — so the functionality pass adds presses and nothing else.
+
+**Data.** `GET /api/shows/details/{id}` (show, seasons, cast, creators, genres, networks,
+companies, extras) and `GET /api/shows/{id}/seasons/{n}/episodes`, one season at a time.
+`ShowDetailsViewModel` holds the page in Loading until the details **and** the first season (in
+server order: by number, Specials last, so they are never the default) have settled, so
+Play/Resume arrives with the page rather than popping into a hero anchored to its bottom edge. A
+first season that fails still opens the page, the rail carrying its own error. Seasons are read on
+demand and cached once loaded; a failed one is read again when picked again. A background refresh
+re-reads the details and the selected season and keeps what is on screen if either fails; a
+season that vanished from the list falls back to the first.
+
+**Hero.** §11.4.1's: backdrop, poster (TV glyph fallback), title (without the web's "(1994)" —
+the years are in the row), tagline, then the metadata row — the star rating badge (§11.4.2's
+reasoning), the certification and series status ("Ended", "Returning Series") as chips, and a
+plain line, "10 Seasons · 236 Episodes · 1994–2004" — counted over numbered seasons only, with
+"2 of 3 Seasons" / "14 of 24 Episodes" when TMDB knows more than the library holds, and the air
+years from the first and last air dates. TalkBack hears one sentence: "Rated 8.4 out of 10, TV-14,
+Ended, 10 seasons, 236 episodes, aired 1994 to 2004". The genres line follows. The Home hero shares
+the season count, so the two can never disagree.
+
+**Play/Resume.** One Primary button for the **selected season** (web parity): resume its first
+episode with a position worth resuming (not watched, at least 30 s in, under 95% — the movie's
+rule), else play its first unwatched episode, else its first. "Resume S1 E3" on screen; TalkBack
+hears "Resume season 1, episode 3, The One with the Thumb" — "S1 E3" read aloud is letters and
+digits, not an episode — with the movie's resume `stateDescription`. Under it sits the movie
+hero's **resume strip** ("11m left"), whose slot is reserved in every state like the movie's. The
+slot keeps one footprint whatever the season holds — the button, a muted stub while the season
+loads, an empty space when it failed or has no episodes — so a chip press that retargets the hero
+never reflows it. A show with no seasons has no slot at all, and the entry anchor passes to the
+first section (§11.4.2's rule).
+
+**Seasons.** With two or more seasons, a "Seasons" heading over a scrolling row of chips — the
+Genres picker's `SelectableChipRow`, because `IglooTabRow` never scrolls and ten seasons do not fit
+— reading "Season 1 · 24" ("Season 1, 24 episodes", "Selected" on the chosen one) and "Specials ·
+2". **Chips select on press**, the Genres picker's contract, not on focus like a tab: moving across
+them changes nothing, and OK selects the season, reads it if it is not cached, retargets the hero,
+and hands focus down to the season's first episode — or to the rail's loading anchor, which hands
+on to the first card when the season lands. Pressing the selected chip just moves into the rail.
+A single-season show draws no chip row; the rail's heading names the season.
+
+**Episodes.** One rail per selected season, headed "Season 1" or "Specials", keyed by season so
+a switch starts its focus memory over. It speaks its heading once, on entry ("Season 2. Episode
+1, …"), unlike the cast rail, because its name changes with the chips above it, and it has its
+own loading ("Loading Season 2"), Retry and empty ("No episodes of Season 2 are in this library.")
+states, all pinned like its cards. An **episode card** (`EpisodeCard`) is `wideCardWidth` at 16:9:
+the still (TV glyph fallback) carrying the focus treatment, a progress bar on its bottom edge while
+resumable and a check top-end once watched; below it the title ("1. Pilot", `bodyLarge`, two
+lines), one ellipsized meta line ("23m · September 22, 1994 · 11m left", `label`) and the overview
+clamped to three lines with the overview's fade (`bodyMedium`, `foreground` — prose). It is one
+node speaking everything it draws: "Episode 1, Pilot. 23 minutes, aired September 22, 1994.
+Watched. {overview}".
+
+**Sections.** Overview, Key Crew (the show's creators, "Creator: David Crane"; skipped with none),
+Cast (the billing's top ten, each with a third line, "228 episodes"; keyed by position, because
+one artist can hold two roles), Extra Videos (YouTube only, trailers first; inert on this page) and
+"About {name}": Original name (only when it differs), Network(s), Production, Status, Type,
+Original language, First aired, Last aired — each row only when present, in the web's order, the
+network as text without its logo.
+
+**Focus.** One ordered list of the sections present drives both the hand-wired chain and the
+announced section move: [hero summary] → Play/Resume → [Overview] → chips → episodes → [Key Crew]
+→ Cast → Extra Videos → About, the bracketed ones reading stops present only under a screen
+reader. Up from the rail lands on the selected chip, up from the chips on Play/Resume; every
+outward edge is pinned. At 540dp the chips, the rail and everything below sit under the fold, so
+the column is a `rememberAnnouncedSectionColumn` (§9.1) — a move into an off-screen section is
+revealed, waited for and then focused, so TalkBack hears it — and a chip press hands focus down
+through the same move once the new rail has composed, never from inside the press (the entry
+requester still rides the outgoing season's card then). Entry focus is Play/Resume, or under a
+screen reader the hero summary (§11.4.1 Focus).
+
+**Not on the page yet.** Playing an episode or an extra, marking an episode watched (a long-press
+episode menu is planned), and the up-next hand-off. Continue Watching episode cards keep resuming
+straight into the player.
 
 ### 11.5 Music
 
@@ -2094,7 +2205,9 @@ starting at the top. The player's return requester is **parked on whichever cont
 it** — Play Album, Shuffle, or one row's Play — saved across recreation, so its close lands
 back there. An album with **no tracks composes no action row at all** (web parity, and the
 inert-control rule); the facts panel takes the entry anchor, requested safely. Row edges pinned;
-up reaches the hero reading stop only while a spoken reader runs.
+up reaches the hero reading stop only while a spoken reader runs — and under a spoken reader that
+stop is the page's entry anchor, as on every details page (§11.4.1 Focus), with Play Album one
+press down.
 
 **Track list.** §11.5's **three-action row** (`TrackRow`), which superseded the one-stop rows
 the page shipped with before playback existed: index gutter, then Play — carrying the row's one
@@ -2125,10 +2238,12 @@ is the web derivation exactly: dominant codec by track count (first past the pos
 bitrate in kbps, channel layout only when uniform across the album, `·`-joined, absent parts
 dropped, no summary without a codec.
 
-**Shared with movies.** `SectionHeading` and `Modifier.readingStopTarget` moved from
+**Shared with movies.** `Modifier.readingStopTarget` moved from
 `feature/movies/MovieDetailsSections.kt` to `feature/shared/DetailsReadingStops.kt` (the stop
-grew a `radius` parameter for row-shaped targets); everything else — `AboutSection`,
-`DetailsRailSection` — stays movie-private until a second caller earns the move. The track row
+grew a `radius` parameter for row-shaped targets); `SectionHeading` lives in
+`core/ui/IglooText.kt`. The show page (§11.4.3) was the second caller that moved the rest of the
+movie sections — `AboutSection`, `DetailsRailSection` and the others — into
+`feature/shared/DetailsSections.kt`. The track row
 never uses `readingStopTarget`: a cleared row would erase its three controls, so each control
 clears its own subtree and the row's text nodes are cleared into Play's sentence.
 
@@ -2147,7 +2262,8 @@ line, the §11.5.1 Spotify popularity meter, and the action row — **Play all**
 entry anchor) and **Shuffle** (Ghost), both live over the musician queue, the return requester
 parked on whichever launched the player. With no tracks the action row is not composed and the
 entry anchor moves to the discography rail, or to the facts panel with no albums either. The
-hero reading stop exists only under a spoken reader.
+hero reading stop exists only under a spoken reader, and is then the entry anchor (§11.4.1
+Focus).
 
 **Discography.** An `IglooMediaRail` of the artist's albums as square cards ("Help!, 1965"),
 newest release first, each opening the album (a same-slot replacement). The rail keeps its own
@@ -2524,6 +2640,27 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-19 — The TV show details page (§11.4.3, §9.1, §11.3, §11.4, §11.4.1–2, §11.5.1–2, §12).**
+
+- A show opens its own details page from the TV Shows grid, the Recently Added Shows rail and the
+  Home hero's show page, all announced "Open {name}", with Back returning to the card or hero.
+  UI and UX only: Play/Resume, the episode cards and the extra videos are drawn and reachable but
+  inert, so the functionality pass only adds presses.
+- Seasons are a scrolling chip row that selects on press (the Genres picker, now the shared
+  `SelectableChipRow`) over one episode rail per season; a press hands focus down to the season's
+  first episode through the announced section move, which Home's column and the show page now
+  share (`rememberAnnouncedSectionColumn`).
+- `IglooButton` gains the inert null-press contract; `IglooMediaRail` pins caller-given vertical
+  edges on every card and every state's anchor; `IglooPosterCard` gains a detail line. The movie
+  sections, rail wrapper, hero prose, single-action row, resume strip and their render models move
+  to `feature/shared`, unchanged in look and speech.
+- **Under a screen reader every details page now lands on the hero summary**, not Play: the
+  skeleton giving way hands focus to the summary first, and TalkBack ignored the later move to
+  Play, so its cursor and input focus disagreed. Sighted d-pad users still land on Play.
+- `rememberSpokenAccessibilityEnabled` re-reads after each reported change once the service has
+  had time to bind, and on every resume: TalkBack switched on with the app open used to leave
+  every screen in its sighted layout until a restart.
 
 **2026-10-14 — Recently Added Shows joins Home (§11.3).**
 

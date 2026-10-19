@@ -6,7 +6,8 @@ Igloo server so you can browse and play your library using a TV remote.
 
 ## Features and status
 
-- Browse Home, Movies, TV Shows, and Music, including movie, album, and musician details.
+- Browse Home, Movies, TV Shows, and Music, including movie, show, album, and musician details,
+  with a show's seasons and episodes.
 - Play movies and resume episodes from Home's Continue Watching section, with Direct or
   server-produced HLS playback, audio/subtitle selection, and saved watch progress.
 - Play music from albums, musicians, or the track library, including shuffle.
@@ -14,9 +15,9 @@ Igloo server so you can browse and play your library using a TV remote.
   PIN-protected profiles. Sign-out applies to the selected profile.
 - Navigate with a D-pad and remote, with focus treatments and TalkBack support.
 
-**Development is ongoing; the app is pre-production.** Show details and season/episode browsing
-are unfinished, so TV show posters do not open a details page. Search, Photos, and Settings are
-placeholder destinations. Playlists, episode up-next, music play-stat reporting, and background
+**Development is ongoing; the app is pre-production.** The show details page is browse-only for
+now: its Play/Resume button, episodes, and extra videos do not play yet, and episodes cannot be
+marked watched from it. Search, Photos, and Settings are placeholder destinations. Playlists, episode up-next, music play-stat reporting, and background
 music playback are also unfinished. See [known issues](docs/known-issues.md) and the
 [development guide](docs/development.md#feature-status-and-reference-documents) for more context.
 
