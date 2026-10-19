@@ -53,11 +53,17 @@ enum class IglooButtonVariant { Primary, Ghost, Destructive }
  * a repaint rather than a relayout shoving the row's siblings. The variants are laid out
  * invisibly in the button's own style — a fixed width would drift the moment the labels are
  * localised — and never reach the semantics tree.
+ *
+ * A null [onClick] draws the button in its final place with nothing behind it yet: it stays a
+ * focus target, so the screen's focus chain is already the finished one, but it drops the button
+ * role and the action — the inert contract of [IglooIconButton] and an inert poster card. That
+ * is not [enabled] = false, which leaves the focus tree and announces "disabled": a control that
+ * will work is not a disabled one.
  */
 @Composable
 fun IglooButton(
     text: String,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     variant: IglooButtonVariant = IglooButtonVariant.Primary,
     enabled: Boolean = true,
@@ -103,24 +109,24 @@ fun IglooButton(
             )
             .onFocusChanged { focused = it.isFocused }
             .then(
-                if (enabled) {
-                    Modifier.clickable(
+                when {
+                    !enabled -> Modifier
+                    onClick != null -> Modifier.clickable(
                         interactionSource = null,
                         indication = null,
                         onClick = onClick,
                     )
-                } else {
-                    Modifier
+                    else -> Modifier.focusable()
                 },
             )
             .clearAndSetSemantics {
                 contentDescription = semanticLabel
-                role = Role.Button
+                if (onClick != null || !enabled) role = Role.Button
                 if (!enabled) {
                     disabled()
                 }
                 if (stateDescription != null) this.stateDescription = stateDescription
-                if (enabled) {
+                if (enabled && onClick != null) {
                     onClick(label = actionLabel ?: semanticLabel) {
                         onClick()
                         true
