@@ -23,6 +23,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -38,6 +40,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -45,22 +48,28 @@ import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.overMediaSideScrim
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
+import com.igloo.blindpenguincoder.core.ui.IglooButton
+import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.RatingBadge
+import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
+import com.igloo.blindpenguincoder.core.ui.withRequester
 
 /*
- * The hero every details overlay shares (docs/design-system.md sections 11.4.1, 11.5.1 and
- * 11.5.2): the library and in-theaters movie pages, the album page and the musician page all
- * put artwork and a prose block over a full-bleed backdrop, with one reading stop for the prose
- * under a screen reader and a geometry-matched skeleton while the page loads.
+ * The hero every details overlay shares (docs/design-system.md sections 11.4.1, 11.4.3, 11.5.1
+ * and 11.5.2): the library and in-theaters movie pages, the show page, the album page and the
+ * musician page all put artwork and a prose block over a full-bleed backdrop, with one reading
+ * stop for the prose under a screen reader and a geometry-matched skeleton while the page loads.
  */
 
 /**
@@ -242,6 +251,127 @@ internal fun HeroGenresLine(text: String, overMedia: Boolean) {
         color = if (overMedia) OVER_MEDIA_TERTIARY else IglooTheme.colors.mutedForeground,
         maxLines = 1,
     )
+}
+
+/**
+ * The hero's prose: title, tagline, metadata row, genres. TV TalkBack follows input focus and
+ * never traverses plain text, so while a screen reader runs ([readingStop]) this whole block is
+ * one reading stop — reachable by pressing up from the action row — that speaks
+ * [readingStopDescription] in a single announcement. Without one it stays what it always was:
+ * text the d-pad passes by. Tag `details_hero_info` on every page.
+ *
+ * The metadata row is visually a row of chips but one TalkBack stop: a run of two-character
+ * announcements would be noise, so it speaks [metadataDescription], the sentence the page's view
+ * model composes with the abbreviations spelled out. [chips] are the outlined pills after the
+ * rating badge (certification, a movie's media badges, a show's status); [plainLine] is the
+ * unboxed text that ends the row (runtime and release date, or a show's seasons and years).
+ */
+@Composable
+internal fun DetailsHeroInfo(
+    title: String,
+    tagline: String?,
+    ratingBadge: RatingBadgeSpec?,
+    chips: List<String>,
+    plainLine: String?,
+    metadataDescription: String,
+    genresLine: String?,
+    readingStopDescription: String,
+    overMedia: Boolean,
+    readingStop: Boolean,
+    requester: FocusRequester,
+    downRequester: FocusRequester,
+) {
+    val colors = IglooTheme.colors
+    HeroReadingStop(
+        enabled = readingStop,
+        tag = "details_hero_info",
+        overMedia = overMedia,
+        requester = requester,
+        downRequester = downRequester,
+        description = readingStopDescription,
+    ) {
+        HeroTitle(title, overMedia)
+        if (tagline != null) {
+            IglooText(
+                text = "“$tagline”",
+                style = IglooTheme.typography.bodyLarge
+                    .copy(fontStyle = FontStyle.Italic)
+                    .overMedia(overMedia),
+                color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
+                maxLines = 1,
+            )
+        }
+        Row(
+            modifier = Modifier.clearAndSetSemantics {
+                contentDescription = metadataDescription
+            },
+            horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (ratingBadge != null) {
+                RatingBadge(
+                    spec = ratingBadge,
+                    radius = IglooTheme.radius.pill,
+                    verticalPadding = IglooTheme.spacing.xs,
+                )
+            }
+            chips.forEach { chip -> DetailChip(text = chip, overMedia = overMedia) }
+            if (plainLine != null) {
+                IglooText(
+                    text = plainLine,
+                    style = IglooTheme.typography.label.overMedia(overMedia),
+                    color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = IglooTheme.spacing.xs),
+                )
+            }
+        }
+        if (genresLine != null) HeroGenresLine(genresLine, overMedia)
+    }
+}
+
+/**
+ * A hero action row holding one Primary button: the in-theaters page's Play Trailer, the show
+ * page's Play/Resume. It is the entry anchor through [requester] and, where pressing opens an
+ * overlay, the node that overlay restores focus to through [returnRequester] — two requesters on
+ * one button, the same pairing a rail's card carries. A null [onClick] draws the button inert
+ * until its action exists (the [IglooButton] contract).
+ *
+ * Every direction out is pinned but down: the shell is still composed under the overlay, and
+ * the row's only control has no horizontal neighbour of its own.
+ */
+@Composable
+internal fun HeroSingleActionRow(
+    text: String,
+    semanticLabel: String,
+    onClick: (() -> Unit)?,
+    tag: String,
+    requester: FocusRequester,
+    upRequester: FocusRequester,
+    downRequester: FocusRequester?,
+    modifier: Modifier = Modifier,
+    returnRequester: FocusRequester? = null,
+    onFocused: () -> Unit = {},
+) {
+    Row(modifier = modifier) {
+        IglooButton(
+            text = text,
+            onClick = onClick,
+            icon = IglooIcons.Play,
+            semanticLabel = semanticLabel,
+            modifier = Modifier
+                .testTag(tag)
+                .focusRequester(requester)
+                .withRequester(returnRequester)
+                .focusProperties {
+                    up = upRequester
+                    left = Cancel
+                    right = Cancel
+                    down = downRequester ?: Cancel
+                }
+                .onFocusChanged { if (it.isFocused) onFocused() },
+        )
+    }
 }
 
 /**
