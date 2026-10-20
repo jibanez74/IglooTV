@@ -8,7 +8,7 @@ package com.igloo.blindpenguincoder.playback.model
  */
 
 const val PLAYBACK_UNAUTHORIZED_MESSAGE =
-    "Your session is no longer valid. Sign in again to keep watching."
+    "Your session has expired. Sign in again to keep watching."
 
 const val PLAYBACK_SESSION_LOST_MESSAGE =
     "The playback session was lost and could not be recreated."

@@ -364,7 +364,7 @@ class SessionManagerTest {
         assertTrue(fixture.http.profileStore.vault.profiles.isEmpty())
         // The notice reaches this arm too. Before NeedsLogin carried one, a revoked *last*
         // profile lost its explanation entirely.
-        assertEquals("Jose's session expired. Sign in again.", state.notice)
+        assertEquals("Jose's session has expired. Sign in again.", state.notice)
     }
 
     @Test
@@ -833,7 +833,7 @@ class SessionManagerTest {
 
         val state = fixture.manager.state.value as AppAuthState.ChooseProfile
         assertEquals(listOf("Ana"), state.profiles.map { it.name })
-        // A 401 is what this request wanted. Not "Jose's session expired. Sign in again."
+        // A 401 is what this request wanted. Not "Jose's session has expired. Sign in again."
         assertNull(state.notice)
     }
 

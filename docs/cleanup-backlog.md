@@ -204,14 +204,6 @@ left for one.
 list can only be written once behind a shared `refresh()` interface the view models do not have;
 adding one for this is not worth it.
 
-### 8.3 Copy that says the same thing differently
-
-- Session expiry is worded three ways: `feature/auth/ErrorMessages.kt`
-  (`toLibraryDisplayMessage`), `SessionManager.revokedNotice`, and
-  `playback/model/PlaybackMessages.kt`.
-- A failed like reads "Couldn't update like status: …" on a movie and "Couldn't update like: …"
-  on a track (both through `AppError.toFailureNotice` now, so aligning them is one word).
-
 ### 8.4 Track rows repeat their like wiring
 
 `AlbumDetailsSections.kt`, `MusicianDetailsScreen.kt` and `MusicScreen.kt` each derive

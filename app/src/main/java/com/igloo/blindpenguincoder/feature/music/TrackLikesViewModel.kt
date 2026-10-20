@@ -92,7 +92,7 @@ class TrackLikesViewModel(
                         reseedAfterDrain += id
                         _uiState.update {
                             it.copy(
-                                notice = result.error.toFailureNotice("update like"),
+                                notice = result.error.toFailureNotice("update like status"),
                             )
                         }
                     }

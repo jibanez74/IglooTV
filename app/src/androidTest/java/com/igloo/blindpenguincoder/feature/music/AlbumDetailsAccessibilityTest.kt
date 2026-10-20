@@ -199,13 +199,13 @@ class AlbumDetailsAccessibilityTest {
         setContent(
             trackLikes = TrackLikesUiState(
                 likedIds = emptySet(),
-                notice = "Couldn't update like: Something went wrong. Please try again.",
+                notice = "Couldn't update like status: Something went wrong. Please try again.",
             ),
         )
 
         composeRule.onNodeWithTag("album_notice")
             .assertTextEquals(
-                "Couldn't update like: Something went wrong. Please try again.",
+                "Couldn't update like status: Something went wrong. Please try again.",
             )
             .assert(
                 SemanticsMatcher.expectValue(
