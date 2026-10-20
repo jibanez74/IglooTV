@@ -242,23 +242,6 @@ per site; a wrapper would add a composable to save them.
 
 ## 9. Recorded by the Home screen review (2026-10-18)
 
-### 9.1 `HomeViewModel.refresh()` leaves an episode resume in flight
-
-**Files:** `feature/home/HomeViewModel.kt` (`refresh`, `resumeEpisode`)
-
-`refresh()` clears `playbackNotice` but does not cancel `resumeJob`, so a resume prepared just
-before a foreground refresh can still post a notice or a play request after it. Harmless in
-practice — `refresh()` runs on START, before a press — but the two should agree on who owns the
-notice.
-
-### 9.2 `serverUrl.require()` throws inside `viewModelScope.launch`
-
-**Files:** `feature/home/HomeViewModel.kt` (every rail load), `core/config/ServerUrlProvider.kt`
-
-An unset server address would surface as an uncaught `IllegalStateException` rather than an
-`IglooRailState.Error`. The session lifecycle guarantees the address exists while Home is
-composed, which is why it has never fired; the guard is a one-liner if that guarantee moves.
-
 ### 9.3 The hero can keep a page the rail no longer leads with
 
 **Files:** `feature/home/HomeViewModel.kt` (`hideFeatureOrKeep`)
@@ -266,12 +249,6 @@ composed, which is why it has never fired; the guard is a one-liner if that guar
 On a background refresh whose newest title changed but whose details call failed, the hero
 keeps the old page while the rail shows the new list. Deliberate — working content over an error
 card — but the two can disagree until the next refresh.
-
-### 9.4 `SignOutViewModel.confirm()` does not require a prior `request()`
-
-**Files:** `feature/home/SignOutViewModel.kt`
-
-Nothing calls it that way; the dialog is the only caller. A guard would be one line.
 
 ### 9.5 Spoken once, then unreachable on a TV
 

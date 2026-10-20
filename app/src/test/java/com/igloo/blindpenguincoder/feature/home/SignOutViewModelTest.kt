@@ -135,6 +135,18 @@ class SignOutViewModelTest {
     }
 
     @Test
+    fun `confirming without a request does nothing`() = runTest {
+        val fixture = fixture { accepted() }
+
+        fixture.viewModel.confirm()
+        yield()
+
+        assertEquals(SignOutUiState(), fixture.viewModel.uiState.value)
+        assertEquals(0, fixture.logoutRequests)
+        assertTrue(fixture.sessionManager.state.value is AppAuthState.Authenticated)
+    }
+
+    @Test
     fun `confirming reports pending while the revoke is in flight`() = runTest {
         val release = CompletableDeferred<Unit>()
         val fixture = fixture {

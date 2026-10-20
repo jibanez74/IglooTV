@@ -39,9 +39,11 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -685,6 +687,68 @@ class HomeViewModelTest {
         assertEquals(PlaybackMediaRef.Episode(900), request.media)
     }
 
+    @Test
+    fun `a refresh abandons a preparation still in flight`() = runTest {
+        var launched = false
+        val release = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
+            episode = {
+                release.await()
+                jsonResponse(episodePlaybackJson())
+            },
+        )
+        val viewModel = viewModel(http)
+        val watcher = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.playRequests.collect { launched = true }
+        }
+
+        viewModel.resumeEpisode(900)
+        viewModel.refresh()
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(launched)
+        assertNull(viewModel.uiState.value.playbackNotice)
+        watcher.cancel()
+    }
+
+    @Test
+    fun `a refresh drops a play request built but not yet delivered`() = runTest {
+        val http = routedHttp(engineDispatcher = UnconfinedTestDispatcher(testScheduler))
+        val viewModel = viewModel(http)
+
+        // No collector: the host was not composed when the preparation finished.
+        viewModel.resumeEpisode(900)
+        advanceUntilIdle()
+        viewModel.refresh()
+
+        assertNull(withTimeoutOrNull(1_000) { viewModel.playRequests.first() })
+    }
+
+    @Test
+    fun `an address cleared before preparation finishes reads as a notice, not a crash`() =
+        runTest {
+            var launched = false
+            lateinit var http: TestHttp
+            http = routedHttp(
+                episodeProgress = {
+                    http.serverUrl.set(null)
+                    jsonResponse(watchProgressJson(progressSec = 600.0, durationSec = 3300.0))
+                },
+            )
+            val viewModel = viewModel(http)
+            val watcher =
+                backgroundScope.launch { viewModel.playRequests.collect { launched = true } }
+
+            viewModel.resumeEpisode(900)
+            val notice = viewModel.uiState.first { it.playbackNotice != null }.playbackNotice
+
+            assertTrue(notice!!.startsWith("Couldn't prepare playback: "))
+            assertFalse(launched)
+            watcher.cancel()
+        }
+
     /**
      * Home has no Playback Settings to point the user at, so a Direct request the device cannot
      * decode is relaunched as Remux instead of being refused with unreachable guidance.
@@ -845,6 +909,60 @@ class HomeViewModelTest {
         )
 
         viewModel(http).awaitHiddenHero()
+    }
+
+    /**
+     * The session keeps the address set while Home is composed; a sign-out that clears it between
+     * a response and its mapping must fail the load, not throw out of the coroutine.
+     */
+    @Test
+    fun `an address cleared before a response is mapped fails the rail and hides the hero`() =
+        runTest {
+            lateinit var http: TestHttp
+            http = routedHttp(
+                latest = {
+                    http.serverUrl.set(null)
+                    jsonResponse(latestMoviesJson())
+                },
+            )
+            val viewModel = viewModel(http)
+
+            viewModel.awaitLatestError()
+            viewModel.awaitHiddenHero()
+        }
+
+    @Test
+    fun `an address cleared before the hero's details are mapped hides the hero`() = runTest {
+        var detailsRequests = 0
+        lateinit var http: TestHttp
+        http = routedHttp(
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson())) },
+            details = {
+                detailsRequests += 1
+                http.serverUrl.set(null)
+                jsonResponse(movieDetailsJson())
+            },
+        )
+        val viewModel = viewModel(http)
+
+        assertEquals(1, viewModel.awaitLatest().items.size)
+        viewModel.awaitHiddenHero()
+        assertEquals(1, detailsRequests)
+    }
+
+    /** Album covers arrive absolute, so the rail needs no address to map its response. */
+    @Test
+    fun `an address cleared before the albums are mapped still loads the albums`() = runTest {
+        lateinit var http: TestHttp
+        http = routedHttp(
+            albums = {
+                http.serverUrl.set(null)
+                jsonResponse(latestAlbumsJson(simpleAlbumJson()))
+            },
+        )
+        val viewModel = viewModel(http)
+
+        assertEquals(1, viewModel.awaitAlbums().items.size)
     }
 
     @Test
