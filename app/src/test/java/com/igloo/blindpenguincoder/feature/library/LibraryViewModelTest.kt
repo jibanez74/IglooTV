@@ -1396,6 +1396,36 @@ class LibraryViewModelTest {
         }
 
     @Test
+    fun `a sort after a genre rename keeps the count of the same list`() = runTest {
+        var renamed = false
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            genres = {
+                val tag = if (renamed) "Action & Adventure" else "Action"
+                jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = tag)))
+            },
+            genreMovies = {
+                if (renamed) gate.await()
+                jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L))
+            },
+        )
+        val model = loaded(http)
+        landOn(model, LibraryTab.Genres)
+
+        // The grid is loaded, so this refresh re-reads only the genres: the tag changes, the
+        // list does not.
+        renamed = true
+        model.refresh()
+        assertEquals(LibraryFilter.Genre(id = 7, tag = "Action & Adventure"), model.uiState.value.genre)
+
+        model.toggleSort()
+
+        assertTrue(model.uiState.value.refreshing)
+        assertEquals(26L, model.uiState.value.paged.total)
+        gate.complete(Unit)
+    }
+
+    @Test
     fun `a reload settles a canceled append and keeps the committed count while in flight`() =
         runTest {
             assertReplacementCancelsAppend(expectedPendingTotal = 96L) { it.reload() }
@@ -1719,11 +1749,13 @@ class LibraryViewModelTest {
         assertEquals(listOf(1L, 2L, 3L), pending.gridIds())
         assertTrue(pending.refreshing)
         assertEquals(expectedPendingTotal, pending.paged.total)
-        assertEquals(
-            "Showing 3 of 96 movies",
+        // A switch's blank count reads as Loading on screen, which the accessibility suite owns;
+        // a re-read of the same list keeps its count line.
+        if (expectedPendingTotal != null) assertEquals(
+            "Showing 3 of $expectedPendingTotal movies",
             showingCountLine(
                 loadedCount = pending.gridIds().size,
-                total = 96,
+                total = expectedPendingTotal,
                 noun = "movies",
                 pluralNoun = "movies",
                 append = pending.paged.append,

@@ -368,8 +368,20 @@ class LibraryViewModel(
         }
     }
 
-    /** Whether this state requests a list other than the one the grid shows. */
-    private fun LibraryUiState.isSwitching() = filter != filterFor(committedTab, committedGenre)
+    /**
+     * Whether this state requests a list other than the one the grid shows. A genre is its id:
+     * a genres refresh can rename the selected tag without paging, leaving [committedGenre] on
+     * the old tag for the very same list.
+     */
+    private fun LibraryUiState.isSwitching(): Boolean {
+        val requested = filter
+        val committed = filterFor(committedTab, committedGenre)
+        return if (requested is LibraryFilter.Genre && committed is LibraryFilter.Genre) {
+            requested.id != committed.id
+        } else {
+            requested != committed
+        }
+    }
 
     private fun appendNextPage() {
         val page = nextPage
