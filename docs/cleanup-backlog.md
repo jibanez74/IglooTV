@@ -71,14 +71,6 @@ scaled `Dp`s (each `roundToInt().dp`), so the strip's total height can land ±1d
 the strip to `controlHeight`", which is exactly true only at 1.0. Either compute the tab height
 from the unscaled values before rounding, or soften the comment.
 
-### 3.2 The tab's radius is not concentric with the row's
-
-**Files:** `core/ui/IglooTabRow.kt:82`, `:41`, `design-system.md` §9.1
-
-A `radius.md` (8) tab inside a `radius.lg` (10) row with `spacing.xs` (4) padding should be
-`radius.sm` (6) to nest cleanly. Cosmetic, currently documented as intentional in §9.1 — decide
-deliberately rather than leave it as an accident, and if `md` stays, say why there.
-
 ---
 
 ## 4. Test coverage still open
