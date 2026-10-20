@@ -332,6 +332,8 @@ private val LibraryKind.icon: ImageVector
  * The visible line stays generic; only the spoken form names the active filter. A null
  * [filter] is one of the Genres tab's two card-less surfaces, where the count belongs to a list
  * the user cannot see — and the two must not sound alike, because only one of them is a failure.
+ * A null [total] over a loaded grid is a switch in flight: the count left with the request, so
+ * the line names the list being fetched rather than the one still on screen.
  */
 private fun spokenCount(
     kind: LibraryKind,
@@ -345,6 +347,7 @@ private fun spokenCount(
         // Not the anchor's own "Loading genres": two nodes speaking the same phrase is the
         // redundant announcement section 12 rules out, and this line is about scale.
         filter == null -> if (genresLoading) "Loading the genre list" else "Genres unavailable"
+        total == null && loadedCount != null -> "Loading ${filterNoun(kind, filter, PLURAL)}"
         total == null -> "Loading ${kind.libraryPhrase}"
         loadedCount == null -> paneCountLine(total, kind::noun)
         else -> showingCountLine(
@@ -363,6 +366,8 @@ private fun filterNoun(kind: LibraryKind, filter: LibraryFilter, count: Long): S
         is LibraryFilter.Genre -> "${filter.tag} ${kind.noun(count)}"
     }
 
+/** Any count that pluralises the noun; the switch line has no number to show. */
+private const val PLURAL = 2L
 private const val NO_GENRES_MESSAGE = "Genres aren't available right now. Refresh to try again."
 private const val SORT_ASCENDING_LABEL = "A–Z"
 private const val SORT_DESCENDING_LABEL = "Z–A"

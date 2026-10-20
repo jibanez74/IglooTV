@@ -1174,11 +1174,13 @@ class LibraryViewModelTest {
         )
         val model = loaded(http)
 
+        val countBefore = model.uiState.value.paged.total
         landOn(model, LibraryTab.Liked)
 
         assertEquals(listOf(1L, 2L, 3L), model.uiState.value.gridIds())
         assertEquals(LibraryTab.All, model.uiState.value.tab)
         assertEquals(LibraryFilter.All, model.uiState.value.filter)
+        assertEquals(countBefore, model.uiState.value.paged.total)
         assertTrue(model.uiState.value.notice != null)
     }
 
@@ -1287,6 +1289,91 @@ class LibraryViewModelTest {
         model.refresh()
 
         assertEquals(26L, model.uiState.value.paged.total)
+    }
+
+    @Test
+    fun `a stats response landing under a switch to All never overwrites the filtered count`() = runTest {
+        val statsGate = CompletableDeferred<Unit>()
+        val pageGate = CompletableDeferred<Unit>()
+        var gated = false
+        val http = routedHttp(
+            stats = {
+                if (gated) statsGate.await()
+                jsonResponse(moviesStatsJson(totalMovies = 96))
+            },
+            library = {
+                if (gated) pageGate.await()
+                jsonResponse(page(number = 1, total = 150, totalPages = 1, ids = 1L..3L))
+            },
+            genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
+        )
+        val model = loaded(http)
+        model.selectGenre(LibraryFilter.Genre(id = 7, tag = "Action"))
+        assertEquals(26L, model.uiState.value.paged.total)
+
+        // The TV wakes (stats out), and the user presses All while the genre grid is committed.
+        gated = true
+        model.refresh()
+        model.pressTab(LibraryTab.All)
+        assertNull(model.uiState.value.paged.total)
+
+        statsGate.complete(Unit)
+        // The requested tab is All, but the grid still shows Action: the stat has no list to
+        // count yet. The page brings its own total.
+        assertNull(model.uiState.value.paged.total)
+        pageGate.complete(Unit)
+        assertEquals(150L, model.uiState.value.paged.total)
+    }
+
+    @Test
+    fun `a switch blanks the count with its request and the page brings the new one`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            stats = { jsonResponse(moviesStatsJson(totalMovies = 96)) },
+            library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
+            liked = {
+                gate.await()
+                jsonResponse(page(number = 1, total = 12, totalPages = 1, ids = 1L..3L))
+            },
+        )
+        val model = loaded(http)
+        assertEquals(96L, model.uiState.value.paged.total)
+
+        // A tab the d-pad is only passing over keeps the count it had.
+        model.selectTab(LibraryTab.Liked)
+        advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS - 1)
+        assertEquals(96L, model.uiState.value.paged.total)
+
+        advanceTimeBy(2)
+        assertTrue(model.uiState.value.refreshing)
+        assertNull(model.uiState.value.paged.total)
+        gate.complete(Unit)
+        assertEquals(12L, model.uiState.value.paged.total)
+    }
+
+    @Test
+    fun `a reload and a sort flip keep the committed count while in flight`() = runTest {
+        var gate: CompletableDeferred<Unit>? = null
+        val http = routedHttp(
+            stats = { jsonResponse(moviesStatsJson(totalMovies = 96)) },
+            library = {
+                gate?.await()
+                jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
+            },
+        )
+        val model = loaded(http)
+
+        gate = CompletableDeferred()
+        model.reload()
+        assertTrue(model.uiState.value.refreshing)
+        assertEquals(96L, model.uiState.value.paged.total)
+        gate.complete(Unit)
+
+        gate = CompletableDeferred()
+        model.toggleSort()
+        assertTrue(model.uiState.value.refreshing)
+        assertEquals(96L, model.uiState.value.paged.total)
+        gate.complete(Unit)
     }
 
     @Test

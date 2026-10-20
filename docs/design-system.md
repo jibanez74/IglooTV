@@ -1594,7 +1594,11 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   300 ms**, because passing over Genres on the way from Liked to All lands on it, and a tab the
   d-pad is only crossing must not put a request on the wire, flip the header to "Refreshing…",
   or re-announce the count to TalkBack. The transient highlight is the platform's own tab
-  behaviour and stays. A **press** skips the delay — it is deliberate, never a pass-over — and
+  behaviour and stays. When the request does go out, the **count goes with it**: the header
+  shows its dash and speaks "Loading Action movies" for the list being fetched, and the number
+  comes back with the page — or, when the switch fails, with the reverted selection — so the
+  new section's noun is never paired with the old section's number. Refresh and Sort re-read
+  the list on screen and keep its count. A **press** skips the delay — it is deliberate, never a pass-over — and
   a switch that outruns the delay still cancels the page job and bumps the generation, so a
   superseded response can never land. The one cost worth naming: a switch that lands
   while the user is still on the tab must **not** re-anchor focus on the grid (the yank every
@@ -2671,6 +2675,14 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-20 — Cleanup backlog pass (§11.4).**
+
+- **§11.4**: the library count goes with a switch's request — dash on screen, "Loading Action
+  movies" spoken — and comes back with the page, or with the reverted selection when the switch
+  fails. The library-wide stat is written only while All is both requested and committed; a
+  stats response can no longer land on a filtered grid under a switch to All. Refresh and Sort
+  keep the committed count.
 
 **2026-10-19 — The details hero stays whole while focus is in it (§11.4.1, §11.2).**
 

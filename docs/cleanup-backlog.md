@@ -100,8 +100,6 @@ not.
   `LibraryViewModel.refresh`.
 - `onLikeCommitted()`'s early return when the Liked grid is not `Loaded`.
 - `retryAppend()`'s active-job guard.
-- `loadStats()` writing the library-wide count while the *requested* tab is All but the committed
-  grid is still a filtered list.
 - `notice` being cleared by the next successful switch — the failure branch sets it, nothing pins
   the clear.
 
@@ -143,13 +141,11 @@ Each is its own small pass; none is a defect.
    state is independent of the selection, so re-entering Genres with a remembered genre far to the
    right shows the leftmost chips while the grid shows a genre you cannot see. `bringIntoView` on
    a selection change fixes it.
-3. **`total` is not cleared across a switch**, so the header shows the previous view's count
-   until the new page lands, then snaps.
-4. **The strip has no motion.** The selected fill hard-swaps; a sliding indicator pill is the
+3. **The strip has no motion.** The selected fill hard-swaps; a sliding indicator pill is the
    conventional premium treatment. Animate it with `iglooTween`, which snaps under reduced motion.
-5. **The Genres tab could carry its active genre** ("Genres · Action"), so the section is legible
+4. **The Genres tab could carry its active genre** ("Genres · Action"), so the section is legible
    without entering it.
-6. **The count's polite live region re-announces on every tab landing.** The 300 ms debounce made
+5. **The count's polite live region re-announces on every tab landing.** The 300 ms debounce made
    this much rarer, but suppressing the announcement outright while a tab holds focus is the
    cleaner answer and matches `AGENTS.md`'s "avoid redundant announcements".
 
