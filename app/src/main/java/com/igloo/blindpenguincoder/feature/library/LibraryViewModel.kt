@@ -347,22 +347,29 @@ class LibraryViewModel(
      * The chrome a first-page request puts up, raised with the request rather than before it.
      * A request for a *different* list also blanks the count: the header must not pair the new
      * section's noun with the old section's number for the length of a round trip. Refresh and
-     * Sort re-read the committed list, whose count still holds.
+     * Sort re-read the committed list, whose count still holds. A background switch — a genres
+     * refresh that dropped the selected genre — raises no Refreshing label but blanks the count
+     * all the same.
      */
     private fun applyFirstPageRequestState(userInitiated: Boolean, silent: Boolean) {
         when {
             silent -> _uiState.update { it.withTailSettled().copy(refreshing = false) }
             userInitiated -> _uiState.update {
                 val settled = it.withTailSettled()
-                val switching = it.filter != filterFor(committedTab, committedGenre)
                 settled.copy(
-                    paged = if (switching) settled.paged.copy(total = null) else settled.paged,
+                    paged = if (it.isSwitching()) settled.paged.copy(total = null) else settled.paged,
                     refreshing = true,
                     notice = null,
                 )
             }
+            else -> _uiState.update {
+                if (it.isSwitching()) it.copy(paged = it.paged.copy(total = null)) else it
+            }
         }
     }
+
+    /** Whether this state requests a list other than the one the grid shows. */
+    private fun LibraryUiState.isSwitching() = filter != filterFor(committedTab, committedGenre)
 
     private fun appendNextPage() {
         val page = nextPage

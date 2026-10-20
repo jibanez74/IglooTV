@@ -1353,6 +1353,49 @@ class LibraryViewModelTest {
     }
 
     @Test
+    fun `a genres refresh that drops the selected genre blanks its count without Refreshing`() =
+        runTest {
+            var dropped = false
+            val gate = CompletableDeferred<Unit>()
+            val http = routedHttp(
+                genres = {
+                    if (dropped) {
+                        jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 9, tag = "Drama")))
+                    } else {
+                        jsonResponse(
+                            moviesGenresJson(
+                                movieGenreWithCountJson(id = 7, tag = "Action"),
+                                movieGenreWithCountJson(id = 9, tag = "Drama"),
+                            ),
+                        )
+                    }
+                },
+                genreMovies = {
+                    if (dropped) {
+                        gate.await()
+                        jsonResponse(page(number = 1, total = 14, totalPages = 1, ids = 4L..6L))
+                    } else {
+                        jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L))
+                    }
+                },
+            )
+            val model = loaded(http)
+            landOn(model, LibraryTab.Genres)
+            assertEquals(26L, model.uiState.value.paged.total)
+
+            dropped = true
+            model.refresh()
+
+            // Drama is requested in the background: no label, but Action's count must not sit
+            // beside it while the page is out.
+            assertEquals(LibraryFilter.Genre(id = 9, tag = "Drama"), model.uiState.value.filter)
+            assertNull(model.uiState.value.paged.total)
+            assertTrue(!model.uiState.value.refreshing)
+            gate.complete(Unit)
+            assertEquals(14L, model.uiState.value.paged.total)
+        }
+
+    @Test
     fun `a reload settles a canceled append and keeps the committed count while in flight`() =
         runTest {
             assertReplacementCancelsAppend(expectedPendingTotal = 96L) { it.reload() }
