@@ -79,14 +79,6 @@ A `radius.md` (8) tab inside a `radius.lg` (10) row with `spacing.xs` (4) paddin
 `radius.sm` (6) to nest cleanly. Cosmetic, currently documented as intentional in §9.1 — decide
 deliberately rather than leave it as an accident, and if `md` stays, say why there.
 
-### 3.3 `design-system.md`'s web-parity stamp is stale
-
-**Files:** `docs/design-system.md:14`
-
-"**Last verified**: 2026-08-02, against web client `3b48f9a6`" predates several passes. It is
-about palette parity rather than behaviour, so nothing is wrong — but a stamp nobody refreshes
-stops meaning anything.
-
 ---
 
 ## 4. Test coverage still open

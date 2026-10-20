@@ -11,7 +11,7 @@ The design system for **Igloo TV**, the Android TV client (Kotlin + Jetpack Comp
   clients stay recognizably one product. **Everything else — type sizes, spacing, geometry,
   focus, motion — is authored for the 10-foot TV target and does not mirror the web.**
   See [Appendix A](#appendix-a--web-parity) for what came from where.
-- **Last verified**: 2026-08-02, against web client `3b48f9a6`.
+- **Last verified**: 2026-10-20, against web client `9b7d514d`.
 
 > **Changing a number here means changing `core/design/`.** Appendix B maps every token
 > group to its file. A PR that changes one without the other is incomplete.
@@ -218,7 +218,7 @@ foreground) so contrast is structural rather than per-call-site.
 | `auroraForeground` | `#08131F` | `#08131F` | Text on aurora |
 | `sidebar` | `#0F1A2E` | `#E8F1FA` | Nav spine chrome |
 | `sidebarPrimary` | `#38BDF8` | `#0369A1` | Active nav item |
-| `destructive` | `#F87171` | `#DC2626` | Danger / delete |
+| `destructive` | `#F87171` | `#B91C1C` | Danger / delete |
 | `destructiveForeground` | `#08131F` | `#FFFFFF` | Text on destructive |
 
 Notes:
@@ -226,9 +226,9 @@ Notes:
 - `aurora` / `auroraForeground` are **identical in both themes** — intentional.
 - `ring` is the single focus color across the entire app. Do not introduce a second.
 - `destructiveForeground` is ported from web (`--destructive-foreground`), which authors both
-  values *and* their contrast: **6.76:1 dark / 4.83:1 light**. That makes it the weakest paired
-  token in the app — `primary`/`primaryForeground` is 8.72:1 — and it sits under §12's 7:1 body
-  target. It is admissible because it only ever carries a **control label** (§9.1's `Destructive`
+  values *and* their contrast: **6.76:1 dark / 6.47:1 light** (light `destructive` followed the
+  web from `#DC2626` to `#B91C1C` on 2026-10-20). That makes it the weakest paired token in the
+  app — `primary`/`primaryForeground` is 8.72:1 — and it sits under §12's 7:1 body target. It is admissible because it only ever carries a **control label** (§9.1's `Destructive`
   button), never prose. Do not reach for it to color body text; a destructive *message* uses
   `cardForeground` on `card`, as §9.3 requires.
 - **Not ported from web**: `success`, `accentTeal`, `popover`, `chart-1..5`. No feature needs
@@ -2683,6 +2683,9 @@ forgot to change the code.**
   fails. The library-wide stat is written only while All is both requested and committed; a
   stats response can no longer land on a filtered grid under a switch to All. Refresh and Sort
   keep the committed count.
+- **§3**: light `destructive` follows the web client to `#B91C1C` (white on it 6.47:1, up from
+  4.83:1); every other token in both palettes re-verified against `styles.css` at `9b7d514d`,
+  and the parity stamp refreshed.
 
 **2026-10-19 — The details hero stays whole while focus is in it (§11.4.1, §11.2).**
 
