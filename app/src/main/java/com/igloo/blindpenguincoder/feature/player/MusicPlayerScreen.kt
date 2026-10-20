@@ -65,9 +65,9 @@ fun MusicPlayerScreen(
     onClose: () -> Unit,
     engineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine,
     queueFetcher: MusicQueueFetcher,
+    modifier: Modifier = Modifier,
     onQueueChanged: (MusicPlayRequest) -> Unit = {},
     spokenAccessibilityEnabled: Boolean = rememberSpokenAccessibilityEnabled(),
-    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val hostView = LocalView.current

@@ -672,6 +672,8 @@ private fun TracksList(
 }
 
 /** Row-shaped placeholders under a stub action row, the first Play slot being the anchor. */
+// The anchor's modifier, not this composable's; lint's naming rule is about the latter.
+@Suppress("ModifierParameter")
 @Composable
 private fun TracksListSkeleton(
     contentInset: PaddingValues,

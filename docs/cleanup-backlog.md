@@ -177,13 +177,6 @@ deliberately left the three view models as separate classes: a base class or loa
 about forty lines apiece for an abstraction every details test would then have to understand.
 Worth doing if a fourth appears.
 
-### 7.6 Lint's `ModifierParameter` on the skeleton anchors
-
-`PaneGridSkeleton`, `TracksListSkeleton`, `PaneFirstPageError` and `PaneEmpty` take
-`anchorModifier: Modifier`; lint wants the parameter named `modifier`. It is not the composable's own modifier — it is
-the anchor's — so the name is right and the warning is noise. Suppress or rename them
-together.
-
 ---
 
 ## 8. Recorded by the DRY pass (2026-09-29)

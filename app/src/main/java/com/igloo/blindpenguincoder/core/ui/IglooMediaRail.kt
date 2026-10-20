@@ -303,6 +303,8 @@ fun <T> IglooMediaRail(
  * first cell is real to focus and TalkBack; the rest are texture. Static on purpose — nothing
  * in the product loops (design-system.md section 7.2).
  */
+// The anchor's modifier, not this composable's; lint's naming rule is about the latter.
+@Suppress("ModifierParameter")
 @Composable
 private fun RailSkeleton(
     anchorModifier: Modifier,

@@ -142,10 +142,10 @@ fun MovieDetailsScreen(
     playbackSettingsOpen: Boolean,
     onOpenPlaybackSettings: () -> Unit,
     onDismissPlaybackSettings: () -> Unit,
+    modifier: Modifier = Modifier,
     mutationNotice: String? = null,
     progressSyncError: String? = null,
     onRetryProgressSync: () -> Unit = {},
-    modifier: Modifier = Modifier,
     // Parameterized so tests can force both states: the reading-stop chain below depends on it,
     // and a test device with TalkBack running would otherwise pin the gate open.
     spokenAccessibilityEnabled: Boolean = rememberSpokenAccessibilityEnabled(),
