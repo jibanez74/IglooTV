@@ -19,7 +19,9 @@ import com.igloo.blindpenguincoder.feature.library.RoutedHttp
 import com.igloo.blindpenguincoder.feature.library.actions
 import com.igloo.blindpenguincoder.feature.library.gridIds
 import com.igloo.blindpenguincoder.feature.library.landOn
+import com.igloo.blindpenguincoder.feature.library.page
 import com.igloo.blindpenguincoder.feature.library.routedLibraryHttp
+import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import io.ktor.http.HttpStatusCode
@@ -33,6 +35,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -192,9 +195,41 @@ class ShowLibraryViewModelTest {
      */
     @Test
     fun `the screen's actions are bound to the view model's methods`() = runTest {
-        val http = routedHttp()
+        var failNext = false
+        val http = routedHttp(
+            // Listed, so the Genres landing below keeps it rather than resolving to another.
+            genres = { jsonResponse(showsGenresJson(showGenreWithCountJson(id = 9, tag = "Drama"))) },
+            library = {
+                if (failNext) {
+                    failNext = false
+                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                } else {
+                    val number = it.page().toLong()
+                    jsonResponse(
+                        page(number = number, totalPages = 3, ids = (number * 10)..(number * 10 + 2)),
+                    )
+                }
+            },
+        )
+        failNext = true
         val model = loaded(http)
         val actions = model.actions()
+        assertTrue(model.uiState.value.paged.content is IglooRailState.Error)
+
+        actions.onRetryFirstPage()
+        assertEquals(listOf("1", "1"), http.libraryPages)
+        assertEquals(listOf(10L, 11L, 12L), model.uiState.value.gridIds())
+
+        actions.onLoadMore()
+        assertEquals("2", http.libraryPages.last())
+        assertEquals(6, model.uiState.value.gridIds().size)
+
+        failNext = true
+        actions.onLoadMore()
+        assertTrue(model.uiState.value.paged.append is AppendState.Error)
+        actions.onRetryAppend()
+        assertEquals(listOf("1", "1", "2", "3", "3"), http.libraryPages)
+        assertEquals(AppendState.End, model.uiState.value.paged.append)
 
         actions.onToggleSort()
         assertEquals("desc", http.sorts.last())
@@ -205,7 +240,14 @@ class ShowLibraryViewModelTest {
 
         actions.onPressTab(LibraryTab.All)
         assertEquals(LibraryTab.All, model.uiState.value.tab)
-        assertEquals(3, http.libraryPages.size)
+        assertEquals("1", http.libraryPages.last())
+
+        // The focus landing: the highlight moves at once, the fetch waits out the debounce.
+        actions.onSelectTab(LibraryTab.Genres)
+        assertEquals(LibraryTab.Genres, model.uiState.value.tab)
+        assertEquals(1, http.genrePages.size)
+        advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS + 1)
+        assertEquals(listOf("9:1", "9:1"), http.genrePages)
 
         actions.onRefresh()
         assertEquals(2, http.paths.count { it == "/api/shows/stats" })

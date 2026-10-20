@@ -106,11 +106,12 @@ not.
 
 **Wiring**
 
-- `LibraryViewModel.actions()` now binds the eight lambdas in one place and
-  `ShowLibraryViewModelTest` pins each binding, so a lambda wired to the wrong method no longer
-  passes the suite. Still open: every instrumented test hand-feeds a `LibraryUiState`, so one
-  test that composes the screen over a real view model against a mock engine would close the
-  loop that the focus-a-tab → debounce → request → revert → press-to-retry path depends on.
+- `LibraryViewModel.actions()` binds the eight lambdas in one place and
+  `ShowLibraryViewModelTest` pins all eight (since 2026-10-20; four were unpinned before), so a
+  lambda wired to the wrong method no longer passes the suite. Still open: every instrumented
+  test hand-feeds a `LibraryUiState`, so one test that composes the screen over a real view
+  model against a mock engine would close the loop that the focus-a-tab → debounce → request →
+  revert → press-to-retry path depends on.
 
 ---
 
