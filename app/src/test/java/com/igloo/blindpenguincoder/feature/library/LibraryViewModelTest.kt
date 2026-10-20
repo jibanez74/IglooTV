@@ -11,6 +11,7 @@ import com.igloo.blindpenguincoder.data.repository.moviesStatsJson
 import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
+import com.igloo.blindpenguincoder.feature.shared.showingCountLine
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -1352,29 +1353,24 @@ class LibraryViewModelTest {
     }
 
     @Test
-    fun `a reload and a sort flip keep the committed count while in flight`() = runTest {
-        var gate: CompletableDeferred<Unit>? = null
-        val http = routedHttp(
-            stats = { jsonResponse(moviesStatsJson(totalMovies = 96)) },
-            library = {
-                gate?.await()
-                jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
-            },
-        )
-        val model = loaded(http)
+    fun `a reload settles a canceled append and keeps the committed count while in flight`() =
+        runTest {
+            assertReplacementCancelsAppend(expectedPendingTotal = 96L) { it.reload() }
+        }
 
-        gate = CompletableDeferred()
-        model.reload()
-        assertTrue(model.uiState.value.refreshing)
-        assertEquals(96L, model.uiState.value.paged.total)
-        gate.complete(Unit)
+    @Test
+    fun `a sort flip settles a canceled append and keeps the committed count while in flight`() =
+        runTest {
+            assertReplacementCancelsAppend(expectedPendingTotal = 96L) { it.toggleSort() }
+        }
 
-        gate = CompletableDeferred()
-        model.toggleSort()
-        assertTrue(model.uiState.value.refreshing)
-        assertEquals(96L, model.uiState.value.paged.total)
-        gate.complete(Unit)
-    }
+    @Test
+    fun `a filter switch settles a canceled append and clears the count when its request starts`() =
+        runTest {
+            assertReplacementCancelsAppend(expectedPendingTotal = null) {
+                landOn(it, LibraryTab.Liked)
+            }
+        }
 
     @Test
     fun `re-selecting the current tab is a no-op`() = runTest {
@@ -1639,6 +1635,65 @@ class LibraryViewModelTest {
     }
 
     // --- harness ----------------------------------------------------------------------------
+
+    private fun TestScope.assertReplacementCancelsAppend(
+        expectedPendingTotal: Long?,
+        replace: (LibraryViewModel) -> Unit,
+    ) {
+        val appendGate = CompletableDeferred<Unit>()
+        val replacementGate = CompletableDeferred<Unit>()
+        var firstPageCalls = 0
+        val replacement: LibraryRoute = {
+            replacementGate.await()
+            jsonResponse(page(number = 1, total = 12, totalPages = 1, ids = 7L..9L))
+        }
+        val http = routedHttp(
+            stats = { jsonResponse(moviesStatsJson(totalMovies = 96)) },
+            library = {
+                if (it.page() == "1") {
+                    firstPageCalls += 1
+                    if (firstPageCalls == 1) {
+                        jsonResponse(page(number = 1, totalPages = 3, ids = 1L..3L))
+                    } else {
+                        replacement(it)
+                    }
+                } else {
+                    appendGate.await()
+                    jsonResponse(page(number = 2, totalPages = 3, ids = 4L..6L))
+                }
+            },
+            liked = replacement,
+        )
+        val model = loaded(http)
+        assertEquals(96L, model.uiState.value.paged.total)
+        model.loadMore()
+        assertEquals(AppendState.Loading, model.uiState.value.paged.append)
+
+        replace(model)
+
+        val pending = model.uiState.value
+        assertEquals(AppendState.Idle, pending.paged.append)
+        assertEquals(listOf(1L, 2L, 3L), pending.gridIds())
+        assertTrue(pending.refreshing)
+        assertEquals(expectedPendingTotal, pending.paged.total)
+        assertEquals(
+            "Showing 3 of 96 movies",
+            showingCountLine(
+                loadedCount = pending.gridIds().size,
+                total = 96,
+                noun = "movies",
+                pluralNoun = "movies",
+                append = pending.paged.append,
+            ),
+        )
+
+        appendGate.complete(Unit)
+        assertEquals(pending, model.uiState.value)
+        replacementGate.complete(Unit)
+        assertEquals(listOf(7L, 8L, 9L), model.uiState.value.gridIds())
+        assertEquals(12L, model.uiState.value.paged.total)
+        assertTrue(!model.uiState.value.refreshing)
+    }
 
     /** The host's start effect is what fires the first load; there is no fetch in `init`. */
     private fun loaded(http: RoutedHttp) =

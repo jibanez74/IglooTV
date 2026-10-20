@@ -353,9 +353,10 @@ class LibraryViewModel(
         when {
             silent -> _uiState.update { it.withTailSettled().copy(refreshing = false) }
             userInitiated -> _uiState.update {
+                val settled = it.withTailSettled()
                 val switching = it.filter != filterFor(committedTab, committedGenre)
-                it.withTailSettled().copy(
-                    paged = if (switching) it.paged.copy(total = null) else it.paged,
+                settled.copy(
+                    paged = if (switching) settled.paged.copy(total = null) else settled.paged,
                     refreshing = true,
                     notice = null,
                 )
