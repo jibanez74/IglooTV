@@ -9,6 +9,8 @@ This is the small stuff. Contract and behaviour gaps with real product consequen
 `design-system.md` first.
 
 **Opened:** 2026-09-02, from the Movies tab-strip review.
+**Re-verified:** 2026-10-20, every entry against `dev`; the wrong, moot and landed ones were
+removed (§3.1 was never a drift, §6.1's document is referenced and on `main`).
 
 ---
 
@@ -61,15 +63,9 @@ so it costs nothing at run time; do it with the Music pane's model so the two st
 
 ## 3. Small correctness edges
 
-### 3.1 The tab's height arithmetic drifts at non-1.0 UI scale
-
-**Files:** `core/ui/IglooTabRow.kt:84`, `core/design/IglooDimens.kt:96`
-
-`IglooTheme.sizes.controlHeight - IglooTheme.spacing.xs * 2` subtracts two independently rounded
-scaled `Dp`s (each `roundToInt().dp`), so the strip's total height can land ±1dp off
-`controlHeight` at scales other than 1.0. The comment at `:83` asserts the row's padding "brings
-the strip to `controlHeight`", which is exactly true only at 1.0. Either compute the tab height
-from the unscaled values before rounding, or soften the comment.
+Empty since 2026-10-20: the three edges recorded here (tab height arithmetic, tab radius, the
+web-parity stamp) were either not real or landed. Numbering below is kept so cross-references in
+the status documents still resolve.
 
 ---
 
@@ -95,7 +91,8 @@ not.
 - Up from the card-less anchors to the strip in the **Loading** and first-page-**Error** states;
   only the placeholder and the empty Liked view exercise that edge today.
 - The genre row scrolling horizontally with more chips than fit the panel — the fixture has two
-  genres, so `horizontalScroll` (`LibraryGenreRow.kt`) is never actually scrolled.
+  genres, so `horizontalScroll` (`feature/shared/SelectableChipRow.kt`) is never actually
+  scrolled.
 - The genre list going empty *while a chip holds focus* — the row is disposed under the focused
   node. Only the opposite direction (a list arriving) is covered.
 - A tab switch composed mid-flight (`refreshing = true` with a different `tab`).
@@ -133,19 +130,6 @@ Each is its own small pass; none is a defect.
 5. **The count's polite live region re-announces on every tab landing.** The 300 ms debounce made
    this much rarer, but suppressing the announcement outright while a tab holds focus is the
    cleaner answer and matches `AGENTS.md`'s "avoid redundant announcements".
-
----
-
-## 6. Repository hygiene
-
-### 6.1 A music document sits on the Movies branch
-
-**Files:** `docs/music-shuffle.md`, commit `96e01ff` ("Working on the movies tab")
-
-That commit contains **only** a 227-line music-shuffle API spec — unrelated to the tab work,
-referenced by nothing, and under a message that describes something else entirely. It belongs on
-the music branch, or at minimum in a commit whose message says what it is. Left alone because
-moving it means rewriting history.
 
 ---
 
@@ -190,11 +174,11 @@ Worth doing if a fourth appears.
 Each is a new token to name and document, a design-system call rather than a cleanup, so it was
 left for one.
 
-### 8.2 The start effect names nine view models twice
+### 8.2 The start effect names ten view models twice
 
 **Files:** `IglooRoot.kt`
 
-`LifecycleStartEffect` keys on the nine session view models it then refreshes one by one. The
+`LifecycleStartEffect` keys on the ten session view models it then refreshes one by one. The
 list can only be written once behind a shared `refresh()` interface the view models do not have;
 adding one for this is not worth it.
 
