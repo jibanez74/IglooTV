@@ -84,6 +84,8 @@ internal fun SkeletonStub(
  * live region, for the reason [IglooFocusableEmpty] gives. The other cells of the surface are
  * [IglooSkeletonTextureCell]s.
  */
+// The anchor's modifier, not this composable's; lint's naming rule is about the latter.
+@Suppress("ModifierParameter")
 @Composable
 internal fun IglooSkeletonAnchorCell(
     anchorModifier: Modifier,

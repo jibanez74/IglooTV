@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasTestTag
@@ -292,6 +293,27 @@ class MoviesGridAccessibilityTest {
 
         composeRule.onNodeWithTag("movies_count")
             .assertContentDescriptionEquals("Showing 3 of 26 Action movies")
+    }
+
+    /**
+     * A switch in flight has blanked the count: the line names the list being fetched, not the
+     * one still on screen, so the spoken form never pairs the new noun with the old number.
+     */
+    @Test
+    fun theCountNamesTheListBeingFetchedWhileASwitchIsOut() {
+        setContent(
+            testLibraryState(
+                tab = LibraryTab.Genres,
+                genre = LibraryFilter.Genre(id = 7, tag = "Action"),
+                grid = IglooRailState.Loaded(testMovieGridItems.take(3)),
+                total = null,
+                refreshing = true,
+            ),
+        )
+
+        composeRule.onNodeWithTag("movies_count")
+            .assertContentDescriptionEquals("Loading Action movies")
+            .assertTextEquals("—")
     }
 
     /**

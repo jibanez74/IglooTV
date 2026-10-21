@@ -423,7 +423,7 @@ class SessionManager(
         }
     }
 
-    private fun revokedNotice(name: String) = "$name's session expired. Sign in again."
+    private fun revokedNotice(name: String) = "$name's session has expired. Sign in again."
 
     /** Whose session is live: the signed-in profile, or the one waiting on its PIN. */
     private fun AppAuthState.signedInProfileId(): Long? = when (this) {

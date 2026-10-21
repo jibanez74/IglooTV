@@ -9,6 +9,8 @@ This is the small stuff. Contract and behaviour gaps with real product consequen
 `design-system.md` first.
 
 **Opened:** 2026-09-02, from the Movies tab-strip review.
+**Re-verified:** 2026-10-20, every entry against `dev`; the wrong, moot and landed ones were
+removed (§3.1 was never a drift, §6.1's document is referenced and on `main`).
 
 ---
 
@@ -61,31 +63,9 @@ so it costs nothing at run time; do it with the Music pane's model so the two st
 
 ## 3. Small correctness edges
 
-### 3.1 The tab's height arithmetic drifts at non-1.0 UI scale
-
-**Files:** `core/ui/IglooTabRow.kt:84`, `core/design/IglooDimens.kt:96`
-
-`IglooTheme.sizes.controlHeight - IglooTheme.spacing.xs * 2` subtracts two independently rounded
-scaled `Dp`s (each `roundToInt().dp`), so the strip's total height can land ±1dp off
-`controlHeight` at scales other than 1.0. The comment at `:83` asserts the row's padding "brings
-the strip to `controlHeight`", which is exactly true only at 1.0. Either compute the tab height
-from the unscaled values before rounding, or soften the comment.
-
-### 3.2 The tab's radius is not concentric with the row's
-
-**Files:** `core/ui/IglooTabRow.kt:82`, `:41`, `design-system.md` §9.1
-
-A `radius.md` (8) tab inside a `radius.lg` (10) row with `spacing.xs` (4) padding should be
-`radius.sm` (6) to nest cleanly. Cosmetic, currently documented as intentional in §9.1 — decide
-deliberately rather than leave it as an accident, and if `md` stays, say why there.
-
-### 3.3 `design-system.md`'s web-parity stamp is stale
-
-**Files:** `docs/design-system.md:14`
-
-"**Last verified**: 2026-08-02, against web client `3b48f9a6`" predates several passes. It is
-about palette parity rather than behaviour, so nothing is wrong — but a stamp nobody refreshes
-stops meaning anything.
+Empty since 2026-10-20: the three edges recorded here (tab height arithmetic, tab radius, the
+web-parity stamp) were either not real or landed. Numbering below is kept so cross-references in
+the status documents still resolve.
 
 ---
 
@@ -100,8 +80,6 @@ not.
   `LibraryViewModel.refresh`.
 - `onLikeCommitted()`'s early return when the Liked grid is not `Loaded`.
 - `retryAppend()`'s active-job guard.
-- `loadStats()` writing the library-wide count while the *requested* tab is All but the committed
-  grid is still a filtered list.
 - `notice` being cleared by the next successful switch — the failure branch sets it, nothing pins
   the clear.
 
@@ -113,7 +91,8 @@ not.
 - Up from the card-less anchors to the strip in the **Loading** and first-page-**Error** states;
   only the placeholder and the empty Liked view exercise that edge today.
 - The genre row scrolling horizontally with more chips than fit the panel — the fixture has two
-  genres, so `horizontalScroll` (`LibraryGenreRow.kt`) is never actually scrolled.
+  genres, so `horizontalScroll` (`feature/shared/SelectableChipRow.kt`) is never actually
+  scrolled.
 - The genre list going empty *while a chip holds focus* — the row is disposed under the focused
   node. Only the opposite direction (a list arriving) is covered.
 - A tab switch composed mid-flight (`refreshing = true` with a different `tab`).
@@ -124,11 +103,12 @@ not.
 
 **Wiring**
 
-- `LibraryViewModel.actions()` now binds the eight lambdas in one place and
-  `ShowLibraryViewModelTest` pins each binding, so a lambda wired to the wrong method no longer
-  passes the suite. Still open: every instrumented test hand-feeds a `LibraryUiState`, so one
-  test that composes the screen over a real view model against a mock engine would close the
-  loop that the focus-a-tab → debounce → request → revert → press-to-retry path depends on.
+- `LibraryViewModel.actions()` binds the eight lambdas in one place and
+  `ShowLibraryViewModelTest` pins all eight (since 2026-10-20; four were unpinned before), so a
+  lambda wired to the wrong method no longer passes the suite. Still open: every instrumented
+  test hand-feeds a `LibraryUiState`, so one test that composes the screen over a real view
+  model against a mock engine would close the loop that the focus-a-tab → debounce → request →
+  revert → press-to-retry path depends on.
 
 ---
 
@@ -143,28 +123,13 @@ Each is its own small pass; none is a defect.
    state is independent of the selection, so re-entering Genres with a remembered genre far to the
    right shows the leftmost chips while the grid shows a genre you cannot see. `bringIntoView` on
    a selection change fixes it.
-3. **`total` is not cleared across a switch**, so the header shows the previous view's count
-   until the new page lands, then snaps.
-4. **The strip has no motion.** The selected fill hard-swaps; a sliding indicator pill is the
+3. **The strip has no motion.** The selected fill hard-swaps; a sliding indicator pill is the
    conventional premium treatment. Animate it with `iglooTween`, which snaps under reduced motion.
-5. **The Genres tab could carry its active genre** ("Genres · Action"), so the section is legible
+4. **The Genres tab could carry its active genre** ("Genres · Action"), so the section is legible
    without entering it.
-6. **The count's polite live region re-announces on every tab landing.** The 300 ms debounce made
+5. **The count's polite live region re-announces on every tab landing.** The 300 ms debounce made
    this much rarer, but suppressing the announcement outright while a tab holds focus is the
    cleaner answer and matches `AGENTS.md`'s "avoid redundant announcements".
-
----
-
-## 6. Repository hygiene
-
-### 6.1 A music document sits on the Movies branch
-
-**Files:** `docs/music-shuffle.md`, commit `96e01ff` ("Working on the movies tab")
-
-That commit contains **only** a 227-line music-shuffle API spec — unrelated to the tab work,
-referenced by nothing, and under a message that describes something else entirely. It belongs on
-the music branch, or at minimum in a commit whose message says what it is. Left alone because
-moving it means rewriting history.
 
 ---
 
@@ -196,13 +161,6 @@ deliberately left the three view models as separate classes: a base class or loa
 about forty lines apiece for an abstraction every details test would then have to understand.
 Worth doing if a fourth appears.
 
-### 7.6 Lint's `ModifierParameter` on the skeleton anchors
-
-`PaneGridSkeleton`, `TracksListSkeleton`, `PaneFirstPageError` and `PaneEmpty` take
-`anchorModifier: Modifier`; lint wants the parameter named `modifier`. It is not the composable's own modifier — it is
-the anchor's — so the name is right and the warning is noise. Suppress or rename them
-together.
-
 ---
 
 ## 8. Recorded by the DRY pass (2026-09-29)
@@ -216,21 +174,13 @@ together.
 Each is a new token to name and document, a design-system call rather than a cleanup, so it was
 left for one.
 
-### 8.2 The start effect names nine view models twice
+### 8.2 The start effect names ten view models twice
 
 **Files:** `IglooRoot.kt`
 
-`LifecycleStartEffect` keys on the nine session view models it then refreshes one by one. The
+`LifecycleStartEffect` keys on the ten session view models it then refreshes one by one. The
 list can only be written once behind a shared `refresh()` interface the view models do not have;
 adding one for this is not worth it.
-
-### 8.3 Copy that says the same thing differently
-
-- Session expiry is worded three ways: `feature/auth/ErrorMessages.kt`
-  (`toLibraryDisplayMessage`), `SessionManager.revokedNotice`, and
-  `playback/model/PlaybackMessages.kt`.
-- A failed like reads "Couldn't update like status: …" on a movie and "Couldn't update like: …"
-  on a track (both through `AppError.toFailureNotice` now, so aligning them is one word).
 
 ### 8.4 Track rows repeat their like wiring
 

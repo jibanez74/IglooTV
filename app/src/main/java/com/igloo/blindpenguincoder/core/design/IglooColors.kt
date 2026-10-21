@@ -59,7 +59,7 @@ val IglooLightColors = IglooColors(
     auroraForeground = Color(0xFF08131F),
     sidebar = Color(0xFFE8F1FA),
     sidebarPrimary = Color(0xFF0369A1),
-    destructive = Color(0xFFDC2626),
+    destructive = Color(0xFFB91C1C),
     destructiveForeground = Color(0xFFFFFFFF),
 )
 

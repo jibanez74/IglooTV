@@ -259,6 +259,8 @@ fun NavigationRail(
  * [modifier] slots between the focus ring and the focus observers so per-row requester
  * wiring keeps the order the focus treatment depends on.
  */
+// The label's fade, not this composable's modifier; lint's naming rule is about the latter.
+@Suppress("ModifierParameter")
 @Composable
 private fun RailRow(
     icon: ImageVector,

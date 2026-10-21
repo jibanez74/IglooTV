@@ -78,7 +78,8 @@ fun IglooTab(
         text = text,
         selected = selected,
         onPress = onPress,
-        radius = IglooTheme.radius.md,
+        // Concentric with the row: its `lg` corner minus the `xs` inset the tab sits in.
+        radius = IglooTheme.radius.sm,
         // The row's padding on each side brings the strip to controlHeight.
         minHeight = IglooTheme.sizes.controlHeight - IglooTheme.spacing.xs * 2,
         focusedForeground = colors.foreground,

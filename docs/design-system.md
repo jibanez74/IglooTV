@@ -11,7 +11,7 @@ The design system for **Igloo TV**, the Android TV client (Kotlin + Jetpack Comp
   clients stay recognizably one product. **Everything else — type sizes, spacing, geometry,
   focus, motion — is authored for the 10-foot TV target and does not mirror the web.**
   See [Appendix A](#appendix-a--web-parity) for what came from where.
-- **Last verified**: 2026-08-02, against web client `3b48f9a6`.
+- **Last verified**: 2026-10-20, against web client `9b7d514d`.
 
 > **Changing a number here means changing `core/design/`.** Appendix B maps every token
 > group to its file. A PR that changes one without the other is incomplete.
@@ -218,7 +218,7 @@ foreground) so contrast is structural rather than per-call-site.
 | `auroraForeground` | `#08131F` | `#08131F` | Text on aurora |
 | `sidebar` | `#0F1A2E` | `#E8F1FA` | Nav spine chrome |
 | `sidebarPrimary` | `#38BDF8` | `#0369A1` | Active nav item |
-| `destructive` | `#F87171` | `#DC2626` | Danger / delete |
+| `destructive` | `#F87171` | `#B91C1C` | Danger / delete |
 | `destructiveForeground` | `#08131F` | `#FFFFFF` | Text on destructive |
 
 Notes:
@@ -226,9 +226,9 @@ Notes:
 - `aurora` / `auroraForeground` are **identical in both themes** — intentional.
 - `ring` is the single focus color across the entire app. Do not introduce a second.
 - `destructiveForeground` is ported from web (`--destructive-foreground`), which authors both
-  values *and* their contrast: **6.76:1 dark / 4.83:1 light**. That makes it the weakest paired
-  token in the app — `primary`/`primaryForeground` is 8.72:1 — and it sits under §12's 7:1 body
-  target. It is admissible because it only ever carries a **control label** (§9.1's `Destructive`
+  values *and* their contrast: **6.76:1 dark / 6.47:1 light** (light `destructive` followed the
+  web from `#DC2626` to `#B91C1C` on 2026-10-20). That makes it the weakest paired token in the
+  app — `primary`/`primaryForeground` is 8.72:1 — and it sits under §12's 7:1 body target. It is admissible because it only ever carries a **control label** (§9.1's `Destructive`
   button), never prose. Do not reach for it to color body text; a destructive *message* uses
   `cardForeground` on `card`, as §9.3 requires.
 - **Not ported from web**: `success`, `accentTeal`, `popover`, `chart-1..5`. No feature needs
@@ -838,7 +838,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
 | `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `overMedia` takes the §3.2 over-media ground and white content where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. A null `onClick` draws a button in its final place before its action exists (the show page's Play/Resume, §11.4.3): still a focus target, but with no `Role.Button` and no action — the `IglooIconButton` inert contract. That is not `enabled = false`, which leaves the focus tree and announces "disabled": a control that will work is not a disabled one. |
 | `IglooFilterChip` | One choice in a row of mutually exclusive filters (the Movies index's genre picker, §11.4): `heightIn(min = sizes.controlHeight)`, radius `lg`, `spacing.md` horizontal padding, `bodyMedium` label. Selection and focus compose rather than compete — selected is a `primary` fill that holds while unfocused, focus is the §6.1 ring/scale/glow over whatever fill the chip has; unselected rests as the ring's hairline border and takes the Ghost focus fill. Not an `IglooButton` variant: a selected-state fill on an unfocused node is outside the button contract. Built on the internal `SelectablePill`, which carries that body for both pills. One cleared node: `semanticLabel` replaces the drawn text ("Action · 26" speaks as "Action, 26 movies"), the selected chip announces "Selected" via state description, and `actionLabel` names the press. |
-| `IglooTabRow` / `IglooTab` | A strip of mutually exclusive sections (the Movies index, §11.4) — the web client's tab list. The row is one bordered pill on `muted @ 0.50` with a `border @ 0.50` hairline at `focus.restWidth`, radius `lg`, `spacing.xs` padding and gap, sized to its content and never scrolling (more tabs than fit the panel is too many tabs). A tab is `controlHeight` minus the row's padding, radius `md`, `spacing.md` horizontal padding, `bodyMedium` label: `primary` fill / `primaryForeground` selected, `card @ 0.72` / `foreground` focused, transparent / `mutedForeground` at rest — selection and focus compose as on the chip, but **no focus scale**, since a lifted tab would overlap the row's border. Shares `IglooFilterChip`'s `SelectablePill` body; the five differences (radius, focus scale, height inset, resting label colour, semantics) are its parameters. **Selects on focus**: d-pad landing on a tab is the switch, the Android TV convention. `onPress` is the separate, deliberate signal — TalkBack's click action, and the way back after a failed switch reverted the selection out from under a focused tab — and every caller passes it separately, because the panes' landing is debounced and a press must not wait behind it. The focused-but-unselected treatment exists for exactly that revert window and nowhere else. One cleared node with `Role.Tab`, `selected` set only when true (never false — TalkBack would say "not selected" on every other tab) and `actionLabel` on the press; the row is a `selectableGroup`. Hand-rolled on Foundation, not `androidx.tv.material3.TabRow` (§9.2), and the ground is written out rather than taken from `iglooSurface`, whose `clip` would cut the focused tab's glow at the row's bounds. |
+| `IglooTabRow` / `IglooTab` | A strip of mutually exclusive sections (the Movies index, §11.4) — the web client's tab list. The row is one bordered pill on `muted @ 0.50` with a `border @ 0.50` hairline at `focus.restWidth`, radius `lg`, `spacing.xs` padding and gap, sized to its content and never scrolling (more tabs than fit the panel is too many tabs). A tab is `controlHeight` minus the row's padding, radius `sm` — concentric with the row's `lg` corner at its `xs` inset — `spacing.md` horizontal padding, `bodyMedium` label: `primary` fill / `primaryForeground` selected, `card @ 0.72` / `foreground` focused, transparent / `mutedForeground` at rest — selection and focus compose as on the chip, but **no focus scale**, since a lifted tab would overlap the row's border. Shares `IglooFilterChip`'s `SelectablePill` body; the five differences (radius, focus scale, height inset, resting label colour, semantics) are its parameters. **Selects on focus**: d-pad landing on a tab is the switch, the Android TV convention. `onPress` is the separate, deliberate signal — TalkBack's click action, and the way back after a failed switch reverted the selection out from under a focused tab — and every caller passes it separately, because the panes' landing is debounced and a press must not wait behind it. The focused-but-unselected treatment exists for exactly that revert window and nowhere else. One cleared node with `Role.Tab`, `selected` set only when true (never false — TalkBack would say "not selected" on every other tab) and `actionLabel` on the press; the row is a `selectableGroup`. Hand-rolled on Foundation, not `androidx.tv.material3.TabRow` (§9.2), and the ground is written out rather than taken from `iglooSurface`, whose `clip` would cut the focused tab's glow at the row's bounds. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
 | `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, compact `formatRemainingTime` ("2h 20m left"), spoken `formatSpokenRemainingTime` ("2 hours and 20 minutes remaining"), `formatTimecode` ("1:01:15"), sparse `formatSpokenTime` ("1 hour and 15 seconds"), and exact `formatSpokenTimeThroughSeconds` ("1 hour, 0 minutes, and 15 seconds"). `formatEpisodeCode` ("S1 E3") names an episode the way the web client does. Both remaining-time forms clamp overshoot and round partial minutes up; they use "Less than 1m left" / "Less than 1 minute remaining" below one minute and defensively fall back to "In progress" for an invalid duration. The exact resume form floors to the last completed second and includes every unit from the largest relevant one through seconds, never a leading zero hour. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
@@ -1594,7 +1594,11 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   300 ms**, because passing over Genres on the way from Liked to All lands on it, and a tab the
   d-pad is only crossing must not put a request on the wire, flip the header to "Refreshing…",
   or re-announce the count to TalkBack. The transient highlight is the platform's own tab
-  behaviour and stays. A **press** skips the delay — it is deliberate, never a pass-over — and
+  behaviour and stays. When the request does go out, the **count goes with it**: the header
+  shows its dash and speaks "Loading Action movies" for the list being fetched, and the number
+  comes back with the page — or, when the switch fails, with the reverted selection — so the
+  new section's noun is never paired with the old section's number. Refresh and Sort re-read
+  the list on screen and keep its count. A **press** skips the delay — it is deliberate, never a pass-over — and
   a switch that outruns the delay still cancels the page job and bumps the generation, so a
   superseded response can never land. The one cost worth naming: a switch that lands
   while the user is still on the tab must **not** re-anchor focus on the grid (the yank every
@@ -2671,6 +2675,19 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-20 — Cleanup backlog pass (§11.4).**
+
+- **§11.4**: the library count goes with a switch's request — dash on screen, "Loading Action
+  movies" spoken — and comes back with the page, or with the reverted selection when the switch
+  fails. The library-wide stat is written only while All is both requested and committed; a
+  stats response can no longer land on a filtered grid under a switch to All. Refresh and Sort
+  keep the committed count.
+- **§3**: light `destructive` follows the web client to `#B91C1C` (white on it 6.47:1, up from
+  4.83:1); every other token in both palettes re-verified against `styles.css` at `9b7d514d`,
+  and the parity stamp refreshed.
+- **§9.1**: `IglooTab` takes radius `sm`, not `md`, so its corner is concentric with the row's
+  `lg` at the `xs` inset.
 
 **2026-10-19 — The details hero stays whole while focus is in it (§11.4.1, §11.2).**
 

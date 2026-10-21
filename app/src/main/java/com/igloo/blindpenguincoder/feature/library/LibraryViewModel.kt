@@ -57,6 +57,13 @@ class LibraryViewModel(
     private var committedSort: SortOrder = SortOrder.Ascending
 
     /**
+     * The count that belongs to the committed list — the pages' own total, or the library-wide
+     * stat while All is committed. A switch to another filter blanks the shown count with the
+     * request, so this is what a failed switch puts back beside the reverted tab.
+     */
+    private var committedTotal: Long? = null
+
+    /**
      * Ids already on screen. A–Z paging over a library that is being scanned shifts rows between
      * pages, and a repeated id is a duplicate key — a hard crash in `LazyVerticalGrid`, not a
      * visual glitch — so this is required, not defensive.
@@ -273,6 +280,7 @@ class LibraryViewModel(
                     committedTab = tab
                     committedGenre = genre
                     committedSort = sort
+                    committedTotal = result.value.total
                     _uiState.update {
                         it.copy(
                             paged = it.paged.copy(
@@ -317,6 +325,8 @@ class LibraryViewModel(
                             },
                             sort = committedSort,
                             paged = it.paged.copy(
+                                // The count went with the request; it comes back with the list.
+                                total = committedTotal,
                                 content = IglooRailState.Error(message)
                                     .orKeepContent(it.paged.content),
                                 append = it.paged.append.resetIfLoading(),
@@ -333,13 +343,43 @@ class LibraryViewModel(
         }
     }
 
-    /** The chrome a first-page request puts up, raised with the request rather than before it. */
+    /**
+     * The chrome a first-page request puts up, raised with the request rather than before it.
+     * A request for a *different* list also blanks the count: the header must not pair the new
+     * section's noun with the old section's number for the length of a round trip. Refresh and
+     * Sort re-read the committed list, whose count still holds. A background switch — a genres
+     * refresh that dropped the selected genre — raises no Refreshing label but blanks the count
+     * all the same.
+     */
     private fun applyFirstPageRequestState(userInitiated: Boolean, silent: Boolean) {
         when {
             silent -> _uiState.update { it.withTailSettled().copy(refreshing = false) }
             userInitiated -> _uiState.update {
-                it.withTailSettled().copy(refreshing = true, notice = null)
+                val settled = it.withTailSettled()
+                settled.copy(
+                    paged = if (it.isSwitching()) settled.paged.copy(total = null) else settled.paged,
+                    refreshing = true,
+                    notice = null,
+                )
             }
+            else -> _uiState.update {
+                if (it.isSwitching()) it.copy(paged = it.paged.copy(total = null)) else it
+            }
+        }
+    }
+
+    /**
+     * Whether this state requests a list other than the one the grid shows. A genre is its id:
+     * a genres refresh can rename the selected tag without paging, leaving [committedGenre] on
+     * the old tag for the very same list.
+     */
+    private fun LibraryUiState.isSwitching(): Boolean {
+        val requested = filter
+        val committed = filterFor(committedTab, committedGenre)
+        return if (requested is LibraryFilter.Genre && committed is LibraryFilter.Genre) {
+            requested.id != committed.id
+        } else {
+            requested != committed
         }
     }
 
@@ -377,6 +417,7 @@ class LibraryViewModel(
                     // earlier, a dropped page would be unrecoverable without a full reload.
                     nextPage = page + 1
                     seenIds += fresh.map { it.id }
+                    committedTotal = result.value.total
                     _uiState.update {
                         it.copy(
                             paged = it.paged.copy(
@@ -417,15 +458,18 @@ class LibraryViewModel(
      * The header count. A failed re-read leaves the shown number alone — a moment of bad wifi as
      * the TV wakes must not blank a count the grid below it still agrees with. The stat is
      * library-wide, so it only applies to the All view; a filtered count comes from that view's
-     * own pages, and a slow stats response must not overwrite it.
+     * own pages, and a slow stats response must not overwrite it — whether the filtered list is
+     * the one still on screen under a switch to All, or the one a switch away from All is
+     * requesting. A switch's page carries its own total either way.
      */
     private fun loadStats() {
         statsJob?.cancel()
         statsJob = viewModelScope.launch {
             val result = source.total()
             if (result is ApiResult.Success) {
+                if (committedTab == LibraryTab.All) committedTotal = result.value
                 _uiState.update {
-                    if (it.tab == LibraryTab.All) {
+                    if (it.tab == LibraryTab.All && committedTab == LibraryTab.All) {
                         it.copy(paged = it.paged.copy(total = result.value))
                     } else {
                         it

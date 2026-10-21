@@ -233,6 +233,8 @@ internal fun Modifier.paneCardlessAnchor(
     .onFocusChanged { focusOwnership.onCardlessFocusChanged(it.isFocused) }
 
 /** A first page that failed: the error card, its Retry the pane's anchor. */
+// The anchor's modifier, not this composable's; lint's naming rule is about the latter.
+@Suppress("ModifierParameter")
 @Composable
 internal fun PaneFirstPageError(
     message: String,
@@ -252,6 +254,8 @@ internal fun PaneFirstPageError(
 }
 
 /** An empty list: the focusable empty box, the pane's anchor. */
+// The anchor's modifier, not this composable's; lint's naming rule is about the latter.
+@Suppress("ModifierParameter")
 @Composable
 internal fun PaneEmpty(
     icon: ImageVector,

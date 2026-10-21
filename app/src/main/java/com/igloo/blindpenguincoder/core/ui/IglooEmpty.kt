@@ -60,6 +60,8 @@ private fun IglooEmpty(
  * by itself, while a live region on a focus target re-reads it on every focus change (section
  * 6.3).
  */
+// The anchor's modifier, not this composable's; lint's naming rule is about the latter.
+@Suppress("ModifierParameter")
 @Composable
 internal fun IglooFocusableEmpty(
     anchorModifier: Modifier,

@@ -317,6 +317,8 @@ internal fun <T> PaneGrid(
 }
 
 /** Card-geometry placeholders, so focus taken while loading sits where the first card will land. */
+// The anchor's modifier, not this composable's; lint's naming rule is about the latter.
+@Suppress("ModifierParameter")
 @Composable
 internal fun PaneGridSkeleton(
     columns: Int,
