@@ -575,8 +575,10 @@ internal val testSeasonTwoEpisodes = listOf(
 )
 
 internal val testPlayTarget = PlayTargetUi(
+    episodeId = 902,
     label = "Resume S1 E2",
     spokenLabel = "Resume season 1, episode 2, Half Loop",
+    actionLabel = "Resume",
 )
 
 /** Image-less like the movie fixtures: every artwork path falls back to a glyph. */

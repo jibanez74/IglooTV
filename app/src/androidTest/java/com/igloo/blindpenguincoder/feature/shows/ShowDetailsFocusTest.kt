@@ -5,7 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -31,6 +33,7 @@ import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.inertShowDetailsActions
 import com.igloo.blindpenguincoder.testEpisode
 import com.igloo.blindpenguincoder.testEpisodes
 import com.igloo.blindpenguincoder.testHomeShows
@@ -49,8 +52,9 @@ import org.junit.runner.RunWith
  * The show page's focus contract (design-system.md sections 6.3 and 11.4.3), through the real
  * shell: every entry point lands on Play/Resume and Back returns to the card or hero that led
  * away, the vertical chain is hand-wired top to bottom with nothing escaping into the shell
- * composed underneath, and a season chip changes the rail only when pressed — and then hands
- * focus down to that season's first episode.
+ * composed underneath, a season chip changes the rail only when pressed — and then hands focus
+ * down to that season's first episode — and a failed save's Retry card (section 11.8) joins the
+ * chain between Play and the sections below it.
  */
 @RunWith(AndroidJUnit4::class)
 class ShowDetailsFocusTest {
@@ -105,7 +109,12 @@ class ShowDetailsFocusTest {
                                 selectedSeason = number,
                                 episodes = episodes,
                                 playTarget = if (episodes is IglooRailState.Loaded) {
-                                    PlayTargetUi("Play S$number E1", "Play season $number, episode 1")
+                                    PlayTargetUi(
+                                        episodeId = episodes.items.first().id,
+                                        label = "Play S$number E1",
+                                        spokenLabel = "Play season $number, episode 1",
+                                        actionLabel = "Play",
+                                    )
                                 } else {
                                     null
                                 },
@@ -414,7 +423,12 @@ class ShowDetailsFocusTest {
 
         showState = showState.copy(
             episodes = IglooRailState.Loaded(testSeasonTwoEpisodes),
-            playTarget = PlayTargetUi("Play S2 E1", "Play season 2, episode 1, Hello, Ms. Cobel"),
+            playTarget = PlayTargetUi(
+                episodeId = 911,
+                label = "Play S2 E1",
+                spokenLabel = "Play season 2, episode 1, Hello, Ms. Cobel",
+                actionLabel = "Play",
+            ),
         )
         composeRule.waitForIdle()
         assertEquals(before, heroSpan(), 0.5f)
@@ -484,6 +498,88 @@ class ShowDetailsFocusTest {
         shell.assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
     }
 
+    /** The page alone, as the host composes it, with a failed save's Retry card under the hero. */
+    private fun setScreenContent(
+        state: ShowDetailsUiState,
+        progressSyncError: String,
+        spokenAccessibilityEnabled: Boolean = false,
+    ) {
+        composeRule.setContent {
+            IglooTheme {
+                ShowDetailsScreen(
+                    state = state,
+                    actions = inertShowDetailsActions,
+                    onPlayEpisode = { _, _ -> },
+                    playReturnRequester = remember { FocusRequester() },
+                    episodeReturnRequester = remember { FocusRequester() },
+                    progressSyncError = progressSyncError,
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                )
+            }
+        }
+        composeRule.waitForIdle()
+    }
+
+    /**
+     * The Retry card sits under Play: down from Play reaches it, down again the chips, and up walks
+     * back the same way; its sides are pinned like every edge of the page.
+     */
+    @Test
+    fun theProgressRetrySitsBetweenPlayAndTheChipsAndPinsItsSides() {
+        setScreenContent(testShowDetailsState(), progressSyncError = SAVE_FAILED)
+        play().assertIsFocused()
+
+        play().press(Key.DirectionDown)
+        val retry = node("details_progress_retry")
+        retry.assertIsFocused()
+        retry.press(Key.DirectionLeft).assertIsFocused()
+        retry.press(Key.DirectionRight).assertIsFocused()
+        retry.press(Key.DirectionDown)
+        chip(1).assertIsFocused()
+        chip(1).press(Key.DirectionUp)
+        retry.assertIsFocused()
+        retry.press(Key.DirectionUp)
+        play().assertIsFocused()
+    }
+
+    /** With nothing to play, the Retry card is the chain's top and the page's entry. */
+    @Test
+    fun withoutPlayTheProgressRetryIsTheEntryAndTheTopOfTheChain() {
+        setScreenContent(
+            testShowDetailsState(episodes = IglooRailState.Loaded(emptyList()), playTarget = null),
+            progressSyncError = SAVE_FAILED,
+        )
+
+        val retry = node("details_progress_retry")
+        retry.assertIsFocused()
+        retry.press(Key.DirectionUp).assertIsFocused()
+        retry.press(Key.DirectionDown)
+        chip(1).assertIsFocused()
+    }
+
+    /** Under a screen reader the card sits between Play and the Overview stop, both ways. */
+    @Test
+    fun underAScreenReaderTheProgressRetryPrecedesTheOverviewStop() {
+        setScreenContent(
+            testShowDetailsState(),
+            progressSyncError = SAVE_FAILED,
+            spokenAccessibilityEnabled = true,
+        )
+        node("details_hero_info").assertIsFocused()
+
+        node("details_hero_info").press(Key.DirectionDown)
+        play().assertIsFocused()
+        play().press(Key.DirectionDown)
+        settleSectionMove()
+        node("details_progress_retry").assertIsFocused()
+        node("details_progress_retry").press(Key.DirectionDown)
+        settleSectionMove()
+        node("details_overview_stop").assertIsFocused()
+        node("details_overview_stop").press(Key.DirectionUp)
+        settleSectionMove()
+        node("details_progress_retry").assertIsFocused()
+    }
+
     private fun allDirections(check: (Key) -> Unit) =
         listOf(Key.DirectionLeft, Key.DirectionDown, Key.DirectionUp, Key.DirectionRight)
             .forEach(check)
@@ -498,3 +594,4 @@ class ShowDetailsFocusTest {
 }
 
 private const val SECTION_MOVE_MS = 3_000L
+private const val SAVE_FAILED = "Couldn't save playback progress: no connection."

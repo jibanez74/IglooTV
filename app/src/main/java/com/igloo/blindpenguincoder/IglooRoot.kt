@@ -233,6 +233,15 @@ fun IglooRoot(container: IglooAppContainer) {
                                 canPlayAudioMime = canPlayAudioMime,
                             )
                         }
+                    val showDetailsViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "show-details") {
+                            ShowDetailsViewModel(
+                                container.showRepository,
+                                container.serverUrlProvider,
+                                canPlayVideoMime = ::deviceCanDecodeVideoMime,
+                                canPlayAudioMime = canPlayAudioMime,
+                            )
+                        }
                     val videoPlayerViewModel =
                         sessionViewModel(authenticatedSessionOwner, "video-player") {
                             VideoPlayerViewModel(
@@ -240,9 +249,11 @@ fun IglooRoot(container: IglooAppContainer) {
                                     container.videoPlaybackRepository::updateWatchProgress,
                                 onWatchedStateCommitted = {
                                     homeViewModel.refreshContinueWatching()
-                                    // The resume strip and watched pill are current on return to
-                                    // the details page; a no-op while the overlay is closed.
+                                    // The movie's resume strip and watched pill, and the show
+                                    // page's episode rail and Play/Resume target, are current on
+                                    // return to the page underneath; no-ops while closed.
                                     detailsViewModel.refresh()
+                                    showDetailsViewModel.refresh()
                                 },
                             )
                         }
@@ -256,13 +267,6 @@ fun IglooRoot(container: IglooAppContainer) {
                     val albumDetailsViewModel =
                         sessionViewModel(authenticatedSessionOwner, "album-details") {
                             AlbumDetailsViewModel(container.musicRepository)
-                        }
-                    val showDetailsViewModel =
-                        sessionViewModel(authenticatedSessionOwner, "show-details") {
-                            ShowDetailsViewModel(
-                                container.showRepository,
-                                container.serverUrlProvider,
-                            )
                         }
                     // Session-scoped like the Movies grid: the three tabs' pages and scroll
                     // positions survive a Music -> Home -> Music trip.
@@ -433,6 +437,8 @@ fun IglooRoot(container: IglooAppContainer) {
                         showDetails = showDetails,
                         showDetailsActions = showDetailsActions,
                         onShowSelected = openDetails(showDetailsViewModel::open),
+                        showPlayRequests = showDetailsViewModel.playRequests,
+                        onPlayShowEpisode = showDetailsViewModel::playEpisode,
                         // Back does not ask which one was up: closing a closed page is a no-op.
                         onCloseDetails = closeAllDetails,
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },

@@ -38,6 +38,7 @@ import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
@@ -46,6 +47,7 @@ import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
 import com.igloo.blindpenguincoder.testContinueItems
 import com.igloo.blindpenguincoder.testMovieDetails
+import com.igloo.blindpenguincoder.testShowDetailsState
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -53,10 +55,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The movie player in the details page's one player-overlay slot (design-system.md sections 6.3
- * and 11.8): the hero's Play opens it through the gated request, newer overlays supersede a
- * deferred Play, the details screen underneath leaves TalkBack traversal for its lifetime, and
- * closing restores focus to the control that led away.
+ * The video player in the details page's one player-overlay slot (design-system.md sections 6.3
+ * and 11.8), launched from the movie page, the show page and Home's Continue Watching rail: a
+ * Play opens it through the gated request, newer overlays supersede a deferred Play, the surface
+ * underneath leaves TalkBack traversal for its lifetime, closing restores focus to the control
+ * that led away, and a failed exit save follows the user back to the surface that launched.
  */
 @RunWith(AndroidJUnit4::class)
 class VideoPlayerOverlayFocusTest {
@@ -90,19 +93,25 @@ class VideoPlayerOverlayFocusTest {
     )
 
     private var detailsState by mutableStateOf(MovieDetailsUiState())
+    private var showState by mutableStateOf(ShowDetailsUiState())
     private val engines = mutableListOf<FakeVideoPlayerEngine>()
+    private val launched = mutableListOf<VideoPlayRequest>()
     private val trailerEngines = mutableListOf<FakeTrailerPlayerEngine>()
     private lateinit var playRequests: MutableSharedFlow<VideoPlayRequest>
     private lateinit var homePlayRequests: MutableSharedFlow<VideoPlayRequest>
+    private lateinit var showPlayRequests: MutableSharedFlow<VideoPlayRequest>
     private var failProgressSaves = false
     private var hostActivity: Activity? = null
 
     /**
      * Null mimics the gate refusing: the message lands on the page and nothing opens. With
-     * [detailsOpen] false the shell is Home itself, with an episode leading Continue Watching.
+     * [detailsOpen] false the shell is Home itself, with an episode leading Continue Watching;
+     * [showOpen] puts the show page over it instead, its view model standing in as a launcher
+     * that answers every press at once with the pressed episode.
      */
     private fun setShellContent(
         detailsOpen: Boolean = true,
+        showOpen: Boolean = false,
         requestPlayback: () -> VideoPlayRequest? = { playRequest },
     ) {
         detailsState = if (detailsOpen) {
@@ -113,11 +122,14 @@ class VideoPlayerOverlayFocusTest {
         } else {
             MovieDetailsUiState()
         }
+        showState = if (showOpen) testShowDetailsState() else ShowDetailsUiState()
         engines.clear()
+        launched.clear()
         trailerEngines.clear()
         failProgressSaves = false
         playRequests = MutableSharedFlow(extraBufferCapacity = 1)
         homePlayRequests = MutableSharedFlow(extraBufferCapacity = 1)
+        showPlayRequests = MutableSharedFlow(extraBufferCapacity = 1)
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
@@ -140,13 +152,21 @@ class VideoPlayerOverlayFocusTest {
                         continueWatching = IglooRailState.Loaded(testContinueItems),
                     ),
                     details = detailsState,
+                    showDetails = showState,
                     onRequestPlayback = {
                         requestPlayback()?.let(playRequests::tryEmit)
                     },
                     playRequests = playRequests,
                     homePlayRequests = homePlayRequests,
+                    showPlayRequests = showPlayRequests,
+                    onPlayShowEpisode = { episodeId ->
+                        showPlayRequests.tryEmit(
+                            episodeRequest.copy(media = PlaybackMediaRef.Episode(episodeId)),
+                        )
+                    },
                     videoPlayerViewModel = progressViewModel,
-                    videoPlayerEngineFactory = { _, _ ->
+                    videoPlayerEngineFactory = { _, request ->
+                        launched += request
                         FakeVideoPlayerEngine().also { engines += it }
                     },
                     onMovieSelected = {},
@@ -156,6 +176,7 @@ class VideoPlayerOverlayFocusTest {
                             openMovieId = null,
                             details = DetailsState.Loading,
                         )
+                        showState = ShowDetailsUiState()
                     },
                     trailerEngineFactory = { _, _ ->
                         FakeTrailerPlayerEngine().also { trailerEngines += it }
@@ -174,10 +195,19 @@ class VideoPlayerOverlayFocusTest {
     }
 
     private fun pressPlay() {
-        // Entry focus already anchors on the hero's Play button (section 11.4).
+        // Entry focus already anchors on the hero's Play button, on either details page (section 11.4).
         val play = composeRule.onNodeWithTag("details_play")
         play.assertIsFocused()
         play.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+    }
+
+    /** Moves onto the show page's episode card [id] and presses it. */
+    private fun pressEpisodeCard(id: Long) {
+        val card = composeRule.onNodeWithTag("episode_card_$id")
+        card.requestFocus()
+        card.assertIsFocused()
+        card.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
     }
 
@@ -329,6 +359,112 @@ class VideoPlayerOverlayFocusTest {
 
         composeRule.onNodeWithTag("details_progress_error").assertDoesNotExist()
         composeRule.onNodeWithTag("home_progress_error").assertDoesNotExist()
+    }
+
+    @Test
+    fun theShowPagesPlayOpensThePlayerAndBackRestoresPlay() {
+        setShellContent(detailsOpen = false, showOpen = true)
+        val layer = composeRule.onNodeWithTag("details_layer")
+        layer.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+
+        pressPlay()
+
+        // The player is named for what it plays, the show page under it leaves TalkBack
+        // traversal, and the request carries the hero's target episode.
+        composeRule.onNodeWithTag("movie_player")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Episode player"))
+        layer.assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
+        composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
+        assertEquals(PlaybackMediaRef.Episode(902), launched.single().media)
+        assertEquals(listOf("start:null:true"), engines.single().playbackCommands)
+
+        pressBack()
+
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        assertEquals(true, engines.single().released)
+        layer.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
+    }
+
+    @Test
+    fun anEpisodeCardOpensThePlayerAndBackRestoresTheCard() {
+        setShellContent(detailsOpen = false, showOpen = true)
+
+        pressEpisodeCard(903)
+
+        composeRule.onNodeWithTag("movie_player").assertExists()
+        assertEquals(PlaybackMediaRef.Episode(903), launched.single().media)
+
+        pressBack()
+
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        composeRule.onNodeWithTag("episode_card_903").assertIsFocused()
+    }
+
+    @Test
+    fun aShowPagesFailedSaveFollowsBackToTheShowPageAndRetryRestoresPlayFocus() {
+        setShellContent(detailsOpen = false, showOpen = true)
+        pressPlay()
+        failACadenceSave(engines.single(), durationSec = 3300.0)
+
+        pressBack()
+
+        // The show page carries the Retry under its hero action, one press down from Play.
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        composeRule.onNodeWithTag("details_progress_error").assertExists()
+        val play = composeRule.onNodeWithTag("details_play")
+        play.assertIsFocused()
+        play.performKeyInput { pressKey(Key.DirectionDown) }
+        val retry = composeRule.onNodeWithTag("details_progress_retry")
+        retry.assertIsFocused()
+
+        failProgressSaves = false
+        retry.performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("details_progress_error").assertDoesNotExist()
+        play.assertIsFocused()
+    }
+
+    /** Each surface shows only the failures of the launches it made (section 11.8). */
+    @Test
+    fun aShowPagesFailedSaveStaysOffHomeOnceThePageCloses() {
+        setShellContent(detailsOpen = false, showOpen = true)
+        pressPlay()
+        failACadenceSave(engines.single(), durationSec = 3300.0)
+        pressBack()
+        composeRule.onNodeWithTag("details_progress_error").assertExists()
+
+        pressBack()
+
+        composeRule.onNodeWithTag("details_layer").assertDoesNotExist()
+        composeRule.onNodeWithTag("home_progress_error").assertDoesNotExist()
+    }
+
+    /** Only a press on this page arms a landing: a request from nowhere opens nothing. */
+    @Test
+    fun aShowLaunchWithoutAPressOpensNothing() {
+        setShellContent(detailsOpen = false, showOpen = true)
+
+        composeRule.runOnIdle { showPlayRequests.tryEmit(episodeRequest) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
+    }
+
+    @Test
+    fun closingTheShowPageTakesItsPlayerWithIt() {
+        setShellContent(detailsOpen = false, showOpen = true)
+        pressPlay()
+        composeRule.onNodeWithTag("movie_player").assertExists()
+
+        // A session revalidation or profile switch closes the overlay from outside Back.
+        composeRule.runOnIdle { showState = ShowDetailsUiState() }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        assertEquals(true, engines.single().released)
     }
 
     @Test

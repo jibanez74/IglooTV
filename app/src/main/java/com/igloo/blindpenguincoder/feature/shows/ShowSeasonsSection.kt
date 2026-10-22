@@ -36,7 +36,9 @@ import com.igloo.blindpenguincoder.feature.shared.SelectableChipRow
  * The rail is keyed by season, so a switch builds it fresh: its focus memory starts over and the
  * hand-off lands on the first episode, and its entry, loading, error and empty anchors all belong
  * to the season it shows. It speaks its heading once, on entry ("Season 2. Episode 1, …"),
- * because unlike the cast rail its name changes with the chips above it.
+ * because unlike the cast rail its name changes with the chips above it. A card's press plays its
+ * episode through [onPlayEpisode], and [episodesReturnRequester] rides the rail's last-focused
+ * card, so the player's close lands back on the card that launched it (section 6.3).
  */
 @Composable
 internal fun ShowSeasonsSection(
@@ -51,11 +53,13 @@ internal fun ShowSeasonsSection(
     episodesRequester: FocusRequester,
     episodesUpRequester: FocusRequester?,
     episodesDownRequester: FocusRequester?,
+    episodesReturnRequester: FocusRequester,
     chipsSection: AnnouncedSection,
     episodesSection: AnnouncedSection,
     onEpisodesFocusChanged: (Boolean) -> Unit,
     onPressSeason: (Long) -> Unit,
     onRetrySeason: () -> Unit,
+    onPlayEpisode: (Long) -> Unit,
 ) {
     if (seasons.size >= 2) {
         val chips = remember(seasons) {
@@ -99,6 +103,7 @@ internal fun ShowSeasonsSection(
             entryRequester = episodesRequester,
             upRequester = episodesUpRequester,
             downRequester = episodesDownRequester,
+            returnRequester = episodesReturnRequester,
             modifier = Modifier
                 .announcedSection(episodesSection)
                 .onFocusChanged { onEpisodesFocusChanged(it.hasFocus) },
@@ -113,8 +118,7 @@ internal fun ShowSeasonsSection(
         ) { episode, itemModifier, _ ->
             EpisodeCard(
                 episode = episode,
-                // Episode playback is not on the page yet: the card is a landing site.
-                onClick = null,
+                onClick = { onPlayEpisode(episode.id) },
                 modifier = itemModifier.testTag("episode_card_${episode.id}"),
             )
         }

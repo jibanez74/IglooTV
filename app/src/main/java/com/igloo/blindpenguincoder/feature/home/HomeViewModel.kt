@@ -3,10 +3,9 @@ package com.igloo.blindpenguincoder.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
-import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.core.error.flatMap
 import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.withApiBaseUrl
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatEpisodeCode
@@ -21,41 +20,27 @@ import com.igloo.blindpenguincoder.data.model.ContinueWatchingItem
 import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.LatestShow
 import com.igloo.blindpenguincoder.data.model.Movie
-import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.ShowDetailsData
-import com.igloo.blindpenguincoder.data.model.ShowEpisodePlaybackData
-import com.igloo.blindpenguincoder.data.model.ShowEpisodeTechnicalDetailsData
-import com.igloo.blindpenguincoder.data.model.WatchProgress
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.data.repository.ShowRepository
-import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
-import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
-import com.igloo.blindpenguincoder.feature.movies.buildVideoPlayRequest
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.music.toCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.posterItem
+import com.igloo.blindpenguincoder.feature.shows.EpisodePlayLauncher
 import com.igloo.blindpenguincoder.feature.shows.formatSeasonCount
 import com.igloo.blindpenguincoder.feature.shows.formatSpokenSeasonCount
 import com.igloo.blindpenguincoder.feature.shows.numberedSeasons
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
-import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
-import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
-import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.cancelChildren
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -172,15 +157,19 @@ class HomeViewModel(
     private val features: MutableMap<HomeHeroKind, Feature> =
         HomeHeroKind.entries.associateWithTo(mutableMapOf()) { Feature.Loading }
 
-    // Conflated, like the details page's: the host consumes launches, and only the latest one
-    // can matter once it does.
-    private val playRequestChannel = Channel<VideoPlayRequest>(Channel.CONFLATED)
+    // Shared with the show page, so a Continue Watching card and a Play/Resume press prepare an
+    // episode the same way; the notice it posts is Home's own.
+    private val episodeLauncher = EpisodePlayLauncher(
+        scope = viewModelScope,
+        shows = shows,
+        serverUrl = serverUrl,
+        canPlayVideoMime = canPlayVideoMime,
+        canPlayAudioMime = canPlayAudioMime,
+        onNotice = { notice -> _uiState.update { it.copy(playbackNotice = notice) } },
+    )
 
     /** An episode ready to play, once its preparation succeeded; the host opens the player. */
-    val playRequests: Flow<VideoPlayRequest> = playRequestChannel.receiveAsFlow()
-
-    private var resumeEpisodeId: Long? = null
-    private var resumeJob: Job? = null
+    val playRequests: Flow<VideoPlayRequest> get() = episodeLauncher.playRequests
 
     /**
      * Re-reads every rail. Driven by the host's start effect rather than `init`, so a TV woken
@@ -190,9 +179,7 @@ class HomeViewModel(
         // The refresh owns the notice: a preparation from before the app left the foreground
         // must not post one, or open a player, behind the cleared state — nor may one already
         // built but not yet delivered, which a recreated host would otherwise pick up.
-        resumeJob?.cancel()
-        playRequestChannel.tryReceive()
-        _uiState.update { it.copy(playbackNotice = null) }
+        episodeLauncher.reset()
         loadContinueWatching(userInitiated = false)
         loadLatestMovies(userInitiated = false)
         loadLatestShows(userInitiated = false)
@@ -222,7 +209,7 @@ class HomeViewModel(
         }
         launchLoad(HomeRail.ContinueWatching) {
             // Server order is the contract (most recently watched first) — do not re-sort.
-            val next = movies.continueWatching().withApiBaseUrl()
+            val next = movies.continueWatching().withApiBaseUrl(serverUrl)
                 .toRailState { (inProgress, apiBaseUrl) ->
                     inProgress.mapNotNull { item -> toContinueItem(item, apiBaseUrl) }
                 }
@@ -271,91 +258,10 @@ class HomeViewModel(
     }
 
     /**
-     * A Continue Watching episode card's press. Like the details page's Play, the launch waits
-     * for the episode's header, technical details and saved position, and repeated presses
-     * while those are in flight coalesce into the one launch. A press on a different card
-     * abandons the earlier preparation: only the latest intent should open a player.
+     * A Continue Watching episode card's press: the launcher prepares the episode and, once its
+     * reads land, emits the request the host opens the player with.
      */
-    fun resumeEpisode(episodeId: Long) {
-        if (resumeEpisodeId == episodeId && resumeJob?.isActive == true) return
-        resumeJob?.cancel()
-        resumeEpisodeId = episodeId
-        _uiState.update { it.copy(playbackNotice = null) }
-        resumeJob = viewModelScope.launch {
-            when (val prepared = prepareEpisode(episodeId)) {
-                is ApiResult.Success -> playRequestChannel.trySend(prepared.value)
-                is ApiResult.Failure -> _uiState.update {
-                    it.copy(
-                        playbackNotice = prepared.error.toFailureNotice("prepare playback"),
-                    )
-                }
-            }
-        }
-    }
-
-    private suspend fun prepareEpisode(episodeId: Long): ApiResult<VideoPlayRequest> =
-        coroutineScope {
-            val playback = async { shows.episodePlayback(episodeId) }
-            val technical = async { shows.episodeTechnicalDetails(episodeId) }
-            val progress = async { shows.episodeWatchProgress(episodeId) }
-            playback.await().flatMap { header ->
-                technical.await().flatMap { file ->
-                    progress.await().withApiBaseUrl().map { (saved, apiBaseUrl) ->
-                        toEpisodePlayRequest(episodeId, header, file, saved, apiBaseUrl)
-                    }
-                }
-            }.also { prepared ->
-                // The first failure answers the press; the reads still in flight are not waited out.
-                if (prepared is ApiResult.Failure) coroutineContext.cancelChildren()
-            }
-        }
-
-    /**
-     * Home has no Playback Settings dialog, so the request carries the defaults; when the
-     * capability gate refuses Direct play of the file's video or default audio track, the launch
-     * falls back to Remux rather than blocking on guidance the user cannot follow from here. For
-     * video the server cannot copy, it answers that Remux with a transcode. The gate's rule that
-     * it never overrides a choice holds: no choice was made.
-     */
-    private fun toEpisodePlayRequest(
-        episodeId: Long,
-        header: ShowEpisodePlaybackData,
-        file: ShowEpisodeTechnicalDetailsData,
-        saved: WatchProgress,
-        apiBaseUrl: String,
-    ): VideoPlayRequest {
-        val title = listOf(
-            header.show.name,
-            formatEpisodeCode(header.season.seasonNumber, header.episode.episodeNumber),
-            header.episode.name,
-        ).joinToString(" · ")
-        // The show's poster, as the rail's card shows it, re-used as session artwork.
-        val posterUrl = tmdbImageUrl(
-            apiBaseUrl,
-            TmdbImageSize.W500,
-            header.show.posterPath.orNull(),
-        )
-        val build = { selection: PlaybackSelection ->
-            buildVideoPlayRequest(
-                media = PlaybackMediaRef.Episode(episodeId),
-                title = title,
-                posterUrl = posterUrl,
-                mimeType = file.file.mimeType,
-                videoStreams = file.videoStreams,
-                audioStreams = file.audioStreams,
-                subtitles = file.subtitles,
-                chapters = file.chapters,
-                progress = saved,
-                fileDurationSec = file.file.duration.orNull(),
-                selection = selection,
-            )
-        }
-        val request = build(PlaybackSelection())
-        return when (evaluatePlaybackGate(request, canPlayVideoMime, canPlayAudioMime)) {
-            PlaybackGateResult.Proceed -> request
-            is PlaybackGateResult.Blocked -> build(PlaybackSelection(mode = PlaybackMode.Remux))
-        }
-    }
+    fun resumeEpisode(episodeId: Long) = episodeLauncher.launch(episodeId)
 
     private fun loadLatestMovies(userInitiated: Boolean) {
         if (userInitiated) {
@@ -364,7 +270,7 @@ class HomeViewModel(
         }
         launchLoad(HomeRail.LatestMovies) {
             val result = movies.latestMovies()
-            val next = result.withApiBaseUrl().toRailState { (latest, apiBaseUrl) ->
+            val next = result.withApiBaseUrl(serverUrl).toRailState { (latest, apiBaseUrl) ->
                 latest.map { movie ->
                     posterItem(
                         id = movie.id,
@@ -390,7 +296,7 @@ class HomeViewModel(
         }
         launchLoad(HomeRail.LatestShows) {
             val result = shows.latestShows()
-            val next = result.withApiBaseUrl().toRailState { (latest, apiBaseUrl) ->
+            val next = result.withApiBaseUrl(serverUrl).toRailState { (latest, apiBaseUrl) ->
                 // Preserve the server's newest-first order and cap of 12.
                 latest.map { show ->
                     posterItem(
@@ -429,7 +335,7 @@ class HomeViewModel(
             _uiState.update { it.copy(inTheaters = IglooRailState.Loading) }
         }
         launchLoad(HomeRail.InTheaters) {
-            val next = movies.moviesInTheaters().withApiBaseUrl()
+            val next = movies.moviesInTheaters().withApiBaseUrl(serverUrl)
                 .toRailState { (theater, apiBaseUrl) ->
                     theater
                         // The TMDB route's order is not a contract the way the library rails' is;
@@ -477,7 +383,8 @@ class HomeViewModel(
                 return
             }
         }
-        val hero = movies.movieDetails(newest.id).withApiBaseUrl().map { (details, apiBaseUrl) ->
+        val hero = movies.movieDetails(newest.id).withApiBaseUrl(serverUrl).map {
+            (details, apiBaseUrl) ->
             toMovieHero(details.movie, apiBaseUrl)
         }
         when (hero) {
@@ -501,7 +408,8 @@ class HomeViewModel(
                 return
             }
         }
-        val hero = shows.showDetails(newest.id).withApiBaseUrl().map { (details, apiBaseUrl) ->
+        val hero = shows.showDetails(newest.id).withApiBaseUrl(serverUrl).map {
+            (details, apiBaseUrl) ->
             toShowHero(details, apiBaseUrl)
         }
         when (hero) {
@@ -542,17 +450,6 @@ class HomeViewModel(
             is ApiResult.Success -> IglooRailState.Loaded(map(value))
             is ApiResult.Failure -> IglooRailState.Error(error.toLibraryDisplayMessage())
         }
-
-    /**
-     * Pairs a response with the address its paths resolve against. The session keeps it set
-     * while Home is composed, but a sign-out can clear it between a response and its mapping;
-     * that reads as a failed load rather than an exception thrown out of the coroutine. Only
-     * mappings that build URLs take it — album covers arrive absolute.
-     */
-    private fun <T> ApiResult<T>.withApiBaseUrl(): ApiResult<Pair<T, String>> = flatMap { value ->
-        serverUrl.current.value?.let { ApiResult.Success(value to it.apiBaseUrl) }
-            ?: ApiResult.Failure(AppError.Unexpected("Server address cleared mid-load"))
-    }
 
     private fun toMovieHero(movie: Movie, apiBaseUrl: String): HomeHero {
         val ratingBadge = movie.criticRating?.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)

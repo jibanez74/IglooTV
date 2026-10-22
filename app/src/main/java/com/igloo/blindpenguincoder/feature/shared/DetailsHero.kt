@@ -347,7 +347,8 @@ internal fun DetailsHeroInfo(
  * overlay, the node that overlay restores focus to through [returnRequester] — two requesters on
  * one button, the same pairing a rail's card carries. A null [onClick] draws the button inert
  * until its action exists (the [IglooButton] contract). [belowButton] stacks under the button at
- * its width — the show page's resume strip — and [stateDescription] is spoken with the label.
+ * its width — the show page's resume strip — [stateDescription] is spoken with the label, and
+ * [actionLabel] is what TalkBack offers after "double-tap to" when the label is a whole sentence.
  *
  * Every direction out is pinned but down: the shell is still composed under the overlay, and
  * the row's only control has no horizontal neighbour of its own.
@@ -365,6 +366,7 @@ internal fun HeroSingleActionRow(
     returnRequester: FocusRequester? = null,
     onFocused: () -> Unit = {},
     stateDescription: String? = null,
+    actionLabel: String? = null,
     belowButton: (@Composable () -> Unit)? = null,
 ) {
     Row(modifier = modifier) {
@@ -377,6 +379,7 @@ internal fun HeroSingleActionRow(
                 icon = IglooIcons.Play,
                 semanticLabel = semanticLabel,
                 stateDescription = stateDescription,
+                actionLabel = actionLabel,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag(tag)

@@ -2034,11 +2034,11 @@ occupant of the **one details slot**, opened from a TV Shows grid card (`Details
 and the pane's return requester), a Recently Added Shows card, or the Home hero's show page; Back
 restores focus to whichever led away. `ShowDetailsScreen` keeps a frame of its own (the movie
 page's — entry requester, refocus after the state swap, `paneTitle` "Show details" until the show
-loads, then its name) and builds everything else from the shared details pieces (§9.1). **This
-pass is UI and UX only**: every control the web page has is drawn in its final place and is
-reachable, but nothing plays and nothing is written. Play/Resume, the episode cards and the extra
-videos are **inert** — focusable, announced, no button role and no action (the `IglooButton` and
-`IglooPosterCard` null-press contract) — so the functionality pass adds presses and nothing else.
+loads, then its name) and builds everything else from the shared details pieces (§9.1). Every
+control the web page has is drawn in its final place and is reachable; Play/Resume and the
+episode cards **play** (below), the extra videos stay **inert** — focusable, announced, no button
+role and no action (the `IglooPosterCard` null-press contract) — until their pass, and nothing on
+the page writes yet.
 
 **Data.** `GET /api/shows/details/{id}` (show, seasons, cast, creators, genres, networks,
 companies, extras) and `GET /api/shows/{id}/seasons/{n}/episodes`, one season at a time.
@@ -2063,12 +2063,34 @@ the season count, so the two can never disagree.
 episode with a position worth resuming (not watched, at least 30 s in, under 95% — the movie's
 rule), else play its first unwatched episode, else its first. "Resume S1 E3" on screen; TalkBack
 hears "Resume season 1, episode 3, The One with the Thumb" — "S1 E3" read aloud is letters and
-digits, not an episode — with the movie's resume `stateDescription`. Under it sits the movie
-hero's **resume strip** ("11m left"), whose slot is reserved in every state like the movie's. The
-slot keeps one footprint whatever the season holds — the button, a muted stub while the season
-loads, an empty space when it failed or has no episodes — so a chip press that retargets the hero
-never reflows it. A show with no seasons has no slot at all, and the entry anchor passes to the
-first section (§11.4.2's rule).
+digits, not an episode — with the movie's resume `stateDescription`, and TalkBack is offered the
+verb alone as the action ("double-tap to Resume"), since the label is already a sentence. Under it
+sits the movie hero's **resume strip** ("11m left"), whose slot is reserved in every state like the
+movie's. The slot keeps one footprint whatever the season holds — the button, a muted stub while
+the season loads, an empty space when it failed or has no episodes — so a chip press that
+retargets the hero never reflows it. A show with no seasons has no slot at all, and the entry
+anchor passes to the first section (§11.4.2's rule).
+
+**Pressing plays the target episode** through §11.8's player, and an episode card plays its own
+the same way. The press names the control that asked; the view model's `EpisodePlayLauncher` —
+the one Home's Continue Watching rail uses, so no two surfaces can launch an episode differently —
+reads the episode's header, technical details and the caller's saved position in parallel (the
+season list's numbers can be minutes old) and builds the request with the default mode and
+tracks: the page has no Playback Settings, so a Direct play the capability gate refuses falls back
+to Remux rather than blocking on guidance the user cannot follow from here, Home's rule, and the
+in-player menus stay the place to change quality or tracks. The host opens the player only for a
+press made on this page (an armed landing, the movie's `deferredPlayArmed` reasoning: a recreation
+never finishes a press from the old activity), with an origin per control so the close restores
+focus to Play/Resume or to the rail's last-focused card, and it takes the player down with the
+page. Repeated presses while the reads are out coalesce into one launch; a press on another
+episode abandons the first; a season switch leaves a preparation alone. A failed read says why in
+a polite notice under the action ("Couldn't prepare playback: …"), cleared by the next press, the
+page's open or close, or a refresh — which also abandons a preparation in flight, Home's rule.
+Closing the player re-reads the details and the selected season, so the label retargets ("Resume
+S1 E3" becomes "Play S1 E4") and the rail's bars and checks follow. A **failed exit save** follows
+the user back here (§11.8): the movie hero's Retry card renders under the action slot as a
+section of the chain between Play/Resume and Overview, sides pinned, and when the Retry succeeds
+the card leaves and focus re-lands on Play/Resume (else the summary stop, else the entry).
 
 **Seasons.** With two or more seasons, a "Seasons" heading over a scrolling row of chips — the
 Genres picker's `SelectableChipRow`, because `IglooTabRow` never scrolls and ten seasons do not fit
@@ -2092,7 +2114,7 @@ lines reserved** so a wrapping title never pushes a card's rows below its neighb
 ellipsized meta line ("23m · September 22, 1994 · 11m left", `label`) and the overview
 clamped to three lines with the overview's fade (`bodyMedium`, `foreground` — prose). It is one
 node speaking everything it draws: "Episode 1, Pilot. 23 minutes, aired September 22, 1994.
-Watched. {overview}".
+Watched. {overview}", with "Play 1. Pilot" as its action.
 
 **Sections.** Overview, Key Crew (the show's creators, "Creator: David Crane"; skipped with none),
 Cast (the billing's top ten, each with a third line, "228 episodes"; keyed by position, because
@@ -2102,9 +2124,9 @@ Original language, First aired, Last aired — each row only when present, in th
 network as text without its logo.
 
 **Focus.** One ordered list of the sections present drives both the hand-wired chain and the
-announced section move: [hero summary] → Play/Resume → [Overview] → chips → episodes → [Key Crew]
-→ Cast → Extra Videos → About, the bracketed ones reading stops present only under a screen
-reader. Up from the rail lands on the selected chip, up from the chips on Play/Resume; with no
+announced section move: [hero summary] → Play/Resume → (Retry card) → [Overview] → chips →
+episodes → [Key Crew] → Cast → Extra Videos → About, the bracketed ones reading stops present only
+under a screen reader, the Retry card present only while a failed save waits. Up from the rail lands on the selected chip, up from the chips on Play/Resume; with no
 Play/Resume (nothing to play), a section's up goes to whichever section is present above it — the
 chips' to the Overview stop under a screen reader, otherwise nowhere, the chips then being the top
 of the chain. Every outward edge is pinned. At 540dp the chips, the rail and everything below sit under the fold, so
@@ -2115,9 +2137,8 @@ requester still rides the outgoing season's card then). Entry focus is the first
 under a screen reader the hero summary (§11.4.1 Focus), otherwise Play/Resume, or with no
 Play/Resume whichever section comes next.
 
-**Not on the page yet.** Playing an episode or an extra, marking an episode watched (a long-press
-episode menu is planned), and the up-next hand-off. Continue Watching episode cards keep resuming
-straight into the player.
+**Not on the page yet.** Playing an extra, marking an episode watched (a long-press episode menu
+is planned), and the up-next hand-off: an episode that ends closes the player back to the page.
 
 ### 11.5 Music
 
@@ -2403,8 +2424,9 @@ near the end and leaving seconds later still marks the movie watched, and so doe
 end and leaving. A pause and the background stop that follows it write once, not twice. The exit
 write is never cancelled by the client, so backing out of the app right after the player cannot
 lose the end of a movie. Save failures never pause playback. They hold the chrome open with a polite,
-D-pad-reachable inline Retry and follow the user back to movie details if exit finishes first —
-or, for an episode resumed from Continue Watching, to Home, since no details page sits under that
+D-pad-reachable inline Retry and follow the user back to the page that launched if exit finishes
+first — movie details, or the show page for an episode played from it (§11.4.3) — or, for an
+episode resumed from Continue Watching, to Home, since no details page sits under that
 launch: the same Retry card sits directly above the Continue Watching rail, reached by Up from the
 card the player closed onto, and hands focus back to that card when it clears. Each surface shows
 only the failures of the launches it made.
@@ -2675,6 +2697,21 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-21 — The show page plays episodes (§11.4.3, §11.8).**
+
+- **§11.4.3**: Play/Resume and the episode cards act. Each press prepares its episode through the
+  `EpisodePlayLauncher` Home's Continue Watching rail now shares (header, technical details and
+  saved position in parallel; defaults with a Remux fallback, since the page has no Playback
+  Settings) and opens §11.8's player over the page, which leaves TalkBack traversal for its
+  lifetime. The host accepts a request only for a press made on the page, restores focus to the
+  control that pressed (Play/Resume, or the rail's last-focused card), takes the player down with
+  the page, and re-reads the details and the selected season when the player closes. The
+  failed-save Retry card follows the user back here, a section of the chain between Play/Resume
+  and Overview; a press that went nowhere is a polite notice under the action. TalkBack is
+  offered the verb alone as Play/Resume's action. The extras stay inert.
+- **§11.8**: the show page joins movie details and Home as a surface the Retry card follows back
+  to.
 
 **2026-10-20 — Cleanup backlog pass (§11.4).**
 

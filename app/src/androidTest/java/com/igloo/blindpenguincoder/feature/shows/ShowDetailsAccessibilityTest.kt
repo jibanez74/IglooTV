@@ -2,8 +2,11 @@ package com.igloo.blindpenguincoder.feature.shows
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -16,6 +19,9 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTopPositionInRootIsEqualTo
+import androidx.compose.ui.test.filterToOne
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -38,10 +44,11 @@ import org.junit.runner.RunWith
 
 /**
  * What the show page says to TalkBack (design-system.md sections 11.4.3 and 12): the metadata
- * chips are one sentence, every drawn control that cannot act yet — Play/Resume, the episode
- * cards, the extra-video cards — is a focus target that announces no action, the season chips
- * carry their selection and what pressing does, and the prose a d-pad passes by is reachable as
- * reading stops while a screen reader runs.
+ * chips are one sentence, Play/Resume and the episode cards name their episode and offer the press
+ * as a short action, the extra-video cards — which cannot act yet — announce none, the season
+ * chips carry their selection and what pressing does, the hero's notice and Retry card speak
+ * politely, and the prose a d-pad passes by is reachable as reading stops while a screen reader
+ * runs.
  */
 @RunWith(AndroidJUnit4::class)
 class ShowDetailsAccessibilityTest {
@@ -56,9 +63,11 @@ class ShowDetailsAccessibilityTest {
     private var retries = 0
     private var seasonRetries = 0
     private val selectedSeasons = mutableListOf<Long>()
+    private val pressed = mutableListOf<Pair<Long, EpisodeLaunchSite>>()
 
     private fun setContent(
         initial: ShowDetailsUiState = testShowDetailsState(),
+        progressSyncError: String? = null,
         // Explicit, never the ambient default: the Shield test device runs TalkBack, and these
         // cases pin the semantics that exist with and without the reading-stop chain.
         spokenAccessibilityEnabled: Boolean = false,
@@ -67,6 +76,7 @@ class ShowDetailsAccessibilityTest {
         retries = 0
         seasonRetries = 0
         selectedSeasons.clear()
+        pressed.clear()
         composeRule.setContent {
             IglooTheme {
                 ShowDetailsScreen(
@@ -76,6 +86,10 @@ class ShowDetailsAccessibilityTest {
                         onSelectSeason = { selectedSeasons += it },
                         onRetrySeason = { seasonRetries += 1 },
                     ),
+                    onPlayEpisode = { episodeId, site -> pressed += episodeId to site },
+                    playReturnRequester = remember { FocusRequester() },
+                    episodeReturnRequester = remember { FocusRequester() },
+                    progressSyncError = progressSyncError,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
@@ -133,19 +147,53 @@ class ShowDetailsAccessibilityTest {
     }
 
     /**
-     * Play/Resume is drawn where it will act, takes the entry focus, and names its episode the
-     * way a screen reader can say it — but there is no playback on the page yet, so it announces
-     * neither a button role nor an action it cannot perform.
+     * Play/Resume takes the entry focus, names its episode the way a screen reader can say it, and
+     * offers the verb alone as its action — "double-tap to Resume", not the sentence again. The
+     * press plays the hero's target, from the hero.
      */
     @Test
-    fun theHeroActionNamesItsEpisodeAndAnnouncesNoAction() {
+    fun theHeroActionNamesItsEpisodeAndOffersItsAction() {
         setContent()
 
-        composeRule.onNodeWithTag("details_play")
+        val play = composeRule.onNodeWithTag("details_play")
+        play
             .assertIsFocused()
             .assertContentDescriptionEquals("Resume season 1, episode 2, Half Loop")
-            .assertHasNoClickAction()
-            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Role))
+            .assertHasClickAction()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        assertEquals("Resume", play.clickActionLabel())
+
+        play.performSemanticsAction(SemanticsActions.OnClick)
+
+        assertEquals(listOf(902L to EpisodeLaunchSite.Hero), pressed)
+    }
+
+    /** A press that went nowhere is explained under the hero, politely, with no focus stop. */
+    @Test
+    fun aPlaybackNoticeIsAPoliteLiveRegionUnderTheHero() {
+        val notice = "Couldn't prepare playback: no connection."
+        setContent(testShowDetailsState().copy(playbackNotice = notice))
+
+        composeRule.onNodeWithTag("details_playback_notice")
+            .assert(hasText(notice))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Focused))
+    }
+
+    /** A failed save's card says why, politely, and its Retry names what it retries. */
+    @Test
+    fun theProgressRetryCardSpeaksPolitelyAndNamesItsAction() {
+        setContent(progressSyncError = "Couldn't save playback progress: no connection.")
+
+        // The message is the card's own text node, under the tagged card (the player's test
+        // reads its chrome card the same way).
+        composeRule
+            .onAllNodesWithText("Couldn't save playback progress: no connection.", substring = true)
+            .filterToOne(hasAnyAncestor(hasTestTag("details_progress_error")))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+        composeRule.onNodeWithTag("details_progress_retry")
+            .assertContentDescriptionEquals("Retry saving playback progress")
+            .assertHasClickAction()
     }
 
     @Test
@@ -199,18 +247,23 @@ class ShowDetailsAccessibilityTest {
 
     /**
      * One node per card, speaking everything the card draws — and, entered from outside, the
-     * rail's season first. No action: playing an episode is not on the page yet.
+     * rail's season first — with the press offered as "Play 2. Half Loop", which plays that
+     * episode from the rail.
      */
     @Test
-    fun episodeCardsSpeakOneSentenceWithNoAction() {
+    fun episodeCardsSpeakOneSentenceAndPlayOnPress() {
         setContent()
 
-        composeRule.onNodeWithTag("episode_card_902")
+        val card = composeRule.onNodeWithTag("episode_card_902")
+        card
             .assertContentDescriptionEquals(
                 "Season 1. Episode 2, Half Loop. 57 minutes, aired February 17, 2022. " +
                     "45 minutes remaining. Half Loop, the episode",
             )
-            .assertHasNoClickAction()
+            .assertHasClickAction()
+        assertEquals("Play 2. Half Loop", card.clickActionLabel())
+        card.performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(listOf(902L to EpisodeLaunchSite.EpisodesRail), pressed)
         composeRule.onNodeWithTag("episode_card_901")
             .assertContentDescriptionEquals(
                 "Season 1. Episode 1, Good News About Hell. 57 minutes, aired February 17, 2022. " +

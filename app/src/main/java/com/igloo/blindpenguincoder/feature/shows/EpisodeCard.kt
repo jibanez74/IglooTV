@@ -41,8 +41,7 @@ import com.igloo.blindpenguincoder.feature.shared.FadeClampedText
  *
  * Focus, press and announcement are the poster card's (`mediaCardInteraction`): the whole card
  * is one focus target and one node speaking [EpisodeUi.description], which carries everything
- * drawn. Playing an episode is not on the page yet, so [onClick] is null and the card announces
- * no action — the inert-card contract — rather than a "Play" that does nothing.
+ * drawn, and [onClick] plays the episode — the action TalkBack offers is "Play 1. Pilot".
  *
  * The check's pill takes the section 3.2 black ground only over a decoded still; over the glyph
  * fallback it sits on the token pair instead.
@@ -50,7 +49,7 @@ import com.igloo.blindpenguincoder.feature.shared.FadeClampedText
 @Composable
 internal fun EpisodeCard(
     episode: EpisodeUi,
-    onClick: (() -> Unit)?,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors

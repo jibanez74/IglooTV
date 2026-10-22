@@ -171,8 +171,9 @@ current code when using an older status report:
 - [Known issues](known-issues.md) and [cleanup backlog](cleanup-backlog.md): behavior gaps,
   follow-up work, and open test coverage.
 - [Movies](movies-screen-status.md) and [TV Shows](tv-shows-screen-status.md): library status.
-- [Show details](show-details-status.md): the show page, its seasons and episodes, browse-only
-  until episode playback, marking watched, and up-next land.
+- [Show details](show-details-status.md) and [episode playback](episode-playback-status.md): the
+  show page, its seasons and episodes, and playing them from it; the extras, marking watched and
+  up-next are still to land.
 - [Music](music-screen-status.md), [album details](album-details-status.md), and
   [music player](music-player-status.md): music features and remaining work, including playlists,
   background playback, and play-stat reporting.

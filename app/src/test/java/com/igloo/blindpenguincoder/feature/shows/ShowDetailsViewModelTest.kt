@@ -1,24 +1,32 @@
 package com.igloo.blindpenguincoder.feature.shows
 
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.TestHttp
+import com.igloo.blindpenguincoder.data.repository.audioStreamJson
+import com.igloo.blindpenguincoder.data.repository.episodePlaybackJson
+import com.igloo.blindpenguincoder.data.repository.episodeTechnicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.showDetailsJson
 import com.igloo.blindpenguincoder.data.repository.showEpisodeJson
 import com.igloo.blindpenguincoder.data.repository.showSeasonEpisodesJson
 import com.igloo.blindpenguincoder.data.repository.showSeasonSummaryJson
+import com.igloo.blindpenguincoder.data.repository.watchProgressJson
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -47,8 +55,9 @@ class ShowDetailsViewModelTest {
     }
 
     /**
-     * A fake server for one show: [details] answers the details route and [season] each season
-     * route, by number. Every request path is recorded in [paths], and anything else fails.
+     * A fake server for one show: [details] answers the details route, [season] each season route
+     * by number, and [episode], [episodeTechnical] and [episodeProgress] an episode's three
+     * playback reads by id. Every request path is recorded in [paths], and anything else fails.
      */
     private class Server {
         val paths = mutableListOf<String>()
@@ -58,24 +67,63 @@ class ShowDetailsViewModelTest {
         var season: suspend MockRequestHandleScope.(Long) -> HttpResponseData = { number ->
             jsonResponse(seasonJson(number))
         }
+        var episode: suspend MockRequestHandleScope.(Long) -> HttpResponseData = { id ->
+            jsonResponse(episodePlaybackJson(episodeId = id))
+        }
+        var episodeTechnical: suspend MockRequestHandleScope.(Long) -> HttpResponseData = {
+            jsonResponse(episodeTechnicalDetailsJson())
+        }
+        var episodeProgress: suspend MockRequestHandleScope.(Long) -> HttpResponseData = {
+            jsonResponse(watchProgressJson(progressSec = 600.0, durationSec = 3300.0))
+        }
 
         fun seasonRequests(number: Long): Int =
             paths.count { it == "/api/shows/40/seasons/$number/episodes" }
+
+        fun episodeRequests(id: Long): List<String> =
+            paths.filter { it.startsWith("/api/shows/episodes/$id") }
     }
 
-    private fun TestScope.viewModel(server: Server): ShowDetailsViewModel {
+    private fun TestScope.viewModel(
+        server: Server,
+        canPlayVideo: Boolean = true,
+        canPlayAudio: Boolean = true,
+    ): ShowDetailsViewModel {
         val http = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
             val path = request.url.encodedPath
             server.paths += path
             val season = Regex("/api/shows/40/seasons/(\\d+)/episodes").matchEntire(path)
+            val episode = Regex("/api/shows/episodes/(\\d+)(/technical-details|/watch-progress)?")
+                .matchEntire(path)
             when {
                 path == "/api/shows/details/40" -> server.details(this)
                 season != null -> server.season(this, season.groupValues[1].toLong())
+                episode != null -> {
+                    val id = episode.groupValues[1].toLong()
+                    when (episode.groupValues[2]) {
+                        "/technical-details" -> server.episodeTechnical(this, id)
+                        "/watch-progress" -> server.episodeProgress(this, id)
+                        else -> server.episode(this, id)
+                    }
+                }
                 else -> error("Unrouted path: $path")
             }
         }
-        return ShowDetailsViewModel(http.showRepository, http.serverUrl).also { viewModels += it }
+        return ShowDetailsViewModel(
+            http.showRepository,
+            http.serverUrl,
+            canPlayVideoMime = { canPlayVideo },
+            canPlayAudioMime = { _, _ -> canPlayAudio },
+        ).also { viewModels += it }
     }
+
+    /**
+     * The next launch, or null when none arrives within a (virtual) second: the channel is
+     * conflated, so this is also what proves an abandoned preparation never launched — had it
+     * completed after the one that replaced it, its request would be the latest.
+     */
+    private suspend fun ShowDetailsViewModel.nextLaunchOrNull(): PlaybackMediaRef? =
+        withTimeoutOrNull(1_000) { playRequests.first().media }
 
     private fun ShowDetailsViewModel.loaded(): ShowDetailsUi =
         (uiState.value.details as DetailsState.Loaded).value
@@ -92,6 +140,7 @@ class ShowDetailsViewModelTest {
         viewModel.retry()
         viewModel.selectSeason(2)
         viewModel.retrySeason()
+        viewModel.playEpisode(101)
 
         assertNull(viewModel.uiState.value.openShowId)
         assertTrue(server.paths.isEmpty())
@@ -120,6 +169,7 @@ class ShowDetailsViewModelTest {
         assertEquals(1L, state.selectedSeason)
         assertEquals(listOf(101L, 102L), viewModel.episodeIds())
         assertEquals("Play S1 E1", state.playTarget?.label)
+        assertEquals(101L, state.playTarget?.episodeId)
     }
 
     @Test
@@ -222,6 +272,7 @@ class ShowDetailsViewModelTest {
 
         assertEquals(listOf(201L, 202L), viewModel.episodeIds())
         assertEquals("Resume S2 E2", viewModel.uiState.value.playTarget?.label)
+        assertEquals(202L, viewModel.uiState.value.playTarget?.episodeId)
     }
 
     @Test
@@ -385,6 +436,183 @@ class ShowDetailsViewModelTest {
         testScheduler.advanceUntilIdle()
 
         assertEquals(ShowDetailsUiState(), viewModel.uiState.value)
+    }
+
+    @Test
+    fun `playing an episode prepares it and emits the request the host opens the player with`() =
+        runTest {
+            val server = Server()
+            val viewModel = viewModel(server)
+            viewModel.open(40)
+            testScheduler.advanceUntilIdle()
+
+            viewModel.playEpisode(102)
+            val request = viewModel.playRequests.first()
+
+            assertEquals(PlaybackMediaRef.Episode(102), request.media)
+            assertEquals("Severance · S1 E3 · In Perpetuity", request.title)
+            assertEquals(PlaybackMode.Direct, request.mode)
+            assertEquals(600.0, request.resumeAtSec)
+            assertEquals(
+                listOf(
+                    "/api/shows/episodes/102",
+                    "/api/shows/episodes/102/technical-details",
+                    "/api/shows/episodes/102/watch-progress",
+                ),
+                server.episodeRequests(102).sorted(),
+            )
+            assertNull(viewModel.uiState.value.playbackNotice)
+        }
+
+    @Test
+    fun `a failed episode read surfaces a notice and launches nothing`() = runTest {
+        val server = Server().apply { episodeTechnical = { failure() } }
+        val viewModel = viewModel(server)
+        viewModel.open(40)
+        testScheduler.advanceUntilIdle()
+
+        viewModel.playEpisode(101)
+        val notice = viewModel.uiState.first { it.playbackNotice != null }.playbackNotice
+
+        assertEquals("Couldn't prepare playback: boom", notice)
+        assertNull(viewModel.nextLaunchOrNull())
+    }
+
+    @Test
+    fun `presses on one episode coalesce and a press on another abandons the first`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val server = Server().apply {
+            episode = { id ->
+                if (id == 101L) gate.await()
+                jsonResponse(episodePlaybackJson(episodeId = id))
+            }
+        }
+        val viewModel = viewModel(server)
+        viewModel.open(40)
+        testScheduler.advanceUntilIdle()
+
+        viewModel.playEpisode(101)
+        viewModel.playEpisode(101)
+        testScheduler.runCurrent()
+        assertEquals(1, server.paths.count { it == "/api/shows/episodes/101" })
+
+        viewModel.playEpisode(102)
+        gate.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(PlaybackMediaRef.Episode(102), viewModel.nextLaunchOrNull())
+        assertNull(viewModel.uiState.value.playbackNotice)
+    }
+
+    @Test
+    fun `closing abandons a preparation in flight, so a late answer opens nothing`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val server = Server().apply {
+            episode = { id -> gate.await(); jsonResponse(episodePlaybackJson(episodeId = id)) }
+        }
+        val viewModel = viewModel(server)
+        viewModel.open(40)
+        testScheduler.advanceUntilIdle()
+
+        viewModel.playEpisode(101)
+        testScheduler.runCurrent()
+        viewModel.close()
+        gate.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertNull(viewModel.nextLaunchOrNull())
+        assertEquals(ShowDetailsUiState(), viewModel.uiState.value)
+    }
+
+    @Test
+    fun `a refresh clears the notice and abandons a preparation in flight`() = runTest {
+        var fail = true
+        val gate = CompletableDeferred<Unit>()
+        val server = Server().apply {
+            episodeTechnical = {
+                if (fail) failure() else { gate.await(); jsonResponse(episodeTechnicalDetailsJson()) }
+            }
+        }
+        val viewModel = viewModel(server)
+        viewModel.open(40)
+        testScheduler.advanceUntilIdle()
+
+        viewModel.playEpisode(101)
+        testScheduler.advanceUntilIdle()
+        assertEquals("Couldn't prepare playback: boom", viewModel.uiState.value.playbackNotice)
+
+        // The host's start effect, with the notice showing and a second press in flight.
+        fail = false
+        viewModel.playEpisode(102)
+        testScheduler.runCurrent()
+        viewModel.refresh()
+        gate.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.playbackNotice)
+        assertNull(viewModel.nextLaunchOrNull())
+    }
+
+    @Test
+    fun `a refresh drops a launch the host has not taken yet`() = runTest {
+        val server = Server()
+        val viewModel = viewModel(server)
+        viewModel.open(40)
+        testScheduler.advanceUntilIdle()
+
+        // Nobody collecting: the request waits in the channel, as it would across a recreation.
+        viewModel.playEpisode(101)
+        testScheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testScheduler.advanceUntilIdle()
+
+        assertNull(viewModel.nextLaunchOrNull())
+    }
+
+    /** The press named a concrete episode; browsing another season does not withdraw it. */
+    @Test
+    fun `a season switch leaves a preparation in flight alone`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val server = Server().apply {
+            episode = { id -> gate.await(); jsonResponse(episodePlaybackJson(episodeId = id)) }
+        }
+        val viewModel = viewModel(server)
+        viewModel.open(40)
+        testScheduler.advanceUntilIdle()
+
+        viewModel.playEpisode(101)
+        testScheduler.runCurrent()
+        viewModel.selectSeason(2)
+        gate.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(PlaybackMediaRef.Episode(101), viewModel.playRequests.first().media)
+        assertEquals(2L, viewModel.uiState.value.selectedSeason)
+    }
+
+    /** The page has no Playback Settings, so the gate's refusal becomes a Remux launch, as on Home. */
+    @Test
+    fun `an undecodable default track falls back to remux instead of blocking`() = runTest {
+        val server = Server().apply {
+            episodeTechnical = {
+                jsonResponse(
+                    episodeTechnicalDetailsJson(
+                        audioStreams = listOf(
+                            audioStreamJson(ownerKey = "file_id", codec = "truehd", channels = 8),
+                        ),
+                    ),
+                )
+            }
+        }
+        val viewModel = viewModel(server, canPlayAudio = false)
+        viewModel.open(40)
+        testScheduler.advanceUntilIdle()
+
+        viewModel.playEpisode(101)
+        val request = viewModel.playRequests.first()
+
+        assertEquals(PlaybackMode.Remux, request.mode)
+        assertNull(viewModel.uiState.value.playbackNotice)
     }
 
     private companion object {

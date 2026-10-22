@@ -46,10 +46,14 @@ import com.igloo.blindpenguincoder.feature.shared.OverviewSection
 import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
 import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 
+/** Which control asked for an episode; the host restores focus to it when the player closes. */
+enum class EpisodeLaunchSite { Hero, EpisodesRail }
+
 /**
- * What the show page can do. Close is the host's own business (it owns Back and focus
- * restoration) and is deliberately not here; so is everything the page draws but cannot do yet
- * — playing an episode or a video, marking one watched.
+ * What the show page asks of its view model. Close is the host's own business (it owns Back and
+ * focus restoration) and is deliberately not here; so is playing an episode, a host-owned overlay
+ * launch that arrives as a screen parameter beside its return requesters, like the movie page's
+ * `onPlay`; and so is what the page draws but cannot do yet — playing a video, marking watched.
  */
 data class ShowDetailsActions(
     val onRetry: () -> Unit,
@@ -69,12 +73,22 @@ data class ShowDetailsActions(
  * skeleton's action stub while loading, the Retry on error, and once loaded the first section
  * that can take focus — the hero summary under a screen reader, else Play/Resume, or (for a show
  * whose first season failed or that has no seasons) the next section down.
+ *
+ * [onPlayEpisode], the return requesters, [progressSyncError] and [onRetryProgressSync] come from
+ * the host rather than [actions]: a press names the control that asked, so the host can arm the
+ * landing and restore focus to it when the player closes, and a failed exit save follows the user
+ * back here as a Retry card under the hero action (section 11.8).
  */
 @Composable
 fun ShowDetailsScreen(
     state: ShowDetailsUiState,
     actions: ShowDetailsActions,
+    onPlayEpisode: (episodeId: Long, site: EpisodeLaunchSite) -> Unit,
+    playReturnRequester: FocusRequester,
+    episodeReturnRequester: FocusRequester,
     modifier: Modifier = Modifier,
+    progressSyncError: String? = null,
+    onRetryProgressSync: () -> Unit = {},
     // Parameterized so tests can force both states: the reading-stop chain below depends on it,
     // and a test device with TalkBack running would otherwise pin the gate open.
     spokenAccessibilityEnabled: Boolean = rememberSpokenAccessibilityEnabled(),
@@ -125,6 +139,11 @@ fun ShowDetailsScreen(
                 show = details.value,
                 state = state,
                 actions = actions,
+                onPlayEpisode = onPlayEpisode,
+                playReturnRequester = playReturnRequester,
+                episodeReturnRequester = episodeReturnRequester,
+                progressSyncError = progressSyncError,
+                onRetryProgressSync = onRetryProgressSync,
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 entryRequester = entryRequester,
             )
@@ -134,11 +153,13 @@ fun ShowDetailsScreen(
 
 /**
  * The page's sections, top to bottom. HeroInfo, Overview and Key Crew are reading stops, focus
- * targets only while a screen reader runs (section 12).
+ * targets only while a screen reader runs (section 12); ProgressRetry is the failed-save card,
+ * present only while a save of this page's launch is waiting to be retried.
  */
 private enum class ShowSection {
     HeroInfo,
     Action,
+    ProgressRetry,
     Overview,
     Seasons,
     Episodes,
@@ -153,6 +174,11 @@ private fun ShowDetailsContent(
     show: ShowDetailsUi,
     state: ShowDetailsUiState,
     actions: ShowDetailsActions,
+    onPlayEpisode: (Long, EpisodeLaunchSite) -> Unit,
+    playReturnRequester: FocusRequester,
+    episodeReturnRequester: FocusRequester,
+    progressSyncError: String?,
+    onRetryProgressSync: () -> Unit,
     spokenAccessibilityEnabled: Boolean,
     entryRequester: FocusRequester,
 ) {
@@ -163,6 +189,7 @@ private fun ShowDetailsContent(
     val present = buildList {
         if (stops) add(ShowSection.HeroInfo)
         if (state.playTarget != null) add(ShowSection.Action)
+        if (progressSyncError != null) add(ShowSection.ProgressRetry)
         if (stops) add(ShowSection.Overview)
         if (show.seasons.size >= 2) add(ShowSection.Seasons)
         if (show.seasons.isNotEmpty()) add(ShowSection.Episodes)
@@ -231,6 +258,15 @@ private fun ShowDetailsContent(
     val onEpisodesFocus = rememberRefocusAfterSwap(state.selectedSeason, screenReader) {
         requesterOf(ShowSection.Episodes).requestFocusSafely()
     }
+    // A successful Retry disposes its card under the focus it held; focus goes where Up from the
+    // card went — the hero action, else the summary stop, else the page's entry.
+    val aboveProgressRetry = listOf(ShowSection.Action, ShowSection.HeroInfo)
+        .firstOrNull { it in present }
+        ?.let(::requesterOf)
+        ?: entryRequester
+    val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError != null, screenReader) {
+        aboveProgressRetry.requestFocusSafely()
+    }
 
     val contentInset = PaddingValues(horizontal = layout.safeAreaHorizontal)
     var entered by remember { mutableStateOf(false) }
@@ -245,16 +281,28 @@ private fun ShowDetailsContent(
                     show = show,
                     episodes = state.episodes,
                     playTarget = state.playTarget,
+                    playbackNotice = state.playbackNotice,
+                    progressSyncError = progressSyncError,
                     overMedia = overMedia,
                     spokenAccessibilityEnabled = stops,
+                    onPlay = {
+                        state.playTarget?.let { onPlayEpisode(it.episodeId, EpisodeLaunchSite.Hero) }
+                    },
+                    onRetryProgressSync = onRetryProgressSync,
                     heroInfoRequester = requesterOf(ShowSection.HeroInfo),
                     heroInfoDownRequester = below(ShowSection.HeroInfo),
                     actionRequester = requesterOf(ShowSection.Action),
                     actionUpRequester = above(ShowSection.Action),
                     actionDownRequester = below(ShowSection.Action),
+                    playReturnRequester = playReturnRequester,
+                    progressRetryRequester = requesterOf(ShowSection.ProgressRetry),
+                    progressRetryUpRequester = above(ShowSection.ProgressRetry),
+                    progressRetryDownRequester = below(ShowSection.ProgressRetry),
                     heroInfoSection = sectionColumn.section(ShowSection.HeroInfo),
                     actionSection = sectionColumn.section(ShowSection.Action),
+                    progressRetrySection = sectionColumn.section(ShowSection.ProgressRetry),
                     onActionFocusChanged = onActionFocus,
+                    onProgressRetryFocusChanged = onProgressRetryFocus,
                     modifier = heroHeaderModifier(),
                 )
             }
@@ -287,11 +335,13 @@ private fun ShowDetailsContent(
                 episodesRequester = requesterOf(ShowSection.Episodes),
                 episodesUpRequester = above(ShowSection.Episodes),
                 episodesDownRequester = below(ShowSection.Episodes),
+                episodesReturnRequester = episodeReturnRequester,
                 chipsSection = sectionColumn.section(ShowSection.Seasons),
                 episodesSection = sectionColumn.section(ShowSection.Episodes),
                 onEpisodesFocusChanged = onEpisodesFocus,
                 onPressSeason = onPressSeason,
                 onRetrySeason = actions.onRetrySeason,
+                onPlayEpisode = { episodeId -> onPlayEpisode(episodeId, EpisodeLaunchSite.EpisodesRail) },
             )
             if (show.keyCrew.isNotEmpty()) {
                 KeyCrewSection(

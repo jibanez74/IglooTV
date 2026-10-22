@@ -120,8 +120,10 @@ details hero stays whole while focus is in it (design-system §11.4.1, Focus).
 
 ## What remains
 
-- **Playing from the page**: Play/Resume, the episode cards and the extra videos (through the
-  existing episode player and trailer player), each returning focus to its control.
+- ~~**Playing from the page**~~ — Play/Resume and the episode cards landed on
+  `feature/play-episode` (2026-10-21), each returning focus to its control; see
+  [episode-playback-status.md](episode-playback-status.md). The extra videos (through the
+  trailer player) are still inert.
 - **Marking an episode watched**: a long-press episode menu, also offered as a TalkBack action.
 - **Up next** after an episode, as the web's countdown and hand-off to `next_episode`.
 - **Person pages** for cast and creators, once the TV app has one; the cards stay inert.

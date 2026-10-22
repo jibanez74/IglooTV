@@ -18,7 +18,9 @@ import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.ProgressUi
 import com.igloo.blindpenguincoder.feature.shared.errorOrKeep
 import com.igloo.blindpenguincoder.feature.shared.heroInfoDescription
+import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,12 +52,15 @@ data class EpisodeUi(
 )
 
 /**
- * The hero's Play/Resume for the selected season: "Resume S1 E3" and its spoken form, and the
- * resume strip under it while the target has a position worth resuming.
+ * The hero's Play/Resume for the selected season: the episode it starts, "Resume S1 E3" and its
+ * spoken form, the verb TalkBack offers as the action ("double-tap to Resume"), and the resume
+ * strip under it while the target has a position worth resuming.
  */
 data class PlayTargetUi(
+    val episodeId: Long,
     val label: String,
     val spokenLabel: String,
+    val actionLabel: String,
     val progress: ProgressUi? = null,
 )
 
@@ -101,12 +106,15 @@ data class ShowDetailsUiState(
     val selectedSeason: Long? = null,
     val episodes: IglooRailState<EpisodeUi> = IglooRailState.Loading,
     val playTarget: PlayTargetUi? = null,
+    /** Why the last Play/Resume or episode press did not reach the player; cleared by the next. */
+    val playbackNotice: String? = null,
 )
 
 /**
  * The show details page (docs/design-system.md section 11.4.3): the show's details, then one
- * season's episodes at a time. Nothing is written — playback and marking watched are not on the
- * page yet.
+ * season's episodes at a time. A Play/Resume or episode-card press prepares that episode through
+ * the shared [EpisodePlayLauncher] and emits it on [playRequests] for the host to open the player
+ * with. Nothing else is written — marking watched is not on the page yet.
  *
  * Opening holds the page in Loading until the details *and* the first season (server order,
  * so specials are never the default) have settled, so the hero's Play/Resume arrives with the
@@ -118,10 +126,27 @@ data class ShowDetailsUiState(
 class ShowDetailsViewModel(
     private val shows: ShowRepository,
     private val serverUrl: ServerUrlProvider,
+    /** The pre-flight gate's device capability, injected so the launch rules stay JVM-testable. */
+    canPlayVideoMime: (mimeType: String) -> Boolean,
+    canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ShowDetailsUiState())
     val uiState: StateFlow<ShowDetailsUiState> = _uiState.asStateFlow()
+
+    // Shared with Home's Continue Watching rail, so both prepare an episode the same way; the
+    // notice it posts is this page's own.
+    private val episodeLauncher = EpisodePlayLauncher(
+        scope = viewModelScope,
+        shows = shows,
+        serverUrl = serverUrl,
+        canPlayVideoMime = canPlayVideoMime,
+        canPlayAudioMime = canPlayAudioMime,
+        onNotice = { notice -> _uiState.update { it.copy(playbackNotice = notice) } },
+    )
+
+    /** An episode ready to play, once its preparation succeeded; the host opens the player. */
+    val playRequests: Flow<VideoPlayRequest> get() = episodeLauncher.playRequests
 
     private var detailsJob: Job? = null
     private val seasonJobs = mutableMapOf<Long, Job>()
@@ -162,6 +187,9 @@ class ShowDetailsViewModel(
      */
     fun refresh() {
         val id = _uiState.value.openShowId ?: return
+        // The refresh owns the notice, as Home's does: a preparation from before the app left the
+        // foreground must not post one, or open a player, behind the re-read page.
+        episodeLauncher.reset()
         loadDetails(id, userInitiated = false)
     }
 
@@ -197,6 +225,17 @@ class ShowDetailsViewModel(
         val seasonNumber = state.selectedSeason ?: return
         _uiState.update { it.copy(episodes = IglooRailState.Loading, playTarget = null) }
         loadSeason(id, seasonNumber, userInitiated = true)
+    }
+
+    /**
+     * A Play/Resume or episode-card press. The launcher reads the episode's header, technical
+     * details and saved position in parallel and emits the request on [playRequests]; a failure
+     * lands in [ShowDetailsUiState.playbackNotice]. A season switch meanwhile leaves the
+     * preparation alone — the press named a concrete episode. Nothing happens on a closed page.
+     */
+    fun playEpisode(episodeId: Long) {
+        if (_uiState.value.openShowId == null) return
+        episodeLauncher.launch(episodeId)
     }
 
     private fun loadDetails(id: Long, userInitiated: Boolean) {
@@ -324,6 +363,9 @@ class ShowDetailsViewModel(
         seasonJobs.values.forEach { it.cancel() }
         seasonJobs.clear()
         seasonCache.clear()
+        // The launcher's reads too: a press on the page that is leaving must not open a player
+        // over whatever comes next.
+        episodeLauncher.reset()
     }
 
     private fun apiBaseUrl(): String = serverUrl.require().apiBaseUrl

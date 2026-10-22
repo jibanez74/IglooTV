@@ -249,7 +249,8 @@ private fun ShowEpisode.resumeSpan(): ResumeSpan? {
  * The hero's action for the selected season (web parity): resume the first episode with a
  * position worth resuming, else play the first unwatched one, else the first. Null for a season
  * with no episodes. "Resume S1 E3" on screen; TalkBack hears "Resume season 1, episode 3, The One
- * with the Thumb" — "S1 E3" read aloud is letters and digits, not an episode.
+ * with the Thumb" — "S1 E3" read aloud is letters and digits, not an episode — and is offered the
+ * verb alone as the action, so "double-tap to" does not repeat the whole sentence.
  */
 internal fun seasonPlayTarget(seasonNumber: Long, episodes: List<ShowEpisode>): PlayTargetUi? {
     val resumable = episodes.firstOrNull { it.resumeSpan() != null }
@@ -260,8 +261,10 @@ internal fun seasonPlayTarget(seasonNumber: Long, episodes: List<ShowEpisode>): 
     val verb = if (resumable != null) "Resume" else "Play"
     val spokenSeason = if (seasonNumber == 0L) "Specials" else "season $seasonNumber"
     return PlayTargetUi(
+        episodeId = target.id,
         label = "$verb ${formatEpisodeCode(seasonNumber, target.episodeNumber)}",
         spokenLabel = "$verb $spokenSeason, episode ${target.episodeNumber}, ${target.name}",
+        actionLabel = verb,
         progress = target.resumeSpan()?.let { resumeProgressUi(it.progressSec, it.durationSec) },
     )
 }
