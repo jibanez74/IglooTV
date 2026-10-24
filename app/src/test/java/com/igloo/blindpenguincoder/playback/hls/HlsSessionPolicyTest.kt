@@ -6,6 +6,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+private const val SEGMENT = "/api/movies/7/hls/1080p_8mbps/segment_42.m4s"
+private const val PLAYLIST = "/api/movies/7/hls/remux/playlist.m3u8"
+
 class HlsSessionPolicyTest {
 
     // --- resume rewind ---
@@ -108,32 +111,72 @@ class HlsSessionPolicyTest {
         // Media3's own delay is ignored for a 503: "not encoded yet" is worth the server's word.
         assertEquals(
             9_000L,
-            hlsLoadRetryDelayMs(503, 9, errorCount = 1, defaultRetryCount = 3, defaultRetryDelayMs = 0L),
+            hlsLoadRetryDelayMs(503, SEGMENT, 9, errorCount = 1, defaultRetryCount = 3, defaultRetryDelayMs = 0L),
         )
         assertEquals(
             5_000L,
-            hlsLoadRetryDelayMs(503, null, errorCount = 6, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
+            hlsLoadRetryDelayMs(503, PLAYLIST, null, errorCount = 6, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
         )
         assertNull(
-            hlsLoadRetryDelayMs(503, null, errorCount = 7, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
+            hlsLoadRetryDelayMs(503, PLAYLIST, null, errorCount = 7, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
         )
     }
 
     @Test
-    fun `503 gets six retries while non-503 stops at the Media3 default threshold`() {
+    fun `a playlist 503 gets the capacity budget and a segment 503 three fresh attempts`() {
+        // Each segment attempt is a full 120s long-poll on the server, so the capacity budget
+        // held a viewer about 14 minutes on one segment the encoder never reached.
         assertEquals(
             9_000L,
-            hlsLoadRetryDelayMs(503, 9, 6, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
+            hlsLoadRetryDelayMs(503, PLAYLIST, 9, 6, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
         )
         assertNull(
-            hlsLoadRetryDelayMs(503, 9, 7, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
+            hlsLoadRetryDelayMs(503, PLAYLIST, 9, 7, defaultRetryCount = 3, defaultRetryDelayMs = 5_000L),
         )
+        assertEquals(
+            1_000L,
+            hlsLoadRetryDelayMs(
+                503,
+                SEGMENT,
+                1,
+                HLS_SEGMENT_NOT_READY_MAX_RETRIES,
+                defaultRetryCount = 3,
+                defaultRetryDelayMs = 5_000L,
+            ),
+        )
+        assertNull(
+            hlsLoadRetryDelayMs(
+                503,
+                SEGMENT,
+                1,
+                HLS_SEGMENT_NOT_READY_MAX_RETRIES + 1,
+                defaultRetryCount = 3,
+                defaultRetryDelayMs = 5_000L,
+            ),
+        )
+    }
 
-        listOf<Int?>(401, 404, 500, null).forEach { responseCode ->
+    @Test
+    fun `a segment 500 goes straight to the lost-session recovery`() {
+        // FFmpeg died: every quick retry gets the same 500, and only recreating the session helps.
+        assertNull(
+            hlsLoadRetryDelayMs(500, SEGMENT, null, errorCount = 1, defaultRetryCount = 3, defaultRetryDelayMs = 1_000L),
+        )
+        // Anything else keeps Media3's own retries.
+        assertEquals(
+            1_000L,
+            hlsLoadRetryDelayMs(500, PLAYLIST, null, errorCount = 1, defaultRetryCount = 3, defaultRetryDelayMs = 1_000L),
+        )
+    }
+
+    @Test
+    fun `non-503 failures stop at the Media3 default threshold`() {
+        listOf<Int?>(401, 404, 502, null).forEach { responseCode ->
             assertEquals(
                 2_000L,
                 hlsLoadRetryDelayMs(
                     responseCode,
+                    SEGMENT,
                     null,
                     errorCount = 3,
                     defaultRetryCount = 3,
@@ -143,6 +186,7 @@ class HlsSessionPolicyTest {
             assertNull(
                 hlsLoadRetryDelayMs(
                     responseCode,
+                    SEGMENT,
                     null,
                     errorCount = 4,
                     defaultRetryCount = 3,
@@ -157,12 +201,26 @@ class HlsSessionPolicyTest {
         assertNull(
             hlsLoadRetryDelayMs(
                 responseCode = null,
+                requestPath = null,
                 retryAfterSec = null,
                 errorCount = 1,
                 defaultRetryCount = 3,
                 defaultRetryDelayMs = null,
             ),
         )
+    }
+
+    // --- recovery spacing ---
+
+    @Test
+    fun `mid-play recoveries stay two seconds apart`() {
+        // The first of an incident runs at once.
+        assertEquals(0L, sessionLostRecoveryDelayMs(lastRecoveryAtMs = 0L, nowMs = 1_000_000L))
+        // A failure right after the last recovery waits out the rest of the spacing.
+        assertEquals(1_800L, sessionLostRecoveryDelayMs(lastRecoveryAtMs = 10_000L, nowMs = 10_200L))
+        assertEquals(0L, sessionLostRecoveryDelayMs(lastRecoveryAtMs = 10_000L, nowMs = 12_000L))
+        // The last one is still waiting to run: the next waits the full spacing after it, no more.
+        assertEquals(2_000L, sessionLostRecoveryDelayMs(lastRecoveryAtMs = 11_800L, nowMs = 10_300L))
     }
 
     // --- mid-play lost-session recovery ---
