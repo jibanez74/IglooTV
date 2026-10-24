@@ -438,6 +438,7 @@ internal class ExoVideoPlayerEngine(
         audioTypeIndex: Int?,
         targetAbsoluteSec: Double,
         startDelayMs: Long = 0L,
+        onStart: (() -> Unit)? = null,
     ) {
         if (!playbackIntent.acceptsCommands) return
         // Recovery, keepalive, and seeks re-enter here with the stored intent; resolving again
@@ -475,6 +476,7 @@ internal class ExoVideoPlayerEngine(
             try {
                 // A spaced-out recovery waits here, cancellable like the rest of the restart.
                 if (startDelayMs > 0) delay(startDelayMs)
+                onStart?.invoke()
                 val start = controller.start(
                     profileId = profileId,
                     audioTypeIndex = audioTypeIndex ?: request.effectiveAudioTypeIndex,
@@ -748,7 +750,9 @@ internal class ExoVideoPlayerEngine(
         ) return false
         val delayMs = sessionLostRecoveryDelayMs(lastSessionLostRecoveryAtMs, nowMs)
         sessionLostRecoveries++
-        // The spacing to the next recovery counts from when this one actually runs.
+        // The spacing to the next recovery counts from when this one actually runs: the
+        // planned start covers a failure during the wait, and the restart records the real
+        // one, since a delay can resume late but never early.
         lastSessionLostRecoveryAtMs = nowMs + delayMs
         controller.noteSessionLost()
         restartInPlace(
@@ -756,6 +760,7 @@ internal class ExoVideoPlayerEngine(
             currentAudioTypeIndex,
             intendedAbsoluteSec(),
             startDelayMs = delayMs,
+            onStart = { lastSessionLostRecoveryAtMs = SystemClock.elapsedRealtime() },
         )
         return true
     }

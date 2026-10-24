@@ -804,8 +804,9 @@ class ExoVideoPlayerEngineTest {
     /**
      * Serves a one-segment playlist and answers every segment with a 500, which is what a
      * session whose FFmpeg dies at the same point in the film looks like to the player.
+     * [failedAtMs] records when each 500 was answered.
      */
-    private fun segmentsFailWith500(): DataSource.Factory = DataSource.Factory {
+    private fun segmentsFailWith500(failedAtMs: MutableList<Long>): DataSource.Factory = DataSource.Factory {
         object : DataSource {
             private var delegate: ByteArrayDataSource? = null
 
@@ -813,6 +814,7 @@ class ExoVideoPlayerEngineTest {
 
             override fun open(dataSpec: DataSpec): Long {
                 if (dataSpec.uri.path?.endsWith("playlist.m3u8") != true) {
+                    synchronized(failedAtMs) { failedAtMs += SystemClock.elapsedRealtime() }
                     throw HttpDataSource.InvalidResponseCodeException(
                         500,
                         /* responseMessage= */ null,
@@ -844,16 +846,25 @@ class ExoVideoPlayerEngineTest {
         // Recreating the session at once spent the whole recovery budget in well under a second
         // when the new session failed the same way, as one whose FFmpeg dies at a fixed point does.
         val api = FakeHlsApi(pathPrefix = "/api")
-        val engine = engine(playRequest(mode = PlaybackMode.Remux), api, hlsDataSourceFactory = segmentsFailWith500())
+        val failedAtMs = mutableListOf<Long>()
+        val engine = engine(
+            playRequest(mode = PlaybackMode.Remux),
+            api,
+            hlsDataSourceFactory = segmentsFailWith500(failedAtMs),
+        )
 
         onMain { engine.startPlayback(null, initialPlayWhenReady = true, rewindOnResume = true) }
         waitFor("the recoveries to run out", timeoutMs = 15_000) { engine.errors().isNotEmpty() }
 
         // The first start, then one manifest per recovery.
         assertEquals(1 + HLS_SESSION_LOST_MAX_ATTEMPTS, api.fetched.size)
+        // The first recovery of the incident runs at once: measured from the failure that set
+        // it off, so the playlist load before it does not count.
+        val firstFailureMs = synchronized(failedAtMs) { failedAtMs.first() }
+        val firstRecoveryWaitMs = api.fetchedAtMs[1] - firstFailureMs
+        assertTrue("first recovery waited $firstRecoveryWaitMs ms", firstRecoveryWaitMs < 1_000)
+        // Each one after waits out the spacing from the recovery before it.
         val gaps = api.fetchedAtMs.zipWithNext { earlier, later -> later - earlier }
-        // The first recovery of the incident runs at once; each one after waits out the spacing.
-        assertTrue("first recovery waited ${gaps.first()} ms", gaps.first() < 1_500)
         gaps.drop(1).forEach { gap -> assertTrue("recoveries $gap ms apart", gap >= 1_900) }
     }
 }
