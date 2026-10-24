@@ -113,6 +113,10 @@ helpers require non-empty window bounds, avoiding stale nodes left by a previous
   including PIN verification and Quick Connect. It records requested paths, returns 404 for
   unimplemented routes, and handles connections independently so hanging requests do not block
   other routes.
+- A held Center (the episode card's long-press) is `keyDown`, then `waitUntil` the menu's tag
+  appears, then `keyUp` through `onRoot()`: foundation's long-press timer runs on real time, not
+  the Compose clock, and the card has left the semantics tree under the menu by the time the
+  release is sent.
 - Prefer `testTag` selectors, following existing tags such as `navigation_rail`, `movies_grid`,
   and `poster_card_${id}`. Use Coil's `FakeImageLoaderEngine` when an image result matters;
   see `feature/movies/MovieDetailsOverMediaTest.kt`.

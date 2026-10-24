@@ -1,7 +1,7 @@
 package com.igloo.blindpenguincoder.data.api
 
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
-import com.igloo.blindpenguincoder.data.model.SetMovieWatchedRequest
+import com.igloo.blindpenguincoder.data.model.SetWatchedRequest
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -81,7 +81,7 @@ class MovieApi(
     suspend fun movieWatchProgress(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/movies/$id/watch-progress")
 
-    suspend fun setMovieWatched(id: Long, body: SetMovieWatchedRequest): HttpResponse =
+    suspend fun setMovieWatched(id: Long, body: SetWatchedRequest): HttpResponse =
         client.put("${serverUrl.require().apiBaseUrl}/movies/$id/watch-progress/watched") {
             contentType(ContentType.Application.Json)
             setBody(body)

@@ -5,16 +5,22 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -31,6 +37,7 @@ import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.inertShowDetailsActions
 import com.igloo.blindpenguincoder.testEpisode
 import com.igloo.blindpenguincoder.testEpisodes
 import com.igloo.blindpenguincoder.testHomeShows
@@ -41,6 +48,7 @@ import com.igloo.blindpenguincoder.testShowDetails
 import com.igloo.blindpenguincoder.testShowDetailsState
 import com.igloo.blindpenguincoder.testShowHero
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,8 +57,9 @@ import org.junit.runner.RunWith
  * The show page's focus contract (design-system.md sections 6.3 and 11.4.3), through the real
  * shell: every entry point lands on Play/Resume and Back returns to the card or hero that led
  * away, the vertical chain is hand-wired top to bottom with nothing escaping into the shell
- * composed underneath, and a season chip changes the rail only when pressed — and then hands
- * focus down to that season's first episode.
+ * composed underneath, a season chip changes the rail only when pressed — and then hands focus
+ * down to that season's first episode — and a failed save's Retry card (section 11.8) joins the
+ * chain between Play and the sections below it.
  */
 @RunWith(AndroidJUnit4::class)
 class ShowDetailsFocusTest {
@@ -63,6 +72,8 @@ class ShowDetailsFocusTest {
 
     private var showState by mutableStateOf(ShowDetailsUiState())
     private val opened = mutableListOf<Long>()
+    private val watchedSets = mutableListOf<Pair<Long, Boolean>>()
+    private val played = mutableListOf<Long>()
     private val selectedSeasons = mutableListOf<Long>()
     private var hostActivity: Activity? = null
 
@@ -84,6 +95,8 @@ class ShowDetailsFocusTest {
     ) {
         showState = initialShow
         opened.clear()
+        watchedSets.clear()
+        played.clear()
         selectedSeasons.clear()
         composeRule.setContent {
             val context = LocalContext.current
@@ -105,13 +118,19 @@ class ShowDetailsFocusTest {
                                 selectedSeason = number,
                                 episodes = episodes,
                                 playTarget = if (episodes is IglooRailState.Loaded) {
-                                    PlayTargetUi("Play S$number E1", "Play season $number, episode 1")
+                                    PlayTargetUi(
+                                        episodeId = episodes.items.first().id,
+                                        label = "Play S$number E1",
+                                        spokenLabel = "Play season $number, episode 1",
+                                        actionLabel = "Play",
+                                    )
                                 } else {
                                     null
                                 },
                             )
                         },
                         onRetrySeason = {},
+                        onSetEpisodeWatched = { id, watched -> watchedSets += id to watched },
                     ),
                     onShowSelected = { id ->
                         opened += id
@@ -119,6 +138,7 @@ class ShowDetailsFocusTest {
                             details = DetailsState.Loaded(testShowDetails(id = id)),
                         )
                     },
+                    onPlayShowEpisode = { played += it },
                     onCloseDetails = { showState = ShowDetailsUiState() },
                 )
             }
@@ -414,7 +434,12 @@ class ShowDetailsFocusTest {
 
         showState = showState.copy(
             episodes = IglooRailState.Loaded(testSeasonTwoEpisodes),
-            playTarget = PlayTargetUi("Play S2 E1", "Play season 2, episode 1, Hello, Ms. Cobel"),
+            playTarget = PlayTargetUi(
+                episodeId = 911,
+                label = "Play S2 E1",
+                spokenLabel = "Play season 2, episode 1, Hello, Ms. Cobel",
+                actionLabel = "Play",
+            ),
         )
         composeRule.waitForIdle()
         assertEquals(before, heroSpan(), 0.5f)
@@ -484,6 +509,88 @@ class ShowDetailsFocusTest {
         shell.assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
     }
 
+    /** The page alone, as the host composes it, with a failed save's Retry card under the hero. */
+    private fun setScreenContent(
+        state: ShowDetailsUiState,
+        progressSyncError: String,
+        spokenAccessibilityEnabled: Boolean = false,
+    ) {
+        composeRule.setContent {
+            IglooTheme {
+                ShowDetailsScreen(
+                    state = state,
+                    actions = inertShowDetailsActions,
+                    onPlayEpisode = { _, _ -> },
+                    playReturnRequester = remember { FocusRequester() },
+                    episodeReturnRequester = remember { FocusRequester() },
+                    progressSyncError = progressSyncError,
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                )
+            }
+        }
+        composeRule.waitForIdle()
+    }
+
+    /**
+     * The Retry card sits under Play: down from Play reaches it, down again the chips, and up walks
+     * back the same way; its sides are pinned like every edge of the page.
+     */
+    @Test
+    fun theProgressRetrySitsBetweenPlayAndTheChipsAndPinsItsSides() {
+        setScreenContent(testShowDetailsState(), progressSyncError = SAVE_FAILED)
+        play().assertIsFocused()
+
+        play().press(Key.DirectionDown)
+        val retry = node("details_progress_retry")
+        retry.assertIsFocused()
+        retry.press(Key.DirectionLeft).assertIsFocused()
+        retry.press(Key.DirectionRight).assertIsFocused()
+        retry.press(Key.DirectionDown)
+        chip(1).assertIsFocused()
+        chip(1).press(Key.DirectionUp)
+        retry.assertIsFocused()
+        retry.press(Key.DirectionUp)
+        play().assertIsFocused()
+    }
+
+    /** With nothing to play, the Retry card is the chain's top and the page's entry. */
+    @Test
+    fun withoutPlayTheProgressRetryIsTheEntryAndTheTopOfTheChain() {
+        setScreenContent(
+            testShowDetailsState(episodes = IglooRailState.Loaded(emptyList()), playTarget = null),
+            progressSyncError = SAVE_FAILED,
+        )
+
+        val retry = node("details_progress_retry")
+        retry.assertIsFocused()
+        retry.press(Key.DirectionUp).assertIsFocused()
+        retry.press(Key.DirectionDown)
+        chip(1).assertIsFocused()
+    }
+
+    /** Under a screen reader the card sits between Play and the Overview stop, both ways. */
+    @Test
+    fun underAScreenReaderTheProgressRetryPrecedesTheOverviewStop() {
+        setScreenContent(
+            testShowDetailsState(),
+            progressSyncError = SAVE_FAILED,
+            spokenAccessibilityEnabled = true,
+        )
+        node("details_hero_info").assertIsFocused()
+
+        node("details_hero_info").press(Key.DirectionDown)
+        play().assertIsFocused()
+        play().press(Key.DirectionDown)
+        settleSectionMove()
+        node("details_progress_retry").assertIsFocused()
+        node("details_progress_retry").press(Key.DirectionDown)
+        settleSectionMove()
+        node("details_overview_stop").assertIsFocused()
+        node("details_overview_stop").press(Key.DirectionUp)
+        settleSectionMove()
+        node("details_progress_retry").assertIsFocused()
+    }
+
     private fun allDirections(check: (Key) -> Unit) =
         listOf(Key.DirectionLeft, Key.DirectionDown, Key.DirectionUp, Key.DirectionRight)
             .forEach(check)
@@ -495,6 +602,262 @@ class ShowDetailsFocusTest {
     }
 
     private fun isHeading() = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
+
+    // --- the episode menu ---
+
+    /**
+     * Holds Center on a card: foundation's long-press timer runs on real time, so the menu is
+     * awaited, not idled for. The release goes through the root — the card has left the
+     * semantics tree under the menu — and lands on the focused menu row, which must not take a
+     * release it never saw pressed as a click.
+     */
+    private fun SemanticsNodeInteraction.hold() {
+        performKeyInput { keyDown(Key.DirectionCenter) }
+        composeRule.waitUntil(timeoutMillis = 3_000) {
+            composeRule.onAllNodesWithTag("more_menu").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onRoot().performKeyInput { keyUp(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+    }
+
+    private fun menuRow() = node("more_menu_item_0")
+
+    @Test
+    fun holdingCenterOnAnEpisodeOpensItsMenuOnMarkWatchedAndDoesNotPlay() {
+        openShow()
+        episode(903).requestFocus()
+
+        episode(903).hold()
+
+        menuRow().assertIsFocused()
+        menuRow().assertContentDescriptionEquals("Mark watched")
+        assertTrue(played.isEmpty())
+        assertTrue(watchedSets.isEmpty())
+    }
+
+    @Test
+    fun aShortPressOnAnEpisodeStillPlaysIt() {
+        openShow()
+        episode(903).requestFocus()
+
+        episode(903).press(Key.DirectionCenter)
+
+        assertEquals(listOf(903L), played)
+        node("more_menu").assertDoesNotExist()
+    }
+
+    @Test
+    fun theEpisodeMenuTrapsEveryDpadDirection() {
+        openShow()
+        episode(903).requestFocus()
+        episode(903).hold()
+
+        allDirections { menuRow().press(it).assertIsFocused() }
+    }
+
+    @Test
+    fun backClosesTheEpisodeMenuAloneAndRestoresFocusToTheCard() {
+        openShow()
+        episode(903).requestFocus()
+        episode(903).hold()
+
+        pressBack()
+
+        node("more_menu").assertDoesNotExist()
+        node("show_details").assertExists()
+        episode(903).assertIsFocused()
+        assertTrue(watchedSets.isEmpty())
+    }
+
+    @Test
+    fun selectingMarkWatchedClosesTheMenuAndRestoresFocusToTheCard() {
+        openShow()
+        episode(903).requestFocus()
+        episode(903).hold()
+
+        menuRow().press(Key.DirectionCenter)
+
+        assertEquals(listOf(903L to true), watchedSets)
+        node("more_menu").assertDoesNotExist()
+        episode(903).assertIsFocused()
+        assertTrue(played.isEmpty())
+    }
+
+    @Test
+    fun aWatchedCardOffersMarkUnwatched() {
+        openShow()
+        episode(901).requestFocus()
+
+        episode(901).hold()
+
+        menuRow().assertContentDescriptionEquals("Mark unwatched")
+        menuRow().press(Key.DirectionCenter)
+        assertEquals(listOf(901L to false), watchedSets)
+    }
+
+    // --- landing after the player's hand-off ---
+
+    private fun land(seasonNumber: Long, episodeId: Long, site: EpisodeLaunchSite, sequence: Int = 1) =
+        EpisodeLanding(seasonNumber, episodeId, site, sequence)
+
+    private val seasonTwoTarget = PlayTargetUi(
+        episodeId = 911,
+        label = "Play S2 E1",
+        spokenLabel = "Play season 2, episode 1, Hello, Ms. Cobel",
+        actionLabel = "Play",
+    )
+
+    @Test
+    fun aLandingOnTheShownSeasonMovesFocusToTheLandedCard() {
+        openShow()
+        play().assertIsFocused()
+
+        composeRule.runOnIdle { showState = showState.copy(landing = land(1, 903, EpisodeLaunchSite.EpisodesRail)) }
+        composeRule.waitForIdle()
+
+        episode(903).assertIsFocused()
+    }
+
+    @Test
+    fun aLandingOnAnotherSeasonSelectsItsChipAndLandsOnItsCard() {
+        openShow()
+
+        composeRule.runOnIdle {
+            showState = showState.copy(
+                selectedSeason = 2,
+                episodes = IglooRailState.Loaded(testSeasonTwoEpisodes),
+                playTarget = seasonTwoTarget,
+                landing = land(2, 912, EpisodeLaunchSite.EpisodesRail),
+            )
+        }
+        composeRule.waitForIdle()
+
+        episode(912).assertIsFocused()
+        chip(2).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
+        node("episode_card_901").assertDoesNotExist()
+    }
+
+    @Test
+    fun aLandingOnASeasonStillLoadingHoldsTheSkeletonThenLandsOnTheCard() {
+        openShow()
+
+        composeRule.runOnIdle {
+            showState = showState.copy(
+                selectedSeason = 2,
+                episodes = IglooRailState.Loading,
+                playTarget = null,
+                landing = land(2, 912, EpisodeLaunchSite.EpisodesRail),
+            )
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Loading Season 2").assertExists()
+        node("episode_card_912").assertDoesNotExist()
+
+        composeRule.runOnIdle {
+            showState = showState.copy(
+                episodes = IglooRailState.Loaded(testSeasonTwoEpisodes),
+                playTarget = seasonTwoTarget,
+            )
+        }
+        composeRule.waitForIdle()
+
+        episode(912).assertIsFocused()
+    }
+
+    @Test
+    fun aHeroLandingKeepsPlayAndRelabelsIt() {
+        openShow()
+        play().assertIsFocused()
+
+        composeRule.runOnIdle {
+            showState = showState.copy(
+                playTarget = PlayTargetUi(
+                    episodeId = 903,
+                    label = "Play S1 E3",
+                    spokenLabel = "Play season 1, episode 3, In Perpetuity",
+                    actionLabel = "Play",
+                ),
+                landing = land(1, 902, EpisodeLaunchSite.Hero),
+            )
+        }
+        composeRule.waitForIdle()
+
+        play().assertIsFocused()
+        play().assertContentDescriptionEquals("Play season 1, episode 3, In Perpetuity")
+    }
+
+    @Test
+    fun aHeroLandingOnALoadingSeasonReturnsFocusToPlayWhenItLands() {
+        openShow()
+
+        composeRule.runOnIdle {
+            showState = showState.copy(
+                selectedSeason = 2,
+                episodes = IglooRailState.Loading,
+                playTarget = null,
+                landing = land(2, 911, EpisodeLaunchSite.Hero),
+            )
+        }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle {
+            showState = showState.copy(
+                episodes = IglooRailState.Loaded(testSeasonTwoEpisodes),
+                playTarget = seasonTwoTarget,
+            )
+        }
+        composeRule.waitForIdle()
+
+        play().assertIsFocused()
+        play().assertContentDescriptionEquals("Play season 2, episode 1, Hello, Ms. Cobel")
+    }
+
+    @Test
+    fun aLandingOnAnEpisodeTheSeasonNoLongerListsLandsOnItsFirstCard() {
+        openShow()
+
+        composeRule.runOnIdle { showState = showState.copy(landing = land(1, 999, EpisodeLaunchSite.EpisodesRail)) }
+        composeRule.waitForIdle()
+
+        episode(901).assertIsFocused()
+    }
+
+    @Test
+    fun aSecondLandingOnTheSameEpisodeLandsAgain() {
+        openShow()
+        composeRule.runOnIdle { showState = showState.copy(landing = land(1, 903, EpisodeLaunchSite.EpisodesRail)) }
+        composeRule.waitForIdle()
+        episode(903).assertIsFocused()
+        play().requestFocus()
+        play().assertIsFocused()
+
+        composeRule.runOnIdle {
+            showState = showState.copy(landing = land(1, 903, EpisodeLaunchSite.EpisodesRail, sequence = 2))
+        }
+        composeRule.waitForIdle()
+
+        episode(903).assertIsFocused()
+    }
+
+    @Test
+    fun aLandingOnAnotherSeasonIsHeardThroughTheSectionMoveUnderAScreenReader() {
+        setShellContent(initialShow = testShowDetailsState(), spokenAccessibilityEnabled = true)
+
+        composeRule.runOnIdle {
+            showState = showState.copy(
+                selectedSeason = 2,
+                episodes = IglooRailState.Loaded(testSeasonTwoEpisodes),
+                playTarget = seasonTwoTarget,
+                landing = land(2, 912, EpisodeLaunchSite.EpisodesRail),
+            )
+        }
+        composeRule.waitUntil(timeoutMillis = SECTION_MOVE_MS) {
+            composeRule.onAllNodesWithTag("episode_card_912").fetchSemanticsNodes()
+                .any { it.config.getOrNull(SemanticsProperties.Focused) == true }
+        }
+
+        episode(912).assertIsFocused()
+    }
 }
 
 private const val SECTION_MOVE_MS = 3_000L
+private const val SAVE_FAILED = "Couldn't save playback progress: no connection."

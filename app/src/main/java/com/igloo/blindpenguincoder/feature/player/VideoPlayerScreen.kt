@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.feature.player
 
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +34,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -43,6 +46,7 @@ import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooMotion
+import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.iglooTween
@@ -62,15 +66,21 @@ import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.TrackOption
+import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
+import com.igloo.blindpenguincoder.playback.model.UpNextOffer
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerPhase
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerState
+import com.igloo.blindpenguincoder.playback.model.endedPositionSec
 import com.igloo.blindpenguincoder.playback.model.onEvent
+import com.igloo.blindpenguincoder.playback.model.upNextOffer
+import com.igloo.blindpenguincoder.playback.model.upNextOutsideLead
 import com.igloo.blindpenguincoder.playback.model.noun
 import com.igloo.blindpenguincoder.playback.model.videoPlayerAnnouncement
 import kotlinx.coroutines.delay
@@ -79,11 +89,14 @@ import kotlinx.coroutines.delay
  * The movie player (docs/design-system.md section 11.8): a full-screen in-tree overlay whose
  * video surface is rendered by the engine, with all input and chrome in Compose. The trailer
  * player's shape throughout; what this screen adds is the
- * resume prompt, the in-player chapter and track menus, and the progress session on [viewModel].
+ * resume prompt, the in-player chapter and track menus, the progress session on [viewModel], and
+ * for an episode the Up Next card and the hand-off to the episode that follows.
  *
  * The host owns close and focus restoration; this screen's own [BackHandler] handles chrome
  * dismissal and otherwise calls [onClose]. [engineFactory] has no default because the real
- * engine needs the stream URL and data-source factory, which are the host's to know.
+ * engine needs the stream URL and data-source factory, which are the host's to know. The
+ * hand-off is the host's too: [prepareUpNext] builds the next episode's request and [onAdvance]
+ * asks the host to replace this screen with one for it, the way a launch mounts this one.
  */
 @Composable
 fun VideoPlayerScreen(
@@ -93,11 +106,14 @@ fun VideoPlayerScreen(
     onPlaybackModeRequested: (PlaybackMode) -> Unit,
     onTrackSelectionChanged: (audioTypeIndex: Int?, subtitleTypeIndex: Int?) -> Unit,
     engineFactory: (Context, VideoPlayRequest) -> VideoPlayerEngine,
+    prepareUpNext: suspend (UpNextEpisode) -> ApiResult<VideoPlayRequest>,
+    onAdvance: (VideoPlayRequest) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    // A movie that resumes opens on the prompt, so the intent only arms once the user chooses.
-    val host = rememberPlayerHostLifecycle(initialPlayWhenReady = request.resumeAtSec == null)
+    // A title that resumes opens on the prompt, so the intent only arms once the user chooses —
+    // unless the request already carries that choice, and then it plays at once.
+    val host = rememberPlayerHostLifecycle(initialPlayWhenReady = request.resumePromptSec == null)
     val engine = remember(host.reloadKey) { engineFactory(context, request) }
     val latestRequest by rememberUpdatedState(request)
     val latestOnPlaybackModeRequested by rememberUpdatedState(onPlaybackModeRequested)
@@ -109,7 +125,7 @@ fun VideoPlayerScreen(
     // The resume decision, playback position, and transport intent survive recreation. The
     // position prevents an hour-long movie from restarting at zero; the independent intent
     // prevents a replacement engine from autoplaying a movie the user had paused.
-    var resumeDecided by rememberSaveable { mutableStateOf(request.resumeAtSec == null) }
+    var resumeDecided by rememberSaveable { mutableStateOf(request.resumePromptSec == null) }
     var chosenStartSec by rememberSaveable { mutableStateOf(request.resumeAtSec ?: 0.0) }
     var lastPositionSec by rememberSaveable { mutableStateOf(0.0) }
     var lastDurationSec by rememberSaveable { mutableStateOf(request.durationSec ?: 0.0) }
@@ -131,6 +147,18 @@ fun VideoPlayerScreen(
     var playerMenu by remember { mutableStateOf<PlayerMenu?>(null) }
     // Bumped by any key press or chrome focus move; each bump restarts the auto-hide clock.
     var interactionTick by remember { mutableIntStateOf(0) }
+
+    // The Up Next card (section 11.8): offered over an episode's last seconds and at its end.
+    // A dismissal is the viewer's, and survives recreation; it lapses once they seek back past
+    // the lead. The next request is prepared while the card is up, kept for the screen's life,
+    // and spent exactly once — by Center on the card or by the end of the episode.
+    val upNext = request.episode?.upNext
+    var upNextDismissed by rememberSaveable { mutableStateOf(false) }
+    var preparedNext by remember { mutableStateOf<ApiResult<VideoPlayRequest>?>(null) }
+    var handedOff by remember { mutableStateOf(false) }
+    var upNextFocused by remember { mutableStateOf(false) }
+    val upNextRequester = remember { FocusRequester() }
+    var bottomBlockHeightPx by remember { mutableIntStateOf(0) }
 
     val playPauseRequester = remember { FocusRequester() }
     val backRequester = remember { FocusRequester() }
@@ -160,9 +188,12 @@ fun VideoPlayerScreen(
         }
     }
 
-    val closeAndRelease: () -> Unit = {
+    val releaseEngine: () -> Unit = {
         persistTrackSelection(engine)
         engine.release()
+    }
+    val closeAndRelease: () -> Unit = {
+        releaseEngine()
         onClose()
     }
 
@@ -171,7 +202,7 @@ fun VideoPlayerScreen(
     // outlives this composable and gives the final write somewhere to land.
     LaunchedEffect(Unit) { viewModel.startSession(request.media) }
     DisposableEffect(Unit) {
-        onDispose { viewModel.endSession(lastPositionSec, lastDurationSec) }
+        onDispose { viewModel.endSession(request.media, lastPositionSec, lastDurationSec) }
     }
 
     LaunchedEffect(engine) {
@@ -215,6 +246,8 @@ fun VideoPlayerScreen(
                         durationSec = lastDurationSec,
                         isPlaying = next.phase == VideoPlayerPhase.Playing,
                     )
+                    // Back outside the lead, a dismissed card may be offered again at the end.
+                    if (upNextOutsideLead(next)) upNextDismissed = false
                 }
                 // Finishing means full progress: the exit save must record the end, not the
                 // last tick before it.
@@ -243,10 +276,43 @@ fun VideoPlayerScreen(
         // entry focus lands on the Retry button hidden underneath it.
         if (state.phase == VideoPlayerPhase.Error) playerMenu = null
         when (state.phase) {
-            VideoPlayerPhase.Ended -> closeAndRelease()
             // Chrome may only rest hidden over a moving picture; any other phase surfaces it.
             VideoPlayerPhase.Playing -> if (progressSyncError != null) chromeVisible = true
             else -> chromeVisible = true
+        }
+    }
+
+    val upNextOffer: UpNextOffer? = upNext?.let { upNextOffer(state, upNextDismissed) }
+    // The next episode is wanted while its card stands, and at the end whether or not the card
+    // ever showed (a duration the engine never reported); a dismissal withdraws both.
+    val wantsNext = upNext != null && !upNextDismissed &&
+        (upNextOffer != null || state.phase == VideoPlayerPhase.Ended)
+    LaunchedEffect(wantsNext) {
+        if (wantsNext && preparedNext == null) preparedNext = prepareUpNext(requireNotNull(upNext))
+    }
+    // Handing off means finishing this episode: its exit save records the end, as Ended does,
+    // and its engine goes before the host mounts the next episode's screen. Spent once.
+    val advance: () -> Unit = {
+        val next = (preparedNext as? ApiResult.Success)?.value
+        if (next != null && !handedOff) {
+            handedOff = true
+            lastPositionSec = endedPositionSec(lastPositionSec, lastDurationSec)
+            viewModel.endSession(request.media, lastPositionSec, lastDurationSec)
+            releaseEngine()
+            onAdvance(next)
+        }
+    }
+    // The end of the picture: an episode with a next one and no dismissal hands off — at once
+    // when the next request is ready, or as soon as it lands, the ended frame held under the
+    // card meanwhile; a movie, the show's last episode, a dismissal or a failed preparation
+    // close the player as before.
+    LaunchedEffect(state.phase, preparedNext, upNextDismissed) {
+        if (state.phase != VideoPlayerPhase.Ended || handedOff) return@LaunchedEffect
+        when {
+            !wantsNext -> closeAndRelease()
+            preparedNext is ApiResult.Success -> advance()
+            preparedNext is ApiResult.Failure -> closeAndRelease()
+            else -> Unit
         }
     }
 
@@ -272,20 +338,25 @@ fun VideoPlayerScreen(
     val seekToSec = { targetSec: Double ->
         engine.seekTo(targetSec)
         state = state.onSeekApplied(targetSec)
+        // The optimistic seek is what the viewer sees first; a dismissal lapses with it too.
+        if (upNextOutsideLead(state)) upNextDismissed = false
     }
     val seekBy = { deltaSec: Double -> seekToSec(state.seekTarget(deltaSec)) }
 
     // Entry focus: Play/Pause anchors the screen; the error surface moves it to its one action,
+    // the Up Next card takes it the moment it appears — or the moment a menu that was up closes —
     // and the resume prompt and track menus request their own on composition.
-    val focusAnchor = when (state.phase) {
-        VideoPlayerPhase.Error -> FocusAnchor.ErrorAction
-        VideoPlayerPhase.AwaitingResume -> FocusAnchor.Modal
+    val focusAnchor = when {
+        state.phase == VideoPlayerPhase.Error -> FocusAnchor.ErrorAction
+        state.phase == VideoPlayerPhase.AwaitingResume -> FocusAnchor.Modal
+        upNextOffer != null && playerMenu == null -> FocusAnchor.UpNext
         else -> FocusAnchor.Transport
     }
     LaunchedEffect(focusAnchor) {
         when (focusAnchor) {
             FocusAnchor.ErrorAction -> retryRequester.requestFocusSafely()
             FocusAnchor.Transport -> playPauseRequester.requestFocusSafely()
+            FocusAnchor.UpNext -> upNextRequester.requestFocusSafely()
             FocusAnchor.Modal -> Unit
         }
     }
@@ -296,12 +367,12 @@ fun VideoPlayerScreen(
     // The track menus and the resume prompt register their own handlers below this one, so this
     // fires only with the plain chrome up.
     BackHandler {
-        if (
-            chromeVisible && state.phase == VideoPlayerPhase.Playing && progressSyncError == null
-        ) {
-            chromeVisible = false
-        } else {
-            closeAndRelease()
+        when {
+            // The card goes first: the episode plays out, and its end closes the player.
+            upNextOffer != null -> upNextDismissed = true
+            chromeVisible && state.phase == VideoPlayerPhase.Playing && progressSyncError == null ->
+                chromeVisible = false
+            else -> closeAndRelease()
         }
     }
 
@@ -313,8 +384,7 @@ fun VideoPlayerScreen(
         onBackgroundRelease = {
             // The trip away is the web's page hide: progress goes out before the engine does.
             viewModel.flushProgress(lastPositionSec, lastDurationSec)
-            persistTrackSelection(engine)
-            engine.release()
+            releaseEngine()
         },
     )
 
@@ -334,6 +404,9 @@ fun VideoPlayerScreen(
                     togglePlayPause = togglePlayPause,
                     seekBy = seekBy,
                     focusPlayPause = { playPauseRequester.requestFocusSafely() },
+                    // Gated on the offer: a card that left composition under its focus must not
+                    // keep Left and Right pinned on the chrome that took it back.
+                    upNextFocused = upNextFocused && upNextOffer != null,
                 )
             }
             .semantics {
@@ -378,10 +451,12 @@ fun VideoPlayerScreen(
                 subtitlesButtonRequester = subtitlesButtonRequester,
                 qualityButtonRequester = qualityButtonRequester,
                 progressRetryRequester = progressRetryRequester,
+                upNextRequester = upNextRequester.takeIf { upNextOffer != null },
                 progressSyncError = progressSyncError,
                 onRetryProgressSync = viewModel::retryFailedSave,
                 onProgressRetryFocusChanged = onProgressRetryFocus,
                 onAnyControlFocused = { interactionTick++ },
+                onBottomBlockSizeChanged = { bottomBlockHeightPx = it },
                 onBack = closeAndRelease,
                 onTogglePlayPause = togglePlayPause,
                 onSeekBy = seekBy,
@@ -395,9 +470,52 @@ fun VideoPlayerScreen(
             )
         }
 
+        if (upNext != null && upNextOffer != null) {
+            val preparationFailure = (preparedNext as? ApiResult.Failure)?.error
+            val status = when {
+                preparationFailure != null -> preparationFailure.toFailureNotice("prepare the next episode")
+                state.phase == VideoPlayerPhase.Ended -> UP_NEXT_LOADING
+                else -> upNextCountdown(upNextOffer.secondsLeft, upNext.resumable)
+            }
+            // In the corner over the picture; lifted above the transport block while the chrome
+            // is up, so the two never overlap and the card never fades with the chrome.
+            val bottomInset by animateDpAsState(
+                targetValue = if (chromeVisible) {
+                    with(LocalDensity.current) { bottomBlockHeightPx.toDp() }
+                } else {
+                    IglooTheme.layout.safeAreaVertical
+                },
+                animationSpec = iglooTween(IglooMotion.STANDARD_MS),
+                label = "upNextLift",
+            )
+            // Spoken as it stood when the card appeared or changed what it is waiting for —
+            // never per second (section 12). Frozen by remember on exactly those two facts.
+            val upNextSpoken = remember(preparationFailure != null, state.phase == VideoPlayerPhase.Ended) {
+                when {
+                    preparationFailure != null || state.phase == VideoPlayerPhase.Ended ->
+                        upNextSpokenStatus(upNext, status)
+                    else -> upNextAnnouncement(upNext, upNextOffer.secondsLeft)
+                }
+            }
+            UpNextCard(
+                next = upNext,
+                status = status,
+                spoken = upNextSpoken,
+                requester = upNextRequester,
+                upRequester = if (progressSyncError != null) progressRetryRequester else backRequester,
+                downRequester = playPauseRequester,
+                onPlayNow = advance,
+                onFocusChanged = { upNextFocused = it },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = IglooTheme.layout.safeAreaHorizontal, bottom = bottomInset)
+                    .testTag("movie_up_next"),
+            )
+        }
+
         when (state.phase) {
             VideoPlayerPhase.AwaitingResume -> ResumePrompt(
-                resumeAtSec = requireNotNull(request.resumeAtSec),
+                resumeAtSec = requireNotNull(request.resumePromptSec),
                 onResume = {
                     host.playWhenReadyIntent = true
                     resumeDecided = true
@@ -486,7 +604,7 @@ fun VideoPlayerScreen(
 private enum class PlayerMenu { Chapters, Audio, Subtitles, Quality }
 
 /** Where entry focus belongs for the current phase; modals place their own. */
-private enum class FocusAnchor { Transport, ErrorAction, Modal }
+private enum class FocusAnchor { Transport, ErrorAction, UpNext, Modal }
 
 /** The transport row's last visible control — the one whose right edge cancels. */
 private enum class LastControl { Forward, Chapters, Audio, Subtitles, Quality }
@@ -506,10 +624,13 @@ private fun VideoPlayerChrome(
     subtitlesButtonRequester: FocusRequester,
     qualityButtonRequester: FocusRequester,
     progressRetryRequester: FocusRequester,
+    /** The Up Next card while it is up: it joins the vertical route between the transport and what sits above. */
+    upNextRequester: FocusRequester?,
     progressSyncError: String?,
     onRetryProgressSync: () -> Unit,
     onProgressRetryFocusChanged: (Boolean) -> Unit,
     onAnyControlFocused: () -> Unit,
+    onBottomBlockSizeChanged: (Int) -> Unit,
     onBack: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onSeekBy: (Double) -> Unit,
@@ -551,10 +672,10 @@ private fun VideoPlayerChrome(
         PlayerTopBar(
             title = title,
             backRequester = backRequester,
-            downRequester = if (progressSyncError != null) {
-                progressRetryRequester
-            } else {
-                playPauseRequester
+            downRequester = when {
+                progressSyncError != null -> progressRetryRequester
+                upNextRequester != null -> upNextRequester
+                else -> playPauseRequester
             },
             backTag = "movie_back",
             onBack = onBack,
@@ -586,7 +707,7 @@ private fun VideoPlayerChrome(
                         .focusRequester(progressRetryRequester)
                         .focusProperties {
                             up = backRequester
-                            down = playPauseRequester
+                            down = upNextRequester ?: playPauseRequester
                             left = FocusRequester.Cancel
                             right = FocusRequester.Cancel
                         }
@@ -605,6 +726,7 @@ private fun VideoPlayerChrome(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .onSizeChanged { onBottomBlockSizeChanged(it.height) }
                 .playerBottomScrim()
                 .padding(
                     horizontal = layout.safeAreaHorizontal,
@@ -613,12 +735,9 @@ private fun VideoPlayerChrome(
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
             // The track-menu buttons stay one Right press away, so only the row's outer
-            // edges cancel sideways.
-            val transportUp = if (progressSyncError != null) {
-                progressRetryRequester
-            } else {
-                backRequester
-            }
+            // edges cancel sideways. Up leaves for the card when it is up, else the Retry, else Back.
+            val transportUp = upNextRequester
+                ?: if (progressSyncError != null) progressRetryRequester else backRequester
             fun Modifier.transportEdges(isFirst: Boolean = false, isLast: Boolean = false) =
                 transportFocus(transportUp, isFirst, isLast, onAnyControlFocused)
             Row(

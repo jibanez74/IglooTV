@@ -2,6 +2,8 @@ package com.igloo.blindpenguincoder.feature.home
 
 import androidx.compose.runtime.saveable.SaverScope
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.playback.model.EpisodeContext
+import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MAX_QUEUE_TRACKS
@@ -118,8 +120,39 @@ class PlayerRequestSaversTest {
 
     @Test
     fun `an episode survives a round trip whole`() {
-        val episode = movie.copy(media = PlaybackMediaRef.Episode(900), title = "Severance · S1 E3 · In Perpetuity")
+        val episode = movie.copy(
+            media = PlaybackMediaRef.Episode(900),
+            title = "Severance · S1 E3 · In Perpetuity",
+            episode = EpisodeContext(
+                seasonNumber = 1,
+                upNext = UpNextEpisode(
+                    id = 901,
+                    seasonNumber = 1,
+                    episodeNumber = 4,
+                    name = "The You You Are",
+                    stillUrl = "https://igloo.test/api/tmdb/images/w500/next.jpg",
+                    resumable = true,
+                ),
+            ),
+            promptForResume = false,
+        )
         assertEquals(episode, roundTrip(VideoPlayRequestSaver, episode))
+    }
+
+    /** The show's last episode: a season but nothing to follow; the prompt still asks. */
+    @Test
+    fun `an episode with nothing to follow keeps its season and its prompt`() {
+        val last = movie.copy(media = PlaybackMediaRef.Episode(910), episode = EpisodeContext(seasonNumber = 2))
+        val restored = roundTrip(VideoPlayRequestSaver, last)
+        assertEquals(last, restored)
+        assertEquals(true, restored?.promptForResume)
+    }
+
+    /** A bundle written before the episode slots existed must come back as no overlay. */
+    @Test
+    fun `a bundle from before the episode slots restores as no overlay instead of throwing`() {
+        val saved = with(VideoPlayRequestSaver) { scope.save(movie) }!!.take(13)
+        assertNull(VideoPlayRequestSaver.restore(saved))
     }
 
     @Test

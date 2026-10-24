@@ -226,8 +226,9 @@ data class UpdateWatchProgressRequest(
     @SerialName("save_sequence") val saveSequence: Long,
 )
 
+/** Body of both watched routes, a movie's and an episode's (`SetWatchedRequest` in the spec). */
 @Serializable
-data class SetMovieWatchedRequest(
+data class SetWatchedRequest(
     val watched: Boolean,
 )
 

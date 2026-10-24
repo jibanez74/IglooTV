@@ -120,10 +120,14 @@ details hero stays whole while focus is in it (design-system §11.4.1, Focus).
 
 ## What remains
 
-- **Playing from the page**: Play/Resume, the episode cards and the extra videos (through the
-  existing episode player and trailer player), each returning focus to its control.
-- **Marking an episode watched**: a long-press episode menu, also offered as a TalkBack action.
-- **Up next** after an episode, as the web's countdown and hand-off to `next_episode`.
+- ~~**Playing from the page**~~ — Play/Resume and the episode cards landed on
+  `feature/play-episode` (2026-10-21), each returning focus to its control; see
+  [episode-playback-status.md](episode-playback-status.md). The extra videos (through the
+  trailer player) are still inert.
+- ~~**Marking an episode watched**~~ and ~~**Up next**~~ — landed on `feature/play-episode`
+  (2026-10-23): a held Center opens the card's "Episode options" menu (also a TalkBack custom
+  action), and an episode's end hands off to `next_episode` after an Up Next card; see
+  [episode-playback-status.md](episode-playback-status.md).
 - **Person pages** for cast and creators, once the TV app has one; the cards stay inert.
 - Cleanup backlog §7.7 stays open: the show view model reads more than once, so it is not the
   fourth single-read details view model that entry anticipates.

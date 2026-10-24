@@ -61,6 +61,22 @@ class VideoPlayerViewModelTest {
         onTick(toSec, durationSec, isPlaying = true)
     }
 
+    /** The hand-off: the new episode's session may already be active when the old screen disposes. */
+    @Test
+    fun `ending a session for another media is a no-op`() = test { viewModel ->
+        viewModel.play(0.0, 10.0)
+        viewModel.startSession(PlaybackMediaRef.Episode(901))
+
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 600.0, 600.0)
+        assertTrue(requests.isEmpty())
+
+        viewModel.play(30.0, 46.0)
+        assertEquals(1, requests.size)
+        viewModel.endSession(PlaybackMediaRef.Episode(901), 100.0, 600.0)
+        assertEquals(2, requests.size)
+        assertEquals(100.0, requests.last().progressSec, 0.0)
+    }
+
     @Test
     fun `the first save lands after 15 played seconds past the 30 second floor`() = test { viewModel ->
         viewModel.play(20.0, 34.5)
@@ -107,7 +123,7 @@ class VideoPlayerViewModelTest {
     @Test
     fun `ending the session saves once more and refreshes`() = test { viewModel ->
         viewModel.play(30.0, 46.0)
-        viewModel.endSession(46.0, 600.0)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 46.0, 600.0)
         advanceUntilIdle()
         assertEquals(2, requests.size)
         assertEquals(listOf(1L, 2L), requests.map { it.saveSequence })
@@ -117,7 +133,7 @@ class VideoPlayerViewModelTest {
     @Test
     fun `an early exit before the 30 second position floor saves nothing`() = test { viewModel ->
         viewModel.play(0.0, 10.0)
-        viewModel.endSession(10.0, 600.0)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 10.0, 600.0)
         advanceUntilIdle()
         assertTrue(requests.isEmpty())
         assertEquals(0, refreshes)
@@ -127,7 +143,7 @@ class VideoPlayerViewModelTest {
     fun `an exit after a seek saves the seek position without a played floor`() =
         test { viewModel ->
             viewModel.play(300.0, 310.0)
-            viewModel.endSession(500.0, 600.0)
+            viewModel.endSession(PlaybackMediaRef.Movie(7), 500.0, 600.0)
             advanceUntilIdle()
             assertEquals(500.0, requests.single().progressSec, 0.0)
             assertEquals(1, refreshes)
@@ -136,7 +152,7 @@ class VideoPlayerViewModelTest {
     @Test
     fun `a final save needs no actual playback`() = test { viewModel ->
         viewModel.play(0.0, 5.0)
-        viewModel.endSession(300.0, 600.0)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 300.0, 600.0)
         advanceUntilIdle()
         assertEquals(1, requests.size)
         assertEquals(300.0, requests.single().progressSec, 0.0)
@@ -145,7 +161,7 @@ class VideoPlayerViewModelTest {
     @Test
     fun `finishing within seconds of resuming still records the end`() = test { viewModel ->
         viewModel.play(590.0, 595.0)
-        viewModel.endSession(600.0, 600.0)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 600.0, 600.0)
         advanceUntilIdle()
         assertEquals(600.0, requests.single().progressSec, 0.0)
         assertEquals(1, refreshes)
@@ -159,7 +175,7 @@ class VideoPlayerViewModelTest {
             delay(5_000)
             record(id, request)
         }
-        viewModel.endSession(300.0, 600.0)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 300.0, 600.0)
         advanceTimeBy(2_001)
         assertTrue(requests.isEmpty())
         assertEquals(0, refreshes)
@@ -177,7 +193,7 @@ class VideoPlayerViewModelTest {
             delay(1_000)
             record(id, request)
         }
-        viewModel.endSession(300.0, 600.0)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 300.0, 600.0)
         viewModel.viewModelScope.cancel()
         advanceUntilIdle()
         assertEquals(300.0, requests.single().progressSec, 0.0)
@@ -232,7 +248,7 @@ class VideoPlayerViewModelTest {
     fun `an exit right after a pause still writes and refreshes`() = test { viewModel ->
         viewModel.play(0.0, 5.0)
         viewModel.flushProgress(100.0, 600.0)
-        viewModel.endSession(100.0, 600.0)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 100.0, 600.0)
         advanceUntilIdle()
         assertEquals(listOf(1L, 2L), requests.map { it.saveSequence })
         assertEquals(1, refreshes)
@@ -255,8 +271,8 @@ class VideoPlayerViewModelTest {
     @Test
     fun `ending twice writes only once`() = test { viewModel ->
         viewModel.play(0.0, 16.0)
-        viewModel.endSession(300.0, 600.0)
-        viewModel.endSession(300.0, 600.0)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 300.0, 600.0)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 300.0, 600.0)
         advanceUntilIdle()
         assertEquals(1, requests.size)
     }
@@ -317,7 +333,7 @@ class VideoPlayerViewModelTest {
             ApiResult.Failure(AppError.Network)
         }
         viewModel.play(0.0, 16.0)
-        viewModel.endSession(300.0, 600.0)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 300.0, 600.0)
         advanceUntilIdle()
 
         assertTrue(viewModel.progressSyncUiState.value is ProgressSyncUiState.Failed)
@@ -468,7 +484,7 @@ class VideoPlayerViewModelTest {
             viewModel.startSession(PlaybackMediaRef.Movie(7))
             viewModel.play(30.0, 46.0)
             runCurrent()
-            viewModel.endSession(finalPositionSec = 46.0, durationSec = 600.0)
+            viewModel.endSession(PlaybackMediaRef.Movie(7), finalPositionSec = 46.0, durationSec = 600.0)
             runCurrent()
 
             assertEquals(listOf(1L, 2L), calls.filter { it.first == 7L }.map { it.second.saveSequence })

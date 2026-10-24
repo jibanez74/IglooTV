@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooEasing
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
@@ -107,6 +109,7 @@ import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.PosterItemCard
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
+import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsScreen
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
@@ -114,6 +117,7 @@ import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.queue.shuffled
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
@@ -254,6 +258,16 @@ fun IglooApp(
     /** Continue Watching episode launches, built by Home from the card the user pressed. */
     homePlayRequests: Flow<VideoPlayRequest> = emptyFlow(),
     onResumeEpisode: (Long) -> Unit,
+    /** The show page's episode launches, built from the Play/Resume or card the user pressed. */
+    showPlayRequests: Flow<VideoPlayRequest> = emptyFlow(),
+    onPlayShowEpisode: (Long) -> Unit,
+    /** The player's hand-off: the next episode's request, prepared the way a launch is. */
+    prepareUpNext: suspend (UpNextEpisode) -> ApiResult<VideoPlayRequest>,
+    /**
+     * The player closed after advancing: the show page follows the episode that last played,
+     * selecting its season and landing focus on its card or on Play/Resume by [EpisodeLaunchSite].
+     */
+    onPlayerLandedOnEpisode: (seasonNumber: Long, episodeId: Long, site: EpisodeLaunchSite) -> Unit,
     onRetryRail: (HomeRail) -> Unit,
     onMovieSelected: ((Long) -> Unit)?,
     onTheaterMovieSelected: ((Long) -> Unit)?,
@@ -326,6 +340,12 @@ fun IglooApp(
     // close so a failed exit save can still be reported on the surface that launched it.
     var videoPlayOrigin by rememberSaveable { mutableStateOf<VideoPlayOrigin?>(null) }
     val playerOpen = videoPlayRequest != null
+    // The player advanced to a next episode at least once since it opened: its close then tells
+    // the show page which episode it is really on. Reset by every way the player goes down.
+    var handedOffEpisode by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(playerOpen) {
+        if (!playerOpen) handedOffEpisode = false
+    }
     // The music player is the album overlay's one player layer, the movie player's sibling in
     // every host contract: existence, Back gating, and focus restore all live here.
     var musicPlayRequest by rememberSaveable(stateSaver = MusicPlayRequestSaver) {
@@ -349,6 +369,10 @@ fun IglooApp(
     // player from its hero instead, and parks the second requester on that button.
     val extrasReturnRequester = remember { FocusRequester() }
     val heroTrailerReturnRequester = remember { FocusRequester() }
+    // The show page's pair: parked on its Play/Resume, and by its episode rail on the last-focused
+    // card, so closing the player restores focus to whichever launched it (section 6.3).
+    val showPlayReturnRequester = remember { FocusRequester() }
+    val episodeReturnRequester = remember { FocusRequester() }
     // The details screen's More menu is host state for the same reason Back is host behavior:
     // section 9.3 makes the host gate its own handlers while any modal is up, so the host has
     // to know one is. Plain `remember` — an open menu is not worth surviving process death.
@@ -398,6 +422,32 @@ fun IglooApp(
                 videoPlayOrigin = VideoPlayOrigin.ContinueWatchingRail
             }
         }
+    }
+    // The show page's launches land only for a press made on it: the press records which control
+    // asked — plain remember, the movie's reason: a recreation must never finish a press made in
+    // the old activity — and the request that follows takes that site as its origin. The view
+    // model resets its launcher when the page closes or changes show, so no request for another
+    // page can arrive; the player and the sign-out dialog still refuse a late landing.
+    var showPlayArmedSite by remember { mutableStateOf<EpisodeLaunchSite?>(null) }
+    val showCanPlay by rememberUpdatedState(showOpen && !playerOpen && !signOut.confirming)
+    LaunchedEffect(showPlayRequests) {
+        showPlayRequests.collect { request ->
+            val site = showPlayArmedSite
+            showPlayArmedSite = null
+            if (site != null && showCanPlay) {
+                videoPlayRequest = request
+                videoPlayOrigin = when (site) {
+                    EpisodeLaunchSite.Hero -> VideoPlayOrigin.ShowDetailsHero
+                    EpisodeLaunchSite.EpisodesRail -> VideoPlayOrigin.ShowDetailsEpisode
+                }
+            }
+        }
+    }
+    LaunchedEffect(showDetails.openShowId) {
+        showPlayArmedSite = null
+        // The player must not outlive the show page it launched from — a profile switch or
+        // session revalidation that closes the overlay takes the episode with it.
+        if (!showOpen && videoPlayOrigin.isShowDetails) videoPlayRequest = null
     }
     // Back cannot close the details while the menu is up (its handler is gated on the flag), but
     // the overlay can still leave on its own — a session revalidation, a profile switch — and a
@@ -476,13 +526,33 @@ fun IglooApp(
         restoreFocus(returnRequester)
     }
     val closeVideoPlayer: () -> Unit = {
+        val landed = videoPlayRequest?.takeIf { handedOffEpisode }
         videoPlayRequest = null
+        // After one or more hand-offs the show page follows the episode that last played; told
+        // before the restore below, with the page still composed under the player, so the
+        // page's own landing moves focus on from wherever the restore puts it (section 11.4.3).
+        val landedSite = when (videoPlayOrigin) {
+            VideoPlayOrigin.ShowDetailsHero -> EpisodeLaunchSite.Hero
+            VideoPlayOrigin.ShowDetailsEpisode -> EpisodeLaunchSite.EpisodesRail
+            else -> null
+        }
+        val landedEpisode = landed?.episode
+        if (landedEpisode != null && landedSite != null) {
+            onPlayerLandedOnEpisode(
+                landedEpisode.seasonNumber,
+                (landed.media as PlaybackMediaRef.Episode).id,
+                landedSite,
+            )
+        }
         // In the callback, not an effect, for the detach-race reason the details close
-        // documents. The launching control is still composed in every reachable case — the
-        // details page's Play button, or the Continue Watching rail's anchor while Home is the
-        // pane; the pane's anchor is the same last-resort fallback the other overlays use.
+        // documents. The launching control is still composed in every reachable case — a details
+        // page's Play button, the show page's episode card, or the Continue Watching rail's
+        // anchor while Home is the pane; the pane's anchor is the same last-resort fallback the
+        // other overlays use.
         val returnRequester = when (videoPlayOrigin) {
             VideoPlayOrigin.MovieDetails -> playReturnRequester
+            VideoPlayOrigin.ShowDetailsHero -> showPlayReturnRequester
+            VideoPlayOrigin.ShowDetailsEpisode -> episodeReturnRequester
             VideoPlayOrigin.ContinueWatchingRail ->
                 railReturnRequesters.getValue(HomeRail.ContinueWatching)
                     .takeIf { currentDestination == IglooDestination.Home }
@@ -685,11 +755,22 @@ fun IglooApp(
                 )
             }
         } else if (showOpen) {
-            // Nothing launches from the show page yet, so no player ever covers it.
-            DetailsLayer(hiddenFromAccessibility = false) {
+            DetailsLayer(hiddenFromAccessibility = playerOpen) {
                 ShowDetailsScreen(
                     state = showDetails,
                     actions = showDetailsActions,
+                    // The press arms the landing and names the control to restore focus to; the
+                    // view model's request follows through showPlayRequests.
+                    onPlayEpisode = { episodeId, site ->
+                        showPlayArmedSite = site
+                        onPlayShowEpisode(episodeId)
+                    },
+                    playReturnRequester = showPlayReturnRequester,
+                    episodeReturnRequester = episodeReturnRequester,
+                    // An exit save that failed under this page's launch follows the user back
+                    // here (section 11.8); the movie page and Home each carry their own.
+                    progressSyncError = progressSyncError.takeIf { videoPlayOrigin.isShowDetails },
+                    onRetryProgressSync = videoPlayerViewModel::retryFailedSave,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
@@ -786,30 +867,42 @@ fun IglooApp(
             )
         }
         videoPlayRequest?.let { request ->
-            VideoPlayerScreen(
-                request = request,
-                viewModel = videoPlayerViewModel,
-                onClose = closeVideoPlayer,
-                onPlaybackModeRequested = { mode ->
-                    videoPlayRequest = videoPlayRequest?.copy(mode = mode)
-                },
-                onTrackSelectionChanged = { audioTypeIndex, subtitleTypeIndex ->
-                    videoPlayRequest = videoPlayRequest?.let { current ->
-                        if (
-                            current.audioTypeIndex == audioTypeIndex &&
-                            current.subtitleTypeIndex == subtitleTypeIndex
-                        ) {
-                            current
-                        } else {
-                            current.copy(
-                                audioTypeIndex = audioTypeIndex,
-                                subtitleTypeIndex = subtitleTypeIndex,
-                            )
+            // Keyed on the media: a hand-off to the next episode disposes this screen — its exit
+            // save and engine release — and mounts a fresh one, the way a launch does. Mode and
+            // track changes copy the request in place and keep the key.
+            key(request.media) {
+                VideoPlayerScreen(
+                    request = request,
+                    viewModel = videoPlayerViewModel,
+                    onClose = closeVideoPlayer,
+                    onPlaybackModeRequested = { mode ->
+                        videoPlayRequest = videoPlayRequest?.copy(mode = mode)
+                    },
+                    onTrackSelectionChanged = { audioTypeIndex, subtitleTypeIndex ->
+                        videoPlayRequest = videoPlayRequest?.let { current ->
+                            if (
+                                current.audioTypeIndex == audioTypeIndex &&
+                                current.subtitleTypeIndex == subtitleTypeIndex
+                            ) {
+                                current
+                            } else {
+                                current.copy(
+                                    audioTypeIndex = audioTypeIndex,
+                                    subtitleTypeIndex = subtitleTypeIndex,
+                                )
+                            }
                         }
-                    }
-                },
-                engineFactory = videoPlayerEngineFactory,
-            )
+                    },
+                    engineFactory = videoPlayerEngineFactory,
+                    prepareUpNext = prepareUpNext,
+                    // The origin stays: the page that launched the first episode is still the
+                    // one the player closes onto.
+                    onAdvance = { next ->
+                        videoPlayRequest = next
+                        handedOffEpisode = true
+                    },
+                )
+            }
         }
     }
 
@@ -1234,8 +1327,20 @@ private fun paneBranchOf(destination: IglooDestination): PaneBranch = when (dest
 /** Which surface launched the music player; see `musicPlayOrigin` in [IglooApp]. */
 private enum class MusicPlayOrigin { AlbumDetails, MusicianDetails, MusicPane }
 
-/** Which surface launched the video player; see `videoPlayOrigin` in [IglooApp]. */
-private enum class VideoPlayOrigin { MovieDetails, ContinueWatchingRail }
+/**
+ * Which surface launched the video player; see `videoPlayOrigin` in [IglooApp]. The show page has
+ * one per launching control, because the close restores focus to the one that pressed.
+ */
+private enum class VideoPlayOrigin {
+    MovieDetails,
+    ContinueWatchingRail,
+    ShowDetailsHero,
+    ShowDetailsEpisode,
+}
+
+/** Either of the show page's origins: its launches share one kill-on-close and Retry routing. */
+private val VideoPlayOrigin?.isShowDetails: Boolean
+    get() = this == VideoPlayOrigin.ShowDetailsHero || this == VideoPlayOrigin.ShowDetailsEpisode
 
 @Composable
 private fun HomeRails(

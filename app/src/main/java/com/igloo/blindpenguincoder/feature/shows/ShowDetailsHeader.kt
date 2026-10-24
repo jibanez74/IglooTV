@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -22,11 +24,13 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.AnnouncedSection
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.announcedSection
 import com.igloo.blindpenguincoder.feature.shared.DetailsHeroInfo
 import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
 import com.igloo.blindpenguincoder.feature.shared.HeroSingleActionRow
+import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
 
 /**
@@ -37,26 +41,38 @@ import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
  *
  * The action slot is composed whenever the show has seasons and keeps one footprint — a button
  * over the movie hero's resume strip — in every state, so the bottom-anchored hero never reflows
- * when a season switch retargets it: the selected season's [playTarget] as an inert Play/Resume
- * button (no playback yet — the `IglooButton` contract) with the strip showing while it resumes,
- * a muted stub while that season loads, and an empty, silent slot when it failed or has no
- * episodes. A show with no seasons has no slot at all.
+ * when a season switch retargets it: the selected season's [playTarget] as the Play/Resume button
+ * that plays the episode it names through [onPlay], with the strip showing while it resumes, a
+ * muted stub while that season loads, and an empty, silent slot when it failed or has no episodes.
+ * A show with no seasons has no slot at all. Under the slot sit the movie hero's pair when they
+ * have something to say: [playbackNotice], why a press went nowhere, and the Retry card for a
+ * failed progress save ([progressSyncError], section 11.8), a focus stop of the page's own chain.
  */
 @Composable
 internal fun ShowDetailsHeader(
     show: ShowDetailsUi,
     episodes: IglooRailState<EpisodeUi>,
     playTarget: PlayTargetUi?,
+    playbackNotice: String?,
+    progressSyncError: String?,
     overMedia: Boolean,
     spokenAccessibilityEnabled: Boolean,
+    onPlay: () -> Unit,
+    onRetryProgressSync: () -> Unit,
     heroInfoRequester: FocusRequester,
     heroInfoDownRequester: FocusRequester?,
     actionRequester: FocusRequester,
     actionUpRequester: FocusRequester?,
     actionDownRequester: FocusRequester?,
+    playReturnRequester: FocusRequester,
+    progressRetryRequester: FocusRequester,
+    progressRetryUpRequester: FocusRequester?,
+    progressRetryDownRequester: FocusRequester?,
     heroInfoSection: AnnouncedSection,
     actionSection: AnnouncedSection,
+    progressRetrySection: AnnouncedSection,
     onActionFocusChanged: (Boolean) -> Unit,
+    onProgressRetryFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -101,12 +117,14 @@ internal fun ShowDetailsHeader(
                         HeroSingleActionRow(
                             text = playTarget.label,
                             semanticLabel = playTarget.spokenLabel,
-                            onClick = null,
+                            onClick = onPlay,
                             tag = "details_play",
                             requester = actionRequester,
+                            returnRequester = playReturnRequester,
                             upRequester = actionUpRequester ?: Cancel,
                             downRequester = actionDownRequester,
                             stateDescription = playTarget.progress?.resumeStateDescription,
+                            actionLabel = playTarget.actionLabel,
                             belowButton = {
                                 ResumeProgress(progress = playTarget.progress, overMedia = overMedia)
                             },
@@ -137,6 +155,31 @@ internal fun ShowDetailsHeader(
                         }
                     }
                 }
+            }
+            if (playbackNotice != null) {
+                IglooNotice(
+                    text = playbackNotice,
+                    modifier = Modifier.testTag("details_playback_notice"),
+                )
+            }
+            if (progressSyncError != null) {
+                ProgressSyncRetry(
+                    message = progressSyncError,
+                    onRetry = onRetryProgressSync,
+                    retryModifier = Modifier
+                        .focusRequester(progressRetryRequester)
+                        .focusProperties {
+                            up = progressRetryUpRequester ?: Cancel
+                            down = progressRetryDownRequester ?: Cancel
+                            left = Cancel
+                            right = Cancel
+                        }
+                        .onFocusChanged { onProgressRetryFocusChanged(it.isFocused) }
+                        .testTag("details_progress_retry"),
+                    modifier = Modifier
+                        .announcedSection(progressRetrySection)
+                        .testTag("details_progress_error"),
+                )
             }
         }
     }

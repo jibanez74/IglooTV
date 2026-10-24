@@ -86,12 +86,13 @@ exactly as Movies and Music do.
 
 - ~~**Show details, seasons and episodes**~~ — landed on `feature/show-details` (2026-10-19):
   the cards open the show page, with `DetailsOrigin.ShowsGrid` and the pane's return requester;
-  see [show-details-status.md](show-details-status.md). Playing from that page is the next pass.
-- **Up next after an episode** — Continue Watching now renders `kind: episode` entries and a
-  press resumes the episode in the player (`HomeViewModel.resumeEpisode`, over the shared
-  `VideoPlaybackRepository` routes under `/shows/episodes/{id}`); when the episode ends the
-  player closes back to Home, as for a movie. The web's up-next countdown and hand-off to
-  `next_episode` are the next pass.
+  see [show-details-status.md](show-details-status.md). Playing from that page landed on
+  `feature/play-episode` (2026-10-21); see [episode-playback-status.md](episode-playback-status.md).
+- ~~**Up next after an episode**~~ — landed on `feature/play-episode` (2026-10-23): Continue
+  Watching, the show page's Play/Resume and its episode cards all launch through the shared
+  `EpisodePlayPreparer`, a Continue Watching card resuming without the Resume prompt; fifteen
+  seconds before an episode ends the Up Next card offers `next_episode`, and the end hands off in
+  place; see [episode-playback-status.md](episode-playback-status.md).
 - **Likes for shows** — the backend has none; if it grows them, the source gains a liked
   fetcher and the strip its third tab with no screen change.
 - **Search** — unchanged; `GET /search/shows` is not wired.

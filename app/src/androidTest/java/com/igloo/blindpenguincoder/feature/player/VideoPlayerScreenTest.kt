@@ -10,13 +10,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -35,8 +40,11 @@ import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
+import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
+import com.igloo.blindpenguincoder.playback.model.EpisodeContext
+import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
@@ -44,6 +52,7 @@ import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.TrackOption
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -80,6 +89,13 @@ class VideoPlayerScreenTest {
     /** The host contract: closing unmounts the screen, which is what fires the exit save. */
     private var open by mutableStateOf(true)
 
+    /** The hand-off contract: the host replaces this screen with one for [advanced]'s last request. */
+    private val advanced = mutableListOf<VideoPlayRequest>()
+    private val prepared = mutableListOf<UpNextEpisode>()
+    private var prepareUpNext: suspend (UpNextEpisode) -> ApiResult<VideoPlayRequest> = {
+        ApiResult.Success(nextRequest)
+    }
+
     private lateinit var lifecycleOwner: TestLifecycleOwner
 
     private fun playRequest(
@@ -100,6 +116,31 @@ class VideoPlayerScreenTest {
         resumeAtSec = resumeAtSec,
         durationSec = 7200.0,
         chapters = chapters,
+    )
+
+    private val upNextEpisode = UpNextEpisode(
+        id = 901,
+        seasonNumber = 1,
+        episodeNumber = 4,
+        name = "The You You Are",
+        stillUrl = null,
+        resumable = false,
+    )
+
+    /** An episode with one to follow, two hours long like the movie so the tick helpers serve both. */
+    private fun episodeRequest(resumable: Boolean = false, durationSec: Double? = 7200.0) = playRequest().copy(
+        media = PlaybackMediaRef.Episode(900),
+        title = "Severance · S1 E3 · In Perpetuity",
+        durationSec = durationSec,
+        episode = EpisodeContext(seasonNumber = 1, upNext = upNextEpisode.copy(resumable = resumable)),
+    )
+
+    /** What the host prepares for the hand-off: the next episode at its saved position, no prompt. */
+    private val nextRequest = playRequest(resumeAtSec = 600.0).copy(
+        media = PlaybackMediaRef.Episode(901),
+        title = "Severance · S1 E4 · The You You Are",
+        episode = EpisodeContext(seasonNumber = 1),
+        promptForResume = false,
     )
 
     /** A wire list whose ordinal 1 is a bitmap stream an HLS source cannot serve. */
@@ -125,6 +166,9 @@ class VideoPlayerScreenTest {
         closes = 0
         failProgressSaves = false
         open = true
+        advanced.clear()
+        prepared.clear()
+        prepareUpNext = { ApiResult.Success(nextRequest) }
         viewModel = VideoPlayerViewModel(
             saveProgress = { _, body ->
                 savedRequests += body
@@ -168,6 +212,15 @@ class VideoPlayerScreenTest {
                                     engineRequest.subtitleTypeIndex,
                                 )
                                 engine
+                            },
+                            prepareUpNext = { next ->
+                                prepared += next
+                                prepareUpNext(next)
+                            },
+                            // The host mounts the next screen; here the hand-off ends this one.
+                            onAdvance = { next ->
+                                advanced += next
+                                open = false
                             },
                         )
                     }
@@ -230,6 +283,8 @@ class VideoPlayerScreenTest {
                                     restorationEngines += it
                                 }
                             },
+                            prepareUpNext = { ApiResult.Failure(AppError.Network) },
+                            onAdvance = {},
                         )
                     }
                 }
@@ -1485,5 +1540,313 @@ class VideoPlayerScreenTest {
         /** The pre-play gate's shape, as the engine hands it back for an in-player Direct pick. */
         const val REFUSAL = "This TV can't play this movie's Dolby TrueHD audio track (English) — " +
             "it has no decoder for it and no compatible sound system is connected."
+    }
+
+    private fun upNextCard() = composeRule.onNodeWithTag("movie_up_next")
+
+    /** The card is one cleared node; its status line is read from the unmerged tree. */
+    private fun upNextStatus() = composeRule.onNodeWithTag("movie_up_next_status", useUnmergedTree = true)
+
+    private fun clickActionLabelled(label: String) = SemanticsMatcher("click action labelled $label") {
+        it.config.getOrNull(SemanticsActions.OnClick)?.label == label
+    }
+
+    /** Plays an episode with a next one up to [toSec], the card's lead being the last 15 s of 7200. */
+    private fun playEpisodeTo(toSec: Int, resumable: Boolean = false) {
+        setContent(episodeRequest(resumable = resumable))
+        startPlaying()
+        playThrough(fromSec = toSec - 1, toSec = toSec)
+    }
+
+    // --- up next ---
+
+    @Test
+    fun upNextCardAppearsFifteenSecondsBeforeTheEndTakesFocusAndCounts() {
+        playEpisodeTo(7180)
+        composeRule.onAllNodesWithTag("movie_up_next").assertCountEquals(0)
+        assertTrue(prepared.isEmpty())
+
+        playThrough(fromSec = 7181, toSec = 7185)
+
+        upNextCard().assertIsFocused()
+        upNextCard().assert(clickActionLabelled("Play now"))
+        upNextStatus().assert(hasText("Playing in 15s"))
+        // One cleared node, spoken with the focus it takes; the count is not a live region.
+        val announcement = "Up next: season 1, episode 4, The You You Are. Playing in 15 seconds"
+        upNextCard().assertContentDescriptionEquals(announcement)
+        upNextCard().assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        // The next episode is prepared once, while the card is up.
+        assertEquals(listOf(upNextEpisode), prepared)
+
+        playThrough(fromSec = 7186, toSec = 7188)
+
+        // The count falls on the card; the spoken sentence does not follow it.
+        upNextStatus().assert(hasText("Playing in 12s"))
+        upNextCard().assertContentDescriptionEquals(announcement)
+        assertEquals(1, prepared.size)
+    }
+
+    @Test
+    fun upNextSaysResumingWhenTheNextEpisodeHasASavedPosition() {
+        playEpisodeTo(7185, resumable = true)
+
+        upNextStatus().assert(hasText("Resuming in 15s"))
+        upNextCard().assert(clickActionLabelled("Resume now"))
+        upNextCard().assertContentDescriptionEquals(
+            "Up next: season 1, episode 4, The You You Are. Resuming in 15 seconds",
+        )
+    }
+
+    @Test
+    fun playNowHandsOffAtOnceAndTheExitSaveRecordsTheEnd() {
+        playEpisodeTo(7185)
+
+        upNextCard().performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(listOf(nextRequest), advanced)
+        assertEquals(0, closes)
+        assertTrue(engine.released)
+        awaitSaveCount(1)
+        assertEquals(7200.0, savedRequests.single().progressSec, 0.001)
+        assertEquals(7200.0, savedRequests.single().durationSec, 0.001)
+    }
+
+    @Test
+    fun endedWithANextEpisodeAdvancesEvenWhenTheCardNeverShowed() {
+        val pending = CompletableDeferred<ApiResult<VideoPlayRequest>>()
+        setContent(episodeRequest(durationSec = null))
+        prepareUpNext = { pending.await() }
+        // The engine never learns the duration: no lead, no card.
+        engine.emit(VideoPlayerEvent.Ready(0.0))
+        engine.emit(VideoPlayerEvent.IsPlayingChanged(true))
+        playThrough(fromSec = 0, toSec = 16, durationSec = 0.0)
+        composeRule.onAllNodesWithTag("movie_up_next").assertCountEquals(0)
+
+        engine.emit(VideoPlayerEvent.Ended)
+        composeRule.waitForIdle()
+
+        // The ended frame is held under the card while the next episode prepares.
+        upNextCard().assertIsFocused()
+        upNextStatus().assert(hasText("Loading next episode…"))
+        upNextCard().assertContentDescriptionEquals(
+            "Up next: season 1, episode 4, The You You Are. Loading next episode…",
+        )
+        assertEquals(0, closes)
+        assertTrue(advanced.isEmpty())
+
+        composeRule.runOnIdle { pending.complete(ApiResult.Success(nextRequest)) }
+        composeRule.waitForIdle()
+
+        assertEquals(listOf(nextRequest), advanced)
+        assertEquals(0, closes)
+    }
+
+    @Test
+    fun endedHoldsForAPreparationInFlightAndHandsOffOnce() {
+        val pending = CompletableDeferred<ApiResult<VideoPlayRequest>>()
+        setContent(episodeRequest())
+        prepareUpNext = { pending.await() }
+        startPlaying()
+        playThrough(fromSec = 7184, toSec = 7185)
+        upNextCard().assertIsFocused()
+
+        engine.emit(VideoPlayerEvent.Ended)
+        composeRule.waitForIdle()
+        // A press while the request is still out spends nothing.
+        upNextCard().performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        assertTrue(advanced.isEmpty())
+
+        composeRule.runOnIdle { pending.complete(ApiResult.Success(nextRequest)) }
+        composeRule.waitForIdle()
+
+        assertEquals(1, advanced.size)
+        assertEquals(0, closes)
+    }
+
+    @Test
+    fun backDismissesTheCardAndTheEpisodePlaysOutToAClose() {
+        playEpisodeTo(7185)
+
+        pressBack()
+
+        composeRule.onAllNodesWithTag("movie_up_next").assertCountEquals(0)
+        composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
+        assertEquals(0, closes)
+
+        playThrough(fromSec = 7186, toSec = 7199)
+        engine.emit(VideoPlayerEvent.Ended)
+        composeRule.waitForIdle()
+
+        assertEquals(1, closes)
+        assertTrue(advanced.isEmpty())
+    }
+
+    @Test
+    fun seekingBackPastTheLeadRetractsTheCardAndClearsTheDismissal() {
+        playEpisodeTo(7186)
+        pressBack()
+        composeRule.onAllNodesWithTag("movie_up_next").assertCountEquals(0)
+
+        // Rewind 10s from 7186 lands at 7176: outside the lead, so the dismissal lapses.
+        composeRule.onNodeWithTag("movie_play_pause").performKeyInput { pressKey(Key.MediaRewind) }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("movie_up_next").assertCountEquals(0)
+        assertTrue(engine.playbackCommands.contains("seek:7176.0"))
+
+        playThrough(fromSec = 7185, toSec = 7186)
+
+        upNextCard().assertIsFocused()
+    }
+
+    @Test
+    fun aFailedPreparationShowsOnTheCardAndEndedClosesAsToday() {
+        setContent(episodeRequest())
+        prepareUpNext = { ApiResult.Failure(AppError.Network) }
+        startPlaying()
+        playThrough(fromSec = 7184, toSec = 7185)
+
+        val failure = AppError.Network.toFailureNotice("prepare the next episode")
+        upNextStatus().assert(hasText(failure))
+        upNextCard().assertContentDescriptionEquals(
+            "Up next: season 1, episode 4, The You You Are. ${failure.trimEnd('.')}",
+        )
+
+        engine.emit(VideoPlayerEvent.Ended)
+        composeRule.waitForIdle()
+
+        assertEquals(1, closes)
+        assertTrue(advanced.isEmpty())
+    }
+
+    @Test
+    fun upAndDownFromTheCardRevealTheChromeAndTheCardKeepsCounting() {
+        playEpisodeTo(7185)
+        letChromeHide()
+        upNextCard().assertIsFocused()
+
+        upNextCard().performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
+        upNextCard().assertExists()
+
+        composeRule.onNodeWithTag("movie_play_pause").performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.waitForIdle()
+        upNextCard().assertIsFocused()
+
+        playThrough(fromSec = 7186, toSec = 7188)
+        upNextStatus().assert(hasText("Playing in 12s"))
+
+        upNextCard().performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
+    }
+
+    @Test
+    fun leftAndRightOnTheFocusedCardNeitherSeekNorMoveFocus() {
+        playEpisodeTo(7185)
+        letChromeHide()
+        val commandsBefore = engine.playbackCommands.toList()
+
+        upNextCard().performKeyInput { pressKey(Key.DirectionLeft) }
+        upNextCard().performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.waitForIdle()
+
+        upNextCard().assertIsFocused()
+        assertEquals(commandsBefore, engine.playbackCommands)
+    }
+
+    @Test
+    fun mediaKeysStillActWithTheCardFocused() {
+        playEpisodeTo(7185)
+        letChromeHide()
+
+        upNextCard().performKeyInput { pressKey(Key.MediaPause) }
+        composeRule.waitForIdle()
+
+        assertEquals("pause", engine.playbackCommands.last())
+        upNextCard().assertExists()
+    }
+
+    @Test
+    fun theCardWaitsForAnOpenMenuAndTakesFocusWhenItCloses() {
+        playEpisodeTo(7180)
+        emitTracks()
+        openPlayerMenu("movie_audio")
+        composeRule.onNodeWithTag("movie_track_menu").assertExists()
+
+        playThrough(fromSec = 7181, toSec = 7186)
+
+        upNextCard().assertExists()
+        upNextCard().assert(SemanticsMatcher.expectValue(SemanticsProperties.Focused, false))
+
+        pressBack()
+
+        composeRule.onNodeWithTag("movie_track_menu").assertDoesNotExist()
+        upNextCard().assertIsFocused()
+    }
+
+    @Test
+    fun theCardSitsAboveTheTransportBlockWhileTheChromeIsUp() {
+        playEpisodeTo(7185)
+
+        val card = upNextCard().getUnclippedBoundsInRoot()
+        val playPause = composeRule.onNodeWithTag("movie_play_pause").getUnclippedBoundsInRoot()
+        assertTrue("card bottom ${card.bottom} over play/pause top ${playPause.top}", card.bottom <= playPause.top)
+    }
+
+    @Test
+    fun aBackgroundTripKeepsTheCardWithAStaticCount() {
+        playEpisodeTo(7185)
+        upNextStatus().assert(hasText("Playing in 15s"))
+
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.CREATED
+        }
+        composeRule.waitForIdle()
+        assertTrue(engine.released)
+
+        engine = FakeVideoPlayerEngine()
+        composeRule.runOnUiThread {
+            lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
+        }
+        composeRule.waitForIdle()
+        engine.emit(VideoPlayerEvent.Ready(7200.0))
+        composeRule.waitForIdle()
+
+        // Rebuilt paused at the same second: the card returns with the same count and focus.
+        assertEquals(listOf("start:7185.0:false"), engine.playbackCommands)
+        upNextCard().assertIsFocused()
+        upNextStatus().assert(hasText("Playing in 15s"))
+        assertEquals(1, prepared.size)
+    }
+
+    @Test
+    fun aMovieEndsWithoutACardOrAHandOff() {
+        setContent()
+        startPlaying()
+        playThrough(fromSec = 7184, toSec = 7199)
+
+        composeRule.onAllNodesWithTag("movie_up_next").assertCountEquals(0)
+        engine.emit(VideoPlayerEvent.Ended)
+        composeRule.waitForIdle()
+
+        assertEquals(1, closes)
+        assertTrue(advanced.isEmpty())
+        assertTrue(prepared.isEmpty())
+    }
+
+    // --- resume skip ---
+
+    @Test
+    fun aRequestThatSkipsThePromptStartsAtTheSavedPosition() {
+        setContent(playRequest(resumeAtSec = 600.0).copy(promptForResume = false))
+
+        composeRule.onAllNodesWithTag("movie_resume_prompt").assertCountEquals(0)
+        assertEquals(listOf("start:600.0:true"), engine.playbackCommands)
+        assertEquals(listOf(true), engine.startRewinds)
+        composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
     }
 }

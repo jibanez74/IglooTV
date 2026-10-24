@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.feature.home
 
 import androidx.compose.runtime.saveable.Saver
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.playback.model.EpisodeContext
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MAX_QUEUE_TRACKS
@@ -48,6 +49,8 @@ internal val VideoPlayRequestSaver: Saver<VideoPlayRequest?, List<String>> = Sav
                 request.durationSec?.toString().orEmpty(),
                 Json.encodeToString(request.chapters),
                 request.videoCodec.orEmpty(),
+                request.episode?.let { Json.encodeToString(it) }.orEmpty(),
+                request.promptForResume.toString(),
             )
         }
     },
@@ -70,6 +73,8 @@ internal val VideoPlayRequestSaver: Saver<VideoPlayRequest?, List<String>> = Sav
                     durationSec = saved[10].toDoubleOrNull(),
                     chapters = Json.decodeFromString<List<PlaybackChapter>>(saved[11]),
                     videoCodec = saved[12].ifEmpty { null },
+                    episode = saved[13].ifEmpty { null }?.let { Json.decodeFromString<EpisodeContext>(it) },
+                    promptForResume = saved[14].toBooleanStrict(),
                 )
             }
         }
@@ -112,5 +117,5 @@ internal val MusicPlayRequestSaver: Saver<MusicPlayRequest?, List<String>> = Sav
     },
 )
 
-private const val MOVIE_SLOTS = 13
+private const val MOVIE_SLOTS = 15
 private const val MUSIC_SLOTS = 3

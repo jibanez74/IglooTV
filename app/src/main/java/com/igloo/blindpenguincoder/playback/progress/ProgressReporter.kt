@@ -48,7 +48,7 @@ internal fun shouldPersistProgress(
  * write could lose to the attempt it is retrying.
  */
 internal class ProgressReporter(
-    private val media: PlaybackMediaRef,
+    val media: PlaybackMediaRef,
     private val save: suspend (PlaybackMediaRef, UpdateWatchProgressRequest) ->
     ApiResult<WatchProgressUpdateData>,
     val sessionId: String = UUID.randomUUID().toString(),

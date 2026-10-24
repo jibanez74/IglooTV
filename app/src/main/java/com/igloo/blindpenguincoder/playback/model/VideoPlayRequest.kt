@@ -37,7 +37,18 @@ data class VideoPlayRequest(
     val durationSec: Double?,
     /** Ascending by start time. Empty when the file carries no chapter metadata. */
     val chapters: List<PlaybackChapter> = emptyList(),
+    /** What makes this an episode: its season and what follows it. Null for a movie. */
+    val episode: EpisodeContext? = null,
+    /**
+     * False = start at [resumeAtSec] without asking: the control that launched already said
+     * Resume, or this is the hand-off to the next episode.
+     */
+    val promptForResume: Boolean = true,
 ) {
+    /** The position the Resume prompt asks about, or null when the player starts without asking. */
+    val resumePromptSec: Double?
+        get() = resumeAtSec.takeIf { promptForResume }
+
     /**
      * The audio ordinal with the default resolved: HLS sessions must name a concrete
      * `audio_track` whenever the movie has audio. Null only for a video-only movie.
@@ -66,6 +77,29 @@ internal fun VideoPlayRequest.subtitleRenderableInMode(typeIndex: Int?, hls: Boo
         !hls -> true
         else -> subtitleTracks.getOrNull(typeIndex)?.imageBased == false
     }
+
+/**
+ * The episode behind a request: the season it belongs to, so the page the player closes onto can
+ * follow it, and the episode the player advances to when this one ends (null after the show's
+ * last playable episode).
+ */
+@Serializable
+data class EpisodeContext(
+    val seasonNumber: Long,
+    val upNext: UpNextEpisode? = null,
+)
+
+/** The next episode as the Up Next card presents it; its real start position is read at hand-off. */
+@Serializable
+data class UpNextEpisode(
+    val id: Long,
+    val seasonNumber: Long,
+    val episodeNumber: Long,
+    val name: String,
+    val stillUrl: String?,
+    /** The caller has a position worth resuming on it: the card says "Resuming", not "Playing". */
+    val resumable: Boolean,
+)
 
 /** One audio stream as the player needs it: menu label plus the capability gate's codec facts. */
 @Serializable

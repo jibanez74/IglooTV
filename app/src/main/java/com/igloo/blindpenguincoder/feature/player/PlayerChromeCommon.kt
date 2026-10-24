@@ -280,6 +280,10 @@ internal fun PoliteAnnouncement(text: String?) {
  * The global key map (section 11.8). While the chrome is hidden every handled key is swallowed
  * — the invisible focused control must not activate — and reveals the chrome; media transport
  * keys act regardless of chrome state. Everything else falls through to the focused control.
+ *
+ * [upNextFocused] is the one visible control the hidden chrome leaves standing: the Up Next card.
+ * With it focused, Center falls through to the card instead of toggling playback, Left and Right
+ * are pinned (the card is not a place to seek from), and Up and Down reveal the chrome as usual.
  */
 internal fun handlePlayerKey(
     event: KeyEvent,
@@ -291,6 +295,7 @@ internal fun handlePlayerKey(
     togglePlayPause: () -> Unit,
     seekBy: (Double) -> Unit,
     focusPlayPause: () -> Unit,
+    upNextFocused: Boolean = false,
 ): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
     if (controlsDisabled) {
@@ -342,6 +347,18 @@ internal fun handlePlayerKey(
     }
 
     if (!chromeVisible) {
+        if (upNextFocused) {
+            return when (event.key) {
+                Key.DirectionLeft, Key.DirectionRight -> true
+                Key.DirectionUp, Key.DirectionDown -> {
+                    showChrome()
+                    focusPlayPause()
+                    true
+                }
+
+                else -> false
+            }
+        }
         return when (event.key) {
             Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                 togglePlayPause()

@@ -51,6 +51,7 @@ import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
+import com.igloo.blindpenguincoder.feature.shows.EpisodePlayPreparer
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.MusicViewModel
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsViewModel
@@ -195,14 +196,23 @@ fun IglooRoot(container: IglooAppContainer) {
                     val canPlayAudioMime: (String, Int?) -> Boolean = { mimeType, channels ->
                         deviceCanPlayAudioMime(appContext, mimeType, channels)
                     }
+                    // One way to prepare an episode for Home, the show page and the player's
+                    // hand-off to the next episode; stateless, so a plain remember suffices.
+                    val episodePreparer = remember(canPlayAudioMime) {
+                        EpisodePlayPreparer(
+                            container.showRepository,
+                            container.serverUrlProvider,
+                            canPlayVideoMime = ::deviceCanDecodeVideoMime,
+                            canPlayAudioMime = canPlayAudioMime,
+                        )
+                    }
                     val homeViewModel = sessionViewModel(authenticatedSessionOwner, "home") {
                         HomeViewModel(
                             container.movieRepository,
                             container.showRepository,
                             container.musicRepository,
                             container.serverUrlProvider,
-                            canPlayVideoMime = ::deviceCanDecodeVideoMime,
-                            canPlayAudioMime = canPlayAudioMime,
+                            episodePreparer,
                         )
                     }
                     // Session-scoped like the rest: that is what keeps the library grid's loaded
@@ -233,6 +243,15 @@ fun IglooRoot(container: IglooAppContainer) {
                                 canPlayAudioMime = canPlayAudioMime,
                             )
                         }
+                    val showDetailsViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "show-details") {
+                            ShowDetailsViewModel(
+                                container.showRepository,
+                                container.serverUrlProvider,
+                                episodePreparer,
+                                onWatchedStateCommitted = homeViewModel::refreshContinueWatching,
+                            )
+                        }
                     val videoPlayerViewModel =
                         sessionViewModel(authenticatedSessionOwner, "video-player") {
                             VideoPlayerViewModel(
@@ -240,9 +259,11 @@ fun IglooRoot(container: IglooAppContainer) {
                                     container.videoPlaybackRepository::updateWatchProgress,
                                 onWatchedStateCommitted = {
                                     homeViewModel.refreshContinueWatching()
-                                    // The resume strip and watched pill are current on return to
-                                    // the details page; a no-op while the overlay is closed.
+                                    // The movie's resume strip and watched pill, and the show
+                                    // page's episode rail and Play/Resume target, are current on
+                                    // return to the page underneath; no-ops while closed.
                                     detailsViewModel.refresh()
+                                    showDetailsViewModel.refresh()
                                 },
                             )
                         }
@@ -256,13 +277,6 @@ fun IglooRoot(container: IglooAppContainer) {
                     val albumDetailsViewModel =
                         sessionViewModel(authenticatedSessionOwner, "album-details") {
                             AlbumDetailsViewModel(container.musicRepository)
-                        }
-                    val showDetailsViewModel =
-                        sessionViewModel(authenticatedSessionOwner, "show-details") {
-                            ShowDetailsViewModel(
-                                container.showRepository,
-                                container.serverUrlProvider,
-                            )
                         }
                     // Session-scoped like the Movies grid: the three tabs' pages and scroll
                     // positions survive a Music -> Home -> Music trip.
@@ -344,6 +358,7 @@ fun IglooRoot(container: IglooAppContainer) {
                             onRetry = showDetailsViewModel::retry,
                             onSelectSeason = showDetailsViewModel::selectSeason,
                             onRetrySeason = showDetailsViewModel::retrySeason,
+                            onSetEpisodeWatched = showDetailsViewModel::setEpisodeWatched,
                         )
                     }
                     val albumDetails by albumDetailsViewModel.uiState
@@ -433,6 +448,10 @@ fun IglooRoot(container: IglooAppContainer) {
                         showDetails = showDetails,
                         showDetailsActions = showDetailsActions,
                         onShowSelected = openDetails(showDetailsViewModel::open),
+                        showPlayRequests = showDetailsViewModel.playRequests,
+                        onPlayShowEpisode = showDetailsViewModel::playEpisode,
+                        prepareUpNext = { next -> episodePreparer.prepare(next.id, promptForResume = false) },
+                        onPlayerLandedOnEpisode = showDetailsViewModel::landOnEpisode,
                         // Back does not ask which one was up: closing a closed page is a no-op.
                         onCloseDetails = closeAllDetails,
                         onSwitchProfile = { scope.launch { sessionManager.switchProfile() } },

@@ -2,6 +2,8 @@ package com.igloo.blindpenguincoder
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.feature.home.HomeRail
@@ -19,11 +21,13 @@ import com.igloo.blindpenguincoder.feature.music.MusicUiState
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
+import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.queue.InertMusicQueueFetcher
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
@@ -90,6 +94,10 @@ internal fun TestIglooApp(
     musicPlayRequests: Flow<MusicPlayRequest> = emptyFlow(),
     homePlayRequests: Flow<VideoPlayRequest> = emptyFlow(),
     onResumeEpisode: (Long) -> Unit = {},
+    showPlayRequests: Flow<VideoPlayRequest> = emptyFlow(),
+    onPlayShowEpisode: (Long) -> Unit = {},
+    prepareUpNext: suspend (UpNextEpisode) -> ApiResult<VideoPlayRequest> = { ApiResult.Failure(AppError.Network) },
+    onPlayerLandedOnEpisode: (Long, Long, EpisodeLaunchSite) -> Unit = { _, _, _ -> },
     onRetryRail: (HomeRail) -> Unit = {},
     onMovieSelected: ((Long) -> Unit)? = null,
     onTheaterMovieSelected: ((Long) -> Unit)? = null,
@@ -136,6 +144,10 @@ internal fun TestIglooApp(
         musicPlayRequests = musicPlayRequests,
         homePlayRequests = homePlayRequests,
         onResumeEpisode = onResumeEpisode,
+        showPlayRequests = showPlayRequests,
+        onPlayShowEpisode = onPlayShowEpisode,
+        prepareUpNext = prepareUpNext,
+        onPlayerLandedOnEpisode = onPlayerLandedOnEpisode,
         onRetryRail = onRetryRail,
         onMovieSelected = onMovieSelected,
         onTheaterMovieSelected = onTheaterMovieSelected,

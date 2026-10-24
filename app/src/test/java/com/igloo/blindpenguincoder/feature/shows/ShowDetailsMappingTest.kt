@@ -56,8 +56,10 @@ class ShowDetailsMappingTest {
             ),
         )
 
+        assertEquals(3L, target?.episodeId)
         assertEquals("Resume S1 E3", target?.label)
         assertEquals("Resume season 1, episode 3, In Perpetuity", target?.spokenLabel)
+        assertEquals("Resume", target?.actionLabel)
     }
 
     @Test
@@ -70,8 +72,10 @@ class ShowDetailsMappingTest {
             ),
         )
 
+        assertEquals(2L, target?.episodeId)
         assertEquals("Play S2 E2", target?.label)
         assertEquals("Play season 2, episode 2, Half Loop", target?.spokenLabel)
+        assertEquals("Play", target?.actionLabel)
     }
 
     @Test
@@ -82,6 +86,7 @@ class ShowDetailsMappingTest {
         )
 
         assertEquals("Play S1 E1", seasonPlayTarget(1, watched)?.label)
+        assertEquals(1L, seasonPlayTarget(1, watched)?.episodeId)
         assertNull(seasonPlayTarget(1, emptyList()))
     }
 
@@ -378,5 +383,32 @@ class ShowDetailsMappingTest {
 
         assertEquals(listOf(3L, 1L), show.extraVideos.map { it.id })
         assertEquals(listOf("Trailer", "Other"), show.extraVideos.map { it.typeLabel })
+    }
+
+    // --- watched toggle ---
+
+    @Test
+    fun `marking watched clears the saved position and unwatched keeps it`() {
+        val inProgress = episodes(showEpisodeJson(id = 2, progressSec = 600.0, durationSec = 3300.0)).single()
+
+        val watched = inProgress.markedWatched(true)
+        assertTrue(watched.watched)
+        assertNull(watched.progressSec.orNull())
+        assertFalse(watched.isResumable())
+
+        val unwatched = watched.copy(progressSec = inProgress.progressSec).markedWatched(false)
+        assertFalse(unwatched.watched)
+        assertEquals(600.0, unwatched.progressSec.orNull())
+        assertTrue(unwatched.isResumable())
+    }
+
+    @Test
+    fun `the watched toggle offers the opposite of what the card shows`() {
+        val (plain, done) = episodes(
+            showEpisodeJson(id = 1, episodeNumber = 1),
+            showEpisodeJson(id = 2, episodeNumber = 2, watched = true),
+        ).map { it.toUi("http://igloo.test:8080/api") }
+        assertEquals("Mark watched", plain.watchedToggleLabel)
+        assertEquals("Mark unwatched", done.watchedToggleLabel)
     }
 }

@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.core.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,9 +18,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextAlign
@@ -164,13 +167,26 @@ internal fun Modifier.mediaCardInteraction(
     onClick: (() -> Unit)?,
     description: String,
     actionLabel: String,
+    /**
+     * A held Center — foundation's key timer fires it after the system long-press timeout and
+     * swallows the release's click. TalkBack is not offered a long-click gesture TV has no idiom
+     * for; the same choice travels as a named entry of [customActions] instead.
+     */
+    onLongClick: (() -> Unit)? = null,
+    customActions: List<CustomAccessibilityAction> = emptyList(),
 ): Modifier = this
     .onFocusChanged { onFocusChanged(it.isFocused) }
     .then(
-        if (onClick != null) {
-            Modifier.clickable(interactionSource = null, indication = null, onClick = onClick)
-        } else {
-            Modifier.focusable()
+        when {
+            onClick == null -> Modifier.focusable()
+            onLongClick == null ->
+                Modifier.clickable(interactionSource = null, indication = null, onClick = onClick)
+            else -> Modifier.combinedClickable(
+                interactionSource = null,
+                indication = null,
+                onLongClick = onLongClick,
+                onClick = onClick,
+            )
         },
     )
     .clearAndSetSemantics {
@@ -182,6 +198,7 @@ internal fun Modifier.mediaCardInteraction(
                 true
             }
         }
+        if (customActions.isNotEmpty()) this.customActions = customActions
     }
 
 /**

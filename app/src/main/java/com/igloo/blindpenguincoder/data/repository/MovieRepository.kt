@@ -16,7 +16,7 @@ import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieWatchedData
 import com.igloo.blindpenguincoder.data.model.MoviesLibraryData
 import com.igloo.blindpenguincoder.data.model.MoviesStatsData
-import com.igloo.blindpenguincoder.data.model.SetMovieWatchedRequest
+import com.igloo.blindpenguincoder.data.model.SetWatchedRequest
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.model.TheaterMovie
 import com.igloo.blindpenguincoder.data.model.TheaterMoviesData
@@ -82,7 +82,7 @@ class MovieRepository(
         envelopeData("watch progress") { api.movieWatchProgress(id) }
 
     suspend fun setMovieWatched(id: Long, watched: Boolean): ApiResult<MovieWatchedData> =
-        envelopeData("set watched") { api.setMovieWatched(id, SetMovieWatchedRequest(watched)) }
+        envelopeData("set watched") { api.setMovieWatched(id, SetWatchedRequest(watched)) }
 
     suspend fun movieLikeStatus(id: Long): ApiResult<MovieLikeStatusData> =
         envelopeData("like status") { api.movieLikeStatus(id) }

@@ -899,10 +899,20 @@ fun episodePlaybackJson(
     }}
 """.trimIndent()
 
-/** A populated `next_episode`, for proving the client ignores it until it can advance. */
-fun upNextEpisodeJson(): String = """{"id":901,"season_number":1,"episode_number":4,""" +
-    """"name":"The You You Are","still_path":${sqlNullStringJson("/next.jpg")},""" +
-    """"progress_sec":${sqlNullFloat64Json(null)},"duration_sec":${sqlNullFloat64Json(null)},"watched":false}"""
+/** A populated `next_episode`: the episode the player offers and advances to. */
+fun upNextEpisodeJson(
+    id: Long = 901,
+    seasonNumber: Long = 1,
+    episodeNumber: Long = 4,
+    name: String = "The You You Are",
+    stillPath: String? = "/next.jpg",
+    progressSec: Double? = null,
+    durationSec: Double? = null,
+    watched: Boolean = false,
+): String = """{"id":$id,"season_number":$seasonNumber,"episode_number":$episodeNumber,""" +
+    """"name":"$name","still_path":${sqlNullStringJson(stillPath)},""" +
+    """"progress_sec":${sqlNullFloat64Json(progressSec)},"duration_sec":${sqlNullFloat64Json(durationSec)},""" +
+    """"watched":$watched}"""
 
 /** `GET …/watch-progress` payload — plain JSON nulls, not `sql.Null*` wrappers. */
 fun watchProgressJson(
@@ -922,6 +932,9 @@ fun likeToggleJson(movieId: Long = 1, isLiked: Boolean = true): String =
 
 fun watchedUpdateJson(movieId: Long = 1, watched: Boolean = true): String =
     """{"error":false,"message":"watched updated","data":{"movie_id":$movieId,"watched":$watched}}"""
+
+fun episodeWatchedJson(episodeId: Long = 900, watched: Boolean = true): String =
+    """{"error":false,"message":"watched updated","data":{"episode_id":$episodeId,"watched":$watched}}"""
 
 /** `GET /auth/user` payload; `has_pin` is required by the contract. */
 fun authUserJson(

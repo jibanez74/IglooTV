@@ -1,10 +1,15 @@
 package com.igloo.blindpenguincoder.data.api
 
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.data.model.SetWatchedRequest
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 
 class ShowApi(
     private val client: HttpClient,
@@ -63,4 +68,11 @@ class ShowApi(
     /** Current user's saved position and watched flag for one episode. */
     suspend fun episodeWatchProgress(id: Long): HttpResponse =
         client.get("${serverUrl.require().apiBaseUrl}/shows/episodes/$id/watch-progress")
+
+    /** Marks one episode watched or unwatched for the current user; watched clears the position. */
+    suspend fun setEpisodeWatched(id: Long, body: SetWatchedRequest): HttpResponse =
+        client.put("${serverUrl.require().apiBaseUrl}/shows/episodes/$id/watch-progress/watched") {
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
 }
