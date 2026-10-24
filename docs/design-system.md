@@ -2039,8 +2039,8 @@ page's — entry requester, refocus after the state swap, `paneTitle` "Show deta
 loads, then its name) and builds everything else from the shared details pieces (§9.1). Every
 control the web page has is drawn in its final place and is reachable; Play/Resume and the
 episode cards **play** (below), the extra videos stay **inert** — focusable, announced, no button
-role and no action (the `IglooPosterCard` null-press contract) — until their pass, and nothing on
-the page writes yet.
+role and no action (the `IglooPosterCard` null-press contract) — until their pass. The one write
+is an episode's watched flag (**Marking watched**, below).
 
 **Data.** `GET /api/shows/details/{id}` (show, seasons, cast, creators, genres, networks,
 companies, extras) and `GET /api/shows/{id}/seasons/{n}/episodes`, one season at a time.

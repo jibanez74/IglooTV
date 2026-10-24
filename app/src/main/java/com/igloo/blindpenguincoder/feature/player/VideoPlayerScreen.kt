@@ -404,7 +404,9 @@ fun VideoPlayerScreen(
                     togglePlayPause = togglePlayPause,
                     seekBy = seekBy,
                     focusPlayPause = { playPauseRequester.requestFocusSafely() },
-                    upNextFocused = upNextFocused,
+                    // Gated on the offer: a card that left composition under its focus must not
+                    // keep Left and Right pinned on the chrome that took it back.
+                    upNextFocused = upNextFocused && upNextOffer != null,
                 )
             }
             .semantics {
