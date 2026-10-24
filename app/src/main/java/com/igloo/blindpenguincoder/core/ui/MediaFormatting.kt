@@ -129,3 +129,7 @@ private fun remainingSeconds(progressSec: Double, durationSec: Double): Double? 
 /** `1, 3` -> "S1 E3": the compact episode code the web client also uses. */
 fun formatEpisodeCode(seasonNumber: Long, episodeNumber: Long): String =
     "S$seasonNumber E$episodeNumber"
+
+/** The season as TalkBack says it: "season 1", or "Specials" for season 0. */
+fun spokenSeason(seasonNumber: Long): String =
+    if (seasonNumber == 0L) "Specials" else "season $seasonNumber"

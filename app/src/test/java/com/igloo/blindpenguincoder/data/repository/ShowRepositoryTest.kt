@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.data.repository
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.SortOrder
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -314,6 +315,55 @@ class ShowRepositoryTest {
         assertEquals(1L, data.season.seasonNumber)
         assertEquals(3L, data.episode.episodeNumber)
         assertEquals("In Perpetuity", data.episode.name)
+        val next = requireNotNull(data.nextEpisode)
+        assertEquals(901L, next.id)
+        assertEquals(4L, next.episodeNumber)
+        assertEquals("The You You Are", next.name)
+    }
+
+    @Test
+    fun `the last playable episode has no next episode`() = runTest {
+        val http = TestHttp { jsonResponse(episodePlaybackJson(nextEpisode = "null")) }
+
+        val result = http.showRepository.episodePlayback(900)
+
+        assertNull((result as ApiResult.Success).value.nextEpisode)
+    }
+
+    @Test
+    fun `setting an episode watched PUTs the flag to the contract path and decodes the answer`() =
+        runTest {
+            var request: HttpRequestData? = null
+            var body: String? = null
+            val http = TestHttp {
+                request = it
+                body = String(it.body.toByteArray())
+                jsonResponse(episodeWatchedJson(episodeId = 903, watched = true))
+            }
+            http.profiles.setPending("igd_test")
+
+            val result = http.showRepository.setEpisodeWatched(903, watched = true)
+
+            val captured = requireNotNull(request)
+            assertEquals("/api/shows/episodes/903/watch-progress/watched", captured.url.encodedPath)
+            assertEquals("PUT", captured.method.value)
+            assertEquals("""{"watched":true}""", body)
+            assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
+            val data = (result as ApiResult.Success).value
+            assertEquals(903L, data.episodeId)
+            assertTrue(data.watched)
+        }
+
+    @Test
+    fun `a refused watched write fails with its status`() = runTest {
+        val http = TestHttp {
+            jsonResponse("""{"error":true,"message":"not found"}""", HttpStatusCode.NotFound)
+        }
+
+        val result = http.showRepository.setEpisodeWatched(999, watched = false)
+
+        val error = (result as ApiResult.Failure).error
+        assertEquals(404, (error as AppError.Api).status)
     }
 
     @Test

@@ -38,8 +38,11 @@ import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
+import com.igloo.blindpenguincoder.playback.model.EpisodeContext
+import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
@@ -50,6 +53,7 @@ import com.igloo.blindpenguincoder.testMovieDetails
 import com.igloo.blindpenguincoder.testShowDetailsState
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -92,6 +96,22 @@ class VideoPlayerOverlayFocusTest {
         durationSec = 3300.0,
     )
 
+    /** The show page's launches carry one episode to follow, so an end hands off. */
+    private val showEpisodeRequest = episodeRequest.copy(
+        episode = EpisodeContext(
+            seasonNumber = 1,
+            upNext = UpNextEpisode(
+                id = 903,
+                seasonNumber = 1,
+                episodeNumber = 3,
+                name = "In Perpetuity",
+                stillUrl = null,
+                resumable = true,
+            ),
+        ),
+    )
+    private val landed = mutableListOf<Triple<Long, Long, EpisodeLaunchSite>>()
+
     private var detailsState by mutableStateOf(MovieDetailsUiState())
     private var showState by mutableStateOf(ShowDetailsUiState())
     private val engines = mutableListOf<FakeVideoPlayerEngine>()
@@ -125,6 +145,7 @@ class VideoPlayerOverlayFocusTest {
         showState = if (showOpen) testShowDetailsState() else ShowDetailsUiState()
         engines.clear()
         launched.clear()
+        landed.clear()
         trailerEngines.clear()
         failProgressSaves = false
         playRequests = MutableSharedFlow(extraBufferCapacity = 1)
@@ -161,9 +182,22 @@ class VideoPlayerOverlayFocusTest {
                     showPlayRequests = showPlayRequests,
                     onPlayShowEpisode = { episodeId ->
                         showPlayRequests.tryEmit(
-                            episodeRequest.copy(media = PlaybackMediaRef.Episode(episodeId)),
+                            showEpisodeRequest.copy(media = PlaybackMediaRef.Episode(episodeId)),
                         )
                     },
+                    // The hand-off's request: the next episode at its saved position, no prompt.
+                    prepareUpNext = { next ->
+                        ApiResult.Success(
+                            episodeRequest.copy(
+                                media = PlaybackMediaRef.Episode(next.id),
+                                title = "Severance · S1 E${next.episodeNumber} · ${next.name}",
+                                resumeAtSec = 300.0,
+                                promptForResume = false,
+                                episode = EpisodeContext(seasonNumber = next.seasonNumber),
+                            ),
+                        )
+                    },
+                    onPlayerLandedOnEpisode = { season, episode, site -> landed += Triple(season, episode, site) },
                     videoPlayerViewModel = progressViewModel,
                     videoPlayerEngineFactory = { _, request ->
                         launched += request
@@ -451,6 +485,60 @@ class VideoPlayerOverlayFocusTest {
 
         composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
         composeRule.onNodeWithTag("details_play").assertIsFocused()
+    }
+
+    /** The episode plays out: the player hands off in place and still closes onto the show page. */
+    @Test
+    fun anEpisodeThatEndsHandsOffInPlaceAndBackReturnsToTheLaunchingControl() {
+        setShellContent(detailsOpen = false, showOpen = true)
+        pressPlay()
+        val first = engines.single()
+        first.emit(VideoPlayerEvent.Ready(3300.0))
+        first.emit(VideoPlayerEvent.IsPlayingChanged(true))
+        composeRule.waitForIdle()
+
+        first.emit(VideoPlayerEvent.Ended)
+        composeRule.waitForIdle()
+
+        // A fresh screen for the next episode: new engine, the old one released, the saved
+        // position taken without the prompt, the show page still hidden underneath.
+        composeRule.onNodeWithTag("movie_player")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Episode player"))
+        assertEquals(2, engines.size)
+        assertEquals(true, first.released)
+        assertEquals(PlaybackMediaRef.Episode(903), launched[1].media)
+        composeRule.onNodeWithTag("movie_resume_prompt").assertDoesNotExist()
+        assertEquals(listOf("start:300.0:true"), engines[1].playbackCommands)
+        composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
+        composeRule.onNodeWithTag("details_layer")
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
+        assertTrue(landed.isEmpty())
+
+        pressBack()
+
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        assertEquals(true, engines[1].released)
+        composeRule.onNodeWithTag("details_play").assertIsFocused()
+        assertEquals(listOf(Triple(1L, 903L, EpisodeLaunchSite.Hero)), landed)
+    }
+
+    @Test
+    fun closingTheShowPageAfterAHandOffStillTakesThePlayer() {
+        setShellContent(detailsOpen = false, showOpen = true)
+        // Episode 902: the fixture's next episode is 903, so the hand-off changes the media.
+        pressEpisodeCard(902)
+        val first = engines.single()
+        first.emit(VideoPlayerEvent.Ready(3300.0))
+        first.emit(VideoPlayerEvent.Ended)
+        composeRule.waitForIdle()
+        assertEquals(2, engines.size)
+
+        composeRule.runOnIdle { showState = ShowDetailsUiState() }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        assertEquals(listOf(true, true), engines.map { it.released })
+        assertTrue(landed.isEmpty())
     }
 
     @Test

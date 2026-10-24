@@ -172,8 +172,8 @@ current code when using an older status report:
   follow-up work, and open test coverage.
 - [Movies](movies-screen-status.md) and [TV Shows](tv-shows-screen-status.md): library status.
 - [Show details](show-details-status.md) and [episode playback](episode-playback-status.md): the
-  show page, its seasons and episodes, and playing them from it; the extras, marking watched and
-  up-next are still to land.
+  show page, its seasons and episodes, playing them from it, the Up Next hand-off and marking
+  them watched; the extras are still to land.
 - [Music](music-screen-status.md), [album details](album-details-status.md), and
   [music player](music-player-status.md): music features and remaining work, including playlists,
   background playback, and play-stat reporting.

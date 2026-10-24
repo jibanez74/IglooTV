@@ -236,9 +236,16 @@ internal fun <T> DetailsRailSection(
     emptyIcon: ImageVector = IglooIcons.Movies,
     emptyText: String = "Nothing to show",
     onRetry: () -> Unit = {},
+    /**
+     * Seeds a fresh rail's focus memory: the card it enters on, parks [returnRequester] on, and
+     * is created scrolled to — for a caller that rebuilds the rail around one card, as the show
+     * page does when the player lands on an episode. An id the list does not hold falls back to
+     * the first card, as an empty memory does.
+     */
+    initialFocusedId: Long? = null,
     card: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
 ) {
-    var lastFocusedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var lastFocusedId by rememberSaveable { mutableStateOf(initialFocusedId) }
     IglooMediaRail(
         title = title,
         state = state,

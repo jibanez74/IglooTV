@@ -9,6 +9,7 @@ import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.orKeepContent
 import com.igloo.blindpenguincoder.data.model.ShowEpisode
 import com.igloo.blindpenguincoder.data.repository.ShowRepository
+import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.shared.CastMemberUi
 import com.igloo.blindpenguincoder.feature.shared.CrewEntry
@@ -96,6 +97,18 @@ data class ShowDetailsUi(
 }
 
 /**
+ * The player's close after it advanced (section 11.4.3): the episode that last played, which the
+ * page follows — its season selected, focus on its card or on Play/Resume per [site]. [sequence]
+ * tells two landings on the same episode apart; the screen keys its focus move on it.
+ */
+data class EpisodeLanding(
+    val seasonNumber: Long,
+    val episodeId: Long,
+    val site: EpisodeLaunchSite,
+    val sequence: Int,
+)
+
+/**
  * [openShowId] is the overlay's existence: null means closed and the rest is meaningless.
  * [episodes] and [playTarget] are the [selectedSeason]'s; a show with no seasons has no
  * selection, an empty rail and no target.
@@ -108,13 +121,17 @@ data class ShowDetailsUiState(
     val playTarget: PlayTargetUi? = null,
     /** Why the last Play/Resume or episode press did not reach the player; cleared by the next. */
     val playbackNotice: String? = null,
+    /** Why the last Mark watched/unwatched did not land, under the rail; cleared by the next. */
+    val watchedNotice: String? = null,
+    /** Where the player left the show; the screen lands focus there once the season has settled. */
+    val landing: EpisodeLanding? = null,
 )
 
 /**
  * The show details page (docs/design-system.md section 11.4.3): the show's details, then one
  * season's episodes at a time. A Play/Resume or episode-card press prepares that episode through
  * the shared [EpisodePlayLauncher] and emits it on [playRequests] for the host to open the player
- * with. Nothing else is written — marking watched is not on the page yet.
+ * with. The one write is an episode's watched flag, optimistic like the movie page's.
  *
  * Opening holds the page in Loading until the details *and* the first season (server order,
  * so specials are never the default) have settled, so the hero's Play/Resume arrives with the
@@ -126,22 +143,19 @@ data class ShowDetailsUiState(
 class ShowDetailsViewModel(
     private val shows: ShowRepository,
     private val serverUrl: ServerUrlProvider,
-    /** The pre-flight gate's device capability, injected so the launch rules stay JVM-testable. */
-    canPlayVideoMime: (mimeType: String) -> Boolean,
-    canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
+    /** Shared with Home and the player, so every surface prepares an episode the same way. */
+    episodePreparer: EpisodePlayPreparer,
+    /** A watched write landed: Home's Continue Watching refreshes, as it does for a movie. */
+    private val onWatchedStateCommitted: () -> Unit = {},
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ShowDetailsUiState())
     val uiState: StateFlow<ShowDetailsUiState> = _uiState.asStateFlow()
 
-    // Shared with Home's Continue Watching rail, so both prepare an episode the same way; the
-    // notice it posts is this page's own.
+    // The notice it posts is this page's own.
     private val episodeLauncher = EpisodePlayLauncher(
         scope = viewModelScope,
-        shows = shows,
-        serverUrl = serverUrl,
-        canPlayVideoMime = canPlayVideoMime,
-        canPlayAudioMime = canPlayAudioMime,
+        preparer = episodePreparer,
         onNotice = { notice -> _uiState.update { it.copy(playbackNotice = notice) } },
     )
 
@@ -153,6 +167,12 @@ class ShowDetailsViewModel(
 
     /** Successful season reads only, keyed by season number, for the open show. */
     private val seasonCache = mutableMapOf<Long, List<ShowEpisode>>()
+
+    /** One optimistic watched write per episode: the row before the run's first press, and what the latest press wants. */
+    private class WatchedWrite(val before: ShowEpisode, val target: Boolean, val serial: Int)
+    private val watchedWrites = mutableMapOf<Long, WatchedWrite>()
+    private var writeSerial = 0
+    private var landingSequence = 0
 
     /** Opens the overlay on show [id] and starts its load. */
     fun open(id: Long) {
@@ -199,22 +219,94 @@ class ShowDetailsViewModel(
      */
     fun selectSeason(seasonNumber: Long) {
         val state = _uiState.value
-        val id = state.openShowId ?: return
         if (state.details !is DetailsState.Loaded || state.selectedSeason == seasonNumber) return
+        showSeason(seasonNumber, landing = null)
+    }
+
+    /**
+     * The player closed after advancing to [episodeId]: the page follows it. Its season is shown
+     * — kept if it is the one on screen, else from the cache or read — and the landing travels on
+     * the state until the screen has moved focus to the card or to Play/Resume, per [site]. A
+     * season the show does not list is ignored, so the host's own focus restore stands.
+     */
+    fun landOnEpisode(seasonNumber: Long, episodeId: Long, site: EpisodeLaunchSite) {
+        val state = _uiState.value
+        val show = (state.details as? DetailsState.Loaded)?.value ?: return
+        if (state.openShowId == null || show.seasons.none { it.number == seasonNumber }) return
+        val landing = EpisodeLanding(seasonNumber, episodeId, site, ++landingSequence)
+        if (seasonNumber == state.selectedSeason) {
+            _uiState.update { it.copy(landing = landing) }
+        } else {
+            showSeason(seasonNumber, landing)
+        }
+    }
+
+    private fun showSeason(seasonNumber: Long, landing: EpisodeLanding?) {
+        val id = _uiState.value.openShowId ?: return
         val cached = seasonCache[seasonNumber]
         if (cached != null) {
-            _uiState.update { it.withSeason(seasonNumber, cached) }
+            _uiState.update { it.withSeason(seasonNumber, cached).copy(landing = landing ?: it.landing) }
         } else {
             _uiState.update {
                 it.copy(
                     selectedSeason = seasonNumber,
                     episodes = IglooRailState.Loading,
                     playTarget = null,
+                    landing = landing ?: it.landing,
                 )
             }
             if (seasonJobs[seasonNumber]?.isActive != true) {
                 loadSeason(id, seasonNumber, userInitiated = true)
             }
+        }
+    }
+
+    /**
+     * A card's Mark watched/unwatched (its long-press menu or TalkBack action). Optimistic: the
+     * card's check and bar and the hero's target follow at once from the rewritten cached row;
+     * the server's answer re-reads the season, a refusal puts the row back and says why under
+     * the rail. A later press on the same episode owns the outcome. The write is not cancelled
+     * with the page's reads — a PUT already sent commits either way, and Home's Continue Watching
+     * must still hear of it — but it touches nothing once the page has moved on.
+     */
+    fun setEpisodeWatched(episodeId: Long, watched: Boolean) {
+        val state = _uiState.value
+        val id = state.openShowId ?: return
+        val seasonNumber = state.selectedSeason ?: return
+        val current = seasonCache[seasonNumber]?.firstOrNull { it.id == episodeId } ?: return
+        val write = WatchedWrite(watchedWrites[episodeId]?.before ?: current, watched, ++writeSerial)
+        watchedWrites[episodeId] = write
+        replaceCachedEpisode(seasonNumber, current.markedWatched(watched))
+        _uiState.update { it.copy(watchedNotice = null) }
+        viewModelScope.launch {
+            val result = shows.setEpisodeWatched(episodeId, watched)
+            if (watchedWrites[episodeId]?.serial != write.serial) return@launch
+            watchedWrites.remove(episodeId)
+            when (result) {
+                is ApiResult.Success -> {
+                    onWatchedStateCommitted()
+                    val now = _uiState.value
+                    if (now.openShowId == id && now.selectedSeason == seasonNumber) {
+                        loadSeason(id, seasonNumber, userInitiated = false)
+                    }
+                }
+
+                is ApiResult.Failure -> if (_uiState.value.openShowId == id) {
+                    replaceCachedEpisode(seasonNumber, write.before)
+                    _uiState.update {
+                        it.copy(watchedNotice = result.error.toFailureNotice("update watched status"))
+                    }
+                }
+            }
+        }
+    }
+
+    /** Replaces one episode in a cached season and, if that season is shown, republishes rail and hero from it. */
+    private fun replaceCachedEpisode(seasonNumber: Long, episode: ShowEpisode) {
+        val episodes = seasonCache[seasonNumber]?.map { if (it.id == episode.id) episode else it } ?: return
+        seasonCache[seasonNumber] = episodes
+        if (_uiState.value.selectedSeason == seasonNumber) {
+            _uiState.update { it.withSeason(seasonNumber, episodes) }
         }
     }
 
@@ -232,10 +324,18 @@ class ShowDetailsViewModel(
      * details and saved position in parallel and emits the request on [playRequests]; a failure
      * lands in [ShowDetailsUiState.playbackNotice]. A season switch meanwhile leaves the
      * preparation alone — the press named a concrete episode. Nothing happens on a closed page.
+     *
+     * A control that already said Resume — the hero's verb, a card drawn with its progress bar,
+     * both read from the same cached episode — launches without the Resume prompt; one that said
+     * Play keeps it, for a position the page did not show.
      */
     fun playEpisode(episodeId: Long) {
-        if (_uiState.value.openShowId == null) return
-        episodeLauncher.launch(episodeId)
+        val state = _uiState.value
+        if (state.openShowId == null) return
+        val resumable = seasonCache[state.selectedSeason]
+            ?.firstOrNull { it.id == episodeId }
+            ?.isResumable() ?: false
+        episodeLauncher.launch(episodeId, promptForResume = !resumable)
     }
 
     private fun loadDetails(id: Long, userInitiated: Boolean) {
@@ -327,9 +427,14 @@ class ShowDetailsViewModel(
     ) {
         when (result) {
             is ApiResult.Success -> {
-                seasonCache[seasonNumber] = result.value
+                // A read landing mid-write keeps the write's value: the write's own answer
+                // re-reads, and a stale list must not flip the card back under the viewer.
+                val episodes = result.value.map { episode ->
+                    watchedWrites[episode.id]?.let { episode.markedWatched(it.target) } ?: episode
+                }
+                seasonCache[seasonNumber] = episodes
                 if (_uiState.value.selectedSeason == seasonNumber) {
-                    _uiState.update { it.withSeason(seasonNumber, result.value) }
+                    _uiState.update { it.withSeason(seasonNumber, episodes) }
                 }
             }
 

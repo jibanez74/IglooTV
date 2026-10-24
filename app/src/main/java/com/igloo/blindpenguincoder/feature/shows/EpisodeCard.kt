@@ -15,8 +15,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
@@ -41,7 +45,10 @@ import com.igloo.blindpenguincoder.feature.shared.FadeClampedText
  *
  * Focus, press and announcement are the poster card's (`mediaCardInteraction`): the whole card
  * is one focus target and one node speaking [EpisodeUi.description], which carries everything
- * drawn, and [onClick] plays the episode — the action TalkBack offers is "Play 1. Pilot".
+ * drawn, and [onClick] plays the episode — the action TalkBack offers is "Play 1. Pilot". A held
+ * Center opens the card's menu through [onOpenMenu] with the card's bounds to anchor it; TalkBack
+ * gets that menu's one choice as a custom action on the same node, "Mark watched" or "Mark
+ * unwatched", through [onToggleWatched].
  *
  * The check's pill takes the section 3.2 black ground only over a decoded still; over the glyph
  * fallback it sits on the token pair instead.
@@ -50,20 +57,31 @@ import com.igloo.blindpenguincoder.feature.shared.FadeClampedText
 internal fun EpisodeCard(
     episode: EpisodeUi,
     onClick: () -> Unit,
+    onOpenMenu: (anchorBounds: Rect) -> Unit,
+    onToggleWatched: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
+    var bounds by remember { mutableStateOf<Rect?>(null) }
     val still = rememberArtworkState(episode.stillUrl)
 
     Column(
         modifier = modifier
             .cardWidth(IglooTheme.layout.wideCardWidth)
+            .onGloballyPositioned { bounds = it.boundsInRoot() }
             .mediaCardInteraction(
                 onFocusChanged = { focused = it },
                 onClick = onClick,
                 description = mediaSectionDescription(episode.description),
                 actionLabel = "Play ${episode.title}",
+                onLongClick = { bounds?.let(onOpenMenu) },
+                customActions = listOf(
+                    CustomAccessibilityAction(episode.watchedToggleLabel) {
+                        onToggleWatched()
+                        true
+                    },
+                ),
             ),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {

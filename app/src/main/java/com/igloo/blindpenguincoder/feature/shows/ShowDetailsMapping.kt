@@ -13,8 +13,10 @@ import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.spoken
+import com.igloo.blindpenguincoder.core.ui.spokenSeason
 import com.igloo.blindpenguincoder.data.model.ShowDetailsData
 import com.igloo.blindpenguincoder.data.model.ShowEpisode
+import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
 import com.igloo.blindpenguincoder.data.model.ShowSeasonSummary
 import com.igloo.blindpenguincoder.feature.movies.resumePositionSec
 import com.igloo.blindpenguincoder.feature.shared.CastCredit
@@ -245,6 +247,22 @@ private fun ShowEpisode.resumeSpan(): ResumeSpan? {
     return ResumeSpan(progress, duration).takeIf { resumePositionSec(progress, duration) != null }
 }
 
+/** Whether a control drawn from this episode says Resume: the hero's verb and the card's bar share the rule. */
+internal fun ShowEpisode.isResumable(): Boolean = resumeSpan() != null
+
+/**
+ * The episode as the server will answer a watched write (web parity): marking watched clears the
+ * saved position; marking unwatched leaves whatever position the row had.
+ */
+internal fun ShowEpisode.markedWatched(watched: Boolean): ShowEpisode = copy(
+    watched = watched,
+    progressSec = if (watched) SqlNullFloat64(0.0, valid = false) else progressSec,
+)
+
+/** The one row of the card's menu, and its TalkBack action: the opposite of what the card shows. */
+internal val EpisodeUi.watchedToggleLabel: String
+    get() = if (watched) "Mark unwatched" else "Mark watched"
+
 /**
  * The hero's action for the selected season (web parity): resume the first episode with a
  * position worth resuming, else play the first unwatched one, else the first. Null for a season
@@ -253,17 +271,16 @@ private fun ShowEpisode.resumeSpan(): ResumeSpan? {
  * verb alone as the action, so "double-tap to" does not repeat the whole sentence.
  */
 internal fun seasonPlayTarget(seasonNumber: Long, episodes: List<ShowEpisode>): PlayTargetUi? {
-    val resumable = episodes.firstOrNull { it.resumeSpan() != null }
+    val resumable = episodes.firstOrNull { it.isResumable() }
     val target = resumable
         ?: episodes.firstOrNull { !it.watched }
         ?: episodes.firstOrNull()
         ?: return null
     val verb = if (resumable != null) "Resume" else "Play"
-    val spokenSeason = if (seasonNumber == 0L) "Specials" else "season $seasonNumber"
     return PlayTargetUi(
         episodeId = target.id,
         label = "$verb ${formatEpisodeCode(seasonNumber, target.episodeNumber)}",
-        spokenLabel = "$verb $spokenSeason, episode ${target.episodeNumber}, ${target.name}",
+        spokenLabel = "$verb ${spokenSeason(seasonNumber)}, episode ${target.episodeNumber}, ${target.name}",
         actionLabel = verb,
         progress = target.resumeSpan()?.let { resumeProgressUi(it.progressSec, it.durationSec) },
     )

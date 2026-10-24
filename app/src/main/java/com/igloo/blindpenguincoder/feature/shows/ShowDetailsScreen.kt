@@ -16,18 +16,24 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.ui.IglooMenu
+import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
 import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.announcedSection
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.rememberAnnouncedSectionColumn
@@ -53,13 +59,18 @@ enum class EpisodeLaunchSite { Hero, EpisodesRail }
  * What the show page asks of its view model. Close is the host's own business (it owns Back and
  * focus restoration) and is deliberately not here; so is playing an episode, a host-owned overlay
  * launch that arrives as a screen parameter beside its return requesters, like the movie page's
- * `onPlay`; and so is what the page draws but cannot do yet — playing a video, marking watched.
+ * `onPlay`; and so is what the page draws but cannot do yet — playing an extra.
  */
 data class ShowDetailsActions(
     val onRetry: () -> Unit,
     val onSelectSeason: (Long) -> Unit,
     val onRetrySeason: () -> Unit,
+    /** An episode card's Mark watched/unwatched, from its long-press menu or TalkBack action. */
+    val onSetEpisodeWatched: (episodeId: Long, watched: Boolean) -> Unit,
 )
+
+/** An episode card's menu while it is up: the card, and the bounds the menu is anchored to. */
+private data class EpisodeMenuRequest(val episode: EpisodeUi, val anchorBounds: Rect)
 
 /**
  * The show details screen (docs/design-system.md section 11.4.3): a full-screen in-tree overlay
@@ -78,6 +89,12 @@ data class ShowDetailsActions(
  * the host rather than [actions]: a press names the control that asked, so the host can arm the
  * landing and restore focus to it when the player closes, and a failed exit save follows the user
  * back here as a Retry card under the hero action (section 11.8).
+ *
+ * An episode card's menu is the screen's own, the album page's row-menu rule: a small anchored
+ * card that occludes nothing, so the body leaves the semantics tree while it is up (section 9.3)
+ * and its dismissal returns focus through the rail's return requester, parked on the card that
+ * was held. The host's Back handlers are not gated on it — composed after them, its own handler
+ * is the one the dispatcher reaches for exactly as long as it is up.
  */
 @Composable
 fun ShowDetailsScreen(
@@ -101,6 +118,7 @@ fun ShowDetailsScreen(
     val onScreenFocus = rememberRefocusAfterSwap(state.details::class, spokenAccessibilityEnabled) {
         entryRequester.requestFocusSafely()
     }
+    var episodeMenu by remember { mutableStateOf<EpisodeMenuRequest?>(null) }
 
     Box(
         modifier = modifier
@@ -114,38 +132,74 @@ fun ShowDetailsScreen(
             }
             .testTag("show_details"),
     ) {
-        when (val details = state.details) {
-            // Geometry-matched to the hero it stands in for: a poster and one action, so the
-            // anchor focus is sitting on is where Play/Resume lands.
-            is DetailsState.Loading -> DetailsHeroSkeleton(
-                artworkAspect = IglooTheme.layout.posterAspect,
-                artworkShape = RoundedCornerShape(IglooTheme.radius.lg),
-                anchorWidth = PLAY_STUB_WIDTH.scaled(),
-                loadingLabel = "Loading show details",
-                anchorRequester = entryRequester,
-                trailingStubWidths = emptyList(),
-                belowAnchor = { ResumeProgress(progress = null, overMedia = false) },
-            )
+        // The menu occludes nothing, so the body leaves the semantics tree while it is up (the
+        // movie details rule); the tag and the pane title stay outside, on the root.
+        Box(
+            modifier = Modifier
+                .testTag("show_details_body")
+                .then(if (episodeMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
+        ) {
+            when (val details = state.details) {
+                // Geometry-matched to the hero it stands in for: a poster and one action, so the
+                // anchor focus is sitting on is where Play/Resume lands.
+                is DetailsState.Loading -> DetailsHeroSkeleton(
+                    artworkAspect = IglooTheme.layout.posterAspect,
+                    artworkShape = RoundedCornerShape(IglooTheme.radius.lg),
+                    anchorWidth = PLAY_STUB_WIDTH.scaled(),
+                    loadingLabel = "Loading show details",
+                    anchorRequester = entryRequester,
+                    trailingStubWidths = emptyList(),
+                    belowAnchor = { ResumeProgress(progress = null, overMedia = false) },
+                )
 
-            is DetailsState.Error -> IglooPinnedError(
-                message = details.message,
-                actionText = "Retry",
-                actionSemanticLabel = "Retry loading show details",
-                actionRequester = entryRequester,
-                onAction = actions.onRetry,
-            )
+                is DetailsState.Error -> IglooPinnedError(
+                    message = details.message,
+                    actionText = "Retry",
+                    actionSemanticLabel = "Retry loading show details",
+                    actionRequester = entryRequester,
+                    onAction = actions.onRetry,
+                )
 
-            is DetailsState.Loaded -> ShowDetailsContent(
-                show = details.value,
-                state = state,
-                actions = actions,
-                onPlayEpisode = onPlayEpisode,
-                playReturnRequester = playReturnRequester,
-                episodeReturnRequester = episodeReturnRequester,
-                progressSyncError = progressSyncError,
-                onRetryProgressSync = onRetryProgressSync,
-                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
-                entryRequester = entryRequester,
+                is DetailsState.Loaded -> ShowDetailsContent(
+                    show = details.value,
+                    state = state,
+                    actions = actions,
+                    onPlayEpisode = onPlayEpisode,
+                    onOpenEpisodeMenu = { episode, bounds -> episodeMenu = EpisodeMenuRequest(episode, bounds) },
+                    playReturnRequester = playReturnRequester,
+                    episodeReturnRequester = episodeReturnRequester,
+                    progressSyncError = progressSyncError,
+                    onRetryProgressSync = onRetryProgressSync,
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                    entryRequester = entryRequester,
+                )
+            }
+        }
+
+        // Last child, over the body. The row offers the opposite of what the card shows *now*,
+        // not when it was held; dismissal restores focus to that card, in the callback rather
+        // than an effect (section 9.3).
+        episodeMenu?.let { menu ->
+            val episode = (state.episodes as? IglooRailState.Loaded)?.items
+                ?.firstOrNull { it.id == menu.episode.id }
+                ?: menu.episode
+            val dismiss: () -> Unit = {
+                episodeMenu = null
+                episodeReturnRequester.requestFocusSafely()
+            }
+            IglooMenu(
+                title = "Episode options",
+                items = listOf(
+                    IglooMenuItem(
+                        label = episode.watchedToggleLabel,
+                        onSelect = {
+                            actions.onSetEpisodeWatched(episode.id, !episode.watched)
+                            dismiss()
+                        },
+                    ),
+                ),
+                anchorBounds = menu.anchorBounds,
+                onDismiss = dismiss,
             )
         }
     }
@@ -175,6 +229,7 @@ private fun ShowDetailsContent(
     state: ShowDetailsUiState,
     actions: ShowDetailsActions,
     onPlayEpisode: (Long, EpisodeLaunchSite) -> Unit,
+    onOpenEpisodeMenu: (EpisodeUi, Rect) -> Unit,
     playReturnRequester: FocusRequester,
     episodeReturnRequester: FocusRequester,
     progressSyncError: String?,
@@ -247,6 +302,24 @@ private fun ShowDetailsContent(
         pendingSeason = seasonNumber
         handoffToken += 1
         if (seasonNumber != state.selectedSeason) actions.onSelectSeason(seasonNumber)
+    }
+    // The player's landing (section 11.4.3): once the landed season has settled, focus goes
+    // where the launch site says — Play/Resume, relabelled by the re-read, or the rail, rebuilt
+    // around the landed card. The host's restore to the launching control holds focus meanwhile;
+    // the sequence handled is saved so a recreation does not land twice.
+    var landedSequence by rememberSaveable { mutableIntStateOf(0) }
+    val railLoading = state.episodes is IglooRailState.Loading
+    LaunchedEffect(state.landing, railLoading) {
+        val landing = state.landing ?: return@LaunchedEffect
+        if (railLoading || landing.sequence <= landedSequence) return@LaunchedEffect
+        landedSequence = landing.sequence
+        withFrameNanos { }
+        sectionColumn.handOff(
+            when (landing.site) {
+                EpisodeLaunchSite.Hero -> ShowSection.Action
+                EpisodeLaunchSite.EpisodesRail -> ShowSection.Episodes
+            },
+        )
     }
     // Focus on a node that a state change disposes is dropped on the floor; these two re-land
     // it. Play goes when a refresh leaves its season with nothing to play, and the rail when a
@@ -342,6 +415,10 @@ private fun ShowDetailsContent(
                 onPressSeason = onPressSeason,
                 onRetrySeason = actions.onRetrySeason,
                 onPlayEpisode = { episodeId -> onPlayEpisode(episodeId, EpisodeLaunchSite.EpisodesRail) },
+                onOpenEpisodeMenu = onOpenEpisodeMenu,
+                onSetEpisodeWatched = actions.onSetEpisodeWatched,
+                landing = state.landing,
+                watchedNotice = state.watchedNotice,
             )
             if (show.keyCrew.isNotEmpty()) {
                 KeyCrewSection(

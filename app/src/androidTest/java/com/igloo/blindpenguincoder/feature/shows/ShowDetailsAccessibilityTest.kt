@@ -11,6 +11,12 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -38,6 +44,7 @@ import com.igloo.blindpenguincoder.testSeason
 import com.igloo.blindpenguincoder.testShowDetails
 import com.igloo.blindpenguincoder.testShowDetailsState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -64,6 +71,7 @@ class ShowDetailsAccessibilityTest {
     private var seasonRetries = 0
     private val selectedSeasons = mutableListOf<Long>()
     private val pressed = mutableListOf<Pair<Long, EpisodeLaunchSite>>()
+    private val watchedSets = mutableListOf<Pair<Long, Boolean>>()
 
     private fun setContent(
         initial: ShowDetailsUiState = testShowDetailsState(),
@@ -77,6 +85,7 @@ class ShowDetailsAccessibilityTest {
         seasonRetries = 0
         selectedSeasons.clear()
         pressed.clear()
+        watchedSets.clear()
         composeRule.setContent {
             IglooTheme {
                 ShowDetailsScreen(
@@ -85,6 +94,7 @@ class ShowDetailsAccessibilityTest {
                         onRetry = { retries += 1 },
                         onSelectSeason = { selectedSeasons += it },
                         onRetrySeason = { seasonRetries += 1 },
+                        onSetEpisodeWatched = { id, watched -> watchedSets += id to watched },
                     ),
                     onPlayEpisode = { episodeId, site -> pressed += episodeId to site },
                     playReturnRequester = remember { FocusRequester() },
@@ -409,5 +419,75 @@ class ShowDetailsAccessibilityTest {
 
         composeRule.onNodeWithTag("details_play").assertIsFocused()
         composeRule.onNodeWithTag("details_hero").assertTopPositionInRootIsEqualTo(0.dp)
+    }
+
+    // --- mark watched ---
+
+    private fun SemanticsNodeInteraction.customActionLabels(): List<String> =
+        fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty().map { it.label }
+
+    /** Runs the card's one custom action, as TalkBack's actions menu would. */
+    private fun SemanticsNodeInteraction.performCustomAction(label: String) {
+        val action = fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == label }
+        composeRule.runOnUiThread { action.action() }
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun episodeCardsOfferMarkWatchedAsACustomAction() {
+        setContent()
+
+        val unwatched = composeRule.onNodeWithTag("episode_card_902")
+        val watched = composeRule.onNodeWithTag("episode_card_901")
+        assertEquals(listOf("Mark watched"), unwatched.customActionLabels())
+        assertEquals(listOf("Mark unwatched"), watched.customActionLabels())
+        // The press still plays; the custom action is the second choice, not a replacement.
+        assertEquals("Play 2. Half Loop", unwatched.clickActionLabel())
+
+        unwatched.performCustomAction("Mark watched")
+        watched.performCustomAction("Mark unwatched")
+
+        assertEquals(listOf(902L to true, 901L to false), watchedSets)
+        assertTrue(pressed.isEmpty())
+    }
+
+    @Test
+    fun theEpisodeMenuNamesItselfAndClearsThePageBehindIt() {
+        setContent()
+        val card = composeRule.onNodeWithTag("episode_card_903")
+        card.requestFocus()
+
+        card.performKeyInput { keyDown(Key.DirectionCenter) }
+        composeRule.waitUntil(timeoutMillis = 3_000) {
+            composeRule.onAllNodesWithTag("more_menu").fetchSemanticsNodes().isNotEmpty()
+        }
+        // The card has left the tree under the menu; the release lands on the focused row.
+        composeRule.onRoot().performKeyInput { keyUp(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("more_menu")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Episode options"))
+        composeRule.onNodeWithTag("more_menu_item_0").assertIsFocused().assertContentDescriptionEquals("Mark watched")
+        // The body is cleared under the menu; the page's own pane stays named.
+        composeRule.onNodeWithTag("episode_card_903").assertDoesNotExist()
+        composeRule.onNodeWithTag("show_details")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Severance"))
+
+        composeRule.onNodeWithTag("more_menu_item_0").performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(listOf(903L to true), watchedSets)
+        composeRule.onNodeWithTag("more_menu").assertDoesNotExist()
+        composeRule.onNodeWithTag("episode_card_903").assertIsFocused()
+        assertTrue(pressed.isEmpty())
+    }
+
+    @Test
+    fun theWatchedNoticeSpeaksPolitelyUnderTheRail() {
+        setContent(testShowDetailsState(watchedNotice = "Couldn't update watched status: Offline."))
+
+        composeRule.onNodeWithTag("episode_watched_notice")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(hasText("Couldn't update watched status: Offline."))
     }
 }

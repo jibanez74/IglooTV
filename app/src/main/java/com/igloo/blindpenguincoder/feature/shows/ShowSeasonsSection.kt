@@ -10,10 +10,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.testTag
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.AnnouncedSection
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.core.ui.announcedSection
@@ -35,10 +37,14 @@ import com.igloo.blindpenguincoder.feature.shared.SelectableChipRow
  *
  * The rail is keyed by season, so a switch builds it fresh: its focus memory starts over and the
  * hand-off lands on the first episode, and its entry, loading, error and empty anchors all belong
- * to the season it shows. It speaks its heading once, on entry ("Season 2. Episode 1, …"),
- * because unlike the cast rail its name changes with the chips above it. A card's press plays its
- * episode through [onPlayEpisode], and [episodesReturnRequester] rides the rail's last-focused
- * card, so the player's close lands back on the card that launched it (section 6.3).
+ * to the season it shows — and by the player's [landing], which rebuilds it around the episode
+ * that last played, so the page's focus move finds that card as the rail's entry even when it had
+ * scrolled off. It speaks its heading once, on entry ("Season 2. Episode 1, …"), because unlike
+ * the cast rail its name changes with the chips above it. A card's press plays its episode
+ * through [onPlayEpisode], a held Center opens its menu through [onOpenEpisodeMenu], and
+ * [episodesReturnRequester] rides the rail's last-focused card, so the player's close and the
+ * menu's dismissal land back on the card that led away (section 6.3). [watchedNotice], why the
+ * last Mark watched did not land, sits under the rail where the viewer who pressed it is.
  */
 @Composable
 internal fun ShowSeasonsSection(
@@ -60,6 +66,10 @@ internal fun ShowSeasonsSection(
     onPressSeason: (Long) -> Unit,
     onRetrySeason: () -> Unit,
     onPlayEpisode: (Long) -> Unit,
+    onOpenEpisodeMenu: (EpisodeUi, Rect) -> Unit,
+    onSetEpisodeWatched: (episodeId: Long, watched: Boolean) -> Unit,
+    landing: EpisodeLanding? = null,
+    watchedNotice: String? = null,
 ) {
     if (seasons.size >= 2) {
         val chips = remember(seasons) {
@@ -94,7 +104,7 @@ internal fun ShowSeasonsSection(
     }
 
     val season = seasons.firstOrNull { it.number == selectedSeason } ?: return
-    key(season.number) {
+    key(season.number, landing) {
         DetailsRailSection(
             title = season.label,
             state = episodes,
@@ -104,6 +114,7 @@ internal fun ShowSeasonsSection(
             upRequester = episodesUpRequester,
             downRequester = episodesDownRequester,
             returnRequester = episodesReturnRequester,
+            initialFocusedId = landing?.episodeId,
             modifier = Modifier
                 .announcedSection(episodesSection)
                 .onFocusChanged { onEpisodesFocusChanged(it.hasFocus) },
@@ -119,8 +130,18 @@ internal fun ShowSeasonsSection(
             EpisodeCard(
                 episode = episode,
                 onClick = { onPlayEpisode(episode.id) },
+                onOpenMenu = { bounds -> onOpenEpisodeMenu(episode, bounds) },
+                onToggleWatched = { onSetEpisodeWatched(episode.id, !episode.watched) },
                 modifier = itemModifier.testTag("episode_card_${episode.id}"),
             )
         }
+    }
+    if (watchedNotice != null) {
+        IglooNotice(
+            text = watchedNotice,
+            modifier = Modifier
+                .insetHorizontally(contentInset)
+                .testTag("episode_watched_notice"),
+        )
     }
 }

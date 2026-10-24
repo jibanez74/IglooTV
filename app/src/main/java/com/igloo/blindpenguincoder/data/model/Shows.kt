@@ -47,14 +47,17 @@ data class ShowsStatsData(
 
 /**
  * Payload of `ShowEpisodePlaybackEnvelope.data`, reduced to what the player needs to title an
- * episode. `next_episode` and the catalog fields (ids, backdrop, season name, overview, air date,
- * still, runtime, votes) are left to `ignoreUnknownKeys` until a screen reads them.
+ * episode and to offer the one that follows it. The catalog fields (ids, backdrop, season name,
+ * overview, air date, still, runtime, votes) are left to `ignoreUnknownKeys` until a screen reads
+ * them.
  */
 @Serializable
 data class ShowEpisodePlaybackData(
     val show: ShowEpisodePlaybackShow,
     val season: ShowEpisodePlaybackSeason,
     val episode: ShowEpisodePlaybackEpisode,
+    /** Null after the show's last playable episode. */
+    @SerialName("next_episode") val nextEpisode: ShowEpisodeUpNext?,
 )
 
 @Serializable
@@ -72,6 +75,23 @@ data class ShowEpisodePlaybackSeason(
 data class ShowEpisodePlaybackEpisode(
     @SerialName("episode_number") val episodeNumber: Long,
     val name: String,
+)
+
+/**
+ * The episode the player advances to when the current one ends: the next in listing order
+ * (regular seasons by number, specials last) backed by a file other than the one that just
+ * played, with the caller's progress on it so the hand-off can resume where it was left.
+ */
+@Serializable
+data class ShowEpisodeUpNext(
+    val id: Long,
+    @SerialName("season_number") val seasonNumber: Long,
+    @SerialName("episode_number") val episodeNumber: Long,
+    val name: String,
+    @SerialName("still_path") val stillPath: SqlNullString,
+    @SerialName("progress_sec") val progressSec: SqlNullFloat64,
+    @SerialName("duration_sec") val durationSec: SqlNullFloat64,
+    val watched: Boolean,
 )
 
 /** Payload of `ShowEpisodeTechnicalDetailsEnvelope.data`; the stream rows are the movie ones. */
@@ -216,5 +236,12 @@ data class ShowEpisode(
     @SerialName("tmdb_runtime") val tmdbRuntime: SqlNullInt64,
     @SerialName("progress_sec") val progressSec: SqlNullFloat64,
     @SerialName("duration_sec") val durationSec: SqlNullFloat64,
+    val watched: Boolean,
+)
+
+/** Payload of `EpisodeWatchedEnvelope.data`: the server's answer to a watched write. */
+@Serializable
+data class EpisodeWatchedData(
+    @SerialName("episode_id") val episodeId: Long,
     val watched: Boolean,
 )

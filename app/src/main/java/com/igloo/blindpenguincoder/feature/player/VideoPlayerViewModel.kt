@@ -122,12 +122,15 @@ class VideoPlayerViewModel(
     }
 
     /**
-     * The player is closing: one last eligible save, never deduplicated because its success is
-     * what refreshes the details page and Continue Watching on return. A failure stays available
-     * for an explicit retry after the screen is gone.
+     * The player is closing [media]: one last eligible save, never deduplicated because its
+     * success is what refreshes the details page and Continue Watching on return. A failure stays
+     * available for an explicit retry after the screen is gone. The media names which session is
+     * ending: an episode handing off to the next one disposes its screen in the same pass the new
+     * screen starts its session, so the old screen's exit must not end — or write onto — the new
+     * episode's session.
      */
-    fun endSession(finalPositionSec: Double, durationSec: Double) {
-        val session = activeSession ?: return
+    fun endSession(media: PlaybackMediaRef, finalPositionSec: Double, durationSec: Double) {
+        val session = activeSession?.takeIf { it.reporter.media == media } ?: return
         activeSession = null
         if (!shouldPersistProgress(finalPositionSec, durationSec)) {
             discardSettledSession(session)

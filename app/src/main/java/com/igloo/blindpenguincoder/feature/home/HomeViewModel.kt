@@ -30,6 +30,7 @@ import com.igloo.blindpenguincoder.feature.music.toCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.posterItem
 import com.igloo.blindpenguincoder.feature.shows.EpisodePlayLauncher
+import com.igloo.blindpenguincoder.feature.shows.EpisodePlayPreparer
 import com.igloo.blindpenguincoder.feature.shows.formatSeasonCount
 import com.igloo.blindpenguincoder.feature.shows.formatSpokenSeasonCount
 import com.igloo.blindpenguincoder.feature.shows.numberedSeasons
@@ -144,8 +145,8 @@ class HomeViewModel(
     private val shows: ShowRepository,
     private val music: MusicRepository,
     private val serverUrl: ServerUrlProvider,
-    private val canPlayVideoMime: (mimeType: String) -> Boolean,
-    private val canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
+    /** Shared with the show page and the player, so every surface prepares an episode the same way. */
+    episodePreparer: EpisodePlayPreparer,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -157,14 +158,10 @@ class HomeViewModel(
     private val features: MutableMap<HomeHeroKind, Feature> =
         HomeHeroKind.entries.associateWithTo(mutableMapOf()) { Feature.Loading }
 
-    // Shared with the show page, so a Continue Watching card and a Play/Resume press prepare an
-    // episode the same way; the notice it posts is Home's own.
+    // The notice it posts is Home's own.
     private val episodeLauncher = EpisodePlayLauncher(
         scope = viewModelScope,
-        shows = shows,
-        serverUrl = serverUrl,
-        canPlayVideoMime = canPlayVideoMime,
-        canPlayAudioMime = canPlayAudioMime,
+        preparer = episodePreparer,
         onNotice = { notice -> _uiState.update { it.copy(playbackNotice = notice) } },
     )
 
@@ -259,9 +256,10 @@ class HomeViewModel(
 
     /**
      * A Continue Watching episode card's press: the launcher prepares the episode and, once its
-     * reads land, emits the request the host opens the player with.
+     * reads land, emits the request the host opens the player with. The card is drawn with its
+     * progress bar under a rail named for resuming, so the player resumes without asking again.
      */
-    fun resumeEpisode(episodeId: Long) = episodeLauncher.launch(episodeId)
+    fun resumeEpisode(episodeId: Long) = episodeLauncher.launch(episodeId, promptForResume = false)
 
     private fun loadLatestMovies(userInitiated: Boolean) {
         if (userInitiated) {

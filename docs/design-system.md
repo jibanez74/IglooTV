@@ -563,7 +563,9 @@ it for a ≤1.5:1 effect.
 ### 6.3 Focus behavior
 
 - **Restoration**: returning to a rail or grid restores the last-focused item, not the first.
-  Back navigation restores focus to the element that led away. The nav spine is the exception:
+  Back navigation restores focus to the element that led away — and a player that advanced
+  through episodes restores to the episode that last played, not the one that launched
+  (§11.4.3). The nav spine is the exception:
   re-entering it (d-pad left, or Back from content) lands on the **current destination's** row —
   the row whose selected state is announced — so Back-then-OK is an idempotent "stay here" (§11.2).
 - **Spine ↔ content**: d-pad **right** from the spine enters content; **left** from the first
@@ -986,9 +988,9 @@ tree. The reader goes silent, the remote looks dead, and Back is the only way ou
 `clearAndSetSemantics { }` on the content it covers, taking those controls out of the tree
 entirely — with the covered node's own `testTag` left *outside* the clear so it survives, the same
 ordering rule the reading stops follow (§12).
-This applies to the movie details page under its More menu and Playback Settings dialog, and to
-the video player's controls (`movie_chrome`) under its chapter, audio, subtitle and quality
-menus.
+This applies to the movie details page under its More menu and Playback Settings dialog, to the
+show page's body under an episode card's menu (§11.4.3), and to the video player's controls
+(`movie_chrome`) under its chapter, audio, subtitle and quality menus.
 
 **Motion.** One `standard` alpha reveal via `graphicsLayer` (§7.2), and **no exit animation** — the
 overlay leaves at once so the restored focus ring is never drawn under a fading scrim. The focus
@@ -1537,7 +1539,7 @@ screen is left to Compose's own move, which is announced in that case.
 
 | Rail | Endpoint | Card | Empty copy |
 |---|---|---|---|
-| Continue Watching | `GET /api/continue-watching` (movies and TV episodes, in server order) | poster + progress bar; fully spoken remaining time in card semantics only. A movie card opens its details; an episode card wears the **show's** poster (`TvShows` glyph fallback) with the show name over `S1 E3 · Episode name`, announces "Resume {show} S1 E3", and resumes straight into the player rather than opening the show's page (web parity: the episode is what the user was watching). The rail's `Long` key folds the kind into the low bit (`id * 2`, `id * 2 + 1`) because a movie id and an episode id can collide. | "Nothing in progress yet. Movies and episodes you start watching appear here." |
+| Continue Watching | `GET /api/continue-watching` (movies and TV episodes, in server order) | poster + progress bar; fully spoken remaining time in card semantics only. A movie card opens its details; an episode card wears the **show's** poster (`TvShows` glyph fallback) with the show name over `S1 E3 · Episode name`, announces "Resume {show} S1 E3", and resumes straight into the player — without the Resume prompt, since the card already said Resume (§11.8) — rather than opening the show's page (web parity: the episode is what the user was watching). The rail's `Long` key folds the kind into the low bit (`id * 2`, `id * 2 + 1`) because a movie id and an episode id can collide. | "Nothing in progress yet. Movies and episodes you start watching appear here." |
 | Recently Added Movies | `GET /api/movies/latest` | poster, year below | "No movies in your library yet. Add a movies folder on the server and run a scan." |
 | Recently Added Shows | `GET /api/shows/latest` | poster, name and optional premiere year below, `TvShows` glyph fallback; announces "Open {name}" and opens the show's details page (§11.4.3), and Back returns to the card | "No shows in your library yet. Add a shows folder on the server and run a scan." |
 | Recently Added Albums | `GET /api/music/albums/latest` | `albumAspect` cover, musician below, `Music` glyph fallback | "No albums in your library yet. Add a music folder on the server and run a scan." |
@@ -2078,7 +2080,10 @@ reads the episode's header, technical details and the caller's saved position in
 season list's numbers can be minutes old) and builds the request with the default mode and
 tracks: the page has no Playback Settings, so a Direct play the capability gate refuses falls back
 to Remux rather than blocking on guidance the user cannot follow from here, Home's rule, and the
-in-player menus stay the place to change quality or tracks. The host opens the player only for a
+in-player menus stay the place to change quality or tracks. A control that already says Resume —
+the hero's verb, a card drawn with its progress bar, both read from the same cached episode —
+launches without the Resume prompt; one that says Play keeps it, for a position the page did not
+show (§11.8). The host opens the player only for a
 press made on this page (an armed landing, the movie's `deferredPlayArmed` reasoning: a recreation
 never finishes a press from the old activity), with an origin per control so the close restores
 focus to Play/Resume or to the rail's last-focused card, and it takes the player down with the
@@ -2116,6 +2121,21 @@ clamped to three lines with the overview's fade (`bodyMedium`, `foreground` — 
 node speaking everything it draws: "Episode 1, Pilot. 23 minutes, aired September 22, 1994.
 Watched. {overview}", with "Play 1. Pilot" as its action.
 
+**Marking watched.** Holding Center on a card (foundation's `combinedClickable` long-press, the
+system's long-press timeout; the release never counts as the press) opens a one-row `IglooMenu`
+beside it, "Episode options": "Mark watched", or "Mark unwatched" on a watched card — the opposite
+of what the card shows *now*. TalkBack gets the same choice as a **custom action on the card's
+node**, not a long-click gesture TV has no idiom for; the press still plays. The menu is the album
+page's row menu in every rule: screen-local, the body cleared under it (§9.3), its own Back
+handler the one the dispatcher reaches while it is up, dismissal restoring focus to the card that
+was held. The write is optimistic — the check appears (or leaves) and the hero's Play/Resume
+retargets in the same frame, from the rewritten cached row; marking watched clears the saved
+position, as the server does. The server's answer re-reads the season and refreshes Home's
+Continue Watching; a refusal puts the row back and says why in a polite notice directly under the
+rail ("Couldn't update watched status: …"), cleared by the next press. A later press on the same
+episode owns the outcome, and a season read landing mid-write keeps the write's value. The write
+is not cancelled with the page's reads: a PUT already sent commits either way.
+
 **Sections.** Overview, Key Crew (the show's creators, "Creator: David Crane"; skipped with none),
 Cast (the billing's top ten, each with a third line, "228 episodes"; keyed by position, because
 one artist can hold two roles), Extra Videos (YouTube only, trailers first; inert on this page) and
@@ -2137,8 +2157,18 @@ requester still rides the outgoing season's card then). Entry focus is the first
 under a screen reader the hero summary (§11.4.1 Focus), otherwise Play/Resume, or with no
 Play/Resume whichever section comes next.
 
-**Not on the page yet.** Playing an extra, marking an episode watched (a long-press episode menu
-is planned), and the up-next hand-off: an episode that ends closes the player back to the page.
+**After a hand-off.** When the player closes having advanced through one or more episodes
+(§11.8), the page **follows the episode that last played**: the host names it before restoring
+focus, the view model selects its season — kept if shown, else from the cache or read, Loading
+meanwhile — and carries a landing on the state until the screen has moved focus through the
+announced section move: to that episode's card when the rail launched (the rail is keyed by
+season *and* landing, so it is rebuilt with its focus memory, entry and return anchor seeded on
+the landed card, scrolled to it even when it had scrolled off), or to Play/Resume — relabelled by
+the re-read — when the hero did. While a season loads the skeleton anchor holds focus; an episode
+the season no longer lists lands on its first card; a season the show does not list lands nothing
+and the host's own restore stands.
+
+**Not on the page yet.** Playing an extra.
 
 ### 11.5 Music
 
@@ -2396,6 +2426,57 @@ autoplay is still pending. The icon and toggle use `playWhenReady`, so Pause dur
 rebuffering cancels pending autoplay and the ready transition cannot restart behind the user's
 back.
 
+**The Resume prompt asks only when the control did not.** A launch whose control already said
+Resume — the show page's "Resume S1 E3", an episode card drawn with its progress bar, a Continue
+Watching card — carries `promptForResume = false` and starts at the saved position at once; a
+control that said Play keeps the prompt, for a position the page did not show. The movie page's
+Play keeps it too. The hand-off below never asks.
+
+**Up next (episodes).** An episode's request carries the episode that follows it (the server's
+`next_episode`: the next in listing order with a file of its own, specials last, null after the
+show's last playable episode). **Fifteen seconds before the end** (`UP_NEXT_LEAD_SEC`) the Up Next
+card appears in the bottom-end corner over the picture — the `TransportButton` recipe at card size
+on the over-media black ground, with a standard reveal: the next episode's still (TV glyph
+fallback), the "UP NEXT" eyebrow, "S1 E2 · Title" on up to two lines, and a tabular-digit status that
+counts the episode's own remaining seconds down, "Playing in 12s" — "Resuming in 12s" when the
+viewer has a position worth resuming on it. It wears the focus ring from the moment it appears:
+**the card takes focus on appearance** (or the moment a menu that was up closes), the visible cue
+that Center plays the next episode now. A paused picture holds the count still; the card stays.
+While the chrome is up the card is lifted above the transport block, animated, so the two never
+overlap, and it never fades with the chrome. The card is one cleared Button node with "Play now" /
+"Resume now" as its action, whose description is the sentence as it stood when the card appeared
+— "Up next: season 1, episode 2, <name>. Playing in 15 seconds" (no closing period; TalkBack adds
+its ". Button") — or last changed what it waits
+for ("… Loading next episode…", or the failure); TalkBack reads it with the focus the card takes
+and again when that sentence changes under its cursor. No live region, and never the falling
+count (§12). With TalkBack on, Center reaches the card as a click, so the hold that opens an
+episode card's menu elsewhere is not a gesture here either way.
+
+| Input, card up | Chrome hidden, card focused | Chrome visible |
+|---|---|---|
+| Center | Play / Resume now | Activates the focused control (the card included) |
+| Back | Dismiss the card; the episode plays out and its end closes the player | Dismiss the card first; the next Back hides the chrome, the next closes |
+| Up / Down | Show the chrome, focus Play/Pause; the card stays and keeps counting | Up from Play/Pause → card → Retry card or Back; Down from the card → Play/Pause |
+| Left / Right | Pinned: no seek, no move | Pinned on the card; the transport seeks as usual |
+| Media keys | Act as usual; a rewind past the lead retracts the card | Same |
+
+A seek that leaves more than the lead remaining retracts the card and lapses a dismissal, so it
+may be offered again at the end. **The end of the episode advances at once** — no post-end
+countdown, unlike the web's ten-second card — whenever a next episode exists and the card was not
+dismissed, even if the card never showed (a duration the engine never reported). The next request
+is prepared while the card is up through the same `EpisodePlayPreparer` a launch uses; if the end
+arrives first, the ended frame is held under the card reading "Loading next episode…" and the
+hand-off follows the moment it lands. A preparation that fails shows why on the card, spoken once,
+and the end then closes the player as before; so does a dismissal, a movie, and the show's last
+episode. **The hand-off is an in-place swap**: the host replaces the player's request under
+`key(request.media)`, so the finished episode's screen disposes — its exit save records the end,
+flipping it watched, and its engine goes — and a fresh screen mounts for the next episode exactly
+as a launch does: chrome up with the new title, "Loading episode…", Play/Pause focused, then
+playing from the saved position without the prompt, the chrome hiding after 4 s. The origin stays:
+Back exits to the page that launched the first episode, which follows the episode that last
+played (§11.4.3). A background trip with the card up rebuilds the engine paused; the card returns
+with the same count and re-takes focus once the picture is back.
+
 The in-player **Quality** menu always lists the same seven modes as Playback Settings, in enum
 order: Direct, Remux, 2160p at 16 Mbps, 1080p at 8 Mbps, 1080p at 6 Mbps, 1080p at 4 Mbps, and
 720p at 3 Mbps. Source height and the current audio route do not remove rows. A requested mode
@@ -2617,6 +2698,9 @@ Non-negotiable. `AGENTS.md` §Accessibility governs; this section covers the des
   as-built example). Heading, live-region and traversal-order semantics still matter for the
   platform's other surfaces, but none of them make text reachable by d-pad.
 - **State changes are announced**: loading → loaded, empty results, errors, and action failures.
+- **A long-press affordance is mirrored as a named custom action on the same node.** TalkBack for
+  TV has no long-click idiom; the episode card's held Center and its "Mark watched" custom action
+  are the as-built pair (§11.4.3).
 - **A pane whose title is not drawn as text announces through `paneTitle`, not through a live
   region on a hidden node.** Swapping the shell's destination moves no focus and, since §11.3
   removed the pane header, changes no text — so without this the change is silent. `paneTitle` is
@@ -2697,6 +2781,23 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-23 — Up next, Resume without asking, and marking episodes watched (§11.8, §11.4.3, §6.3,
+§12).**
+
+- **§11.8**: the Up Next card over an episode's last fifteen seconds — the next episode's still,
+  code, title and a count of the seconds left; takes focus on appearance, Center plays now, Back
+  dismisses, Up/Down reveal the chrome under it, a seek back past the lead retracts it. The end of
+  the episode hands off in place, with no post-end countdown: a fresh player screen for the next
+  episode at its saved position without the Resume prompt, the finished episode's exit save
+  recording the end. A control that already said Resume (the show hero's verb, a card with a bar,
+  a Continue Watching card) now starts without the prompt.
+- **§11.4.3**: holding Center on an episode card opens "Episode options" with Mark watched /
+  Mark unwatched, also a TalkBack custom action on the card; optimistic, with a polite notice
+  under the rail on failure. After a hand-off the page follows the episode that last played:
+  season selected, focus on its card or on the relabelled Play/Resume. "Not on the page yet"
+  shrinks to the extras.
+- **§6.3, §12**: the restoration and long-press rules above, stated.
 
 **2026-10-21 — The show page plays episodes (§11.4.3, §11.8).**
 

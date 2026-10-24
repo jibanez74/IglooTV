@@ -26,6 +26,7 @@ import com.igloo.blindpenguincoder.data.repository.videoStreamJson
 import com.igloo.blindpenguincoder.data.repository.watchProgressJson
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
+import com.igloo.blindpenguincoder.feature.shows.EpisodePlayPreparer
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
@@ -81,8 +82,12 @@ class HomeViewModelTest {
         http.showRepository,
         http.musicRepository,
         http.serverUrl,
-        canPlayVideoMime = { canPlayVideoMime },
-        canPlayAudioMime = { _, _ -> canPlayAudioMime },
+        EpisodePlayPreparer(
+            http.showRepository,
+            http.serverUrl,
+            canPlayVideoMime = { canPlayVideoMime },
+            canPlayAudioMime = { _, _ -> canPlayAudioMime },
+        ),
     )
 
     private fun List<HomeContinueItem>.movieTitles() =
@@ -592,6 +597,8 @@ class HomeViewModelTest {
         assertEquals(600.0, request.resumeAtSec)
         // The saved duration wins over the probed one, as it does for a movie.
         assertEquals(3200.0, request.durationSec)
+        // A Continue Watching card already says Resume: the player does not ask again.
+        assertEquals(false, request.promptForResume)
         assertEquals(
             setOf(
                 "/api/shows/episodes/900",

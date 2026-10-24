@@ -52,6 +52,7 @@ import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
+import com.igloo.blindpenguincoder.feature.shows.EpisodeLanding
 import com.igloo.blindpenguincoder.feature.shows.EpisodeUi
 import com.igloo.blindpenguincoder.feature.shows.PlayTargetUi
 import com.igloo.blindpenguincoder.feature.shows.SeasonUi
@@ -621,18 +622,23 @@ internal fun testShowDetailsState(
     selectedSeason: Long? = 1,
     episodes: IglooRailState<EpisodeUi> = IglooRailState.Loaded(testEpisodes),
     playTarget: PlayTargetUi? = testPlayTarget,
+    landing: EpisodeLanding? = null,
+    watchedNotice: String? = null,
 ) = ShowDetailsUiState(
     openShowId = 40,
     details = details,
     selectedSeason = selectedSeason,
     episodes = episodes,
     playTarget = playTarget,
+    landing = landing,
+    watchedNotice = watchedNotice,
 )
 
 internal val inertShowDetailsActions = ShowDetailsActions(
     onRetry = {},
     onSelectSeason = {},
     onRetrySeason = {},
+    onSetEpisodeWatched = { _, _ -> },
 )
 
 /** An album-page row: index gutter, genre subtitle, no album to go to, the album's artist. */

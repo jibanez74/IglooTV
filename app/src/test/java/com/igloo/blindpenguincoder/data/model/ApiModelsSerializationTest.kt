@@ -289,11 +289,11 @@ class ApiModelsSerializationTest {
     }
 
     /**
-     * `GET /shows/episodes/{id}`: `next_episode` is required but unread, populated or null, and
-     * the catalog fields the player does not read ride along unmodelled.
+     * `GET /shows/episodes/{id}`: `next_episode` decodes populated or null, and the catalog fields
+     * the player does not read ride along unmodelled.
      */
     @Test
-    fun decodesShowEpisodePlaybackHeaderIgnoringUpNext() {
+    fun decodesShowEpisodePlaybackHeaderWithUpNext() {
         fun body(nextEpisode: String) = """
             {
               "error": false,
@@ -315,8 +315,8 @@ class ApiModelsSerializationTest {
         """.trimIndent()
         val upNext = """{"id": 901, "season_number": 1, "episode_number": 4, "name": "Next",
             "still_path": {"String": "", "Valid": false},
-            "progress_sec": {"Float64": 0, "Valid": false},
-            "duration_sec": {"Float64": 0, "Valid": false}, "watched": false}"""
+            "progress_sec": {"Float64": 600, "Valid": true},
+            "duration_sec": {"Float64": 3300, "Valid": true}, "watched": false}"""
 
         listOf("null", upNext).forEach { nextEpisode ->
             val data = json.decodeFromString<ApiEnvelope<ShowEpisodePlaybackData>>(body(nextEpisode)).data!!
@@ -326,6 +326,16 @@ class ApiModelsSerializationTest {
             assertEquals(3L, data.episode.episodeNumber)
             assertEquals("In Perpetuity", data.episode.name)
         }
+        assertNull(json.decodeFromString<ApiEnvelope<ShowEpisodePlaybackData>>(body("null")).data!!.nextEpisode)
+        val next = json.decodeFromString<ApiEnvelope<ShowEpisodePlaybackData>>(body(upNext)).data!!.nextEpisode!!
+        assertEquals(901L, next.id)
+        assertEquals(1L, next.seasonNumber)
+        assertEquals(4L, next.episodeNumber)
+        assertEquals("Next", next.name)
+        assertNull(next.stillPath.orNull())
+        assertEquals(600.0, next.progressSec.orNull())
+        assertEquals(3300.0, next.durationSec.orNull())
+        assertFalse(next.watched)
     }
 
     /**
