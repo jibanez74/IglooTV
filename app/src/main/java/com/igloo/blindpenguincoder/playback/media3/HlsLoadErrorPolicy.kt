@@ -23,11 +23,13 @@ internal class HlsLoadErrorPolicy : DefaultLoadErrorHandlingPolicy() {
     override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
         val http = httpErrorCause(loadErrorInfo.exception)
         val defaultDelayMs = super.getRetryDelayMsFor(loadErrorInfo)
+        val requestPath = http?.dataSpec?.uri?.path
         val videoHlsResponseCode = http?.responseCode?.takeIf {
-            isVideoHlsRequestPath(http.dataSpec.uri.path)
+            isVideoHlsRequestPath(requestPath)
         }
         val delayMs = hlsLoadRetryDelayMs(
             responseCode = videoHlsResponseCode,
+            requestPath = requestPath,
             retryAfterSec = retryAfterSecondsFrom(http?.headerFields),
             errorCount = loadErrorInfo.errorCount,
             defaultRetryCount = super.getMinimumLoadableRetryCount(loadErrorInfo.mediaLoadData.dataType),

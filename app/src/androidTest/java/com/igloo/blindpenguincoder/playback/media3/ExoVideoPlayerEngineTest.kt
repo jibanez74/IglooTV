@@ -6,11 +6,17 @@ import android.os.SystemClock
 import androidx.media3.common.C
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.ByteArrayDataSource
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.playback.hls.HLS_SEEK_SETTLE_MS
+import com.igloo.blindpenguincoder.playback.hls.HLS_SESSION_LOST_MAX_ATTEMPTS
 import com.igloo.blindpenguincoder.playback.hls.HlsManifestResult
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionApi
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
@@ -60,8 +66,10 @@ class ExoVideoPlayerEngineTest {
         stopScope.cancel()
     }
 
-    private class FakeHlsApi : HlsSessionApi {
+    /** [pathPrefix] lets a test put the session assets under the server's real `/api` routes. */
+    private class FakeHlsApi(private val pathPrefix: String = "") : HlsSessionApi {
         val fetched = mutableListOf<HlsSessionSpec>()
+        val fetchedAtMs = mutableListOf<Long>()
         val stopped = mutableListOf<String>()
         var result: HlsManifestResult = HlsManifestResult.Ready("remux", 0.0)
         var throwOnFetch: (() -> Nothing)? = null
@@ -72,6 +80,7 @@ class ExoVideoPlayerEngineTest {
             keepalive: Boolean,
         ): HlsManifestResult {
             fetched += spec
+            fetchedAtMs += SystemClock.elapsedRealtime()
             throwOnFetch?.invoke()
             return suspendedResult?.await() ?: result
         }
@@ -81,7 +90,7 @@ class ExoVideoPlayerEngineTest {
         }
 
         override fun hlsPlaylistUrl(spec: HlsSessionSpec): String =
-            "https://203.0.113.1/movies/${spec.media.id}/hls/${spec.profileId}/playlist.m3u8"
+            "https://203.0.113.1$pathPrefix/movies/${spec.media.id}/hls/${spec.profileId}/playlist.m3u8"
 
         override fun subtitleUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String =
             "https://203.0.113.1/movies/${media.id}/subtitles/$trackIndex/web.vtt"
@@ -116,6 +125,7 @@ class ExoVideoPlayerEngineTest {
         api: FakeHlsApi = FakeHlsApi(),
         canPlayAudioMime: (String, Int?) -> Boolean = { _, _ -> true },
         canPlayVideoMime: (String) -> Boolean = { true },
+        hlsDataSourceFactory: DataSource.Factory = DefaultHttpDataSource.Factory(),
     ): VideoPlayerEngine {
         lateinit var built: VideoPlayerEngine
         instrumentation.runOnMainSync {
@@ -124,7 +134,7 @@ class ExoVideoPlayerEngineTest {
                 request = request,
                 services = VideoPlaybackServices(
                     progressiveDataSourceFactory = DefaultHttpDataSource.Factory(),
-                    hlsDataSourceFactory = DefaultHttpDataSource.Factory(),
+                    hlsDataSourceFactory = hlsDataSourceFactory,
                     directStreamUrl = { "https://203.0.113.1/movies/${it.id}/stream" },
                     hlsSessionApi = api,
                     canPlayVideoMime = canPlayVideoMime,
@@ -138,8 +148,8 @@ class ExoVideoPlayerEngineTest {
     }
 
     /** Pumps the main looper until [condition] holds; the engine's work is all posted there. */
-    private fun waitFor(what: String, condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 5_000
+    private fun waitFor(what: String, timeoutMs: Long = 5_000, condition: () -> Boolean) {
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
         while (SystemClock.uptimeMillis() < deadline) {
             instrumentation.waitForIdleSync()
             if (condition()) return
@@ -787,5 +797,63 @@ class ExoVideoPlayerEngineTest {
         waitFor("the error") { engine.errors().isNotEmpty() }
 
         assertTrue(engine.errors().single().message.contains("Server address"))
+    }
+
+    // --- mid-play lost-session recovery ---
+
+    /**
+     * Serves a one-segment playlist and answers every segment with a 500, which is what a
+     * session whose FFmpeg dies at the same point in the film looks like to the player.
+     */
+    private fun segmentsFailWith500(): DataSource.Factory = DataSource.Factory {
+        object : DataSource {
+            private var delegate: ByteArrayDataSource? = null
+
+            override fun addTransferListener(transferListener: TransferListener) = Unit
+
+            override fun open(dataSpec: DataSpec): Long {
+                if (dataSpec.uri.path?.endsWith("playlist.m3u8") != true) {
+                    throw HttpDataSource.InvalidResponseCodeException(
+                        500,
+                        /* responseMessage= */ null,
+                        /* cause= */ null,
+                        emptyMap(),
+                        dataSpec,
+                        ByteArray(0),
+                    )
+                }
+                val playlist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:4\n" +
+                    "#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:4.0,\nsegment_0.m4s\n#EXT-X-ENDLIST\n"
+                return ByteArrayDataSource(playlist.toByteArray()).also { delegate = it }.open(dataSpec)
+            }
+
+            override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+                requireNotNull(delegate).read(buffer, offset, length)
+
+            override fun getUri() = delegate?.uri
+
+            override fun close() {
+                delegate?.close()
+                delegate = null
+            }
+        }
+    }
+
+    @Test
+    fun aFailureThatRepeatsAtOncePacesItsRecoveriesTwoSecondsApart() {
+        // Recreating the session at once spent the whole recovery budget in well under a second
+        // when the new session failed the same way, as one whose FFmpeg dies at a fixed point does.
+        val api = FakeHlsApi(pathPrefix = "/api")
+        val engine = engine(playRequest(mode = PlaybackMode.Remux), api, hlsDataSourceFactory = segmentsFailWith500())
+
+        onMain { engine.startPlayback(null, initialPlayWhenReady = true, rewindOnResume = true) }
+        waitFor("the recoveries to run out", timeoutMs = 15_000) { engine.errors().isNotEmpty() }
+
+        // The first start, then one manifest per recovery.
+        assertEquals(1 + HLS_SESSION_LOST_MAX_ATTEMPTS, api.fetched.size)
+        val gaps = api.fetchedAtMs.zipWithNext { earlier, later -> later - earlier }
+        // The first recovery of the incident runs at once; each one after waits out the spacing.
+        assertTrue("first recovery waited ${gaps.first()} ms", gaps.first() < 1_500)
+        gaps.drop(1).forEach { gap -> assertTrue("recoveries $gap ms apart", gap >= 1_900) }
     }
 }

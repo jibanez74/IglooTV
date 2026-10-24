@@ -41,6 +41,7 @@ import com.igloo.blindpenguincoder.playback.hls.effectivePlaybackMode
 import com.igloo.blindpenguincoder.playback.hls.hlsResumeStartSec
 import com.igloo.blindpenguincoder.playback.hls.isPastEndHlsSegment
 import com.igloo.blindpenguincoder.playback.hls.sessionLostRecoveriesAt
+import com.igloo.blindpenguincoder.playback.hls.sessionLostRecoveryDelayMs
 import com.igloo.blindpenguincoder.playback.hls.shouldRebaseHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRebasePendingHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRecoverLostHlsSession
@@ -436,6 +437,7 @@ internal class ExoVideoPlayerEngine(
         requestedModeArg: PlaybackMode,
         audioTypeIndex: Int?,
         targetAbsoluteSec: Double,
+        startDelayMs: Long = 0L,
     ) {
         if (!playbackIntent.acceptsCommands) return
         // Recovery, keepalive, and seeks re-enter here with the stored intent; resolving again
@@ -471,6 +473,8 @@ internal class ExoVideoPlayerEngine(
         controller.reserveGeneration()
         restartJob = scope.launch {
             try {
+                // A spaced-out recovery waits here, cancellable like the rest of the restart.
+                if (startDelayMs > 0) delay(startDelayMs)
                 val start = controller.start(
                     profileId = profileId,
                     audioTypeIndex = audioTypeIndex ?: request.effectiveAudioTypeIndex,
@@ -742,10 +746,17 @@ internal class ExoVideoPlayerEngine(
                 recoveries = sessionLostRecoveries,
             )
         ) return false
+        val delayMs = sessionLostRecoveryDelayMs(lastSessionLostRecoveryAtMs, nowMs)
         sessionLostRecoveries++
-        lastSessionLostRecoveryAtMs = nowMs
+        // The spacing to the next recovery counts from when this one actually runs.
+        lastSessionLostRecoveryAtMs = nowMs + delayMs
         controller.noteSessionLost()
-        restartInPlace(pendingMode ?: committedRequestedMode, currentAudioTypeIndex, intendedAbsoluteSec())
+        restartInPlace(
+            pendingMode ?: committedRequestedMode,
+            currentAudioTypeIndex,
+            intendedAbsoluteSec(),
+            startDelayMs = delayMs,
+        )
         return true
     }
 

@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.playback.hls.HLS_CAPACITY_RETRY_MAX_ATTEMPTS
+import com.igloo.blindpenguincoder.playback.hls.HLS_SEGMENT_NOT_READY_MAX_RETRIES
 import java.io.IOException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -82,27 +83,53 @@ class HlsLoadErrorPolicyTest {
     }
 
     @Test
-    fun a503WithNoHeaderStillGetsThePatientDefaultThroughTheWholeBudget() {
-        assertEquals(5_000L, policy.getRetryDelayMsFor(errorInfo(httpError(503), errorCount = 1)))
+    fun aPlaylist503WithNoHeaderStillGetsThePatientDefaultThroughTheWholeBudget() {
+        val playlist = "/api/movies/7/hls/remux/playlist.m3u8"
+        assertEquals(5_000L, policy.getRetryDelayMsFor(errorInfo(httpError(503, path = playlist), errorCount = 1)))
         assertEquals(
             5_000L,
             policy.getRetryDelayMsFor(
-                errorInfo(httpError(503), errorCount = HLS_CAPACITY_RETRY_MAX_ATTEMPTS),
+                errorInfo(httpError(503, path = playlist), errorCount = HLS_CAPACITY_RETRY_MAX_ATTEMPTS),
             ),
         )
         assertEquals(
             C.TIME_UNSET,
             policy.getRetryDelayMsFor(
-                errorInfo(httpError(503), errorCount = HLS_CAPACITY_RETRY_MAX_ATTEMPTS + 1),
+                errorInfo(httpError(503, path = playlist), errorCount = HLS_CAPACITY_RETRY_MAX_ATTEMPTS + 1),
             ),
         )
     }
 
     @Test
+    fun aSegment503GivesUpAfterTheNotReadyBudget() {
+        // Every attempt is a full 120 s long-poll on the server.
+        assertEquals(
+            1_000L,
+            policy.getRetryDelayMsFor(
+                errorInfo(httpError(503, "1"), errorCount = HLS_SEGMENT_NOT_READY_MAX_RETRIES),
+            ),
+        )
+        assertEquals(
+            C.TIME_UNSET,
+            policy.getRetryDelayMsFor(
+                errorInfo(httpError(503, "1"), errorCount = HLS_SEGMENT_NOT_READY_MAX_RETRIES + 1),
+            ),
+        )
+    }
+
+    @Test
+    fun aSegment500FailsAtOnceForTheLostSessionRecovery() {
+        assertEquals(C.TIME_UNSET, policy.getRetryDelayMsFor(errorInfo(httpError(500), errorCount = 1)))
+    }
+
+    @Test
     fun everyOtherFailureKeepsMedia3sOwnDelayAndItsOwnGiveUpPoint() {
         val default = DefaultLoadErrorHandlingPolicyProbe()
-        listOf(404, 500).forEach { code ->
-            val within = errorInfo(httpError(code), errorCount = 1)
+        listOf(
+            httpError(404),
+            httpError(500, path = "/api/movies/7/hls/remux/playlist.m3u8"),
+        ).forEach { error ->
+            val within = errorInfo(error, errorCount = 1)
             assertEquals(default.retryDelayMsFor(within), policy.getRetryDelayMsFor(within))
         }
         // Past Media3's own retry count the load fails, even though the budget for 503 is larger.

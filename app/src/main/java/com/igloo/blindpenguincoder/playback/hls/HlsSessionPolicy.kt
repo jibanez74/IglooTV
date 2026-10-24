@@ -35,6 +35,14 @@ const val HLS_CAPACITY_RETRY_MAX_ATTEMPTS = 6
 private const val HLS_CAPACITY_RETRY_DEFAULT_DELAY_SEC = 5
 
 /**
+ * Fresh attempts a segment 503 gets before the load fails, as in the web client. The server
+ * answers it only after long-polling the full 120s for the encoder, so every attempt costs two
+ * minutes: the capacity budget above, meant for a manifest's 15s permit wait, held a viewer on a
+ * spinner for about 14 minutes before a stuck segment was reported. Four waits are about 8.
+ */
+const val HLS_SEGMENT_NOT_READY_MAX_RETRIES = 3
+
+/**
  * Wall-clock ceiling on one [HlsSessionController.start], attempt budgets included. The attempt
  * counts alone bound nothing useful: a server that accepts connections but never answers spends
  * the manifest request timeout on every attempt, so six attempts can hold the viewer for minutes
@@ -118,6 +126,16 @@ fun sessionLostRetryDelayMs(attempt: Int): Long? {
 }
 
 /**
+ * How long a mid-play recovery at [nowMs] waits so recoveries stay at least
+ * [HLS_SESSION_LOST_MIN_DELAY_MS] apart, measured from the previous one at [lastRecoveryAtMs],
+ * as in the web client. A failure that repeats as soon as the recreated session plays (a segment
+ * FFmpeg dies on every time) otherwise spent the whole budget in well under a second. The first
+ * recovery of an incident runs at once.
+ */
+fun sessionLostRecoveryDelayMs(lastRecoveryAtMs: Long, nowMs: Long): Long =
+    (HLS_SESSION_LOST_MIN_DELAY_MS - (nowMs - lastRecoveryAtMs)).coerceIn(0L, HLS_SESSION_LOST_MIN_DELAY_MS)
+
+/**
  * Whether a mid-play load failure should recreate the session in place rather than surface as
  * a terminal error. A 404 from an ephemeral video HLS playlist/init/segment means "the
  * server-side session evaporated" (idle eviction, restart). A 500 on a segment means FFmpeg
@@ -165,21 +183,30 @@ private fun headerValueFrom(headerFields: Map<out String?, List<String>>?, name:
         ?.value?.firstOrNull()
 
 /**
- * Retry delay for a failed Media3 segment/playlist load, or null to fail the load. Only 503 gets
- * special treatment: it means "not encoded yet" or "no capacity", both worth patient retries
- * honoring `Retry-After` rather than Media3's three quick attempts. Non-503 failures retain
- * Media3's own delay only through its normal retry count, and a null default delay preserves
- * Media3's immediate fail-fast classifications.
+ * Retry delay for a failed Media3 load of a video HLS asset at [requestPath], or null to fail the
+ * load. A 503 means "not encoded yet" or "no capacity", both worth patient retries honoring
+ * `Retry-After` rather than Media3's three quick attempts; a segment's gets
+ * [HLS_SEGMENT_NOT_READY_MAX_RETRIES] of them, a playlist's the capacity budget. A segment 500
+ * fails at once: FFmpeg died, every retry gets the same answer, and only the recovery that
+ * recreates the session helps. Other failures retain Media3's own delay only through its normal
+ * retry count, and a null default delay preserves Media3's immediate fail-fast classifications.
+ * [responseCode] is null for anything that is not a video HLS asset.
  */
 internal fun hlsLoadRetryDelayMs(
     responseCode: Int?,
+    requestPath: String?,
     retryAfterSec: Int?,
     errorCount: Int,
     defaultRetryCount: Int,
     defaultRetryDelayMs: Long?,
-): Long? = when {
-    responseCode == 503 -> capacityRetryDelayMs(errorCount, retryAfterSec)
-    defaultRetryDelayMs == null -> null
-    errorCount > defaultRetryCount -> null
-    else -> defaultRetryDelayMs
+): Long? {
+    val segment = requestPath != null && VIDEO_HLS_SEGMENT_PATH.matches(requestPath)
+    return when {
+        responseCode == 503 && segment && errorCount > HLS_SEGMENT_NOT_READY_MAX_RETRIES -> null
+        responseCode == 503 -> capacityRetryDelayMs(errorCount, retryAfterSec)
+        responseCode == 500 && segment -> null
+        defaultRetryDelayMs == null -> null
+        errorCount > defaultRetryCount -> null
+        else -> defaultRetryDelayMs
+    }
 }
