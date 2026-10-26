@@ -7,23 +7,25 @@ import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
 
 /**
- * The largest `per_page` a page-numbered library list route serves — movies, shows, albums and
- * musicians alike. The backend clamps a larger value to this rather than rejecting it (its
- * default is 24), so the client asks for the maximum and gets exactly it.
+ * The largest `per_page` a page-numbered library list route serves — movies, shows, albums,
+ * musicians and every search category alike. The backend clamps a larger value to this rather
+ * than rejecting it (its default is 24), so the client asks for the maximum and gets exactly it.
  */
 const val MAX_LIBRARY_PER_PAGE = 48L
 
 /**
  * Every page-numbered library list speaks the same query dialect; spell it once. The music
- * lists take no [sort].
+ * lists take no [sort]; only the search routes take a [query].
  */
 internal suspend fun HttpClient.pagedList(
     url: String,
     page: Long,
     perPage: Long,
     sort: SortOrder? = null,
+    query: String? = null,
 ): HttpResponse =
     get(url) {
+        if (query != null) parameter("q", query)
         parameter("page", page)
         parameter("per_page", perPage)
         if (sort != null) parameter("sort", sort.wireName)

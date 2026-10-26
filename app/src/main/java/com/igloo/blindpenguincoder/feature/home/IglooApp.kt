@@ -106,6 +106,10 @@ import com.igloo.blindpenguincoder.feature.player.ProgressSyncUiState
 import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
+import com.igloo.blindpenguincoder.feature.search.SearchActions
+import com.igloo.blindpenguincoder.feature.search.SearchScreen
+import com.igloo.blindpenguincoder.feature.search.SearchUiState
+import com.igloo.blindpenguincoder.feature.search.rememberSearchPaneMemory
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.PosterItemCard
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
@@ -139,6 +143,9 @@ internal sealed interface DetailsOrigin {
     /** The Music pane, whichever tab: its selected surface parks the return requester itself. */
     data object Music : DetailsOrigin
 
+    /** The Search pane, whichever tab: its selected surface parks the return requester itself. */
+    data object Search : DetailsOrigin
+
     companion object {
         /** One string, because the overlay outlives activity recreation but `remember` does not. */
         val Saver: Saver<DetailsOrigin?, String> = Saver(
@@ -149,6 +156,7 @@ internal sealed interface DetailsOrigin {
                     MoviesGrid -> MOVIES_GRID
                     ShowsGrid -> SHOWS_GRID
                     Music -> MUSIC
+                    Search -> SEARCH
                     null -> NONE
                 }
             },
@@ -159,6 +167,7 @@ internal sealed interface DetailsOrigin {
                     MOVIES_GRID -> MoviesGrid
                     SHOWS_GRID -> ShowsGrid
                     MUSIC -> Music
+                    SEARCH -> Search
                     // An unknown name is a rail a newer build renamed: no origin, not a crash.
                     else -> HomeRail.entries.firstOrNull { it.name == saved }?.let(::Rail)
                 }
@@ -169,6 +178,7 @@ internal sealed interface DetailsOrigin {
         private const val MOVIES_GRID = "movies_grid"
         private const val SHOWS_GRID = "shows_grid"
         private const val MUSIC = "music"
+        private const val SEARCH = "search"
         private const val NONE = "none"
     }
 }
@@ -235,6 +245,8 @@ fun IglooApp(
     showsActions: LibraryActions,
     music: MusicUiState,
     musicActions: MusicActions,
+    search: SearchUiState,
+    searchActions: SearchActions,
     details: MovieDetailsUiState,
     detailsActions: MovieDetailsActions,
     showDetails: ShowDetailsUiState,
@@ -255,6 +267,8 @@ fun IglooApp(
     musicQueueFetcher: MusicQueueFetcher,
     playRequests: Flow<VideoPlayRequest> = emptyFlow(),
     musicPlayRequests: Flow<MusicPlayRequest> = emptyFlow(),
+    /** The Search pane's track launches: the rows shown, from the pressed one. */
+    searchPlayRequests: Flow<MusicPlayRequest> = emptyFlow(),
     /** Continue Watching episode launches, built by Home from the card the user pressed. */
     homePlayRequests: Flow<VideoPlayRequest> = emptyFlow(),
     onResumeEpisode: (Long) -> Unit,
@@ -306,6 +320,8 @@ fun IglooApp(
     // item — on the Tracks tab, on the remembered control of the entry row — so Back out of
     // an overlay and a player's close both land exactly where the user left.
     val musicReturnRequester = remember { FocusRequester() }
+    // The Search pane's, on the Music pane's terms: parked on the selected tab's entry item.
+    val searchReturnRequester = remember { FocusRequester() }
     // The rail expands exactly while d-pad focus is inside it; railOpenedByBack remembers
     // whether the rail was entered with the Back button, so Back can mean "step outward":
     // content -> rail -> exit, but a rail entered by d-pad steps back into content instead.
@@ -492,6 +508,18 @@ fun IglooApp(
             }
         }
     }
+    // The Search pane's launches, under the Music pane's rule.
+    val searchPaneCanPlay by rememberUpdatedState(
+        currentDestination == IglooDestination.Search && !shellCovered && !signOut.confirming,
+    )
+    LaunchedEffect(searchPlayRequests) {
+        searchPlayRequests.collect { request ->
+            if (searchPaneCanPlay) {
+                musicPlayRequest = request
+                musicPlayOrigin = MusicPlayOrigin.SearchPane
+            }
+        }
+    }
     // A details page's Play, Shuffle or row Play: the request is built from the page already
     // on screen, and the origin decides whose closing takes the player with it.
     val launchMusic: (MusicPlayOrigin, () -> MusicPlayRequest?) -> Unit = { origin, build ->
@@ -521,6 +549,7 @@ fun IglooApp(
             MusicPlayOrigin.AlbumDetails -> albumPlayReturnRequester
             MusicPlayOrigin.MusicianDetails -> musicianPlayReturnRequester
             MusicPlayOrigin.MusicPane -> musicReturnRequester
+            MusicPlayOrigin.SearchPane -> searchReturnRequester
             null -> null
         }
         restoreFocus(returnRequester)
@@ -616,6 +645,8 @@ fun IglooApp(
                 .takeIf { currentDestination == IglooDestination.TvShows }
             DetailsOrigin.Music -> musicReturnRequester
                 .takeIf { currentDestination == IglooDestination.Music }
+            DetailsOrigin.Search -> searchReturnRequester
+                .takeIf { currentDestination == IglooDestination.Search }
             else -> null
         }
         // A rail whose list changed while the overlay was open — a refresh that dropped the
@@ -648,6 +679,8 @@ fun IglooApp(
             showsActions = showsActions,
             music = music,
             musicActions = musicActions,
+            search = search,
+            searchActions = searchActions,
             trackLikes = trackLikes,
             // The details header owns the notice while the overlay is up; rendering it here too
             // would only shift Home's rails behind a screen nobody can see. It surfaces here
@@ -673,6 +706,7 @@ fun IglooApp(
             moviesReturnRequester = moviesReturnRequester,
             showsReturnRequester = showsReturnRequester,
             musicReturnRequester = musicReturnRequester,
+            searchReturnRequester = searchReturnRequester,
             // The rail stays open behind the dialog: the row that opened it must still be legible,
             // so the focus it gets back on cancel is not a surprise.
             railExpanded = railHasFocus || signOut.confirming,
@@ -940,6 +974,8 @@ private fun IglooShell(
     showsActions: LibraryActions,
     music: MusicUiState,
     musicActions: MusicActions,
+    search: SearchUiState,
+    searchActions: SearchActions,
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
     progressSyncError: String?,
@@ -955,6 +991,7 @@ private fun IglooShell(
     moviesReturnRequester: FocusRequester,
     showsReturnRequester: FocusRequester,
     musicReturnRequester: FocusRequester,
+    searchReturnRequester: FocusRequester,
     railExpanded: Boolean,
     scrimmed: Boolean,
     hiddenFromAccessibility: Boolean,
@@ -1014,6 +1051,8 @@ private fun IglooShell(
                 showsActions = showsActions,
                 music = music,
                 musicActions = musicActions,
+                search = search,
+                searchActions = searchActions,
                 trackLikes = trackLikes,
                 mutationNotice = mutationNotice,
                 progressSyncError = progressSyncError,
@@ -1029,6 +1068,7 @@ private fun IglooShell(
                 moviesReturnRequester = moviesReturnRequester,
                 showsReturnRequester = showsReturnRequester,
                 musicReturnRequester = musicReturnRequester,
+                searchReturnRequester = searchReturnRequester,
                 contentStartRequester = contentStartRequester,
                 navigationRequesters = navigationRequesters,
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
@@ -1104,6 +1144,8 @@ private fun ContentPane(
     showsActions: LibraryActions,
     music: MusicUiState,
     musicActions: MusicActions,
+    search: SearchUiState,
+    searchActions: SearchActions,
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
     progressSyncError: String?,
@@ -1119,6 +1161,7 @@ private fun ContentPane(
     moviesReturnRequester: FocusRequester,
     showsReturnRequester: FocusRequester,
     musicReturnRequester: FocusRequester,
+    searchReturnRequester: FocusRequester,
     contentStartRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     spokenAccessibilityEnabled: Boolean,
@@ -1167,6 +1210,9 @@ private fun ContentPane(
     var lastFocusedTrack by rememberSaveable(stateSaver = TrackFocusMemory.Saver) {
         mutableStateOf<TrackFocusMemory?>(null)
     }
+    // The Search pane's scroll and focus memory, bundled: six surfaces would otherwise be
+    // twelve more fields here.
+    val searchMemory = rememberSearchPaneMemory()
 
     // The pane's one gutter, handed to the sections instead of applied here: the collapsed rail
     // plus a reading gutter on the start, the overscan inset on the end. Chrome and text take it;
@@ -1280,6 +1326,30 @@ private fun ContentPane(
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
+            IglooDestination.Search -> SearchScreen(
+                state = search,
+                likes = trackLikes,
+                actions = searchActions,
+                contentInset = contentInset,
+                memory = searchMemory,
+                contentStartRequester = contentStartRequester,
+                navigationRequester = navigationRequesters.getValue(IglooDestination.Search),
+                returnRequester = searchReturnRequester,
+                onMovieSelected = openMovie?.let { open ->
+                    { movieId -> open(DetailsOrigin.Search, movieId) }
+                },
+                onShowSelected = openShow?.let { open ->
+                    { showId -> open(DetailsOrigin.Search, showId) }
+                },
+                onAlbumSelected = openAlbum?.let { open ->
+                    { albumId -> open(DetailsOrigin.Search, albumId) }
+                },
+                onMusicianSelected = openMusician?.let { open ->
+                    { musicianId -> open(DetailsOrigin.Search, musicianId) }
+                },
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+            )
+
             else -> PlaceholderContent(
                 currentDestination = currentDestination,
                 mutationNotice = mutationNotice,
@@ -1314,9 +1384,10 @@ private fun ContentPane(
 }
 
 /** Which of ContentPane's trees a destination renders; the focus anchor moves with the branch. */
-private enum class PaneBranch { Home, Movies, TvShows, Music, Placeholder }
+private enum class PaneBranch { Home, Movies, TvShows, Music, Search, Placeholder }
 
 private fun paneBranchOf(destination: IglooDestination): PaneBranch = when (destination) {
+    IglooDestination.Search -> PaneBranch.Search
     IglooDestination.Home -> PaneBranch.Home
     IglooDestination.Movies -> PaneBranch.Movies
     IglooDestination.TvShows -> PaneBranch.TvShows
@@ -1325,7 +1396,7 @@ private fun paneBranchOf(destination: IglooDestination): PaneBranch = when (dest
 }
 
 /** Which surface launched the music player; see `musicPlayOrigin` in [IglooApp]. */
-private enum class MusicPlayOrigin { AlbumDetails, MusicianDetails, MusicPane }
+private enum class MusicPlayOrigin { AlbumDetails, MusicianDetails, MusicPane, SearchPane }
 
 /**
  * Which surface launched the video player; see `videoPlayOrigin` in [IglooApp]. The show page has

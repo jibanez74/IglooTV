@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.shared
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,8 +23,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
@@ -108,17 +112,30 @@ internal fun PaneHeader(
                 color = colors.foreground,
                 modifier = Modifier.semantics { heading() },
             )
-            IglooText(
-                text = countText,
-                style = IglooTheme.typography.bodyMedium,
-                color = colors.mutedForeground,
-                modifier = Modifier
-                    .testTag(countTag)
-                    .semantics {
-                        contentDescription = countDescription
-                        liveRegion = LiveRegionMode.Polite
-                    },
-            )
+            // The spoken line rides a node of its own. The visible line changes under a request
+            // ("Searching…", "—") while the spoken one deliberately keeps the count it replaces,
+            // and TalkBack re-reads a live region on any content change of its node — its text
+            // or its layout — so one node for both re-announced the previous count on every tab
+            // switch (Shield, 2026-10-26). A fixed 1dp node changes only when the spoken line does,
+            // and it is the count's only node a screen reader reaches: the visible line is hidden,
+            // not cleared, so it stays in the tree the tests read.
+            Box {
+                IglooText(
+                    text = countText,
+                    style = IglooTheme.typography.bodyMedium,
+                    color = colors.mutedForeground,
+                    modifier = Modifier.semantics { hideFromAccessibility() },
+                )
+                Box(
+                    modifier = Modifier
+                        .size(1.dp)
+                        .testTag(countTag)
+                        .semantics {
+                            contentDescription = countDescription
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                )
+            }
             if (notice != null) {
                 IglooNotice(
                     text = notice,
@@ -172,7 +189,7 @@ internal fun <T> PaneTabRow(
     contentInset: PaddingValues,
     tabRowRequester: FocusRequester,
     navigationRequester: FocusRequester,
-    refreshRequester: FocusRequester,
+    upRequester: FocusRequester,
     downRequester: FocusRequester,
     onSelectTab: (T) -> Unit,
     onPressTab: (T) -> Unit,
@@ -196,7 +213,7 @@ internal fun <T> PaneTabRow(
                     .withRequester(tabRowRequester.takeIf { tab == selected })
                     .onFocusChanged { onFocusChanged(spec.key, it.isFocused) }
                     .focusProperties {
-                        up = refreshRequester
+                        up = upRequester
                         down = downRequester
                         if (index == 0) left = navigationRequester
                         if (index == tabs.lastIndex) right = FocusRequester.Cancel

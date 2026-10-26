@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.movies
 
 import com.igloo.blindpenguincoder.core.error.map
+import com.igloo.blindpenguincoder.data.model.MovieLibraryItem
 import com.igloo.blindpenguincoder.data.model.MoviesLibraryData
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.library.LibraryGenre
@@ -33,9 +34,11 @@ fun movieLibrarySource(movies: MovieRepository): LibrarySource = LibrarySource(
 )
 
 private fun MoviesLibraryData.toLibraryPage(): LibraryPage = LibraryPage(
-    rows = movies.map {
-        LibraryRow(id = it.id, title = it.title, posterPath = it.posterPath, year = it.year)
-    },
+    rows = movies.map { it.toLibraryRow() },
     total = total,
     totalPages = totalPages,
 )
+
+/** A movie as the library grid's row; search results map through here too. */
+fun MovieLibraryItem.toLibraryRow(): LibraryRow =
+    LibraryRow(id = id, title = title, posterPath = posterPath, year = year)

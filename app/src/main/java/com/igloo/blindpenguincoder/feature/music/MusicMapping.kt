@@ -86,7 +86,7 @@ internal fun tracksEntries(tracks: List<TrackListItem>): List<TracksEntry> {
     return entries
 }
 
-private fun TrackListItem.toRowUi(prefix: String?): TrackRowUi = musicTrackRow(
+internal fun TrackListItem.toRowUi(prefix: String? = null): TrackRowUi = musicTrackRow(
     id = id,
     title = title,
     subtitle = trackSubtitle(musicianName.orNull(), albumTitle.orNull()),

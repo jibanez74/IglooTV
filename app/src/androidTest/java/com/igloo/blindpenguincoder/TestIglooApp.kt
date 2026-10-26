@@ -21,6 +21,8 @@ import com.igloo.blindpenguincoder.feature.music.MusicUiState
 import com.igloo.blindpenguincoder.feature.music.MusicianDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
+import com.igloo.blindpenguincoder.feature.search.SearchActions
+import com.igloo.blindpenguincoder.feature.search.SearchUiState
 import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
@@ -68,6 +70,9 @@ internal fun TestIglooApp(
     showsActions: LibraryActions = inertLibraryActions,
     music: MusicUiState = testMusicState(),
     musicActions: MusicActions = inertMusicActions,
+    search: SearchUiState = SearchUiState(),
+    searchActions: SearchActions = inertSearchActions,
+    searchPlayRequests: Flow<MusicPlayRequest> = emptyFlow(),
     details: MovieDetailsUiState = MovieDetailsUiState(),
     detailsActions: MovieDetailsActions = inertDetailsActions,
     showDetails: ShowDetailsUiState = ShowDetailsUiState(),
@@ -122,6 +127,9 @@ internal fun TestIglooApp(
         showsActions = showsActions,
         music = music,
         musicActions = musicActions,
+        search = search,
+        searchActions = searchActions,
+        searchPlayRequests = searchPlayRequests,
         details = details,
         detailsActions = detailsActions,
         showDetails = showDetails,

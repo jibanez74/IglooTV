@@ -58,6 +58,8 @@ import com.igloo.blindpenguincoder.feature.music.MusicianDetailsViewModel
 import com.igloo.blindpenguincoder.feature.music.TrackLikesViewModel
 import com.igloo.blindpenguincoder.feature.music.actions
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
+import com.igloo.blindpenguincoder.feature.search.SearchViewModel
+import com.igloo.blindpenguincoder.feature.search.actions
 import com.igloo.blindpenguincoder.feature.shows.showLibrarySource
 import com.igloo.blindpenguincoder.playback.media3.VideoPlaybackServices
 import com.igloo.blindpenguincoder.playback.media3.deviceCanDecodeVideoMime
@@ -287,6 +289,12 @@ fun IglooRoot(container: IglooAppContainer) {
                         sessionViewModel(authenticatedSessionOwner, "musician-details") {
                             MusicianDetailsViewModel(container.musicRepository)
                         }
+                    // Session-scoped like the panes: the query, the tab and every loaded page
+                    // survive a Search -> Home -> Search trip. Nothing to refresh on start —
+                    // the results belong to a query, not to the library's current state.
+                    val searchViewModel = sessionViewModel(authenticatedSessionOwner, "search") {
+                        SearchViewModel(container.searchRepository, container.serverUrlProvider)
+                    }
                     // One liked-id set for every track row in the session, so no two surfaces
                     // can disagree about a heart; cleared with the rest on sign-out.
                     val trackLikesViewModel =
@@ -349,6 +357,10 @@ fun IglooRoot(container: IglooAppContainer) {
                     val musicActions = remember(musicViewModel, trackLikesViewModel) {
                         musicViewModel.actions(onToggleLike = trackLikesViewModel::toggle)
                     }
+                    val search by searchViewModel.uiState.collectAsStateWithLifecycle()
+                    val searchActions = remember(searchViewModel, trackLikesViewModel) {
+                        searchViewModel.actions(onToggleLike = trackLikesViewModel::toggle)
+                    }
                     val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()
                     val theaterDetails by theaterDetailsViewModel.uiState
                         .collectAsStateWithLifecycle()
@@ -381,6 +393,9 @@ fun IglooRoot(container: IglooAppContainer) {
                         showsActions = showsActions,
                         music = music,
                         musicActions = musicActions,
+                        search = search,
+                        searchActions = searchActions,
+                        searchPlayRequests = searchViewModel.playRequests,
                         details = if (theaterOpen) theaterDetails else libraryDetails,
                         detailsActions = if (theaterOpen) {
                             MovieDetailsActions.Theater(

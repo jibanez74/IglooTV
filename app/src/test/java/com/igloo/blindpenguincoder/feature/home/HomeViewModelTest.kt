@@ -33,12 +33,12 @@ import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -97,9 +97,11 @@ class HomeViewModelTest {
      * A refresh fires all five rails' requests, enriching the movie and show heroes from their lists.
      * The show library is empty unless a test says otherwise, so the movie-page cases see the
      * hero they always did: one page, or none.
+     *
+     * The engine answers on the test's scheduler. On its own threads, the rails a test does not
+     * wait for would resume the view model on `Dispatchers.Main` while `tearDown` resets it.
      */
-    private fun routedHttp(
-        engineDispatcher: CoroutineDispatcher? = null,
+    private fun TestScope.routedHttp(
         continueWatching: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(continueWatchingJson()) },
         latest: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
@@ -120,7 +122,7 @@ class HomeViewModelTest {
             { jsonResponse(episodeTechnicalDetailsJson()) },
         episodeProgress: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
             { jsonResponse(watchProgressJson(progressSec = 600.0, durationSec = 3300.0)) },
-    ) = TestHttp(engineDispatcher) { request ->
+    ) = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
         val path = request.url.encodedPath
         when {
             path == "/api/continue-watching" -> continueWatching(request)
@@ -422,7 +424,6 @@ class HomeViewModelTest {
         // The engine shares the test scheduler, so a request is done being handled by the time
         // the call that triggered it returns — the refresh needs no gate to be observed.
         val http = routedHttp(
-            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
             latest = {
                 requests += 1
                 if (requests == 1) {
@@ -699,7 +700,6 @@ class HomeViewModelTest {
         var launched = false
         val release = CompletableDeferred<Unit>()
         val http = routedHttp(
-            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
             episode = {
                 release.await()
                 jsonResponse(episodePlaybackJson())
@@ -722,7 +722,7 @@ class HomeViewModelTest {
 
     @Test
     fun `a refresh drops a play request built but not yet delivered`() = runTest {
-        val http = routedHttp(engineDispatcher = UnconfinedTestDispatcher(testScheduler))
+        val http = routedHttp()
         val viewModel = viewModel(http)
 
         // No collector: the host was not composed when the preparation finished.
@@ -991,7 +991,6 @@ class HomeViewModelTest {
     fun `a refresh whose details fetch fails keeps the loaded hero`() = runTest {
         var detailsRequests = 0
         val http = routedHttp(
-            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
             latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 1, title = "Heat"))) },
             details = {
                 detailsRequests += 1
@@ -1315,7 +1314,6 @@ class HomeViewModelTest {
     fun `a refresh whose show details fail keeps the loaded show page`() = runTest {
         var showRequests = 0
         val http = routedHttp(
-            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
             latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat"))) },
             details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
             latestShows = { jsonResponse(latestShowsJson(latestShowJson(id = 40))) },
@@ -1659,7 +1657,6 @@ class HomeViewModelTest {
     fun `a refresh that fails leaves the loaded theaters rail alone`() = runTest {
         var requests = 0
         val http = routedHttp(
-            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
             theaters = {
                 requests += 1
                 if (requests == 1) {
@@ -1688,7 +1685,6 @@ class HomeViewModelTest {
     fun `a refresh that fails leaves the loaded albums alone`() = runTest {
         var requests = 0
         val http = routedHttp(
-            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
             albums = {
                 requests += 1
                 if (requests == 1) {
@@ -1756,7 +1752,6 @@ class HomeViewModelTest {
         val detailsGate = CompletableDeferred<Unit>()
         val otherRequests = mutableListOf<String>()
         val http = routedHttp(
-            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
             continueWatching = { otherRequests += "continue"; jsonResponse(continueWatchingJson()) },
             latest = { otherRequests += "movies"; jsonResponse(latestMoviesJson(latestMovieJson())) },
             albums = { otherRequests += "albums"; jsonResponse(latestAlbumsJson()) },
@@ -1821,7 +1816,6 @@ class HomeViewModelTest {
         var detailsRequests = 0
         val refreshGate = CompletableDeferred<Unit>()
         val http = routedHttp(
-            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
             latestShows = {
                 requests++
                 if (requests == 1) {
@@ -1856,7 +1850,6 @@ class HomeViewModelTest {
         var requests = 0
         var detailsRequests = 0
         val http = routedHttp(
-            engineDispatcher = UnconfinedTestDispatcher(testScheduler),
             latest = { jsonResponse(latestMoviesJson(latestMovieJson())) },
             latestShows = {
                 requests++

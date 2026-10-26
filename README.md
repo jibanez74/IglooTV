@@ -17,7 +17,7 @@ Igloo server so you can browse and play your library using a TV remote.
 - Navigate with a D-pad and remote, with focus treatments and TalkBack support.
 
 **Development is ongoing; the app is pre-production.** On the show details page the extra videos
-do not play yet. Search, Photos, and Settings are placeholder destinations. Playlists, music
+do not play yet. Photos and Settings are placeholder destinations. Playlists, music
 play-stat reporting, and background music playback are also unfinished. See [known issues](docs/known-issues.md) and the
 [development guide](docs/development.md#feature-status-and-reference-documents) for more context.
 

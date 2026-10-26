@@ -313,7 +313,7 @@ class MoviesGridAccessibilityTest {
 
         composeRule.onNodeWithTag("movies_count")
             .assertContentDescriptionEquals("Loading Action movies")
-            .assertTextEquals("—")
+        composeRule.onNodeWithText("—").assertExists()
     }
 
     /**

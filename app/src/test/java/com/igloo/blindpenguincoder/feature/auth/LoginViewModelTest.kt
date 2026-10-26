@@ -16,6 +16,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -71,8 +72,12 @@ class LoginViewModelTest {
         val http: TestHttp,
     )
 
-    private fun fixture(handler: MockRequestHandler): Fixture {
-        val http = TestHttp(handler = handler)
+    /**
+     * The engine answers on the test's scheduler, never on a thread of its own that could resume
+     * the view model on `Dispatchers.Main` while `tearDown` resets it.
+     */
+    private fun TestScope.fixture(handler: MockRequestHandler): Fixture {
+        val http = TestHttp(UnconfinedTestDispatcher(testScheduler), handler)
         val repository = http.authRepository
         val sessionManager = SessionManager(
             authRepository = repository,
@@ -94,7 +99,7 @@ class LoginViewModelTest {
 
     private fun TestHttp.pendingToken() = profileStore.vault.pendingToken
 
-    private fun viewModel(handler: MockRequestHandler): Pair<LoginViewModel, SessionManager> =
+    private fun TestScope.viewModel(handler: MockRequestHandler): Pair<LoginViewModel, SessionManager> =
         fixture(handler).let { it.viewModel to it.sessionManager }
 
     @Test

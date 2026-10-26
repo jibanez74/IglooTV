@@ -95,6 +95,6 @@ exactly as Movies and Music do.
   place; see [episode-playback-status.md](episode-playback-status.md).
 - **Likes for shows** — the backend has none; if it grows them, the source gains a liked
   fetcher and the strip its third tab with no screen change.
-- **Search** — unchanged; `GET /search/shows` is not wired.
+- **Search** — since wired; see [`search-screen-status.md`](search-screen-status.md).
 - Everything the review left in `cleanup-backlog.md` §7 (the Music pane still draws its own
   grid, header, tab row and skeleton; §7.2 now describes the Music-side merge).

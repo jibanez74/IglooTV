@@ -16,7 +16,6 @@ import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import com.igloo.blindpenguincoder.feature.shared.pageAppendState
-import com.igloo.blindpenguincoder.feature.shared.posterItem
 import com.igloo.blindpenguincoder.feature.shared.resetIfLoading
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -553,7 +552,7 @@ class LibraryViewModel(
         pageAppendState(page, totalPages, rows.isEmpty())
 
     private fun LibraryPage.toPosterItems(apiBaseUrl: String): List<PosterItem> =
-        rows.map { posterItem(it.id, it.title, it.posterPath, it.year, apiBaseUrl) }
+        rows.map { it.toPosterItem(apiBaseUrl) }
 
     private companion object {
         const val PAGE_SIZE = MAX_LIBRARY_PER_PAGE
