@@ -328,9 +328,8 @@ class NavigationRailBehaviorTest {
 
         composeRule.onNodeWithContentDescription("Search").performClick()
 
-        composeRule.onNodeWithContentDescription(
-            "Search. Find movies, shows, music, and photos across your library.",
-        ).assertIsDisplayed()
+        // The pane's one focus target with nothing typed yet: the query field.
+        composeRule.onNodeWithTag("search_field").assertIsDisplayed().assertIsFocused()
     }
 
     /**

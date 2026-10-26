@@ -21,6 +21,7 @@ class ShellSaversTest {
             DetailsOrigin.MoviesGrid,
             DetailsOrigin.ShowsGrid,
             DetailsOrigin.Music,
+            DetailsOrigin.Search,
             DetailsOrigin.Rail(HomeRail.LatestAlbums),
             null,
         )) {

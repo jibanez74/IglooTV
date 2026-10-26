@@ -96,6 +96,7 @@ entries.
   [`cleanup-backlog.md`](cleanup-backlog.md).
 - **Playlists** — still out. When it has a screen, it becomes the third tab and Liked moves
   inside it, as on the web.
-- **Search** and **Request Movie** — unchanged from the previous pass.
+- **Request Movie** — unchanged from the previous pass. Search has since landed; see
+  [`search-screen-status.md`](search-screen-status.md).
 - **Anything needing richer server support** — watched/year filters, other sort fields — still
   blocked on backend work.

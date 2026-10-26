@@ -1305,4 +1305,49 @@ class ApiModelsSerializationTest {
         assertEquals(193L, chapter.startTime)
         assertEquals("video/x-matroska", data.movie.mimeType)
     }
+
+    /** `GET /search`: five sections, a generic row type each; an empty section is a list, never null. */
+    @Test
+    fun decodesSearchAllEnvelope() {
+        val body = """
+            {"error":false,"message":"search","data":{"query":"help",
+              "movies":{"results":[{"id":3,"title":"Help!","poster_path":{"String":"/h.jpg","Valid":true},
+                "year":{"Int64":1965,"Valid":true},"certification":{"String":"","Valid":false}}],"total":12},
+              "shows":{"results":[],"total":0},
+              "albums":{"results":[{"id":5,"title":"Help!","cover":{"String":"","Valid":false},
+                "musician":{"String":"The Beatles","Valid":true},"year":{"Int64":1965,"Valid":true}}],"total":1},
+              "musicians":{"results":[],"total":0},
+              "tracks":{"results":[{"id":9,"title":"Help!","duration":125000,"codec":"flac","bit_rate":900000,
+                "album_id":{"Int64":5,"Valid":true},"album_title":{"String":"Help!","Valid":true},
+                "album_cover":{"String":"","Valid":false},"musician_id":{"Int64":4,"Valid":true},
+                "musician_name":{"String":"The Beatles","Valid":true}}],"total":1}}}
+        """.trimIndent()
+
+        val data = json.decodeFromString<ApiEnvelope<SearchAllData>>(body).data!!
+
+        assertEquals("help", data.query)
+        assertEquals(12L, data.movies.total)
+        assertEquals(1965L, data.movies.results.single().year.orNull())
+        assertTrue(data.shows.results.isEmpty())
+        assertEquals("The Beatles", data.albums.results.single().musician.orNull())
+        assertEquals(125_000L, data.tracks.results.single().duration)
+    }
+
+    /** `GET /search/{category}`: the same page shape for every category, typed by the route. */
+    @Test
+    fun decodesSearchPageEnvelope() {
+        val body = """
+            {"error":false,"message":"search","data":{"query":"beat","results":[
+              {"id":4,"name":"The Beatles","thumb":{"String":"","Valid":false},"album_count":3,"track_count":40}],
+              "total":70,"page":2,"per_page":48,"total_pages":3}}
+        """.trimIndent()
+
+        val page = json.decodeFromString<ApiEnvelope<SearchPageData<SimpleMusician>>>(body).data!!
+
+        assertEquals(70L, page.total)
+        assertEquals(2L, page.page)
+        assertEquals(48L, page.perPage)
+        assertEquals(3L, page.totalPages)
+        assertEquals("The Beatles", page.results.single().name)
+    }
 }

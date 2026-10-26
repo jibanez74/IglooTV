@@ -843,11 +843,14 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooTabRow` / `IglooTab` | A strip of mutually exclusive sections (the Movies index, §11.4) — the web client's tab list. The row is one bordered pill on `muted @ 0.50` with a `border @ 0.50` hairline at `focus.restWidth`, radius `lg`, `spacing.xs` padding and gap, sized to its content and never scrolling (more tabs than fit the panel is too many tabs). A tab is `controlHeight` minus the row's padding, radius `sm` — concentric with the row's `lg` corner at its `xs` inset — `spacing.md` horizontal padding, `bodyMedium` label: `primary` fill / `primaryForeground` selected, `card @ 0.72` / `foreground` focused, transparent / `mutedForeground` at rest — selection and focus compose as on the chip, but **no focus scale**, since a lifted tab would overlap the row's border. Shares `IglooFilterChip`'s `SelectablePill` body; the five differences (radius, focus scale, height inset, resting label colour, semantics) are its parameters. **Selects on focus**: d-pad landing on a tab is the switch, the Android TV convention. `onPress` is the separate, deliberate signal — TalkBack's click action, and the way back after a failed switch reverted the selection out from under a focused tab — and every caller passes it separately, because the panes' landing is debounced and a press must not wait behind it. The focused-but-unselected treatment exists for exactly that revert window and nowhere else. One cleared node with `Role.Tab`, `selected` set only when true (never false — TalkBack would say "not selected" on every other tab) and `actionLabel` on the press; the row is a `selectableGroup`. Hand-rolled on Foundation, not `androidx.tv.material3.TabRow` (§9.2), and the ground is written out rather than taken from `iglooSurface`, whose `clip` would cut the focused tab's glow at the row's bounds. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
 | `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, compact `formatRemainingTime` ("2h 20m left"), spoken `formatSpokenRemainingTime` ("2 hours and 20 minutes remaining"), `formatTimecode` ("1:01:15"), sparse `formatSpokenTime` ("1 hour and 15 seconds"), and exact `formatSpokenTimeThroughSeconds` ("1 hour, 0 minutes, and 15 seconds"). `formatEpisodeCode` ("S1 E3") names an episode the way the web client does. Both remaining-time forms clamp overshoot and round partial minutes up; they use "Less than 1m left" / "Less than 1 minute remaining" below one minute and defensively fall back to "In progress" for an invalid duration. The exact resume form floors to the last completed second and includes every unit from the largest relevant one through seconds, never a leading zero hour. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
-| `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60` |
+| `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60`; the one control that opts out of the focus scale. `label` is always the spoken description and visible unless `labelVisible = false`; optional `leadingIcon` inside the field; `fieldModifier` goes on the input node itself (its test tag, extra requesters). D-pad up/down move focus to the wired neighbours instead of the cursor; left leaves to `leftFocusRequester` only while the text is empty. |
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
 | `IglooNotice` | One announced line — `bodyMedium` / `mutedForeground`, `liveRegion = Polite`. For a message the user did not ask for and cannot act on: what a gate says after an action that already happened (§10, §11.1.1). Not an error card; no Retry. |
 | `IglooIconButton` | The square icon-only control for row ends (the detail hero's More trigger, a track row's three actions): `controlHeight` both ways, radius `lg`, focus per §6.1, glyph at `icons.md`. `semanticLabel` is mandatory — the glyph alone says nothing to TalkBack. With a null `onClick` it stays a focus target but announces no action, the inert-poster-card contract. Takes `overMedia` for the §3.2 over-media ground like `IglooButton`, and `IglooButton`'s toggle semantics — `stateDescription`, `actionLabel` — plus `iconTint` for a glyph that changes weight while the ground stays. |
 | `TrackRow` | §11.5's three-action row (`feature/shared`): Play, Like, More as `IglooIconButton`s, all focusable, none hidden until focus, the row itself never a target and painting `muted @ 0.50` at `radius.lg` while a child holds focus. Play is the entry column and speaks the row's one sentence with "Liked" as its state; Like carries the like state and an action naming the track; More names the track, or says "None available." while inert. `TrackRowFocus` answers up/down **per column** so vertical moves keep their column, a null answer leaving the direction to the spatial search (a lazy list wires only its edges); `riders` park a host's requesters on one control of one row. `TrackRowSkeleton` is the row-shaped placeholder; `TrackRowMenu` the row's `IglooMenu` ("Go to album" / "Go to artist"). |
+| `PagedLoader` | One infinite list's paging machine (`feature/shared`): cursor, loaded rows, job and generation, writing its `PagedState` into one field of a view model's state through `read`/`write`, with `fetch` the only place `page`/`per_page` and `limit`/`offset` lists differ. `ensureLoaded`, `loadFirstPage(userInitiated)`, `loadMore`, `retryAppend` and `reset` (back to the skeleton, late answers dropped, generations kept monotonic). First-page hooks let a view model keep whole-state flags in step (Music's `refreshing`/`notice`). The Music and Search panes keep one per tab. |
+| `TracksList` | The flat track list (`feature/music`): letter headers the eye reads, `TrackRow`s with per-column vertical moves, the paging tail, the Tracks tab's and the Search pane's. `TracksListSkeleton` is its row-shaped wait. |
+| `MusicianCard` | The circular musician card (`feature/music`), the Music grid's and a search result's: `IglooPosterCard` at `radius.pill`, text centred, speaking the mapping's one sentence. |
 | `IglooScrim` | The paint-only dim: `background @ 0.60` by default (§3.1), no `clickable`/`focusable`/`semantics`, so it can never intercept the d-pad and TalkBack does not know it exists. Used by the rail (§8.1) and the modal (§9.3) — **never both at once**. |
 | `IglooConfirmDialog` | The confirmation modal (§9.3) |
 | `IglooMenu` | The anchored menu: a `card` surface of focusable rows placed against the trigger's root-coordinate bounds — right-aligned, below it, flipping above when the bottom safe area would be breached. In-tree for §9.3's four reasons and hosted as the last child of the screen that owns the trigger; **unscrimmed**, unlike the modal — an anchored menu is local chrome, not a page-blocking decision, and §9.1 gives the scrim to the rail and the modal only. One `standard` alpha reveal, no exit animation. Focus is trapped (up/down walk the rows, everything else `Cancel`), the first row takes focus on reveal, the caller restores focus in `onDismiss` and gates its own Back (§9.3). `paneTitle` + one cleared Button node per row; a `destructive` row wears the destructive token pair, and `separatorBefore` draws a silent hairline. The covered screen leaves the semantics tree via an empty `clearAndSetSemantics { }` — the partial-overlay rule (§9.3), since an anchored card occludes nothing and a merely-hidden node keeps TalkBack's focus. |
@@ -2365,11 +2368,65 @@ Genres, Spotify popularity, Spotify followers, About (the summary) — each drop
 
 ### 11.6 Search
 
-Reached from the spine. A query prompt, then results across **All / Movies / Albums / Musicians
-/ Tracks**. The All tab stacks up to four sections, each with a count and a "See all" into that
-category. Paginated, 24 per page.
+Reached from the spine, first row. The pane is the other panes' shape with the query field above
+the strip: a heading with the result count and a **Clear** action (composed only while the field
+holds text), the field itself, a tab strip — **All · Movies · TV Shows · Albums · Musicians ·
+Tracks**, the five categories `GET /search` returns — and the selected tab's results. The web
+client's search page is the source of the categories and of what a result does; the way the
+query is entered and the way results page are the TV's own.
 
-Prefer the on-screen keyboard and voice input; keep required text entry to search and login.
+**Live search.** The field summons the system keyboard on focus (the one place besides login
+that does, §11.1.2) and the keyboard's own microphone is the voice input. While the keyboard is
+up it owns the d-pad — every arrow moves inside it, as on every Android TV text field — and Back
+or its Search key dismisses it; only then do the field's own edges (Clear above, the strip below,
+the spine to the left of an empty field) apply. The query goes out
+`SEARCH_DEBOUNCE_MS` (400ms) after the last keystroke, so a word typed on a remote is one
+request; the keyboard's **Search** action sends it at once, hides the keyboard and lands focus
+on the results. A query already answered is not sent again on Search — results on screen never
+bounce through a skeleton; a failed one is retried. Trimmed to blank, the query clears every tab
+and the pane returns to its prompt; trimmed to the query already searched, nothing moves. The
+server tokenises, corrects spelling and ranks (`docs/openapi.json`); the app sends the trimmed
+text and nothing else.
+
+**Prompt.** With nothing searched the field is the pane's only focus target — no strip, no
+results — over a decorative hint. The hint is plain text a TV screen reader never reaches, so
+the field's own label is the whole prompt ("Search movies, TV shows, albums, musicians and
+tracks"), spoken only; the heading names the pane.
+
+**All.** One `IglooMediaRail` per category with at least one match, in category order, titled
+with the category's full count — "Movies (12)" — and spoken once on entry like Home's rails
+(§11.3.2). Each shows the top eight rows as the category's own card (poster, square cover,
+circle) and, when more exist, ends in a **See all N …** card into the category's tab. Tracks are
+a plain column of `TrackRow`s under their heading (folded into the first row's sentence, the
+plain-column rule) with a See-all button beneath. Vertical moves between sections are announced
+through `AnnouncedSectionColumn`, as on Home. Every category empty is one empty box naming the
+query.
+
+**Category tabs.** The library and music panes' own surfaces over the search rows: `PaneGrid`
+for movies, shows, albums and musicians, `TracksList` for tracks, paging by `page`/`per_page` at
+48 (`MAX_LIBRARY_PER_PAGE`) through the same `PagedLoader` the Music pane uses. A tab selects on
+focus with the Music pane's debounce and loads lazily for the query last sent; a new query resets
+every tab and fetches only the selected one. The header's count is the tab's own
+(`showingCountLine`); on All it is the sum with the per-category breakdown in the spoken form,
+a polite live region that re-announces once per settled search.
+
+**What a result does.** Movies, shows, albums and musicians open their details overlays with
+`DetailsOrigin.Search`, so Back lands on the card that opened them (§6.3). A track row's Play
+queues the rows shown — the Tracks tab's loaded pages, or the All view's eight — from that row,
+through the pane's own play requests and `MusicPlayOrigin.SearchPane`; the player's close lands
+on the row's Play. Like and More are the shared row's (§11.5).
+
+**Focus.** Blank: the field, with up and down pinned and left to the spine. Otherwise the entry
+anchor rides the selected tab's entry item — remembered, or first — with the strip one press
+above and the field above that, Clear above the field when composed. Left column to the spine,
+right edge pinned, the cardless states on the anchor they draw. The field and Clear join the
+tabs' "do not steal" set in `PaneFocusOwnership`: results landing while the user types leave the
+keyboard where it is. A See-all press and the keyboard's Search both ask for the results one
+frame later (the node is new) and, under a screen reader, after the announced wait. The return
+requester attaches to exactly one node: on All, the section focus last rested in. One §6.3
+deviation, by the platform: with text in the field, left and right move the cursor, so the spine
+is reached through the strip or with Back. The pane's scroll positions and remembered items live
+in `SearchPaneMemory`, held by the host like the Music pane's trio.
 
 ### 11.7 Settings
 
@@ -2781,6 +2838,19 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-26 — Search (§11.6, §9.1).**
+
+- **§11.6**: rewritten for the built pane: live search debounced after the last keystroke with the
+  keyboard's Search action skipping the wait, the five categories `GET /search` returns (TV Shows
+  joined), the All view as rails with "See all" cards and a tracks column, category tabs on the
+  library and music panes' own surfaces at 48 per page, results opening the existing overlays
+  with `DetailsOrigin.Search`, track rows playing the rows shown, and the focus contract with the
+  field above the strip. Records the one platform deviation: cursor keys own left and right while
+  the field holds text.
+- **§9.1**: `IglooTextField` grows `labelVisible`, `leadingIcon`, `fieldModifier` and an empty-field
+  left exit; `PagedLoader` lifted out of the Music view model and shared with Search; `TracksList`
+  and `MusicianCard` named as the shared pieces they now are.
 
 **2026-10-23 — Up next, Resume without asking, and marking episodes watched (§11.8, §11.4.3, §6.3,
 §12).**

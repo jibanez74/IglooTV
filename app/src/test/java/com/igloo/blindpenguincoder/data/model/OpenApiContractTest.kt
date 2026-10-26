@@ -478,6 +478,13 @@ class OpenApiContractTest {
             Route("POST", "/api/music/tracks/{id}/like", envelope(TrackLikeToggleData.serializer())),
             Route("GET", "/api/music/stats", envelope(MusicStats.serializer())),
             Route("GET", "/api/music/tracks/{id}/stream"),
+
+            Route("GET", "/api/search", envelope(SearchAllData.serializer())),
+            Route("GET", "/api/search/movies", envelope(SearchPageData.serializer(MovieLibraryItem.serializer()))),
+            Route("GET", "/api/search/shows", envelope(SearchPageData.serializer(ShowLibraryItem.serializer()))),
+            Route("GET", "/api/search/albums", envelope(SearchPageData.serializer(SimpleAlbum.serializer()))),
+            Route("GET", "/api/search/musicians", envelope(SearchPageData.serializer(SimpleMusician.serializer()))),
+            Route("GET", "/api/search/tracks", envelope(SearchPageData.serializer(TrackListItem.serializer()))),
         )
 
         /** Models decoded outside a route's success body: `safeApiCall` reads the error body. */

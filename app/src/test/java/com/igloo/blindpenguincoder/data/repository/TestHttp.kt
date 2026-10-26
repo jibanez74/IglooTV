@@ -16,6 +16,7 @@ import com.igloo.blindpenguincoder.core.storage.StoredProfile
 import com.igloo.blindpenguincoder.data.api.AuthApi
 import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.api.MusicApi
+import com.igloo.blindpenguincoder.data.api.SearchApi
 import com.igloo.blindpenguincoder.data.api.ShowApi
 import com.igloo.blindpenguincoder.data.api.UserApi
 import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
@@ -69,6 +70,8 @@ class TestHttp(
     val movieRepository = MovieRepository(movieApi)
     val musicApi = MusicApi(client, serverUrl)
     val musicRepository = MusicRepository(musicApi)
+    val searchApi = SearchApi(client, serverUrl)
+    val searchRepository = SearchRepository(searchApi)
     val showApi = ShowApi(client, serverUrl)
     val showRepository = ShowRepository(showApi)
     val videoPlaybackApi = VideoPlaybackApi(client, serverUrl)
@@ -948,3 +951,30 @@ fun authUserJson(
         "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
     }}}
 """.trimIndent()
+
+/** One category of `GET /search`: its top rows and its full match count. */
+fun searchSectionJson(results: List<String>, total: Long = results.size.toLong()): String =
+    """{"results":[${results.joinToString(",")}],"total":$total}"""
+
+/** `GET /search`; every category present, empty ones as `{"results":[],"total":0}`. */
+fun searchAllJson(
+    query: String = "help",
+    movies: String = searchSectionJson(emptyList()),
+    shows: String = searchSectionJson(emptyList()),
+    albums: String = searchSectionJson(emptyList()),
+    musicians: String = searchSectionJson(emptyList()),
+    tracks: String = searchSectionJson(emptyList()),
+): String = """{"error":false,"message":"search","data":{"query":"$query","movies":$movies,""" +
+    """"shows":$shows,"albums":$albums,"musicians":$musicians,"tracks":$tracks}}"""
+
+/** One `GET /search/{category}` page; the rows are whatever that category's list route sends. */
+fun searchPageJson(
+    results: List<String>,
+    query: String = "help",
+    total: Long = results.size.toLong(),
+    page: Long = 1,
+    perPage: Long = 48,
+    totalPages: Long = 1,
+): String = """{"error":false,"message":"search","data":{"query":"$query",""" +
+    """"results":[${results.joinToString(",")}],"total":$total,"page":$page,""" +
+    """"per_page":$perPage,"total_pages":$totalPages}}"""
