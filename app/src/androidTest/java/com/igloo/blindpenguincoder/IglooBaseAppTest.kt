@@ -154,11 +154,11 @@ class IglooBaseAppTest {
 
         // A destination with no screen yet still swaps the pane. The placeholder is one cleared
         // node (section 10's inert-anchor contract), so it is identified by what it announces
-        // rather than by a loose text node inside it. Photos sits past the fold of the rail's
+        // rather than by a loose text node inside it. Settings sits past the fold of the rail's
         // scrolling column at 540dp, so it is brought into view the way d-pad focus would.
-        composeRule.onNodeWithContentDescription("Photos").performScrollTo().performClick()
+        composeRule.onNodeWithContentDescription("Settings").performScrollTo().performClick()
         composeRule.onNodeWithContentDescription(
-            "Photos. ${IglooDestination.Photos.supportingText}",
+            "Settings. ${IglooDestination.Settings.supportingText}",
         ).assertIsDisplayed()
     }
 

@@ -116,17 +116,17 @@ class NavigationRailBehaviorTest {
     /**
      * The content anchor on a destination that has no screen yet. The placeholder is one cleared
      * node — the same contract as the hero and an inert poster card — so it is addressed by the
-     * description it announces, not by the text inside it. Photos rather than Movies or TV
+     * description it announces, not by the text inside it. Settings rather than Movies or TV
      * Shows: both render a real grid now, and this suite's subject is the shell, not a library
      * screen. Its rail row sits past the fold of the rail's scrolling column at 540dp, so
-     * [openPhotos] brings it into view the way d-pad focus would before pressing it.
+     * [openSettings] brings it into view the way d-pad focus would before pressing it.
      */
     private fun placeholderStartCard() = composeRule.onNodeWithContentDescription(
-        "Photos. Photo support is reserved for a later Igloo backend feature.",
+        "Settings. ${IglooDestination.Settings.supportingText}",
     )
 
-    private fun openPhotos() {
-        composeRule.onNodeWithContentDescription("Photos").performScrollTo().performClick()
+    private fun openSettings() {
+        composeRule.onNodeWithContentDescription("Settings").performScrollTo().performClick()
         composeRule.waitForIdle()
     }
 
@@ -162,12 +162,12 @@ class NavigationRailBehaviorTest {
     fun backFromContentOpensRailOnCurrentDestination() {
         setShellContent()
 
-        openPhotos()
+        openSettings()
         placeholderStartCard().assertIsFocused()
 
         pressBack()
 
-        composeRule.onNodeWithContentDescription("Photos").assertIsFocused()
+        composeRule.onNodeWithContentDescription("Settings").assertIsFocused()
         rail().assertWidthIsEqualTo(expandedWidth)
     }
 
@@ -307,8 +307,8 @@ class NavigationRailBehaviorTest {
             .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.mainClock.advanceTimeByFrame()
         composeRule.mainClock.advanceTimeByFrame()
-        // Movies -> TV Shows -> Music -> Photos -> Settings -> Switch profile -> Sign out
-        repeat(6) { rail().performKeyInput { pressKey(Key.DirectionDown) } }
+        // Movies -> TV Shows -> Music -> Settings -> Switch profile -> Sign out
+        repeat(5) { rail().performKeyInput { pressKey(Key.DirectionDown) } }
         composeRule.onNodeWithContentDescription("Sign out")
             .performKeyInput { pressKey(Key.DirectionCenter) }
         repeat(2) { composeRule.mainClock.advanceTimeByFrame() }
@@ -386,8 +386,8 @@ class NavigationRailBehaviorTest {
         contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
 
-        // Home -> Movies -> TV Shows -> Music -> Photos -> Settings -> Switch profile -> Sign out
-        repeat(7) { rail().performKeyInput { pressKey(Key.DirectionDown) } }
+        // Home -> Movies -> TV Shows -> Music -> Settings -> Switch profile -> Sign out
+        repeat(6) { rail().performKeyInput { pressKey(Key.DirectionDown) } }
         composeRule.onNodeWithContentDescription("Sign out").assertIsFocused()
 
         composeRule.onNodeWithContentDescription("Sign out")

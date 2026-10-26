@@ -29,10 +29,6 @@ enum class IglooDestination(
         label = "Music",
         supportingText = "Musicians, albums and tracks in your library.",
     ),
-    Photos(
-        label = "Photos",
-        supportingText = "Photo support is reserved for a later Igloo backend feature.",
-    ),
     Settings(
         label = "Settings",
         supportingText = "Server, profile, theme, and playback settings will live here.",

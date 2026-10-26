@@ -1311,8 +1311,8 @@ stays reachable.
 
 ### 11.2 Navigation spine
 
-Seven destinations, icon + label: **Search**, **Home**, **Movies**, **TV Shows**, **Music**,
-**Photos**, **Settings**. Brand tile + wordmark at the top, the active profile's name and two
+Six destinations, icon + label: **Search**, **Home**, **Movies**, **TV Shows**, **Music**,
+**Settings**. Brand tile + wordmark at the top, the active profile's name and two
 account actions at the bottom: **Switch profile** above **Sign out**.
 
 The two are deliberately separate. Switch profile returns to the picker with the token intact;
@@ -1373,7 +1373,7 @@ The footer must remain visible at every `UiScale` — at 540dp tall this is the 
 constraint in the app and the first thing to break. It now carries two rows rather than one,
 so re-verify it at `UiScale.Large` after any spine change.
 
-**The destinations scroll only when the d-pad needs them to.** Seven rows plus the footer do not
+**The destinations scroll only when the d-pad needs them to.** Six rows plus the footer do not
 fit in 540dp, so the destinations have their own scrolling column. When a row takes focus, the
 column scrolls just far enough to show one whole row past it on each side
 (`NeighbourRevealingScroll`). The row the d-pad reaches next must already be on screen, or
@@ -3057,7 +3057,7 @@ forgot to change the code.**
   byte-identical; the Movies view-model suite migrated by rename alone.
 - **TV Shows** is the second kind: All Shows · Genres, inert cards, `shows_*` tags, the show
   routes; see the "TV Shows differences" paragraph. `PaneBranch.TvShows` in the host; the
-  placeholder-based shell tests moved to Photos.
+  placeholder-based shell tests moved to Photos (now Settings, since Photos was removed).
 - **§8.3:** the grid's real cells key as `item_$id`. **Wire:** `MAX_LIBRARY_PER_PAGE` and the
   paged-list query live in `data/api/PagedListQuery.kt`, shared by `MovieApi` and `ShowApi`, with
   the comment corrected — the backend clamps a larger `per_page`, it does not reject it.

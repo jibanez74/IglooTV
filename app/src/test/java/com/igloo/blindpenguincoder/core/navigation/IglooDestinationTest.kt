@@ -14,7 +14,6 @@ class IglooDestinationTest {
                 "Movies",
                 "TV Shows",
                 "Music",
-                "Photos",
                 "Settings",
             ),
             PrimaryIglooDestinations.map { it.label },

@@ -140,32 +140,6 @@ object IglooIcons {
         }
     }
 
-    val Photos: ImageVector by lazy {
-        icon("Photos") {
-            path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {
-                moveTo(3f, 4f)
-                lineTo(21f, 4f)
-                lineTo(21f, 20f)
-                lineTo(3f, 20f)
-                close()
-                moveTo(5f, 6f)
-                lineTo(19f, 6f)
-                lineTo(19f, 18f)
-                lineTo(5f, 18f)
-                close()
-            }
-            path(fill = SolidColor(Color.White)) {
-                moveTo(6.4f, 16.6f)
-                lineTo(10.2f, 10.8f)
-                lineTo(12.8f, 14.2f)
-                lineTo(14.6f, 12f)
-                lineTo(17.6f, 16.6f)
-                close()
-                circle(9.2f, 8.9f, 1.5f)
-            }
-        }
-    }
-
     val Settings: ImageVector by lazy {
         icon("Settings") {
             path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {
