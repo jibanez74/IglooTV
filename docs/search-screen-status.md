@@ -72,16 +72,72 @@ the strip for the announced wait, so the disposed card never falls to the rail),
 first card; the
 Tracks tab reads "Showing 48 of 668 tracks" and its rows' sentences.
 
+**Nvidia Shield (2026-10-26)**, Android 11, 4K output, Gboard TV, the LAN library server (404
+movies, 667 tracks match "the"). The two Search suites first, as the install:
+`SearchPaneBehaviorTest` **28/28** and `SearchPaneAccessibilityTest` **10/10**, re-run with the
+touched grid, track-list and music-tab suites after the fixes below: `SearchPaneBehaviorTest`
+28, `SearchPaneAccessibilityTest` 10, `MoviesGridAccessibilityTest` 21,
+`ShowsGridAccessibilityTest` 11, `TracksListAccessibilityTest` 7, `MusicTabsBehaviorTest` 8 —
+**85/85** on the Shield. Then the live drive, TalkBack off: Search from the spine lands on the field with
+Gboard up; the keyboard owns the d-pad (arrows move q → e → d), Back closes it on the field, Left
+from the empty field opens the spine and Right comes back with the keyboard; "casino" typed shows
+"4 results" while the keyboard stays; the keyboard's Search key hides it and lands on the Casino
+Royale card; Down walks Movies → Musicians → Tracks with the bottom pinned on the row's Play;
+Play opens the music player as "Track 1 of 1", pause, Back lands on that Play; More opens Go to
+album / Go to artist and Back returns to More; the musician and the movie open their pages and
+Back lands on each card; Clear from the field's Up empties the pane onto the field. "the" shows
+"1,144 results" with the Movies rail ending in **See all** / "404 movies"; its press selects
+Movies, says "404 movies" and focuses the grid's first card with the tab a press above; sliding
+Right across Musicians (18) to Tracks (667) selects each; the Tracks tab paged 48 → 96 on the way
+down with no skipped frames (`Choreographer` silent through the whole drive); a Home round trip
+kept "the", the Tracks tab, 96 rows and the focused row; a no-match query drew "No tracks match
+…" with Down from the field landing on the tab and then the box. 4K crops of the field, strip,
+circles and track row are crisp.
+
+TalkBack 14.2 on the Shield (verbose speech log, `action=SPEAK`): the spine says "Selected.
+Search. Button"; the field "Editing. Edit box. Search movies, TV shows, albums, musicians and
+tracks" then Gboard; letters echo as typed; the settled count once ("4 results for casino: 1
+movie, 2 musicians, 1 track."), and once per letter when "the" is typed with a second between
+keys ("1,742 results for t…", "1,209 results for th…", "1,144 results for the…") — the cadence
+the emulator pass left open is one short sentence per settled search, nothing while the
+debounce runs; the Search key "Out of keyboard row 1. You Know My Name…" and "keyboard hidden";
+Right "Not liked. Like. Button" and "More actions for You Know My Name…"; tabs "selected.
+Movies. Tab" then "Showing 1 of 1 movie", "0 TV shows", "0 albums", "4 results for casino…"
+back on All; Clear "Clear the search. Button" then "Cleared text" and the field. Before the fix
+below, the count line also reached TalkBack as five identical requests within 150 ms of each
+settled search (one per content change on its node), which TalkBack's duplicate filter folded
+into one utterance; after it, one request.
+
+Two defects, both fixed on the branch and re-driven:
+
+1. **Clear kept the hidden tab.** Clear (or a query trimmed to blank) emptied every tab but left
+   the selected category in place under the prompt, which draws no strip; the next query then
+   searched that category — "casino" after a Clear on Tracks answered "Showing 1 of 1 track"
+   with no Movies rail. `clearResults` now returns to All (`SearchViewModelTest` pins it) and
+   §11.6 says so.
+2. **The previous count re-read on every tab switch.** Right onto Movies spoke "selected.
+   Movies. Tab", then "4 results for casino…" again, then "Showing 1 of 1 movie"; every tab
+   switch repeated the line of the tab just left. The header's count was one node carrying the
+   visible text and the spoken description with a polite live region: while a request is out
+   the visible text becomes "Searching…" and the spoken line deliberately keeps the count it
+   replaces, and TalkBack re-reads a live region on any content change of its node — the text
+   change and the layout change both fired. The spoken line now rides a fixed 1dp node of its
+   own beside the visible text (`PaneHeader`, so the Movies, TV Shows and Music panes gain it
+   too); `SearchPaneAccessibilityTest` pins that the live node has no text while "Searching…"
+   shows. On the emulator the request landed inside the same frame, which is why the pass there
+   heard it once. Re-driven on the Shield: "selected. Movies. Tab" then "Showing 1 of 1 movie",
+   "selected. TV shows. Tab" then "0 TV shows", "selected. Albums. Tab" then "0 albums" — one
+   request each; and a Clear from the Albums tab followed by "casino" answers "4 results for
+   casino: 1 movie, 2 musicians, 1 track." on All.
+
 ## What could not be verified
 
-- **Shield and Fire TV.** Emulator only, by request; the Shield pass and the Fire OS pass (VoiceView,
-  the Fire keyboard's Back) come later.
-- **A TV keyboard owns the d-pad while it is up.** With the keyboard showing, Up/Down/Left/Right
-  move inside the keyboard, not the pane; Back or the keyboard's Search key dismiss it and the
-  field's wiring (up to Clear, down to the strip) applies from then on. This is the platform's
-  behaviour and the login screens share it; it is not something the pane can change.
-- **The live count line while typing.** Every settled search re-announces the count. Audible and
-  short on the emulator; judge the cadence on the Shield.
+- **Fire TV.** The Fire OS pass (VoiceView, the Fire keyboard's Back) comes later.
+- **Voice input.** Gboard's microphone cannot be driven over adb; the key is there and focusable.
+- **A TV keyboard owns the d-pad while it is up.** Confirmed on the Shield with Gboard TV: with
+  the keyboard showing, Up/Down/Left/Right move inside the keyboard, not the pane; Back or the
+  keyboard's Search key dismiss it and the field's wiring (up to Clear, down to the strip)
+  applies from then on. This is the platform's behaviour and the login screens share it.
 - **A one-off on the first live pass**, Back out of the music player opening the rail instead
   of landing on the row, was traced by the review to the All view's track rows remembering
   their focus wiring without the return requester among the keys, so the requester could sit on
@@ -106,3 +162,8 @@ nobody passed, and the four All-view rails spelled out in full; all taken.
   on whichever card focus enters on; the column could do the same at compose time.
 - The cursor keys: with text in the field, left and right move the cursor, so the spine is
   reached through the strip or with Back (§11.6 records this).
+- The See-all card draws the category's fallback glyph, the same film strip a movie with no
+  poster shows; at 4K the two are told apart only by the caption. A glyph of its own (an arrow,
+  or the count large) would read as an action at a glance.
+- A musician the server returns with "0 albums, 0 tracks" (a featured-artist credit) opens an
+  empty page; the server's search ranks it, the pane only shows it.

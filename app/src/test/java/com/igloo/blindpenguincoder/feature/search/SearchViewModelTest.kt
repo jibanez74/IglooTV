@@ -270,6 +270,8 @@ class SearchViewModelTest {
 
         assertEquals("", model.uiState.value.query)
         assertEquals("", model.uiState.value.searched)
+        // The prompt draws no strip, so the next search starts on All, not a hidden Movies.
+        assertEquals(SearchTab.All, model.uiState.value.tab)
         assertEquals(SearchContent.Prompt, model.uiState.value.toSearchContent())
         assertEquals(IglooRailState.Loading, model.uiState.value.movies.content)
         assertEquals(IglooRailState.Loading, model.uiState.value.all.content)

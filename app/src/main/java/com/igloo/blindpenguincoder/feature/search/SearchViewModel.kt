@@ -301,7 +301,9 @@ class SearchViewModel(
     }
 
     private fun clearResults() {
-        _uiState.update { it.copy(searched = "") }
+        // Back to All as well: the prompt draws no strip, so a category kept selected under it
+        // would send the next search to a tab the user cannot see (found on the Shield).
+        _uiState.update { it.copy(searched = "", tab = SearchTab.All) }
         loaders.values.forEach { it.reset() }
     }
 

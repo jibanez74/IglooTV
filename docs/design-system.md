@@ -2384,7 +2384,9 @@ the spine to the left of an empty field) apply. The query goes out
 request; the keyboard's **Search** action sends it at once, hides the keyboard and lands focus
 on the results. A query already answered is not sent again on Search — results on screen never
 bounce through a skeleton; a failed one is retried. Trimmed to blank, the query clears every tab
-and the pane returns to its prompt; trimmed to the query already searched, nothing moves. The
+and the pane returns to its prompt **on All**: the prompt draws no strip, so a category left
+selected under it would send the next search where the user cannot see (Shield, 2026-10-26);
+trimmed to the query already searched, nothing moves. The
 server tokenises, corrects spelling and ranks (`docs/openapi.json`); the app sends the trimmed
 text and nothing else.
 
@@ -2408,7 +2410,11 @@ for movies, shows, albums and musicians, `TracksList` for tracks, paging by `pag
 focus with the Music pane's debounce and loads lazily for the query last sent; a new query resets
 every tab and fetches only the selected one. The header's count is the tab's own
 (`showingCountLine`); on All it is the sum with the per-category breakdown in the spoken form,
-a polite live region that re-announces once per settled search.
+a polite live region that re-announces once per settled search. The spoken line rides a fixed
+node of its own beside the visible text (`PaneHeader`, every pane): the visible line changes to
+"Searching…" while a request is out and the spoken one keeps the count it replaces, and TalkBack
+re-reads a live region on any content change of its node — its text or its layout — so the two
+on one node re-announced the previous tab's count on every tab switch (Shield, 2026-10-26).
 
 **What a result does.** Movies, shows, albums and musicians open their details overlays with
 `DetailsOrigin.Search`, so Back lands on the card that opened them (§6.3). A track row's Play
@@ -2851,6 +2857,8 @@ forgot to change the code.**
 - **§9.1**: `IglooTextField` grows `labelVisible`, `leadingIcon`, `fieldModifier` and an empty-field
   left exit; `PagedLoader` lifted out of the Music view model and shared with Search; `TracksList`
   and `MusicianCard` named as the shared pieces they now are.
+- **Shield pass, same day**: Clear and a blank query return to All; the pane header's spoken count
+  moved to a node of its own so TalkBack stops re-reading the previous count on a tab switch.
 
 **2026-10-23 — Up next, Resume without asking, and marking episodes watched (§11.8, §11.4.3, §6.3,
 §12).**
