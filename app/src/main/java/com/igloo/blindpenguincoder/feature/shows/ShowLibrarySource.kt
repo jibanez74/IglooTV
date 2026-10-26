@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.shows
 
 import com.igloo.blindpenguincoder.core.error.map
+import com.igloo.blindpenguincoder.data.model.ShowLibraryItem
 import com.igloo.blindpenguincoder.data.model.ShowsLibraryData
 import com.igloo.blindpenguincoder.data.repository.ShowRepository
 import com.igloo.blindpenguincoder.feature.library.LibraryGenre
@@ -32,9 +33,11 @@ fun showLibrarySource(shows: ShowRepository): LibrarySource = LibrarySource(
 )
 
 private fun ShowsLibraryData.toLibraryPage(): LibraryPage = LibraryPage(
-    rows = shows.map {
-        LibraryRow(id = it.id, title = it.name, posterPath = it.posterPath, year = it.premiereYear)
-    },
+    rows = shows.map { it.toLibraryRow() },
     total = total,
     totalPages = totalPages,
 )
+
+/** A show as the library grid's row; search results map through here too. */
+fun ShowLibraryItem.toLibraryRow(): LibraryRow =
+    LibraryRow(id = id, title = name, posterPath = posterPath, year = premiereYear)

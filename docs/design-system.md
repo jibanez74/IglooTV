@@ -2423,7 +2423,8 @@ through the pane's own play requests and `MusicPlayOrigin.SearchPane`; the playe
 on the row's Play. Like and More are the shared row's (§11.5).
 
 **Focus.** Blank: the field, with up and down pinned and left to the spine. Otherwise the entry
-anchor rides the selected tab's entry item — remembered, or first — with the strip one press
+anchor rides the selected tab's entry item — remembered, or first; a new query forgets every
+remembered item, so its entry is the first result — with the strip one press
 above and the field above that, Clear above the field when composed. Left column to the spine,
 right edge pinned, the cardless states on the anchor they draw. The field and Clear join the
 tabs' "do not steal" set in `PaneFocusOwnership`: results landing while the user types leave the

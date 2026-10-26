@@ -6,6 +6,7 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.withApiBaseUrl
 import com.igloo.blindpenguincoder.data.api.MAX_LIBRARY_PER_PAGE
 import com.igloo.blindpenguincoder.data.model.SearchPageData
 import com.igloo.blindpenguincoder.data.model.TrackListItem
@@ -130,8 +131,8 @@ class SearchViewModel(
         id = { it.kind.ordinal.toLong() },
         present = { it },
         fetch = {
-            search.searchAll(searched).map { data ->
-                val sections = data.toSections(serverUrl.require().apiBaseUrl)
+            search.searchAll(searched).withApiBaseUrl(serverUrl).map { (data, apiBaseUrl) ->
+                val sections = data.toSections(apiBaseUrl)
                 LoadedPage(sections, sections.totalMatches(), FIRST_PAGE, AppendState.End)
             }
         },
@@ -143,8 +144,9 @@ class SearchViewModel(
         id = { it.id },
         present = { it },
         fetch = { page ->
-            val apiBaseUrl = serverUrl.require().apiBaseUrl
-            search.searchMovies(searched, page, PAGE_SIZE).map { it.toLoadedPage(page) { movie -> movie.toPosterItem(apiBaseUrl) } }
+            search.searchMovies(searched, page, PAGE_SIZE).withApiBaseUrl(serverUrl).map { (data, apiBaseUrl) ->
+                data.toLoadedPage(page) { movie -> movie.toPosterItem(apiBaseUrl) }
+            }
         },
     )
 
@@ -154,8 +156,9 @@ class SearchViewModel(
         id = { it.id },
         present = { it },
         fetch = { page ->
-            val apiBaseUrl = serverUrl.require().apiBaseUrl
-            search.searchShows(searched, page, PAGE_SIZE).map { it.toLoadedPage(page) { show -> show.toPosterItem(apiBaseUrl) } }
+            search.searchShows(searched, page, PAGE_SIZE).withApiBaseUrl(serverUrl).map { (data, apiBaseUrl) ->
+                data.toLoadedPage(page) { show -> show.toPosterItem(apiBaseUrl) }
+            }
         },
     )
 
@@ -295,16 +298,24 @@ class SearchViewModel(
     }
 
     private fun submit(trimmed: String) {
-        _uiState.update { it.copy(searched = trimmed) }
-        loaders.values.forEach { it.reset() }
+        resetResults { it.copy(searched = trimmed) }
         selectedLoader.ensureLoaded()
     }
 
     private fun clearResults() {
         // Back to All as well: the prompt draws no strip, so a category kept selected under it
         // would send the next search to a tab the user cannot see (found on the Shield).
-        _uiState.update { it.copy(searched = "", tab = SearchTab.All) }
-        loaders.values.forEach { it.reset() }
+        resetResults { it.copy(searched = "", tab = SearchTab.All) }
+    }
+
+    /**
+     * Every tab back to its skeleton under the new [query state][withQuery], in one emission. A
+     * tab focus still waiting out its debounce belonged to the old query, so it goes too.
+     */
+    private fun resetResults(withQuery: (SearchUiState) -> SearchUiState) {
+        tabDebounceJob?.cancel()
+        val resets = loaders.values.map { it.reset() }
+        _uiState.update { state -> resets.fold(withQuery(state)) { next, reset -> reset(next) } }
     }
 
     private companion object {

@@ -1,10 +1,13 @@
 package com.igloo.blindpenguincoder.feature.search
 
+import com.igloo.blindpenguincoder.core.ui.countNoun
 import com.igloo.blindpenguincoder.core.ui.formatCount
 import com.igloo.blindpenguincoder.data.model.MovieLibraryItem
 import com.igloo.blindpenguincoder.data.model.SearchAllData
 import com.igloo.blindpenguincoder.data.model.ShowLibraryItem
 import com.igloo.blindpenguincoder.data.model.TrackListItem
+import com.igloo.blindpenguincoder.feature.library.toPosterItem
+import com.igloo.blindpenguincoder.feature.movies.toLibraryRow
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.music.MusicianCardUi
 import com.igloo.blindpenguincoder.feature.music.TracksEntry
@@ -12,7 +15,7 @@ import com.igloo.blindpenguincoder.feature.music.toCardUi
 import com.igloo.blindpenguincoder.feature.music.toRowUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
-import com.igloo.blindpenguincoder.feature.shared.posterItem
+import com.igloo.blindpenguincoder.feature.shows.toLibraryRow
 
 /**
  * Wire-to-render rules for the Search pane (docs/design-system.md section 11.6), pure so every
@@ -84,11 +87,9 @@ internal fun SearchAllData.toSections(apiBaseUrl: String): List<SearchSectionUi>
 /** A section's heading on the All view: `"Movies (12)"`, the count being the full match count. */
 internal fun sectionTitle(kind: SearchKind, total: Long): String = "${kind.title} (${formatCount(total)})"
 
-internal fun MovieLibraryItem.toPosterItem(apiBaseUrl: String): PosterItem =
-    posterItem(id = id, title = title, posterPath = posterPath, year = year, apiBaseUrl = apiBaseUrl)
+internal fun MovieLibraryItem.toPosterItem(apiBaseUrl: String): PosterItem = toLibraryRow().toPosterItem(apiBaseUrl)
 
-internal fun ShowLibraryItem.toPosterItem(apiBaseUrl: String): PosterItem =
-    posterItem(id = id, title = name, posterPath = posterPath, year = premiereYear, apiBaseUrl = apiBaseUrl)
+internal fun ShowLibraryItem.toPosterItem(apiBaseUrl: String): PosterItem = toLibraryRow().toPosterItem(apiBaseUrl)
 
 /** The Tracks tab's flat list: ranked rows, no letter headers — the server's order is relevance. */
 internal fun TrackListItem.toSearchEntry(): TracksEntry = TracksEntry.Track(toRowUi())
@@ -98,7 +99,7 @@ internal fun List<SearchSectionUi>.totalMatches(): Long = sumOf { it.total }
 
 /** The header's visible line: `"42 results for “casino”"`, or `"No results for “casino”"`. */
 internal fun resultsCountLine(total: Long, query: String): String =
-    if (total == 0L) "No results for “$query”" else "${formatCount(total)} ${countNoun(total)} for “$query”"
+    if (total == 0L) "No results for “$query”" else "${formatCount(total)} ${countNoun(total, "result")} for “$query”"
 
 /**
  * The header's spoken line on the All view: the total, then each category's count, so a screen
@@ -109,11 +110,9 @@ internal fun spokenResultsSummary(sections: List<SearchSectionUi>, query: String
     if (total == 0L) return "No results for $query."
     val breakdown = sections.filter { it.total > 0 }
         .joinToString(", ") { "${formatCount(it.total)} ${it.kind.noun(it.total)}" }
-    return "${formatCount(total)} ${countNoun(total)} for $query: $breakdown."
+    return "${formatCount(total)} ${countNoun(total, "result")} for $query: $breakdown."
 }
 
 /** The All-view card at the end of a section with more matches than it shows. */
 internal fun seeAllLabel(kind: SearchKind, total: Long): String =
     "See all ${formatCount(total)} ${kind.noun(total)}"
-
-private fun countNoun(total: Long): String = if (total == 1L) "result" else "results"

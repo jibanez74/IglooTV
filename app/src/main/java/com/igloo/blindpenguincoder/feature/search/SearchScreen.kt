@@ -131,6 +131,7 @@ fun SearchScreen(
         pendingContentHandoff = false
     }
     val landOnResults = { pendingContentHandoff = true }
+    LaunchedEffect(state.searched) { memory.onSearched(state.searched) }
     // The row whose More menu is open; the menu is the pane's last child, over everything.
     var trackMenu by remember(tab) { mutableStateOf<Pair<TrackRowUi, Rect>?>(null) }
     // The count line is a polite live region that re-announces on every change, so a search is
@@ -929,7 +930,7 @@ private fun spokenCountLine(state: SearchUiState, content: SearchContent): Strin
         // speaking one phrase is the redundant announcement section 12 rules out.
         SearchContent.Empty -> if (kind == null) "0 results for ${state.searched}" else "0 ${kind.noun(0)}"
         SearchContent.Populated -> when {
-            kind == null -> spokenResultsSummary(state.all.loadedItems().orEmpty(), state.searched)
+            kind == null -> spokenResultsSummary(state.all.shownSections(), state.searched)
             else -> {
                 val total = state.selected.total ?: 0L
                 val loaded = state.selected.loadedItems()?.size ?: 0

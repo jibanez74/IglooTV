@@ -139,6 +139,16 @@ class SearchMappingTest {
     }
 
     @Test
+    fun `a count with no rows is neither shown nor spoken`() {
+        // An index mid-rebuild: five tracks counted, none returned.
+        val sections = allData(tracks = emptyList(), tracksTotal = 5).toSections(API)
+        val shown = SearchUiState(searched = "help", all = PagedState(IglooRailState.Loaded(sections))).all.shownSections()
+
+        assertEquals("3 results for “help”", resultsCountLine(shown.totalMatches(), "help"))
+        assertEquals("3 results for help: 1 movie, 1 TV show, 1 album.", spokenResultsSummary(shown, "help"))
+    }
+
+    @Test
     fun `section titles and see-all labels count in words`() {
         assertEquals("TV Shows (1)", sectionTitle(SearchKind.Shows, 1))
         assertEquals("Movies (1,200)", sectionTitle(SearchKind.Movies, 1200))

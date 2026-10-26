@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -115,12 +116,15 @@ internal fun PaneHeader(
             // ("Searching…", "—") while the spoken one deliberately keeps the count it replaces,
             // and TalkBack re-reads a live region on any content change of its node — its text
             // or its layout — so one node for both re-announced the previous count on every tab
-            // switch (Shield, 2026-10-26). A fixed 1dp node changes only when the spoken line does.
+            // switch (Shield, 2026-10-26). A fixed 1dp node changes only when the spoken line does,
+            // and it is the count's only node a screen reader reaches: the visible line is hidden,
+            // not cleared, so it stays in the tree the tests read.
             Box {
                 IglooText(
                     text = countText,
                     style = IglooTheme.typography.bodyMedium,
                     color = colors.mutedForeground,
+                    modifier = Modifier.semantics { hideFromAccessibility() },
                 )
                 Box(
                     modifier = Modifier

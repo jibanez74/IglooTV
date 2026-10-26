@@ -37,6 +37,7 @@ class SearchPaneMemory(
     private val lastFocusedSectionState: MutableState<SearchKind?>,
     private val lastFocusedTrackState: MutableState<TrackFocusMemory?>,
     private val lastFocusedAllTrackState: MutableState<TrackFocusMemory?>,
+    private val searchedForState: MutableState<String>,
 ) {
     /** The All view's section focus last rested in: where an overlay's Back returns. */
     var lastFocusedSection: SearchKind? by lastFocusedSectionState
@@ -48,6 +49,21 @@ class SearchPaneMemory(
     var lastFocusedAllTrack: TrackFocusMemory? by lastFocusedAllTrackState
 
     fun gridState(tab: SearchTab): LazyGridState = gridStates.getValue(tab)
+
+    /**
+     * Every remembered card belongs to the query it was focused under: a new [searched] forgets
+     * them, so the entry from the tab strip is the new results' first card, not a card an earlier
+     * search left mid-grid. The same query coming back from Home keeps them.
+     */
+    fun onSearched(searched: String) {
+        if (searched == searchedForState.value) return
+        searchedForState.value = searched
+        lastFocusedIds.clear()
+        lastFocusedRailKeys.clear()
+        lastFocusedSection = null
+        lastFocusedTrack = null
+        lastFocusedAllTrack = null
+    }
 
     suspend fun scrollToTop(tab: SearchTab) {
         when (tab) {
@@ -72,6 +88,7 @@ internal fun rememberSearchPaneMemory(): SearchPaneMemory {
     val lastFocusedAllTrack = rememberSaveable(stateSaver = TrackFocusMemory.Saver) {
         mutableStateOf<TrackFocusMemory?>(null)
     }
+    val searchedFor = rememberSaveable { mutableStateOf("") }
     return remember {
         SearchPaneMemory(
             allScrollState = allScrollState,
@@ -82,6 +99,7 @@ internal fun rememberSearchPaneMemory(): SearchPaneMemory {
             lastFocusedSectionState = lastFocusedSection,
             lastFocusedTrackState = lastFocusedTrack,
             lastFocusedAllTrackState = lastFocusedAllTrack,
+            searchedForState = searchedFor,
         )
     }
 }

@@ -297,6 +297,37 @@ class SearchViewModelTest {
     }
 
     @Test
+    fun `a sign-out while a search is out fails the load rather than crashing`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(all = { request ->
+            gate.await()
+            jsonResponse(allBody(request.url.parameters["q"].orEmpty()))
+        })
+        val model = model(http)
+        type(model, "help")
+
+        // The session tears down: the address clears before the answer lands.
+        http.test.serverUrl.set(null)
+        gate.complete(Unit)
+
+        assertTrue(model.uiState.value.all.content is IglooRailState.Error)
+    }
+
+    @Test
+    fun `clearing drops a tab focus still waiting out its debounce`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+        type(model, "help")
+
+        model.selectTab(SearchTab.Movies)
+        model.clear()
+        advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS + 1)
+
+        assertEquals(listOf("/api/search?q=help"), http.requests)
+        assertEquals(IglooRailState.Loading, model.uiState.value.movies.content)
+    }
+
+    @Test
     fun `Search with a blank field and Retry with nothing searched send nothing`() = runTest {
         val http = routedHttp()
         val model = model(http)

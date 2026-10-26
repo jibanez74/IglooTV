@@ -4,6 +4,8 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
+import com.igloo.blindpenguincoder.feature.shared.PosterItem
+import com.igloo.blindpenguincoder.feature.shared.posterItem
 
 /** One row of a paged listing before its poster path is built into a URL. */
 data class LibraryRow(
@@ -12,6 +14,9 @@ data class LibraryRow(
     val posterPath: SqlNullString,
     val year: SqlNullInt64,
 )
+
+/** The row as a poster card; a search result is drawn by the same rule as a library page. */
+fun LibraryRow.toPosterItem(apiBaseUrl: String): PosterItem = posterItem(id, title, posterPath, year, apiBaseUrl)
 
 /** One page of a paged listing, with the counts the grid's tail is driven by. */
 data class LibraryPage(

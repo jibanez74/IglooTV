@@ -547,9 +547,9 @@ class SearchPaneBehaviorTest {
 
         searchState = testSearchState(searched = "yesterday", all = testSearchState().all.copy(contentGeneration = 2))
         composeRule.waitForIdle()
-        // The view re-anchors on the first section's entry: the remembered card when the new
-        // results still hold it, the first otherwise.
-        node("poster_card_2").assertIsFocused()
+        // The view re-anchors on the first section's entry. The remembered card belonged to the
+        // old query, so it is the new results' first card even though they still hold card 2.
+        node("poster_card_1").assertIsFocused()
     }
 
     @Test

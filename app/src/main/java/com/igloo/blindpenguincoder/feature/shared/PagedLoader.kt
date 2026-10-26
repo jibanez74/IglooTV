@@ -130,22 +130,29 @@ class PagedLoader<S, T, R>(
      * Forgets every page: the list goes back to its skeleton with nothing in flight, and the
      * next [ensureLoaded] fetches afresh. A response to an earlier request is dropped. The
      * generations stay monotonic so a screen's memory of them never meets a repeat.
+     *
+     * The skeleton comes back as a state change for the caller to apply, so a view model
+     * resetting several lists does it in one update rather than one emission per list.
      */
-    fun reset() {
+    fun reset(): (S) -> S {
         job?.cancel()
         job = null
         generation += 1
         cursor = firstCursor
         seenIds.clear()
         loaded = emptyList()
-        update({
-            PagedState(
-                appendGeneration = it.appendGeneration,
-                // Rows on screen giving way to a skeleton is a replacement the screen must
-                // re-anchor on, exactly as a page landing is.
-                contentGeneration = if (it.content is IglooRailState.Loaded) it.contentGeneration + 1 else it.contentGeneration,
+        return { current ->
+            val paged = read(current)
+            write(
+                current,
+                PagedState(
+                    appendGeneration = paged.appendGeneration,
+                    // Rows on screen giving way to a skeleton is a replacement the screen must
+                    // re-anchor on, exactly as a page landing is.
+                    contentGeneration = if (paged.content is IglooRailState.Loaded) paged.contentGeneration + 1 else paged.contentGeneration,
+                ),
             )
-        })
+        }
     }
 
     private fun appendNextPage() {
