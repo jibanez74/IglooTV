@@ -147,9 +147,9 @@ class PagedLoader<S, T, R>(
                 current,
                 PagedState(
                     appendGeneration = paged.appendGeneration,
-                    // Rows on screen giving way to a skeleton is a replacement the screen must
-                    // re-anchor on, exactly as a page landing is.
-                    contentGeneration = if (paged.content is IglooRailState.Loaded) paged.contentGeneration + 1 else paged.contentGeneration,
+                    // Rows or an error card giving way to a skeleton is a replacement the screen
+                    // must re-anchor on, exactly as a page landing is: the focused node disposes.
+                    contentGeneration = if (paged.content !is IglooRailState.Loading) paged.contentGeneration + 1 else paged.contentGeneration,
                 ),
             )
         }

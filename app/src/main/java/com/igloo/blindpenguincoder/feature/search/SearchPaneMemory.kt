@@ -51,11 +51,14 @@ class SearchPaneMemory(
     fun gridState(tab: SearchTab): LazyGridState = gridStates.getValue(tab)
 
     /**
-     * Every remembered card belongs to the query it was focused under: a new [searched] forgets
-     * them, so the entry from the tab strip is the new results' first card, not a card an earlier
-     * search left mid-grid. The same query coming back from Home keeps them.
+     * Every remembered card and scroll position belongs to the query it was left under: a new
+     * [searched] forgets them, so the entry from the tab strip is the new results' first card, not
+     * a card an earlier search left mid-grid. The surfaces go back to the top here rather than in
+     * the focus coordinator, which never sees a replacement that landed while the pane was off
+     * screen — and a first card scrolled out of composition is an entry nothing can focus. The
+     * same query coming back from Home keeps them.
      */
-    fun onSearched(searched: String) {
+    suspend fun onSearched(searched: String) {
         if (searched == searchedForState.value) return
         searchedForState.value = searched
         lastFocusedIds.clear()
@@ -63,6 +66,11 @@ class SearchPaneMemory(
         lastFocusedSection = null
         lastFocusedTrack = null
         lastFocusedAllTrack = null
+        // Requested, not scrolled: only the selected tab's list is composed, and a lazy scroll
+        // with no layout attached would wait for one that may never come.
+        gridStates.values.forEach { it.requestScrollToItem(0) }
+        tracksListState.requestScrollToItem(0)
+        allScrollState.scrollTo(0)
     }
 
     suspend fun scrollToTop(tab: SearchTab) {

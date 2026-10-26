@@ -9,16 +9,20 @@ import com.igloo.blindpenguincoder.feature.music.TrackFocusMemory
 import com.igloo.blindpenguincoder.feature.shared.TrackRowColumn
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The remembered cards belong to the query they were focused under. */
+/** The remembered cards and scroll positions belong to the query they were left under. */
 class SearchPaneMemoryTest {
 
+    private val gridTabs = SearchTab.entries - SearchTab.All - SearchTab.Tracks
+
+    /** Every surface starts scrolled deep, as an earlier query's results left them. */
     private fun memory() = SearchPaneMemory(
-        allScrollState = ScrollState(0),
-        gridStates = emptyMap<SearchTab, LazyGridState>(),
-        tracksListState = LazyListState(),
+        allScrollState = ScrollState(500),
+        gridStates = gridTabs.associateWith { LazyGridState(firstVisibleItemIndex = 31) },
+        tracksListState = LazyListState(firstVisibleItemIndex = 31),
         lastFocusedIds = mutableStateMapOf(),
         lastFocusedRailKeys = mutableStateMapOf(),
         lastFocusedSectionState = mutableStateOf(null),
@@ -36,7 +40,7 @@ class SearchPaneMemoryTest {
     }
 
     @Test
-    fun `a new query forgets every remembered card`() {
+    fun `a new query forgets every remembered card`() = runTest {
         val memory = memory()
         memory.onSearched("star")
         memory.rememberEverything()
@@ -51,7 +55,7 @@ class SearchPaneMemoryTest {
     }
 
     @Test
-    fun `the same query coming back from Home keeps them`() {
+    fun `the same query coming back from Home keeps them`() = runTest {
         val memory = memory()
         memory.onSearched("star")
         memory.rememberEverything()
@@ -60,5 +64,26 @@ class SearchPaneMemoryTest {
 
         assertEquals(20L, memory.lastFocusedIds[SearchTab.Movies])
         assertEquals(SearchKind.Movies, memory.lastFocusedSection)
+    }
+
+    @Test
+    fun `a new query scrolls every surface back to the top`() = runTest {
+        val memory = memory()
+
+        memory.onSearched("star trek")
+
+        assertEquals(0, memory.allScrollState.value)
+        gridTabs.forEach { assertEquals(0, memory.gridState(it).firstVisibleItemIndex) }
+        assertEquals(0, memory.tracksListState.firstVisibleItemIndex)
+    }
+
+    @Test
+    fun `the same query coming back from Home keeps its scroll`() = runTest {
+        val memory = memory()
+
+        memory.onSearched("")
+
+        assertEquals(500, memory.allScrollState.value)
+        assertEquals(31, memory.gridState(SearchTab.Movies).firstVisibleItemIndex)
     }
 }

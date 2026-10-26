@@ -221,6 +221,30 @@ class SearchViewModelTest {
     }
 
     @Test
+    fun `a failed query giving way to a new search counts as a replacement`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val http = routedHttp(all = { request ->
+            if (request.url.parameters["q"] == "help") {
+                jsonResponse("""{"error":true,"message":"down"}""", HttpStatusCode.InternalServerError)
+            } else {
+                gate.await()
+                jsonResponse(allBody(request.url.parameters["q"].orEmpty()))
+            }
+        })
+        val model = model(http)
+        type(model, "help")
+        assertEquals(SearchContent.Error("down"), model.uiState.value.toSearchContent())
+        val failedGeneration = model.uiState.value.all.contentGeneration
+
+        // The Retry the user may be standing on disposes here, so the screen must re-anchor.
+        type(model, "helpers")
+
+        assertEquals(SearchContent.Loading, model.uiState.value.toSearchContent())
+        assertEquals(failedGeneration + 1, model.uiState.value.all.contentGeneration)
+        gate.complete(Unit)
+    }
+
+    @Test
     fun `a new query forgets every tab and fetches only the selected one`() = runTest {
         val http = routedHttp()
         val model = model(http)

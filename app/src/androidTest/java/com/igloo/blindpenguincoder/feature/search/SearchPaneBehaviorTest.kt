@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
@@ -27,6 +28,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
+import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
@@ -36,6 +38,7 @@ import com.igloo.blindpenguincoder.playback.queue.toMusicPlayTrack
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testLibraryTracks
 import com.igloo.blindpenguincoder.testMovieDetails
+import com.igloo.blindpenguincoder.testMovieGridItems
 import com.igloo.blindpenguincoder.testSearchState
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Assert.assertEquals
@@ -553,6 +556,23 @@ class SearchPaneBehaviorTest {
     }
 
     @Test
+    fun aFailedSearchGivingWayToANewOneKeepsFocusInThePane() {
+        setContent(testSearchState(all = PagedState(IglooRailState.Error("Server down."))))
+        val retry = composeRule.onNodeWithContentDescription("Retry the search")
+        retry.requestFocus()
+        retry.assertIsFocused()
+
+        // The view model's reset: the error card gives way to the skeleton on a new generation.
+        searchState = testSearchState(searched = "yesterday", all = PagedState(IglooRailState.Loading, contentGeneration = 1))
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Loading results").assertIsFocused()
+
+        searchState = testSearchState(searched = "yesterday", all = testSearchState().all.copy(contentGeneration = 2))
+        composeRule.waitForIdle()
+        node("poster_card_1").assertIsFocused()
+    }
+
+    @Test
     fun theKeyboardsSearchActionSendsTheQueryAndLandsOnTheResults() {
         setContent()
 
@@ -610,5 +630,31 @@ class SearchPaneBehaviorTest {
         node("poster_card_3").assertIsFocused()
         node("poster_card_3").performKeyInput { pressKey(Key.DirectionDown) }
         node("show_card_2").assertIsFocused()
+    }
+
+    @Test
+    fun aQueryReplacedWhileSearchIsAwayReturnsToTheTopOfTheResults() {
+        setContent(testSearchState(tab = SearchTab.Movies))
+        node("search_movies_grid").performScrollToIndex(31)
+        node("poster_card_32").requestFocus()
+        node("poster_card_32").assertIsFocused()
+
+        composeRule.onNodeWithContentDescription("Home").performClick()
+        composeRule.waitForIdle()
+        // The debounced search lands while Home is showing, so the pane never sees it happen.
+        val replaced = testMovieGridItems.map { it.copy(id = it.id + 100) }
+        searchState = testSearchState(
+            query = "yesterday",
+            tab = SearchTab.Movies,
+            movies = PagedState(IglooRailState.Loaded(replaced), total = 40, append = AppendState.End, contentGeneration = 2),
+        )
+        composeRule.waitForIdle()
+        openSearch()
+
+        val rail = composeRule.onNodeWithContentDescription("Search")
+        rail.requestFocus()
+        rail.performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.waitForIdle()
+        node("poster_card_101").assertIsFocused()
     }
 }
