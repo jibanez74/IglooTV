@@ -4,22 +4,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.map
-import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.core.ui.orKeepContent
 import com.igloo.blindpenguincoder.data.api.MAX_LIBRARY_PER_PAGE
 import com.igloo.blindpenguincoder.data.model.MusicStats
 import com.igloo.blindpenguincoder.data.model.TrackListItem
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
-import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.shared.AppendState
-import com.igloo.blindpenguincoder.feature.shared.DUPLICATE_PAGE_BACKOFF_MS
 import com.igloo.blindpenguincoder.feature.shared.FIRST_PAGE
+import com.igloo.blindpenguincoder.feature.shared.LoadedPage
+import com.igloo.blindpenguincoder.feature.shared.PagedLoader
 import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import com.igloo.blindpenguincoder.feature.shared.loadedItems
 import com.igloo.blindpenguincoder.feature.shared.pageAppendState
-import com.igloo.blindpenguincoder.feature.shared.resetIfLoading
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.queue.MusicQueueController
 import kotlinx.coroutines.Job
@@ -69,10 +66,10 @@ data class MusicUiState(
 }
 
 /**
- * The Music pane's paging machine: one [Pager] per tab — cursor, loaded rows, job and
- * generation — all retained for the session so a Home → Music round trip and a tab round trip
- * both land on the pages the user had. Musicians and albums page by `page`/`per_page`, tracks
- * by `limit`/`offset`; each pager's `fetch` is the only place they differ.
+ * The Music pane's paging machine: one [PagedLoader] per tab, all retained for the session so a
+ * Home → Music round trip and a tab round trip both land on the pages the user had. Musicians
+ * and albums page by `page`/`per_page`, tracks by `limit`/`offset`; each loader's `fetch` is the
+ * only place they differ.
  *
  * Playback launches go through [playRequests]: a row's Play and Play all map the loaded rows
  * synchronously, Shuffle all first fetches the server's random batch.
@@ -87,158 +84,35 @@ class MusicViewModel(
     private val playRequestChannel = Channel<MusicPlayRequest>(Channel.CONFLATED)
     val playRequests: Flow<MusicPlayRequest> = playRequestChannel.receiveAsFlow()
 
-    /** One fetched page: the rows in server order plus what the tail needs to know. */
-    private class Page<T>(
-        val rows: List<T>,
-        val total: Long,
-        val nextCursor: Long,
-        val append: AppendState,
+    /** The Music-only first-page flags every loader keeps in step; see [MusicUiState]. */
+    private fun <T, R> pager(
+        read: (MusicUiState) -> PagedState<R>,
+        write: (MusicUiState, PagedState<R>) -> MusicUiState,
+        present: (List<T>) -> List<R>,
+        firstCursor: Long,
+        fetch: suspend (cursor: Long) -> ApiResult<LoadedPage<T>>,
+        id: (T) -> Long,
+    ) = PagedLoader(
+        scope = viewModelScope,
+        state = _uiState,
+        read = read,
+        write = write,
+        id = id,
+        present = present,
+        firstCursor = firstCursor,
+        fetch = fetch,
+        onFirstPageStarted = { state, userInitiated ->
+            if (userInitiated) state.copy(refreshing = true, notice = null) else state
+        },
+        onFirstPageLoaded = { it.copy(refreshing = false, notice = null) },
+        // With content still on screen the failure is over and Refresh is one press away: a
+        // notice, not a second Retry.
+        onFirstPageFailed = { state, message, hadContent ->
+            state.copy(refreshing = false, notice = message.takeIf { hadContent })
+        },
     )
 
-    /**
-     * One tab's paging state and rules. [T] is the row the endpoint returns, kept in
-     * [loaded] in server order; [R] is what the tab draws, derived from every loaded row by
-     * [present] — the identity for a grid of cards, the letter-headed entries for the track
-     * list, which is why an append re-presents the whole list rather than growing it.
-     */
-    private inner class Pager<T, R>(
-        private val read: (MusicUiState) -> PagedState<R>,
-        private val write: (MusicUiState, PagedState<R>) -> MusicUiState,
-        private val id: (T) -> Long,
-        private val present: (List<T>) -> List<R>,
-        private val firstCursor: Long,
-        private val fetch: suspend (cursor: Long) -> ApiResult<Page<T>>,
-    ) {
-        /** The next `page` (1-based) for musicians and albums, the next `offset` for tracks. */
-        private var cursor = firstCursor
-        private val seenIds = mutableSetOf<Long>()
-        private var job: Job? = null
-        private var generation = 0
-
-        /** Every row shown so far, in server order; what a play request is built from. */
-        var loaded: List<T> = emptyList()
-            private set
-
-        val paged: PagedState<R> get() = read(_uiState.value)
-        val isLoaded: Boolean get() = paged.content is IglooRailState.Loaded
-        val isBusy: Boolean get() = job?.isActive == true
-
-        private fun update(transform: (PagedState<R>) -> PagedState<R>, then: (MusicUiState) -> MusicUiState = { it }) {
-            _uiState.update { state -> then(write(state, transform(read(state)))) }
-        }
-
-        /** Page 1 for a tab with nothing shown; a tab with pages or an error card is left alone. */
-        fun ensureLoaded() {
-            if (paged.content !is IglooRailState.Loading) return
-            if (isBusy) return
-            loadFirstPage(userInitiated = false)
-        }
-
-        fun loadFirstPage(userInitiated: Boolean) {
-            job?.cancel()
-            val startedIn = ++generation
-            if (userInitiated) {
-                update({ it.copy(append = it.append.resetIfLoading()) }) {
-                    it.copy(refreshing = true, notice = null)
-                }
-            }
-            job = viewModelScope.launch {
-                val result = fetch(firstCursor)
-                if (startedIn != generation) return@launch
-                when (result) {
-                    is ApiResult.Success -> {
-                        val page = result.value
-                        cursor = page.nextCursor
-                        seenIds.clear()
-                        seenIds += page.rows.map(id)
-                        loaded = page.rows
-                        update({
-                            it.copy(
-                                content = IglooRailState.Loaded(present(loaded)),
-                                append = page.append,
-                                total = page.total,
-                                contentGeneration = it.contentGeneration + 1,
-                            )
-                        }) {
-                            it.copy(refreshing = false, notice = null)
-                        }
-                    }
-
-                    is ApiResult.Failure -> {
-                        val message = result.error.toLibraryDisplayMessage()
-                        val hadContent = isLoaded
-                        update({
-                            it.copy(
-                                content = IglooRailState.Error(message).orKeepContent(it.content),
-                                append = it.append.resetIfLoading(),
-                            )
-                        }) {
-                            it.copy(
-                                refreshing = false,
-                                // With content still on screen the failure is over and Refresh is
-                                // one press away: a notice, not a second Retry.
-                                notice = message.takeIf { hadContent },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        /** The prefetch; every idempotence guard lives here, not in the composable. */
-        fun loadMore() {
-            if (isBusy || !isLoaded || paged.append != AppendState.Idle) return
-            appendNextPage()
-        }
-
-        /** The Retry on a failed tail; re-requests the same page that failed. */
-        fun retryAppend() {
-            if (isBusy || paged.append !is AppendState.Error) return
-            appendNextPage()
-        }
-
-        private fun appendNextPage() {
-            val startedIn = generation
-            update({ it.copy(append = AppendState.Loading) })
-            job = viewModelScope.launch {
-                val result = fetch(cursor)
-                // A refresh can land between the request and its response; appending then would
-                // resurrect a page belonging to a list that no longer exists.
-                if (startedIn != generation) return@launch
-                when (result) {
-                    is ApiResult.Success -> {
-                        val page = result.value
-                        val fresh = page.rows.filterNot { id(it) in seenIds }
-                        // A library mid-rescan can return a page whose every id is already on
-                        // screen; the walk still advances, but only after a beat, or the prefetch
-                        // would chase every remaining page at line rate with nothing growing.
-                        if (fresh.isEmpty() && page.append == AppendState.Idle) {
-                            delay(DUPLICATE_PAGE_BACKOFF_MS)
-                            if (startedIn != generation) return@launch
-                        }
-                        cursor = page.nextCursor
-                        seenIds += fresh.map(id)
-                        loaded = loaded + fresh
-                        update({
-                            it.copy(
-                                content = IglooRailState.Loaded(present(loaded)),
-                                append = page.append,
-                                total = page.total,
-                                appendGeneration = it.appendGeneration + 1,
-                            )
-                        })
-                    }
-
-                    // Never a wipe: the loaded pages stay on screen and the tail becomes a Retry.
-                    is ApiResult.Failure -> update({
-                        it.copy(append = AppendState.Error(result.error.toLibraryDisplayMessage()))
-                    })
-                }
-            }
-        }
-    }
-
-    private val musiciansPager = Pager<MusicianCardUi, MusicianCardUi>(
+    private val musiciansPager = pager<MusicianCardUi, MusicianCardUi>(
         read = { it.musicians },
         write = { state, paged -> state.copy(musicians = paged) },
         id = { it.id },
@@ -247,12 +121,12 @@ class MusicViewModel(
         fetch = { page ->
             music.musicians(page, PAGE_SIZE).map { data ->
                 val rows = data.musicians.map { it.toCardUi() }
-                Page(rows, data.total, page + 1, pageAppendState(page, data.totalPages, rows.isEmpty()))
+                LoadedPage(rows, data.total, page + 1, pageAppendState(page, data.totalPages, rows.isEmpty()))
             }
         },
     )
 
-    private val albumsPager = Pager<AlbumCardUi, AlbumCardUi>(
+    private val albumsPager = pager<AlbumCardUi, AlbumCardUi>(
         read = { it.albums },
         write = { state, paged -> state.copy(albums = paged) },
         id = { it.id },
@@ -261,12 +135,12 @@ class MusicViewModel(
         fetch = { page ->
             music.albums(page, PAGE_SIZE).map { data ->
                 val rows = data.albums.map { it.toCardUi() }
-                Page(rows, data.total, page + 1, pageAppendState(page, data.totalPages, rows.isEmpty()))
+                LoadedPage(rows, data.total, page + 1, pageAppendState(page, data.totalPages, rows.isEmpty()))
             }
         },
     )
 
-    private val tracksPager = Pager<TrackListItem, TracksEntry>(
+    private val tracksPager = pager<TrackListItem, TracksEntry>(
         read = { it.tracks },
         write = { state, paged -> state.copy(tracks = paged) },
         id = { it.id },
@@ -274,7 +148,7 @@ class MusicViewModel(
         firstCursor = 0L,
         fetch = { offset ->
             music.tracks(TRACKS_PAGE_SIZE, offset).map { data ->
-                Page(
+                LoadedPage(
                     rows = data.tracks,
                     total = data.total,
                     nextCursor = offset + data.tracks.size,
@@ -287,13 +161,13 @@ class MusicViewModel(
         },
     )
 
-    private val pagers: Map<MusicTab, Pager<*, *>> = mapOf(
+    private val pagers: Map<MusicTab, PagedLoader<MusicUiState, *, *>> = mapOf(
         MusicTab.Musicians to musiciansPager,
         MusicTab.Albums to albumsPager,
         MusicTab.Tracks to tracksPager,
     )
 
-    private val selectedPager: Pager<*, *> get() = pagers.getValue(_uiState.value.tab)
+    private val selectedPager: PagedLoader<MusicUiState, *, *> get() = pagers.getValue(_uiState.value.tab)
 
     private var statsJob: Job? = null
     private var debounceJob: Job? = null

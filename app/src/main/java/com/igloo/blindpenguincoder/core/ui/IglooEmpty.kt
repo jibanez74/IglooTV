@@ -27,7 +27,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
  * message line. Visual only — [IglooFocusableEmpty] owns the semantics.
  */
 @Composable
-private fun IglooEmpty(
+internal fun IglooEmpty(
     icon: ImageVector,
     message: String,
     modifier: Modifier = Modifier,

@@ -172,7 +172,7 @@ internal fun <T> PaneTabRow(
     contentInset: PaddingValues,
     tabRowRequester: FocusRequester,
     navigationRequester: FocusRequester,
-    refreshRequester: FocusRequester,
+    upRequester: FocusRequester,
     downRequester: FocusRequester,
     onSelectTab: (T) -> Unit,
     onPressTab: (T) -> Unit,
@@ -196,7 +196,7 @@ internal fun <T> PaneTabRow(
                     .withRequester(tabRowRequester.takeIf { tab == selected })
                     .onFocusChanged { onFocusChanged(spec.key, it.isFocused) }
                     .focusProperties {
-                        up = refreshRequester
+                        up = upRequester
                         down = downRequester
                         if (index == 0) left = navigationRequester
                         if (index == tabs.lastIndex) right = FocusRequester.Cancel

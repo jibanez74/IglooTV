@@ -147,6 +147,10 @@ fun <C : PaneContent> PaneFocusHandoffCoordinator(
 
                 content.isCardless -> if (!tabFocused) handOff(cardlessHandoffRequester)
 
+                // Rows giving way to a skeleton (a new search): the focused row is disposing,
+                // so the skeleton's anchor takes over until the page lands.
+                content.isSkeleton -> if (!tabFocused) handOff(cardlessHandoffRequester)
+
                 else -> Unit
             }
 

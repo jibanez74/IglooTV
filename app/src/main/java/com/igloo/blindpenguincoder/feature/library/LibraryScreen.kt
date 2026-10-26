@@ -140,7 +140,7 @@ fun LibraryScreen(
             contentInset = contentInset,
             tabRowRequester = tabRowRequester,
             navigationRequester = navigationRequester,
-            refreshRequester = refreshRequester,
+            upRequester = refreshRequester,
             downRequester = if (genreRowShown) genreRowRequester else contentStartRequester,
             onSelectTab = actions.onSelectTab,
             onPressTab = actions.onPressTab,
