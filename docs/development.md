@@ -116,10 +116,11 @@ in [app/build.gradle.kts](../app/build.gradle.kts), and the wrapper version in
 ## Development constraints
 
 Build for a landscape TV controlled by a remote. Primary actions must work with the D-pad and
-Back. Fire TV support means avoiding assumptions about Google Play Services or the Play Store;
-the speech recogniser is one such optional (`VoiceSearch.available` gates the button, the
-manifest's `<queries>` block lets API 30+ resolve it, and `RECORD_AUDIO` — the app's only
-runtime permission — is asked for on the first press, never at launch).
+Back. Fire TV support means avoiding assumptions about Google Play Services or the Play Store.
+The speech recogniser is one such optional capability: `VoiceSearch.available` gates the button,
+the manifest's `<queries>` block lets API 30+ resolve it, the microphone is declared not
+required, and `RECORD_AUDIO` — the app's only runtime permission — is asked for on the first
+press, never at launch.
 The platform floor is API 28.
 
 Use the design system as the UI specification instead of duplicating its behavior rules here:

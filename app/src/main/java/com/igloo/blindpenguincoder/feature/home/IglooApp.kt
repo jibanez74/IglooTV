@@ -1080,6 +1080,7 @@ private fun IglooShell(
                 navigationRequesters = navigationRequesters,
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 signOutConfirming = signOut.confirming,
+                covered = hiddenFromAccessibility,
                 // The pane fills the panel and applies no gutter of its own. It used to box every
                 // screen into 752x486dp, which is where the dead margins came from. The gutter is
                 // handed down as contentInset instead, so each section applies the inset it owes
@@ -1175,6 +1176,8 @@ private fun ContentPane(
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     spokenAccessibilityEnabled: Boolean,
     signOutConfirming: Boolean,
+    /** A details page, a player or the sign-out dialog sits over the pane. */
+    covered: Boolean,
     modifier: Modifier = Modifier,
 ) {
     // Hoisted above the destination branch so a Home -> Movies -> Home round trip still knows
@@ -1345,6 +1348,7 @@ private fun ContentPane(
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequesters.getValue(IglooDestination.Search),
                 returnRequester = searchReturnRequester,
+                covered = covered,
                 onMovieSelected = openMovie?.let { open ->
                     { movieId -> open(DetailsOrigin.Search, movieId) }
                 },

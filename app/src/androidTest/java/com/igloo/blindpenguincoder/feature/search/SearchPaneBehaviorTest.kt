@@ -343,6 +343,7 @@ class SearchPaneBehaviorTest {
         composeRule.waitForIdle()
         assertEquals(1, voiceSearch.cancels)
         assertEquals(0, voiceSearch.starts)
+        assertSessionEndedSilently()
         node("search_voice").assertIsFocused()
     }
 
@@ -355,7 +356,29 @@ class SearchPaneBehaviorTest {
         pressBack()
 
         assertEquals(1, voiceSearch.cancels)
+        assertSessionEndedSilently()
         node("search_voice").assertIsFocused()
+    }
+
+    @Test
+    fun anOverlayOpeningWhileListeningStopsTheSession() {
+        setContent()
+        deliver(VoiceSearchEvent.Listening)
+
+        node("poster_card_2").requestFocus()
+        node("poster_card_2").performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(1, voiceSearch.cancels)
+        node("details_play").assertIsFocused()
+    }
+
+    /** A cancel puts the field back, says nothing and offers the button again. */
+    private fun assertSessionEndedSilently() {
+        assertEquals(VoiceSearchEvent.Done(VoiceSearchOutcome.Cancelled), voiceEvents.last())
+        node("search_field").assertTextEquals("help")
+        node("search_notice").assertDoesNotExist()
+        node("search_voice").assertContentDescriptionEquals("Search by voice")
     }
 
     @Test

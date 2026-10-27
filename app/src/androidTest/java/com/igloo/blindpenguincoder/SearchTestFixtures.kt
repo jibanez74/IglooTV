@@ -14,6 +14,7 @@ import com.igloo.blindpenguincoder.feature.search.SearchTab
 import com.igloo.blindpenguincoder.feature.search.SearchUiState
 import com.igloo.blindpenguincoder.feature.search.VoiceSearch
 import com.igloo.blindpenguincoder.feature.search.VoiceSearchEvent
+import com.igloo.blindpenguincoder.feature.search.VoiceSearchOutcome
 import com.igloo.blindpenguincoder.feature.search.VoiceSearchSession
 import com.igloo.blindpenguincoder.feature.search.sectionTitle
 import com.igloo.blindpenguincoder.feature.search.SearchKind
@@ -93,6 +94,7 @@ internal class FakeVoiceSearch(override val available: Boolean = true) : VoiceSe
     var cancels = 0
         private set
     private var onEvent: ((VoiceSearchEvent) -> Unit)? = null
+    private var listening = false
 
     @Composable
     override fun rememberSession(onEvent: (VoiceSearchEvent) -> Unit): VoiceSearchSession {
@@ -100,12 +102,18 @@ internal class FakeVoiceSearch(override val available: Boolean = true) : VoiceSe
         return remember {
             object : VoiceSearchSession {
                 override fun start() { starts += 1 }
-                override fun cancel() { cancels += 1 }
+
+                // As the real session: a cancel while listening reports itself.
+                override fun cancel() {
+                    cancels += 1
+                    if (listening) deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.Cancelled))
+                }
             }
         }
     }
 
     fun deliver(event: VoiceSearchEvent) {
+        listening = event is VoiceSearchEvent.Listening || (listening && event is VoiceSearchEvent.Partial)
         checkNotNull(onEvent) { "no Search pane has asked for a session" }(event)
     }
 }

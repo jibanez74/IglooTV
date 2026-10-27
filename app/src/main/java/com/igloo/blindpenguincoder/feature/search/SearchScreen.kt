@@ -106,6 +106,8 @@ fun SearchScreen(
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
     returnRequester: FocusRequester,
+    /** A details page, a player or the sign-out dialog sits over the pane. */
+    covered: Boolean,
     onMovieSelected: ((Long) -> Unit)?,
     onShowSelected: ((Long) -> Unit)?,
     onAlbumSelected: ((Long) -> Unit)?,
@@ -148,6 +150,9 @@ fun SearchScreen(
     // Clear or a keystroke while it listens is the user's own query: the microphone closes first,
     // so nothing it hears afterwards can write over the edit.
     val stopListening = { if (state.voiceListening) voiceSession.cancel() }
+    // So does anything opening over the pane: a phrase heard under it would hand focus to
+    // results nobody can see.
+    LaunchedEffect(covered) { if (covered) stopListening() }
     // Which of the two header notices arrived last; each clears on its own terms.
     var likeNoticeIsNewer by remember { mutableStateOf(false) }
     LaunchedEffect(state.voiceNotice) { if (state.voiceNotice != null) likeNoticeIsNewer = false }

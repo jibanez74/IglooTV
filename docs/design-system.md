@@ -2400,13 +2400,19 @@ app declares `RECORD_AUDIO` — its only runtime permission — and asks for it 
 with the platform's own dialog; a refusal is a notice ("Voice search needs the microphone…").
 The manifest's `<queries>` entry for `android.speech.RecognitionService` lets API 30+ see the
 recogniser, and the button is composed only where one answers (`VoiceSearch.available`): the
-Shield and Google TV have one, a Fire TV has none, and a control that announces an action it
-cannot perform is the §12 failure. The remote's own microphone key is the platform's (Assistant,
+Shield and Google TV have one, a Fire TV is expected to have none (not yet confirmed on the
+device), and a control that announces an action it cannot perform is the §12 failure. The
+microphone is declared optional (`uses-feature … required="false"`), since `RECORD_AUDIO`
+would otherwise imply it as required and keep the app off TVs that report none. The remote's own microphone key is the platform's (Assistant,
 Alexa) and cannot be taken by an app. While listening the button reads **Listening…** (its
 action "Stop listening"), the header's notice line — the polite live region — carries the
 prompt ("Listening… say a title, album, musician or track"), and each partial guess is written
 into the field as it arrives; Back, or the button again, stops silently, restores the field's
-previous text (and the search it was waiting for) and leaves focus on the button. A recognised
+previous text (and the search it was waiting for) and leaves focus on the button. Clear, a
+keystroke, or a details page, player or the sign-out dialog opening over the pane also stops it
+first, so nothing heard afterwards overwrites the user's edit or pulls focus under an overlay;
+each press gets its own recogniser, so a cancelled attempt's late callbacks cannot end the next
+one. A recognised
 phrase replaces the field's text — and any query the debounce has not sent — and goes out on
 the keyboard-Search rules, landing focus on the results the same way, one frame later. No match
 or a recogniser error is one line in the same notice slot ("Didn't catch that. Try again.",

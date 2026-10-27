@@ -232,3 +232,15 @@ no-recogniser layout test. The Shield pass was driven with TalkBack off (the d-p
 TalkBack cursor otherwise); the spoken lines — "Search by voice", the listening line, the
 result count, the first card — are covered by the instrumented accessibility suite, not by a
 read of TalkBack's log on the device.
+
+**What the reviews changed (2026-10-27).** Codex and CodeRabbit found the same gaps. The
+microphone is now declared optional; `RECORD_AUDIO` had implied it as required (aapt2 badging
+showed it), which would keep the app off TVs that report no microphone. Clear, a keystroke, or a
+details page, player or the sign-out dialog opening over the pane now cancels a listening session
+first, and the view model drops the text it would have put back, so a late outcome can neither
+undo the user's edit nor pull focus under an overlay. Each press gets its own `SpeechRecognizer`:
+a reused one delivered callbacks queued for a cancelled attempt to the next one, and the Shield's
+service does send a late CANCELLED/GRPC error after a cancel. `FakeVoiceSearch.cancel()` now
+reports `Cancelled` as the real session does, so the cancel tests prove the field comes back.
+On the Shield, rapid press/cancel/press ended cleanly in "Didn't catch that", and Clear while
+listening closed the microphone and kept the field empty. The Fire TV was still offline.
