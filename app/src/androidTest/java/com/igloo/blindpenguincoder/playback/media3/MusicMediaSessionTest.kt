@@ -9,6 +9,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -78,11 +79,11 @@ class MusicMediaSessionTest {
                     MediaItem.Builder()
                         .setUri("https://203.0.113.1/music/tracks/${track.id}/stream")
                         .setMediaId(track.id.toString())
-                        .setMediaMetadata(musicMediaMetadata(track))
+                        .setMediaMetadata(musicMediaMetadata(track, track.coverUrl))
                         .build()
                 },
             )
-            built = buildMusicMediaSession(context, player, request.source.sessionKey) to player
+            built = buildMusicMediaSession(context, player, request.source.sessionKey, DefaultDataSource.Factory(context)) to player
         }
         toRelease += built
         return built
@@ -112,7 +113,7 @@ class MusicMediaSessionTest {
     @Test
     fun metadataCarriesTheTrackTheAlbumAndTheMusicType() {
         val request = album()
-        val first = musicMediaMetadata(request.tracks[0])
+        val first = musicMediaMetadata(request.tracks[0], request.tracks[0].coverUrl)
 
         assertEquals("Yesterday", first.title.toString())
         assertEquals("The Beatles", first.artist.toString())
@@ -122,8 +123,8 @@ class MusicMediaSessionTest {
 
         // The album page's rule: a missing artist or cover is absent, never an empty string.
         val bare = album(artistName = null, coverUrl = null)
-        assertNull(musicMediaMetadata(bare.tracks[0]).artist)
-        assertNull(musicMediaMetadata(bare.tracks[0]).artworkUri)
+        assertNull(musicMediaMetadata(bare.tracks[0], bare.tracks[0].coverUrl).artist)
+        assertNull(musicMediaMetadata(bare.tracks[0], bare.tracks[0].coverUrl).artworkUri)
     }
 
     @Test

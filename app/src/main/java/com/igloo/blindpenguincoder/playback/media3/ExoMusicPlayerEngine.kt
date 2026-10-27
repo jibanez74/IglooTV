@@ -34,6 +34,7 @@ internal class ExoMusicPlayerEngine(
     request: MusicPlayRequest,
     dataSourceFactory: DataSource.Factory,
     private val trackStreamUrl: (Long) -> String,
+    private val artworkUrl: (String?) -> String?,
 ) : MusicPlayerEngine {
 
     private val _events = MutableSharedFlow<MusicPlayerEvent>(replay = ENGINE_EVENT_REPLAY)
@@ -52,6 +53,7 @@ internal class ExoMusicPlayerEngine(
         context,
         IntentRoutingPlayer(player, playbackIntent, ::play, ::pause),
         request.source.sessionKey,
+        dataSourceFactory,
     )
 
     /** The queue as the player holds it; [appendTracks] grows it, nothing reorders it. */
@@ -61,7 +63,7 @@ internal class ExoMusicPlayerEngine(
     private fun mediaItem(track: MusicPlayTrack): MediaItem = MediaItem.Builder()
         .setUri(trackStreamUrl(track.id))
         .setMediaId(track.id.toString())
-        .setMediaMetadata(musicMediaMetadata(track))
+        .setMediaMetadata(musicMediaMetadata(track, artworkUrl(track.coverUrl)))
         .build()
 
     private val listener = object : Player.Listener {
@@ -235,4 +237,5 @@ fun exoMusicPlayerEngine(
     request: MusicPlayRequest,
     dataSourceFactory: DataSource.Factory,
     trackStreamUrl: (Long) -> String,
-): MusicPlayerEngine = ExoMusicPlayerEngine(context, request, dataSourceFactory, trackStreamUrl)
+    artworkUrl: (String?) -> String?,
+): MusicPlayerEngine = ExoMusicPlayerEngine(context, request, dataSourceFactory, trackStreamUrl, artworkUrl)

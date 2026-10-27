@@ -56,6 +56,7 @@ class ExoMusicPlayerEngineTest {
                 request = request,
                 dataSourceFactory = DataSource.Factory { MissingTrackDataSource() },
                 trackStreamUrl = { id -> "https://example.invalid/tracks/$id.mp3" },
+                artworkUrl = { it },
             ).also {
                 it.startPlayback(
                     startTrackIndex = 1,

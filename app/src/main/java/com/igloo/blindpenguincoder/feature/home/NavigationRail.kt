@@ -58,7 +58,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.data.model.AuthUser
-import com.igloo.blindpenguincoder.images.avatarImageUrl
+import com.igloo.blindpenguincoder.images.serverImageUrl
 import kotlin.math.roundToInt
 
 /**
@@ -204,7 +204,7 @@ fun NavigationRail(
         ) {
             IglooAvatar(
                 name = user.name,
-                avatarUrl = avatarImageUrl(serverOrigin, user.avatar),
+                avatarUrl = serverImageUrl(serverOrigin, user.avatar),
                 size = IglooTheme.icons.lg,
                 textStyle = IglooTheme.typography.label,
             )

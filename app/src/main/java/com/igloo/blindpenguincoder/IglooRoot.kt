@@ -444,6 +444,7 @@ fun IglooRoot(container: IglooAppContainer) {
                                 // uses; /music/tracks/{id}/stream sits behind the same auth.
                                 dataSourceFactory = container.streamDataSourceFactory,
                                 trackStreamUrl = container.musicRepository::trackStreamUrl,
+                                artworkUrl = container.musicRepository::artworkUrl,
                             )
                         },
                         musicQueueFetcher = container.musicRepository,

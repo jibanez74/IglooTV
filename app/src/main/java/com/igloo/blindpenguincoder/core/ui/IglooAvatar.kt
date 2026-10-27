@@ -18,7 +18,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
  * color cover everything a remote image cannot.
  *
  * [avatarUrl] is expected to be already resolved against the server origin by
- * `avatarImageUrl`, since URL construction belongs outside UI components. The absolute-URL
+ * `serverImageUrl`, since URL construction belongs outside UI components. The absolute-URL
  * check is only the backstop that keeps an unresolved relative path from reaching Coil.
  *
  * No content description: identity is announced by whichever labelled node contains the

@@ -33,7 +33,8 @@ internal fun isIglooServerUrl(url: String?, origin: String?): Boolean =
  * Pairs a response with the API base URL its paths resolve against. The session keeps the address
  * set while the app is signed in, but a sign-out can clear it between a response and its mapping;
  * that reads as a failed load rather than an exception thrown out of the coroutine. Only mappings
- * that build URLs take it — album covers, for one, arrive absolute.
+ * that build URLs take it — album covers, for one, arrive as the API returns them, and the
+ * image loader resolves a server path among them against the origin.
  */
 fun <T> ApiResult<T>.withApiBaseUrl(serverUrl: ServerUrlProvider): ApiResult<Pair<T, String>> =
     flatMap { value ->
