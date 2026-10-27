@@ -11,9 +11,9 @@ import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.compose.LifecycleStartEffect
 import java.util.Locale
 
 /**
@@ -34,7 +34,9 @@ class AndroidVoiceSearch(context: Context) : VoiceSearch {
     override fun rememberSession(onEvent: (VoiceSearchEvent) -> Unit): VoiceSearchSession {
         val current = rememberUpdatedState(onEvent)
         val recognizer = remember { RecognizerSession(appContext) { current.value(it) } }
-        DisposableEffect(recognizer) { onDispose { recognizer.cancel() } }
+        // Home or another app stops the activity without disposing the pane: a phrase heard
+        // then would rewrite the query, and pull focus, behind the user's back.
+        LifecycleStartEffect(recognizer) { onStopOrDispose { recognizer.cancel() } }
         val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) recognizer.listen() else current.value(VoiceSearchEvent.Done(VoiceSearchOutcome.Failed(VoiceSearchFailure.Permission)))
         }
@@ -59,8 +61,8 @@ class AndroidVoiceSearch(context: Context) : VoiceSearch {
  * from [listen] itself, not from `onReadyForSpeech`: the recogniser is live from the press, so
  * the pane must own Back and refuse a second press from that moment, not from the callback that
  * lands later. A cancel reports [VoiceSearchOutcome.Cancelled] itself — `SpeechRecognizer.cancel`
- * calls nothing back; leaving the composition mid-session is a cancel too, so the pane never
- * keeps a listening state no recogniser backs.
+ * calls nothing back; leaving the composition, or the app going to the background, mid-session
+ * is a cancel too, so the pane never keeps a listening state no recogniser backs.
  */
 private class RecognizerSession(
     private val context: Context,

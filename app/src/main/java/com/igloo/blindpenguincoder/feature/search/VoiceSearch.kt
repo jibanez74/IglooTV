@@ -18,8 +18,9 @@ interface VoiceSearch {
     val available: Boolean
 
     /**
-     * A session bound to this composition. [onEvent] runs on the main thread, with the latest
-     * lambda the caller passed, as the recogniser reports.
+     * A session bound to this composition while its host is started: leaving either cancels it.
+     * [onEvent] runs on the main thread, with the latest lambda the caller passed, as the
+     * recogniser reports.
      */
     @Composable
     fun rememberSession(onEvent: (VoiceSearchEvent) -> Unit): VoiceSearchSession

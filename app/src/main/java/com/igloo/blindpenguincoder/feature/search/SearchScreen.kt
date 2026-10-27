@@ -150,16 +150,17 @@ fun SearchScreen(
     // Clear or a keystroke while it listens is the user's own query: the microphone closes first,
     // so nothing it hears afterwards can write over the edit.
     val stopListening = { if (state.voiceListening) voiceSession.cancel() }
-    // So does anything opening over the pane: a phrase heard under it would hand focus to
-    // results nobody can see.
-    LaunchedEffect(covered) { if (covered) stopListening() }
+    // The row whose More menu is open; the menu is the pane's last child, over everything.
+    var trackMenu by remember(tab) { mutableStateOf<Pair<TrackRowUi, Rect>?>(null) }
+    // So does anything opening over the pane, a track's More menu included: a phrase heard under
+    // it would hand focus to results nobody can see, or pull it out of the menu.
+    val menuOpen = trackMenu != null
+    LaunchedEffect(covered, menuOpen) { if (covered || menuOpen) stopListening() }
     // Which of the two header notices arrived last; each clears on its own terms.
     var likeNoticeIsNewer by remember { mutableStateOf(false) }
     LaunchedEffect(state.voiceNotice) { if (state.voiceNotice != null) likeNoticeIsNewer = false }
     LaunchedEffect(likes.notice) { if (likes.notice != null) likeNoticeIsNewer = true }
     LaunchedEffect(state.searched) { memory.onSearched(state.searched) }
-    // The row whose More menu is open; the menu is the pane's last child, over everything.
-    var trackMenu by remember(tab) { mutableStateOf<Pair<TrackRowUi, Rect>?>(null) }
     // The count line is a polite live region that re-announces on every change, so a search is
     // spoken once, when it settles: the wait keeps the line it replaced (the skeleton anchor
     // already says "Loading results"), while the visible line says "Searching…".

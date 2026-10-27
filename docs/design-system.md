@@ -2409,8 +2409,9 @@ action "Stop listening"), the header's notice line — the polite live region �
 prompt ("Listening… say a title, album, musician or track"), and each partial guess is written
 into the field as it arrives; Back, or the button again, stops silently, restores the field's
 previous text (and the search it was waiting for) and leaves focus on the button. Clear, a
-keystroke, or a details page, player or the sign-out dialog opening over the pane also stops it
-first, so nothing heard afterwards overwrites the user's edit or pulls focus under an overlay;
+keystroke, a details page, player, track More menu or the sign-out dialog opening over the pane,
+or the app going to the background also stops it first, so nothing heard afterwards overwrites
+the user's edit or pulls focus under an overlay;
 each press gets its own recogniser, so a cancelled attempt's late callbacks cannot end the next
 one. A recognised
 phrase replaces the field's text — and any query the debounce has not sent — and goes out on

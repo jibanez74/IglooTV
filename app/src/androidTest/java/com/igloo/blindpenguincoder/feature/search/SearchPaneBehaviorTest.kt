@@ -373,6 +373,20 @@ class SearchPaneBehaviorTest {
         node("details_play").assertIsFocused()
     }
 
+    @Test
+    fun aTrackMenuOpeningWhileListeningStopsTheSession() {
+        setContent()
+        deliver(VoiceSearchEvent.Listening)
+
+        node("track_more_901").requestFocus()
+        node("track_more_901").performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(1, voiceSearch.cancels)
+        assertEquals(VoiceSearchEvent.Done(VoiceSearchOutcome.Cancelled), voiceEvents.last())
+        node("more_menu").assertExists()
+    }
+
     /** A cancel puts the field back, says nothing and offers the button again. */
     private fun assertSessionEndedSilently() {
         assertEquals(VoiceSearchEvent.Done(VoiceSearchOutcome.Cancelled), voiceEvents.last())
