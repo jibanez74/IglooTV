@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.AuthUser
@@ -23,6 +24,7 @@ import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.search.SearchActions
 import com.igloo.blindpenguincoder.feature.search.SearchUiState
+import com.igloo.blindpenguincoder.feature.search.VoiceSearch
 import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
@@ -72,6 +74,9 @@ internal fun TestIglooApp(
     musicActions: MusicActions = inertMusicActions,
     search: SearchUiState = SearchUiState(),
     searchActions: SearchActions = inertSearchActions,
+    // Available by default — the Shield and the TV emulator configuration; a suite that asserts
+    // the Fire TV layout passes one that is not.
+    voiceSearch: VoiceSearch = remember { FakeVoiceSearch() },
     searchPlayRequests: Flow<MusicPlayRequest> = emptyFlow(),
     details: MovieDetailsUiState = MovieDetailsUiState(),
     detailsActions: MovieDetailsActions = inertDetailsActions,
@@ -129,6 +134,7 @@ internal fun TestIglooApp(
         musicActions = musicActions,
         search = search,
         searchActions = searchActions,
+        voiceSearch = voiceSearch,
         searchPlayRequests = searchPlayRequests,
         details = details,
         detailsActions = detailsActions,

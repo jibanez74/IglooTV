@@ -395,6 +395,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         musicActions = musicActions,
                         search = search,
                         searchActions = searchActions,
+                        voiceSearch = container.voiceSearch,
                         searchPlayRequests = searchViewModel.playRequests,
                         details = if (theaterOpen) theaterDetails else libraryDetails,
                         detailsActions = if (theaterOpen) {

@@ -51,6 +51,13 @@ data class SearchUiState(
     val albums: PagedState<AlbumCardUi> = PagedState(),
     val musicians: PagedState<MusicianCardUi> = PagedState(),
     val tracks: PagedState<TracksEntry> = PagedState(),
+    /** The microphone is open for a voice search; the field shows the recogniser's partial guesses. */
+    val voiceListening: Boolean = false,
+    /**
+     * The last voice attempt that produced no query, worded for the header's notice slot; the
+     * next keystroke, Clear or attempt replaces it.
+     */
+    val voiceNotice: String? = null,
 ) {
     /** The selected tab's list. */
     val selected: PagedState<*>
@@ -70,6 +77,8 @@ data class SearchActions(
     /** The keyboard's Search action: the query goes out now, not after the debounce. */
     val onSearchNow: () -> Unit,
     val onClear: () -> Unit,
+    /** The recogniser's reports: listening, partial guesses, then a phrase sent now, a notice, or silence. */
+    val onVoiceSearch: (VoiceSearchEvent) -> Unit,
     /** A tab taking focus — debounced by the view model, because a slide crosses every tab. */
     val onSelectTab: (SearchTab) -> Unit,
     /** A press on a tab, or a See-all card: deliberate, so it loads at once. */
@@ -85,8 +94,8 @@ data class SearchActions(
  * The Search pane's machine (docs/design-system.md section 11.6): one [PagedLoader] per tab over
  * the query last sent. Typing restarts a [SEARCH_DEBOUNCE_MS] wait; when it lands, every tab is
  * reset to its skeleton and only the selected one fetches — the others load when selected, like
- * the Music pane's. The keyboard's Search action skips the wait. A blank query sends nothing and
- * empties every tab.
+ * the Music pane's. The keyboard's Search action and a recognised voice phrase skip the wait. A
+ * blank query sends nothing and empties every tab.
  *
  * A row's Play goes through [playRequests]: the rows shown become the queue, starting at the
  * pressed one, which is what the web client does on its search page.
@@ -204,14 +213,22 @@ class SearchViewModel(
     private var debounceJob: Job? = null
     private var tabDebounceJob: Job? = null
 
+    /** The field's text when a voice session opened the microphone, put back if it hears nothing. */
+    private var queryBeforeVoice: String? = null
+
     /**
      * Every keystroke. The field shows it at once; the search goes out [SEARCH_DEBOUNCE_MS] after
      * the last one, so a word typed on a remote costs one request, not one per letter. Trimming
      * to the query already searched changes nothing; trimming to blank clears the results now.
      */
     fun onQueryChange(text: String) {
+        _uiState.update { it.copy(query = text, voiceNotice = null) }
+        scheduleSearch(text)
+    }
+
+    /** The live-search rule: a settled query goes out once, a blank one clears the results. */
+    private fun scheduleSearch(text: String) {
         debounceJob?.cancel()
-        _uiState.update { it.copy(query = text) }
         val trimmed = text.trim()
         when {
             trimmed.isEmpty() -> clearResults()
@@ -224,9 +241,9 @@ class SearchViewModel(
     }
 
     /**
-     * The keyboard's Search action. A query the debounce has not sent yet goes now; one already
-     * answered is left alone, so results on screen never bounce through a skeleton; a failed one
-     * is retried.
+     * The keyboard's Search action, and a recognised phrase. A query the debounce has not sent
+     * yet goes now; one already answered is left alone, so results on screen never bounce
+     * through a skeleton; a failed one is retried.
      */
     fun searchNow() {
         debounceJob?.cancel()
@@ -239,12 +256,51 @@ class SearchViewModel(
         }
     }
 
+    /**
+     * The recogniser's reports. While it listens, its partial guesses show in the field without
+     * searching — they are not the user's words yet. A recognised phrase replaces the field's
+     * text — and any query the debounce has not sent — and goes out on [searchNow]'s rules.
+     * Anything else puts back the text the session started over: a cancel says nothing, and no
+     * match or a failure is one line in the header.
+     */
+    fun onVoiceSearch(event: VoiceSearchEvent) {
+        when (event) {
+            VoiceSearchEvent.Listening -> {
+                debounceJob?.cancel()
+                queryBeforeVoice = _uiState.value.query
+                _uiState.update { it.copy(voiceListening = true, voiceNotice = null) }
+            }
+
+            is VoiceSearchEvent.Partial -> if (_uiState.value.voiceListening) {
+                _uiState.update { it.copy(query = event.text) }
+            }
+
+            is VoiceSearchEvent.Done -> {
+                val outcome = event.outcome
+                val heard = (outcome as? VoiceSearchOutcome.Recognized)?.text
+                val restored = queryBeforeVoice ?: _uiState.value.query
+                queryBeforeVoice = null
+                _uiState.update {
+                    it.copy(
+                        voiceListening = false,
+                        voiceNotice = outcome.toNotice(),
+                        query = heard ?: restored,
+                    )
+                }
+                // Heard: out at once, as the keyboard's Search key. Nothing heard: the text the
+                // session interrupted is back, and so is the search it was waiting for.
+                if (heard != null) searchNow() else scheduleSearch(restored)
+            }
+        }
+    }
+
     /** The header's Clear: an empty field and the prompt, on every tab. */
     fun clear() {
         debounceJob?.cancel()
-        _uiState.update { it.copy(query = "") }
+        _uiState.update { it.copy(query = "", voiceNotice = null) }
         clearResults()
     }
+
 
     /**
      * A tab taking focus. The highlight moves at once, but a tab with nothing loaded waits
@@ -335,6 +391,7 @@ fun SearchViewModel.actions(onToggleLike: (Long) -> Unit): SearchActions = Searc
     onQueryChange = ::onQueryChange,
     onSearchNow = ::searchNow,
     onClear = ::clear,
+    onVoiceSearch = ::onVoiceSearch,
     onSelectTab = ::selectTab,
     onPressTab = ::pressTab,
     onRetryFirstPage = ::retryFirstPage,

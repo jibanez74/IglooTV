@@ -107,6 +107,7 @@ import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.search.SearchActions
+import com.igloo.blindpenguincoder.feature.search.VoiceSearch
 import com.igloo.blindpenguincoder.feature.search.SearchScreen
 import com.igloo.blindpenguincoder.feature.search.SearchUiState
 import com.igloo.blindpenguincoder.feature.search.rememberSearchPaneMemory
@@ -247,6 +248,8 @@ fun IglooApp(
     musicActions: MusicActions,
     search: SearchUiState,
     searchActions: SearchActions,
+    /** The platform's speech recogniser, or a fake under instrumentation. */
+    voiceSearch: VoiceSearch,
     details: MovieDetailsUiState,
     detailsActions: MovieDetailsActions,
     showDetails: ShowDetailsUiState,
@@ -681,6 +684,7 @@ fun IglooApp(
             musicActions = musicActions,
             search = search,
             searchActions = searchActions,
+            voiceSearch = voiceSearch,
             trackLikes = trackLikes,
             // The details header owns the notice while the overlay is up; rendering it here too
             // would only shift Home's rails behind a screen nobody can see. It surfaces here
@@ -976,6 +980,8 @@ private fun IglooShell(
     musicActions: MusicActions,
     search: SearchUiState,
     searchActions: SearchActions,
+    /** The platform's speech recogniser, or a fake under instrumentation. */
+    voiceSearch: VoiceSearch,
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
     progressSyncError: String?,
@@ -1053,6 +1059,7 @@ private fun IglooShell(
                 musicActions = musicActions,
                 search = search,
                 searchActions = searchActions,
+                voiceSearch = voiceSearch,
                 trackLikes = trackLikes,
                 mutationNotice = mutationNotice,
                 progressSyncError = progressSyncError,
@@ -1146,6 +1153,8 @@ private fun ContentPane(
     musicActions: MusicActions,
     search: SearchUiState,
     searchActions: SearchActions,
+    /** The platform's speech recogniser, or a fake under instrumentation. */
+    voiceSearch: VoiceSearch,
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
     progressSyncError: String?,
@@ -1330,6 +1339,7 @@ private fun ContentPane(
                 state = search,
                 likes = trackLikes,
                 actions = searchActions,
+                voiceSearch = voiceSearch,
                 contentInset = contentInset,
                 memory = searchMemory,
                 contentStartRequester = contentStartRequester,

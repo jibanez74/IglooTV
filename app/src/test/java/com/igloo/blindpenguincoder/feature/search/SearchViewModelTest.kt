@@ -31,14 +31,16 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
 /**
  * The Search pane's machine: a blank query sends nothing, typing is one request per settled
- * word, the keyboard's Search action skips the wait without repeating an answered query, a new
- * query forgets every tab and drops late answers, tabs load lazily on the Music pane's rules,
+ * word, the keyboard's Search action and a recognised voice phrase skip the wait without
+ * repeating an answered query, a voice attempt that heard nothing is one notice the next
+ * keystroke clears, a new query forgets every tab and drops late answers, tabs load lazily on the Music pane's rules,
  * category tabs page, and a row's Play queues the rows shown.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -218,6 +220,134 @@ class SearchViewModelTest {
 
         assertEquals(2, http.requests.size)
         assertEquals(SearchContent.Populated, model.uiState.value.toSearchContent())
+    }
+
+    // --- voice ---
+
+    private fun heard(text: String) = VoiceSearchEvent.Done(VoiceSearchOutcome.Recognized(text))
+    private fun ended(outcome: VoiceSearchOutcome) = VoiceSearchEvent.Done(outcome)
+
+    @Test
+    fun `a voice result fills the field and searches at once`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        assertTrue(model.uiState.value.voiceListening)
+        model.onVoiceSearch(heard("help"))
+
+        assertEquals("help", model.uiState.value.query)
+        assertEquals(false, model.uiState.value.voiceListening)
+        assertNull(model.uiState.value.voiceNotice)
+        assertEquals(listOf("/api/search?q=help"), http.requests)
+        advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
+        assertEquals(1, http.requests.size)
+    }
+
+    @Test
+    fun `partial guesses show in the field without searching`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        model.onVoiceSearch(VoiceSearchEvent.Partial("he"))
+        model.onVoiceSearch(VoiceSearchEvent.Partial("help"))
+        advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
+
+        assertEquals("help", model.uiState.value.query)
+        assertTrue(http.requests.isEmpty())
+    }
+
+    @Test
+    fun `a voice result replaces a query typed but not yet sent`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+
+        model.onQueryChange("he")
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        model.onVoiceSearch(heard("help"))
+        advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
+
+        assertEquals(listOf("/api/search?q=help"), http.requests)
+    }
+
+    @Test
+    fun `a voice result equal to the answered query does not fetch it again`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+        type(model, "help")
+
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        model.onVoiceSearch(heard("help"))
+
+        assertEquals(1, http.requests.size)
+        assertEquals(SearchContent.Populated, model.uiState.value.toSearchContent())
+    }
+
+    @Test
+    fun `a session that hears nothing puts the field back and leaves a notice the next keystroke clears`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+        type(model, "help")
+
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        model.onVoiceSearch(VoiceSearchEvent.Partial("hel"))
+        model.onVoiceSearch(ended(VoiceSearchOutcome.NoMatch))
+        assertEquals("help", model.uiState.value.query)
+        assertEquals("Didn't catch that. Try again.", model.uiState.value.voiceNotice)
+        assertEquals(1, http.requests.size)
+
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        model.onVoiceSearch(ended(VoiceSearchOutcome.Failed(VoiceSearchFailure.Network)))
+        assertEquals("Couldn't search by voice: no network connection.", model.uiState.value.voiceNotice)
+
+        model.onQueryChange("h")
+        assertNull(model.uiState.value.voiceNotice)
+    }
+
+    @Test
+    fun `a session that heard nothing re-arms the search it interrupted`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+        model.onQueryChange("he")
+
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
+        assertTrue(http.requests.isEmpty())
+        model.onVoiceSearch(ended(VoiceSearchOutcome.Cancelled))
+
+        assertEquals("he", model.uiState.value.query)
+        assertTrue(http.requests.isEmpty())
+        advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
+        assertEquals(listOf("/api/search?q=he"), http.requests)
+    }
+
+    @Test
+    fun `a cancelled session changes nothing and clears an earlier notice`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+        type(model, "help")
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        model.onVoiceSearch(ended(VoiceSearchOutcome.NoMatch))
+
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        model.onVoiceSearch(VoiceSearchEvent.Partial("casino"))
+        model.onVoiceSearch(ended(VoiceSearchOutcome.Cancelled))
+
+        assertNull(model.uiState.value.voiceNotice)
+        assertEquals("help", model.uiState.value.query)
+        assertEquals(1, http.requests.size)
+    }
+
+    @Test
+    fun `Clear drops a voice notice with the query`() = runTest {
+        val model = model(routedHttp())
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        model.onVoiceSearch(ended(VoiceSearchOutcome.NoMatch))
+
+        model.clear()
+
+        assertNull(model.uiState.value.voiceNotice)
     }
 
     @Test

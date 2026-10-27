@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.search
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,19 +74,23 @@ import com.igloo.blindpenguincoder.feature.shared.loadedItems
 import com.igloo.blindpenguincoder.feature.shared.paneCardlessAnchor
 import com.igloo.blindpenguincoder.feature.shared.paneCountLine
 import com.igloo.blindpenguincoder.feature.shared.showingCountLine
+import kotlinx.coroutines.flow.first
 
 /**
- * The Search pane (docs/design-system.md section 11.6): a heading with the result count and a
- * Clear action, the query field that summons the on-screen keyboard, a tab strip (All · Movies ·
- * TV Shows · Albums · Musicians · Tracks) and the selected tab's results — every category as a
- * rail of its own cards on All, with a See-all card into the category; one infinite-scrolling
- * grid or track list on a category tab. Results update as the user types; the keyboard's Search
- * action sends the query at once and lands focus on the results.
+ * The Search pane (docs/design-system.md section 11.6): a heading with the result count, a
+ * Voice search action and a Clear action, the query field that summons the on-screen keyboard,
+ * a tab strip (All · Movies · TV Shows · Albums · Musicians · Tracks) and the selected tab's
+ * results — every category as a rail of its own cards on All, with a See-all card into the
+ * category; one infinite-scrolling grid or track list on a category tab. Results update as the
+ * user types; the keyboard's Search action, or a phrase the platform's recogniser heard through
+ * [voiceSearch] (the button listens in place, showing its partial guesses in the field), sends
+ * the query at once and lands focus on the results.
  *
  * The focus contract is the other panes' (section 6.3), with the field above the strip. With a
  * blank query the field is the pane's only focus target and [contentStartRequester] rides it;
  * otherwise the anchor rides the selected tab's entry item — the remembered one, or the first —
- * with the strip a press above and the field above that. The left column exits to the spine,
+ * with the strip a press above, the field above that, and the header's actions (Voice search
+ * where a recogniser answers, Clear while there is text) above the field. The left column exits to the spine,
  * the right edge is pinned, and the card-less states move the anchor to what they draw instead.
  * [returnRequester] rides the entry item too, so an overlay's Back lands on the card that led
  * away. Results landing while the field or a tab holds focus never pull it.
@@ -95,6 +100,7 @@ fun SearchScreen(
     state: SearchUiState,
     likes: TrackLikesUiState,
     actions: SearchActions,
+    voiceSearch: VoiceSearch,
     contentInset: PaddingValues,
     memory: SearchPaneMemory,
     contentStartRequester: FocusRequester,
@@ -110,7 +116,9 @@ fun SearchScreen(
     val content = state.toSearchContent()
     val prompt = content is SearchContent.Prompt
     val clearShown = state.query.isNotEmpty()
+    val voiceShown = voiceSearch.available
     val fieldRequester = remember { FocusRequester() }
+    val voiceRequester = remember { FocusRequester() }
     val clearRequester = remember { FocusRequester() }
     val tabRowRequester = remember { FocusRequester() }
     val firstItemRequester = remember { FocusRequester() }
@@ -120,9 +128,9 @@ fun SearchScreen(
     // types must leave the keyboard where it is, exactly as a page landing under a focused tab.
     val focusOwnership = remember { PaneFocusOwnership(SEARCH_CHROME_FOCUS_KEYS) }
     val keyboard = LocalSoftwareKeyboardController.current
-    // A See-all card or the keyboard's Search action asks for focus on the results: the node
-    // is composed in the next frame (the new tab's skeleton or its remembered card), so the
-    // request waits one frame, and under a screen reader until it can be heard.
+    // A See-all card, the keyboard's Search action or a voice result asks for focus on the
+    // results: the node is composed in the next frame (the new tab's skeleton or its remembered
+    // card), so the request waits one frame, and under a screen reader until it can be heard.
     var pendingContentHandoff by remember { mutableStateOf(false) }
     LaunchedEffect(pendingContentHandoff) {
         if (!pendingContentHandoff) return@LaunchedEffect
@@ -131,6 +139,16 @@ fun SearchScreen(
         pendingContentHandoff = false
     }
     val landOnResults = { pendingContentHandoff = true }
+    val voiceSession = voiceSearch.rememberSession { event ->
+        actions.onVoiceSearch(event)
+        if (event is VoiceSearchEvent.Done && event.outcome is VoiceSearchOutcome.Recognized) landOnResults()
+    }
+    // Back while the microphone is open stops it, as the button's second press does.
+    BackHandler(enabled = state.voiceListening) { voiceSession.cancel() }
+    // Which of the two header notices arrived last; each clears on its own terms.
+    var likeNoticeIsNewer by remember { mutableStateOf(false) }
+    LaunchedEffect(state.voiceNotice) { if (state.voiceNotice != null) likeNoticeIsNewer = false }
+    LaunchedEffect(likes.notice) { if (likes.notice != null) likeNoticeIsNewer = true }
     LaunchedEffect(state.searched) { memory.onSearched(state.searched) }
     // The row whose More menu is open; the menu is the pane's last child, over everything.
     var trackMenu by remember(tab) { mutableStateOf<Pair<TrackRowUi, Rect>?>(null) }
@@ -156,10 +174,40 @@ fun SearchScreen(
                 countText = countLine(state, content),
                 countDescription = countDescription,
                 countTag = "search_count",
-                notice = likes.notice,
+                // The line under the heading is the voice session's while it listens — the one
+                // polite live region a screen reader hears "Listening" from — then the newer of
+                // the attempt's notice (if it produced nothing) and a like failure; the older one
+                // resurfaces when the newer clears.
+                notice = when {
+                    state.voiceListening -> VOICE_LISTENING_LINE
+                    likeNoticeIsNewer -> likes.notice ?: state.voiceNotice
+                    else -> state.voiceNotice ?: likes.notice
+                },
                 contentInset = contentInset,
                 noticeTag = "search_notice",
             ) {
+                // Composed only where a recogniser answers (section 11.6): on a Fire TV there
+                // is none, and a button that cannot do what it says is the section 12 failure.
+                if (voiceShown) {
+                    val listening = state.voiceListening
+                    IglooButton(
+                        text = if (listening) VOICE_LISTENING_LABEL else VOICE_LABEL,
+                        labelVariants = listOf(VOICE_LABEL, VOICE_LISTENING_LABEL),
+                        onClick = if (listening) voiceSession::cancel else voiceSession::start,
+                        variant = IglooButtonVariant.Ghost,
+                        semanticLabel = if (listening) "Stop listening" else "Search by voice",
+                        modifier = Modifier
+                            .testTag("search_voice")
+                            .focusRequester(voiceRequester)
+                            .onFocusChanged { focusOwnership.onChromeFocusChanged(VOICE_FOCUS_KEY, it.isFocused) }
+                            .focusProperties {
+                                left = navigationRequester
+                                right = if (clearShown) clearRequester else FocusRequester.Cancel
+                                up = FocusRequester.Cancel
+                                down = fieldRequester
+                            },
+                    )
+                }
                 // Composed only with something to clear: a Clear with nothing to do would
                 // announce an action it cannot perform.
                 if (clearShown) {
@@ -178,7 +226,7 @@ fun SearchScreen(
                             .focusRequester(clearRequester)
                             .onFocusChanged { focusOwnership.onChromeFocusChanged(CLEAR_FOCUS_KEY, it.isFocused) }
                             .focusProperties {
-                                left = navigationRequester
+                                left = if (voiceShown) voiceRequester else navigationRequester
                                 right = FocusRequester.Cancel
                                 up = FocusRequester.Cancel
                                 down = fieldRequester
@@ -205,7 +253,7 @@ fun SearchScreen(
                     },
                 ),
                 focusRequester = fieldRequester,
-                upFocusRequester = clearRequester.takeIf { clearShown },
+                upFocusRequester = if (voiceShown) voiceRequester else clearRequester.takeIf { clearShown },
                 // With no results the field is the pane's floor; the strip is not composed.
                 downFocusRequester = if (prompt) FocusRequester.Cancel else tabRowRequester,
                 leftFocusRequester = navigationRequester,
@@ -943,8 +991,12 @@ private fun spokenCountLine(state: SearchUiState, content: SearchContent): Strin
 private const val PROMPT_COUNT_LINE = "Find anything in your library"
 private const val FIELD_LABEL = "Search movies, TV shows, albums, musicians and tracks"
 private const val FIELD_FOCUS_KEY = "search_field"
+private const val VOICE_FOCUS_KEY = "search_voice"
+private const val VOICE_LABEL = "Voice search"
+private const val VOICE_LISTENING_LABEL = "Listening…"
+internal const val VOICE_LISTENING_LINE = "Listening… say a title, album, musician or track."
 private const val CLEAR_FOCUS_KEY = "search_clear"
 
-/** The chrome keys a content swap must not steal focus from: the tabs, the field and Clear. */
+/** The chrome keys a content swap must not steal focus from: the tabs, the field, Voice search and Clear. */
 private val SEARCH_CHROME_FOCUS_KEYS: Set<String> =
-    SearchTab.entries.mapTo(mutableSetOf()) { it.presentation.key } + FIELD_FOCUS_KEY + CLEAR_FOCUS_KEY
+    SearchTab.entries.mapTo(mutableSetOf()) { it.presentation.key } + FIELD_FOCUS_KEY + VOICE_FOCUS_KEY + CLEAR_FOCUS_KEY

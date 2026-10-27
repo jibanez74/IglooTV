@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -37,7 +38,8 @@ import org.junit.runner.RunWith
  * named, the field carries the whole prompt, the count line reports each search's shape once
  * as a polite live region, a rail's title is spoken on the card focus enters it on and on no
  * other, See-all names what it opens, the tracks heading folds into the first row, the
- * decorative hint is silent, and a failed like reaches the header's notice.
+ * decorative hint is silent, Voice search names itself and its listening, and a failed like or
+ * a voice attempt that heard nothing reaches the header's notice, the voice line first.
  */
 @RunWith(AndroidJUnit4::class)
 class SearchPaneAccessibilityTest {
@@ -191,9 +193,37 @@ class SearchPaneAccessibilityTest {
     }
 
     @Test
-    fun clearAndTheTabsNameThemselves() {
+    fun aVoiceAttemptThatHeardNothingReachesTheHeadersNoticeFirst() {
+        setContent()
+        likes = TrackLikesUiState(likedIds = emptySet(), notice = "Couldn't update like status: Server down.")
+        composeRule.waitForIdle()
+
+        searchState = searchState.copy(voiceNotice = "Didn't catch that. Try again.")
+        composeRule.waitForIdle()
+
+        node("search_notice")
+            .assertTextEquals("Didn't catch that. Try again.")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+    }
+
+    @Test
+    fun listeningIsSpokenFromTheHeaderAndTheButtonOffersToStop() {
         setContent()
 
+        searchState = searchState.copy(voiceListening = true)
+        composeRule.waitForIdle()
+
+        node("search_voice").assertContentDescriptionEquals("Stop listening")
+        node("search_notice")
+            .assertTextEquals(VOICE_LISTENING_LINE)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+    }
+
+    @Test
+    fun clearVoiceSearchAndTheTabsNameThemselves() {
+        setContent()
+
+        node("search_voice").assertContentDescriptionEquals("Search by voice").assertHasClickAction()
         node("search_clear").assertContentDescriptionEquals("Clear the search")
         node("search_tab_all").assertContentDescriptionEquals("All results")
         node("search_tab_shows").assertContentDescriptionEquals("TV shows")

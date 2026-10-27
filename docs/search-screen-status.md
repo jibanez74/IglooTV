@@ -1,15 +1,16 @@
 # Search screen — status after the first pass (2026-10-26)
 
 Plain-language record of where the Search destination stands after the `feature/search`
-branch: what was built, what was verified and how, and what is deliberately left.
+branch: what was built, what was verified and how, and what is deliberately left. The
+`feature/voice-search` branch (same day) is recorded at the end.
 
 ## What was done
 
 **The spine's Search row is a real screen.** A heading with the result count and a Clear
 button, the query field, a six-tab strip — **All · Movies · TV Shows · Albums · Musicians ·
 Tracks**, the five categories the server searches — and the selected tab's results. Selecting
-Search from the spine lands on the field and the on-screen keyboard appears; its microphone is
-the voice input. Results update while you type, 400ms after the last key, so a word costs one
+Search from the spine lands on the field and the on-screen keyboard appears; the header's Voice
+search (below) opens the platform's recogniser. Results update while you type, 400ms after the last key, so a word costs one
 request. The keyboard's Search key sends the query at once, hides the keyboard and puts focus on
 the first result. Clear empties everything and hands focus back to the field.
 
@@ -134,6 +135,7 @@ Two defects, both fixed on the branch and re-driven:
 
 - **Fire TV.** The Fire OS pass (VoiceView, the Fire keyboard's Back) comes later.
 - **Voice input.** Gboard's microphone cannot be driven over adb; the key is there and focusable.
+  The app's own Voice search is covered in its own section below.
 - **A TV keyboard owns the d-pad while it is up.** Confirmed on the Shield with Gboard TV: with
   the keyboard showing, Up/Down/Left/Right move inside the keyboard, not the pane; Back or the
   keyboard's Search key dismiss it and the field's wiring (up to Clear, down to the strip)
@@ -167,3 +169,66 @@ nobody passed, and the four All-view rails spelled out in full; all taken.
   or the count large) would read as an action at a glance.
 - A musician the server returns with "0 albums, 0 tracks" (a featured-artist credit) opens an
   empty page; the server's search ranks it, the pane only shows it.
+
+## Voice search (`feature/voice-search`, 2026-10-26)
+
+**What was done.** A **Voice search** button in the Search header, left of Clear and one press
+Up from the field, listens through the platform's speech recogniser bound from the app itself
+(`SpeechRecognizer`; the app declares `RECORD_AUDIO` and asks for it on the first press). While
+it listens the button reads "Listening…" (its action "Stop listening"), the header's notice line
+says "Listening… say a title, album, musician or track", and each partial guess is written into
+the field. A recognised phrase replaces the field's text, goes out at once and lands focus on the
+first result, as the keyboard's Search key does; Back or the button again stops silently and
+restores the field and the search it was waiting for; no match, a refused microphone or a recogniser error is one line in the
+header's notice slot ("Didn't catch that. Try again.", "Couldn't search by voice: …"), cleared
+by the next keystroke, Clear or attempt. The button is composed only where a recogniser answers
+— the Shield and Google TV, not a Fire TV. The remote's own microphone key belongs to the
+platform (Assistant, Alexa) and cannot be taken by an app; that was the first question answered
+before the design. Spec: design-system.md §11.6 "Voice search".
+
+**Why not the "Speak now" overlay.** The first build launched `ACTION_RECOGNIZE_SPEECH`, which
+needs no permission of the app's own. It works on the Google TV emulator (after pinning the TV
+search app's handler, because the image carries two and shows a chooser), but on the Shield's
+Android 11 build the overlay's recognition service refuses every caller with "call for
+recognition service without RECORD_AUDIO permissions" — the shell and an app holding the
+permission alike — and closes at once. A recogniser bound from the app's process is checked
+against the app's own grant and listens, which is also what Leanback's search and Kodi do on
+the Shield; the design was switched that day.
+
+**How it was verified.** JVM, the search package **54/54**: `VoiceSearchOutcomeTest` (8: every
+error code and every notice line) and `SearchViewModelTest` now 30 (a voice result fills the
+field and searches at once, partials never search, a phrase replaces a query not yet sent and
+never repeats an answered one, a blank one is ignored, no match restores the field and leaves a
+notice the next keystroke clears, a cancel clears the notice, Clear drops it). Instrumented,
+Google TV emulator: `SearchPaneBehaviorTest` **37/37** (the chain through Voice search, the
+no-recogniser layout, the press, the listening button and the field showing each guess, Back
+while listening, a recognised phrase landing on the first card, a cancel, a no-match notice) and
+`SearchPaneAccessibilityTest` **12/12** ("Search by voice" / "Stop listening", the listening
+line and a no-match notice as the header's polite live region over a like notice).
+
+Live, Google TV emulator (API 34, the local backend): Search from the spine, Back closes the
+keyboard, Up lands on Voice search; a press shows the permission dialog once, then "Listening…";
+the emulator has no microphone, so it ends in "Didn't catch that. Try again." with focus on the
+button, and Back while listening returns to the plain button with no notice.
+
+Live, Shield (Android 11, the remote's microphone, a person speaking): the permission dialog,
+"Listening…", and — once the device's microphone path was repaired, next paragraph — "Casino"
+spoken into the remote put "Casino" in the field, "3 results for “Casino”" in the heading and
+focus on Casino Royale; a Center press from there opened its page, so the landing is the real
+first card.
+
+**A Shield finding that is not the app's.** Before that, every attempt ended in "Didn't catch
+that", and so did Google Assistant itself from the remote's microphone key: the audio service
+logged "RVS capable devices not present" and fell back to a built-in microphone the Shield does
+not have. The cause was the **Android TV Remote Service** package (`com.google.android.tv.remote.service`)
+being disabled by user on the device: it hosts the service that streams the remote's microphone
+(`IAtvAudioProviderService`), and with it off neither the Assistant nor any app can hear the
+remote. `pm enable` on that package fixed both at once, no reboot needed. Worth remembering when
+voice search "hears nothing" on a Shield: check the Assistant first, then that package.
+
+**What could not be verified here.** The Fire TV Stick was unreachable on the tailnet during
+this pass, so "the button is absent there" rests on the recogniser query and the instrumented
+no-recogniser layout test. The Shield pass was driven with TalkBack off (the d-pad drives the
+TalkBack cursor otherwise); the spoken lines — "Search by voice", the listening line, the
+result count, the first card — are covered by the instrumented accessibility suite, not by a
+read of TalkBack's log on the device.

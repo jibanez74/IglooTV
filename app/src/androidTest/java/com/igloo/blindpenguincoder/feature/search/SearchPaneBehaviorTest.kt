@@ -8,8 +8,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -22,6 +25,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.FakeVoiceSearch
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
@@ -51,8 +55,9 @@ import org.junit.runner.RunWith
  * the field is the pane's one target; with results the entry rides the selected tab's remembered
  * item with the strip and the field above it; the left column exits to the spine and the right
  * edge is pinned; a tab selects on focus without stealing it; See-all lands on the category's
- * results; Clear hands focus back to the field; an overlay's Back and a player's close land on
- * the item that led away; and a Home round trip keeps the tab and the item.
+ * results; Clear hands focus back to the field; Voice search sits above the field where a
+ * recogniser answers and its phrase lands on the results; an overlay's Back and a player's
+ * close land on the item that led away; and a Home round trip keeps the tab and the item.
  */
 @RunWith(AndroidJUnit4::class)
 class SearchPaneBehaviorTest {
@@ -72,11 +77,16 @@ class SearchPaneBehaviorTest {
     private val playedTracks = mutableListOf<Long>()
     private var searchNowCalls = 0
     private var clearCalls = 0
+    private val voiceEvents = mutableListOf<VoiceSearchEvent>()
+    private var voiceSearch = FakeVoiceSearch()
     private var retries = 0
     private val playRequests = MutableSharedFlow<MusicPlayRequest>(extraBufferCapacity = 1)
     private var hostActivity: Activity? = null
 
-    private fun setContent(initial: SearchUiState = testSearchState()) {
+    private fun setContent(
+        initial: SearchUiState = testSearchState(),
+        voice: FakeVoiceSearch = FakeVoiceSearch(),
+    ) {
         searchState = initial
         detailsState = MovieDetailsUiState()
         albumDetailsState = AlbumDetailsUiState()
@@ -84,6 +94,8 @@ class SearchPaneBehaviorTest {
         selectedTabs.clear()
         pressedTabs.clear()
         playedTracks.clear()
+        voiceEvents.clear()
+        voiceSearch = voice
         searchNowCalls = 0
         clearCalls = 0
         retries = 0
@@ -99,6 +111,23 @@ class SearchPaneBehaviorTest {
                         onClear = {
                             clearCalls += 1
                             searchState = SearchUiState()
+                        },
+                        onVoiceSearch = { event ->
+                            voiceEvents += event
+                            // The view model's emissions: listening, each partial in the field,
+                            // then the phrase with every tab back to its skeleton (the answer
+                            // follows), or the field put back with a notice.
+                            searchState = when (event) {
+                                VoiceSearchEvent.Listening -> searchState.copy(voiceListening = true, voiceNotice = null)
+                                is VoiceSearchEvent.Partial -> searchState.copy(query = event.text)
+                                is VoiceSearchEvent.Done -> when (val outcome = event.outcome) {
+                                    is VoiceSearchOutcome.Recognized -> testSearchState(
+                                        query = outcome.text,
+                                        all = PagedState(IglooRailState.Loading, contentGeneration = 1),
+                                    )
+                                    else -> searchState.copy(query = "help", voiceListening = false, voiceNotice = outcome.toNotice())
+                                }
+                            }
                         },
                         onSelectTab = { tab ->
                             selectedTabs += tab
@@ -123,6 +152,7 @@ class SearchPaneBehaviorTest {
                         },
                         onToggleLike = {},
                     ),
+                    voiceSearch = voiceSearch,
                     searchPlayRequests = playRequests,
                     details = detailsState,
                     onMovieSelected = { movieId ->
@@ -169,7 +199,7 @@ class SearchPaneBehaviorTest {
     // --- the field with nothing typed ---
 
     @Test
-    fun withNothingTypedTheFieldIsThePanesOnlyTarget() {
+    fun withNothingTypedTheFieldAndVoiceSearchAreThePanesOnlyTargets() {
         setContent(SearchUiState())
 
         node("search_field").assertIsFocused()
@@ -180,6 +210,12 @@ class SearchPaneBehaviorTest {
         node("search_field").performKeyInput { pressKey(Key.DirectionDown) }
         node("search_field").assertIsFocused()
         node("search_field").performKeyInput { pressKey(Key.DirectionUp) }
+        node("search_voice").assertIsFocused()
+        node("search_voice").performKeyInput { pressKey(Key.DirectionUp) }
+        node("search_voice").assertIsFocused()
+        node("search_voice").performKeyInput { pressKey(Key.DirectionRight) }
+        node("search_voice").assertIsFocused()
+        node("search_voice").performKeyInput { pressKey(Key.DirectionDown) }
         node("search_field").assertIsFocused()
     }
 
@@ -221,11 +257,21 @@ class SearchPaneBehaviorTest {
         node("search_tab_all").performKeyInput { pressKey(Key.DirectionUp) }
         node("search_field").assertIsFocused()
         node("search_field").performKeyInput { pressKey(Key.DirectionUp) }
+        node("search_voice").assertIsFocused()
+        node("search_voice").performKeyInput { pressKey(Key.DirectionUp) }
+        node("search_voice").assertIsFocused()
+        node("search_voice").performKeyInput { pressKey(Key.DirectionRight) }
         node("search_clear").assertIsFocused()
-        node("search_clear").performKeyInput { pressKey(Key.DirectionUp) }
+        node("search_clear").performKeyInput { pressKey(Key.DirectionRight) }
         node("search_clear").assertIsFocused()
+        node("search_clear").performKeyInput { pressKey(Key.DirectionLeft) }
+        node("search_voice").assertIsFocused()
 
+        node("search_clear").requestFocus()
         node("search_clear").performKeyInput { pressKey(Key.DirectionDown) }
+        node("search_field").assertIsFocused()
+        node("search_voice").requestFocus()
+        node("search_voice").performKeyInput { pressKey(Key.DirectionDown) }
         node("search_field").assertIsFocused()
         node("search_field").performKeyInput { pressKey(Key.DirectionDown) }
         node("search_tab_all").assertIsFocused()
@@ -245,9 +291,115 @@ class SearchPaneBehaviorTest {
         node("search_see_all_movies").performKeyInput { pressKey(Key.DirectionRight) }
         node("search_see_all_movies").assertIsFocused()
 
-        node("search_clear").requestFocus()
+        node("search_voice").requestFocus()
+        node("search_voice").performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.onNodeWithContentDescription("Search").assertIsFocused()
+    }
+
+    // --- voice search ---
+
+    @Test
+    fun withoutARecogniserTheButtonIsNotComposedAndClearIsAboveTheField() {
+        setContent(voice = FakeVoiceSearch(available = false))
+
+        node("search_voice").assertDoesNotExist()
+        node("search_field").requestFocus()
+        node("search_field").performKeyInput { pressKey(Key.DirectionUp) }
+        node("search_clear").assertIsFocused()
         node("search_clear").performKeyInput { pressKey(Key.DirectionLeft) }
         composeRule.onNodeWithContentDescription("Search").assertIsFocused()
+    }
+
+    private fun deliver(event: VoiceSearchEvent) {
+        composeRule.runOnUiThread { voiceSearch.deliver(event) }
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun pressingVoiceSearchStartsASessionAndKeepsFocus() {
+        setContent()
+
+        node("search_voice").requestFocus()
+        node("search_voice").performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(1, voiceSearch.starts)
+        assertEquals(emptyList<VoiceSearchEvent>(), voiceEvents)
+        node("search_voice").assertIsFocused()
+    }
+
+    @Test
+    fun whileListeningTheButtonStopsAndTheFieldShowsEachGuess() {
+        setContent()
+        node("search_voice").requestFocus()
+
+        deliver(VoiceSearchEvent.Listening)
+        node("search_voice").assertContentDescriptionEquals("Stop listening")
+        node("search_notice").assertTextEquals(VOICE_LISTENING_LINE)
+        deliver(VoiceSearchEvent.Partial("cas"))
+        node("search_field").assertTextEquals("cas")
+
+        node("search_voice").performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        assertEquals(1, voiceSearch.cancels)
+        assertEquals(0, voiceSearch.starts)
+        node("search_voice").assertIsFocused()
+    }
+
+    @Test
+    fun backWhileListeningStopsTheSession() {
+        setContent()
+        node("search_voice").requestFocus()
+        deliver(VoiceSearchEvent.Listening)
+
+        pressBack()
+
+        assertEquals(1, voiceSearch.cancels)
+        node("search_voice").assertIsFocused()
+    }
+
+    @Test
+    fun aRecognisedPhraseIsTheQueryAndLandsOnTheResults() {
+        setContent(testSearchState(query = "help"))
+        node("search_voice").requestFocus()
+        deliver(VoiceSearchEvent.Listening)
+
+        deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.Recognized("casino")))
+        // The phrase lands on the skeleton's anchor, as the keyboard's Search does; the answer
+        // then carries focus to the first card.
+        searchState = testSearchState(query = "casino", all = testSearchState().all.copy(contentGeneration = 2))
+        composeRule.waitForIdle()
+
+        node("search_field").assertTextEquals("casino")
+        node("search_voice").assertContentDescriptionEquals("Search by voice")
+        node("poster_card_1").assertIsFocused()
+    }
+
+    @Test
+    fun aCancelledSessionLeavesFocusOnVoiceSearch() {
+        setContent()
+        node("search_voice").requestFocus()
+        deliver(VoiceSearchEvent.Listening)
+
+        deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.Cancelled))
+
+        node("search_voice").assertIsFocused()
+        node("search_field").assertTextEquals("help")
+        node("search_notice").assertDoesNotExist()
+    }
+
+    @Test
+    fun aSessionThatHeardNothingSaysSoInTheHeader() {
+        setContent()
+        node("search_voice").requestFocus()
+        deliver(VoiceSearchEvent.Listening)
+
+        deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.NoMatch))
+
+        node("search_notice").assertIsDisplayed()
+        node("search_notice").assertTextEquals("Didn't catch that. Try again.")
+        node("search_voice").assertIsFocused()
+        node("poster_card_1").assertExists()
     }
 
     @Test

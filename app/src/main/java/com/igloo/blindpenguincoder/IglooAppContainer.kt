@@ -33,6 +33,8 @@ import com.igloo.blindpenguincoder.data.repository.ServerRepository
 import com.igloo.blindpenguincoder.data.repository.ShowRepository
 import com.igloo.blindpenguincoder.data.repository.VideoPlaybackRepository
 import com.igloo.blindpenguincoder.feature.auth.SessionManager
+import com.igloo.blindpenguincoder.feature.search.AndroidVoiceSearch
+import com.igloo.blindpenguincoder.feature.search.VoiceSearch
 import com.igloo.blindpenguincoder.playback.hls.HLS_SEGMENT_READ_TIMEOUT_MS
 import com.igloo.blindpenguincoder.playback.media3.bearerStreamDataSourceFactory
 import kotlinx.coroutines.CoroutineScope
@@ -94,6 +96,7 @@ class IglooAppContainer(context: Context) {
     val musicRepository by lazy { MusicRepository(musicApi) }
     private val searchApi by lazy { SearchApi(httpClient, serverUrlProvider) }
     val searchRepository by lazy { SearchRepository(searchApi) }
+    val voiceSearch: VoiceSearch by lazy { AndroidVoiceSearch(appContext) }
     val authRepository by lazy {
         AuthRepository(authApi, userApi, profileRepository, identity)
     }

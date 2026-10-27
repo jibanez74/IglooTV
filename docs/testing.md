@@ -146,6 +146,12 @@ Also drive the flow manually with TalkBack. Avoid `uiautomator dump` during that
 because it can disturb the accessibility service. On TV, important spoken content must be
 reachable through input focus or deliberate reading stops.
 
+Voice search is the same shape: instrumentation cannot speak into the recogniser, so the Search
+suites drive the pane through `FakeVoiceSearch` (`SearchTestFixtures.kt`) — listening, partial
+guesses, a recognised phrase, a cancel, a no-match — and the real round trip (press, speak into
+the remote, results) is a manual check on the Shield. The emulator and the Fire TV each prove one
+half: the button composes where a recogniser answers and is absent where none does.
+
 ## Device validation
 
 | Target | Purpose |

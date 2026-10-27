@@ -15,6 +15,20 @@
         android:required="false" />
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+        Voice search binds the platform's speech recogniser from this process
+        (feature/search/AndroidVoiceSearch.kt), which the platform checks against this app's own
+        microphone grant: asked for on the first press, never at launch. The queries block lets
+        isRecognitionAvailable see the recogniser service under API 30+ package visibility; without
+        it the button would silently never compose.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <application
         android:name=".IglooApplication"

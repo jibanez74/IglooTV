@@ -2369,15 +2369,15 @@ Genres, Spotify popularity, Spotify followers, About (the summary) — each drop
 ### 11.6 Search
 
 Reached from the spine, first row. The pane is the other panes' shape with the query field above
-the strip: a heading with the result count and a **Clear** action (composed only while the field
-holds text), the field itself, a tab strip — **All · Movies · TV Shows · Albums · Musicians ·
+the strip: a heading with the result count, a **Voice search** action (composed only where a
+speech recogniser answers) and a **Clear** action (composed only while the field holds text),
+the field itself, a tab strip — **All · Movies · TV Shows · Albums · Musicians ·
 Tracks**, the five categories `GET /search` returns — and the selected tab's results. The web
 client's search page is the source of the categories and of what a result does; the way the
 query is entered and the way results page are the TV's own.
 
 **Live search.** The field summons the system keyboard on focus (the one place besides login
-that does, §11.1.2) and the keyboard's own microphone is the voice input. While the keyboard is
-up it owns the d-pad — every arrow moves inside it, as on every Android TV text field — and Back
+that does, §11.1.2). While the keyboard is up it owns the d-pad — every arrow moves inside it, as on every Android TV text field — and Back
 or its Search key dismisses it; only then do the field's own edges (Clear above, the strip below,
 the spine to the left of an empty field) apply. The query goes out
 `SEARCH_DEBOUNCE_MS` (400ms) after the last keystroke, so a word typed on a remote is one
@@ -2389,6 +2389,29 @@ selected under it would send the next search where the user cannot see (Shield, 
 trimmed to the query already searched, nothing moves. The
 server tokenises, corrects spelling and ranks (`docs/openapi.json`); the app sends the trimmed
 text and nothing else.
+
+**Voice search.** Typing on a remote is slow and, under a screen reader, the keyboard is the
+slowest screen in the app, so the header's **Voice search** listens through the platform's
+speech recogniser bound from the app's own process (`SpeechRecognizer`, `AndroidVoiceSearch`):
+free-form, the device's language, one hypothesis, partial results as they come. Not the system
+"Speak now" overlay: on the Shield's Android 11 build that overlay refuses to record for anyone
+who opens it, while a recogniser the app binds is checked against the app's own grant. So the
+app declares `RECORD_AUDIO` — its only runtime permission — and asks for it on the first press
+with the platform's own dialog; a refusal is a notice ("Voice search needs the microphone…").
+The manifest's `<queries>` entry for `android.speech.RecognitionService` lets API 30+ see the
+recogniser, and the button is composed only where one answers (`VoiceSearch.available`): the
+Shield and Google TV have one, a Fire TV has none, and a control that announces an action it
+cannot perform is the §12 failure. The remote's own microphone key is the platform's (Assistant,
+Alexa) and cannot be taken by an app. While listening the button reads **Listening…** (its
+action "Stop listening"), the header's notice line — the polite live region — carries the
+prompt ("Listening… say a title, album, musician or track"), and each partial guess is written
+into the field as it arrives; Back, or the button again, stops silently, restores the field's
+previous text (and the search it was waiting for) and leaves focus on the button. A recognised
+phrase replaces the field's text — and any query the debounce has not sent — and goes out on
+the keyboard-Search rules, landing focus on the results the same way, one frame later. No match
+or a recogniser error is one line in the same notice slot ("Didn't catch that. Try again.",
+"Couldn't search by voice: …"), cleared by the next keystroke, Clear or attempt; of that line
+and a like failure the newer shows, and the older resurfaces when it clears.
 
 **Prompt.** With nothing searched the field is the pane's only focus target — no strip, no
 results — over a decorative hint. The hint is plain text a TV screen reader never reaches, so
@@ -2425,11 +2448,14 @@ on the row's Play. Like and More are the shared row's (§11.5).
 **Focus.** Blank: the field, with up and down pinned and left to the spine. Otherwise the entry
 anchor rides the selected tab's entry item — remembered, or first; a new query forgets every
 remembered item, so its entry is the first result — with the strip one press
-above and the field above that, Clear above the field when composed. Left column to the spine,
-right edge pinned, the cardless states on the anchor they draw. The field and Clear join the
-tabs' "do not steal" set in `PaneFocusOwnership`: results landing while the user types leave the
-keyboard where it is. A See-all press and the keyboard's Search both ask for the results one
-frame later (the node is new) and, under a screen reader, after the announced wait. The return
+above and the field above that, and the header's actions above the field: Voice search where
+composed, Clear to its right while there is text (Up from the field reaches Voice search, or
+Clear where there is no recogniser). Left column to the spine, right edge pinned, the cardless
+states on the anchor they draw. The field, Voice search and Clear join the tabs' "do not steal"
+set in `PaneFocusOwnership`: results landing while the user types, or under the button that
+just heard them, leave focus where it is. A See-all press, the keyboard's Search and a voice
+phrase all ask for the results one frame later (the node is new) and, under a screen reader,
+after the announced wait. The return
 requester attaches to exactly one node: on All, the section focus last rested in. One §6.3
 deviation, by the platform: with text in the field, left and right move the cursor, so the spine
 is reached through the strip or with Back. The pane's scroll positions and remembered items live

@@ -1,5 +1,8 @@
 package com.igloo.blindpenguincoder
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.music.MusicianCardUi
@@ -9,6 +12,9 @@ import com.igloo.blindpenguincoder.feature.search.SearchActions
 import com.igloo.blindpenguincoder.feature.search.SearchSectionUi
 import com.igloo.blindpenguincoder.feature.search.SearchTab
 import com.igloo.blindpenguincoder.feature.search.SearchUiState
+import com.igloo.blindpenguincoder.feature.search.VoiceSearch
+import com.igloo.blindpenguincoder.feature.search.VoiceSearchEvent
+import com.igloo.blindpenguincoder.feature.search.VoiceSearchSession
 import com.igloo.blindpenguincoder.feature.search.sectionTitle
 import com.igloo.blindpenguincoder.feature.search.SearchKind
 import com.igloo.blindpenguincoder.feature.shared.AppendState
@@ -65,6 +71,7 @@ internal val inertSearchActions = SearchActions(
     onQueryChange = {},
     onSearchNow = {},
     onClear = {},
+    onVoiceSearch = {},
     onSelectTab = {},
     onPressTab = {},
     onRetryFirstPage = {},
@@ -73,3 +80,32 @@ internal val inertSearchActions = SearchActions(
     onPlayTrack = {},
     onToggleLike = {},
 )
+
+/**
+ * The speech recogniser under instrumentation: a microphone cannot be driven by UiAutomation,
+ * so a suite counts [starts] and [cancels] and hands the pane events with [deliver], on the UI
+ * thread, as the real recogniser would. [available] off composes no button, the Fire TV
+ * configuration.
+ */
+internal class FakeVoiceSearch(override val available: Boolean = true) : VoiceSearch {
+    var starts = 0
+        private set
+    var cancels = 0
+        private set
+    private var onEvent: ((VoiceSearchEvent) -> Unit)? = null
+
+    @Composable
+    override fun rememberSession(onEvent: (VoiceSearchEvent) -> Unit): VoiceSearchSession {
+        SideEffect { this.onEvent = onEvent }
+        return remember {
+            object : VoiceSearchSession {
+                override fun start() { starts += 1 }
+                override fun cancel() { cancels += 1 }
+            }
+        }
+    }
+
+    fun deliver(event: VoiceSearchEvent) {
+        checkNotNull(onEvent) { "no Search pane has asked for a session" }(event)
+    }
+}
