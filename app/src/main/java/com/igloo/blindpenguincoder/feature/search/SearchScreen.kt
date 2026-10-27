@@ -145,6 +145,9 @@ fun SearchScreen(
     }
     // Back while the microphone is open stops it, as the button's second press does.
     BackHandler(enabled = state.voiceListening) { voiceSession.cancel() }
+    // Clear or a keystroke while it listens is the user's own query: the microphone closes first,
+    // so nothing it hears afterwards can write over the edit.
+    val stopListening = { if (state.voiceListening) voiceSession.cancel() }
     // Which of the two header notices arrived last; each clears on its own terms.
     var likeNoticeIsNewer by remember { mutableStateOf(false) }
     LaunchedEffect(state.voiceNotice) { if (state.voiceNotice != null) likeNoticeIsNewer = false }
@@ -214,6 +217,7 @@ fun SearchScreen(
                     IglooButton(
                         text = "Clear",
                         onClick = {
+                            stopListening()
                             actions.onClear()
                             // In the callback, not an effect: this button leaves with the text,
                             // and the field it hands focus to is still composed (section 9.3).
@@ -237,7 +241,10 @@ fun SearchScreen(
 
             IglooTextField(
                 value = state.query,
-                onValueChange = actions.onQueryChange,
+                onValueChange = { text ->
+                    if (text != state.query) stopListening()
+                    actions.onQueryChange(text)
+                },
                 // Spoken only: the heading names the pane, and the prompt below is decorative,
                 // so this label is the one sentence a screen reader hears for the field.
                 label = FIELD_LABEL,

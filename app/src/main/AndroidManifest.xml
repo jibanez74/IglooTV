@@ -13,6 +13,14 @@
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />
+    <!--
+        RECORD_AUDIO below implies a required microphone, which would keep the app off every TV
+        that reports none. Voice search is optional: without a recogniser its button is simply
+        not composed.
+    -->
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!--

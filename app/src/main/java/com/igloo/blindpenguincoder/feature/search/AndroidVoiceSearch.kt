@@ -33,86 +33,91 @@ class AndroidVoiceSearch(context: Context) : VoiceSearch {
     @Composable
     override fun rememberSession(onEvent: (VoiceSearchEvent) -> Unit): VoiceSearchSession {
         val current = rememberUpdatedState(onEvent)
-        val listener = remember { RecognizerSession(appContext) { current.value(it) } }
-        DisposableEffect(listener) { onDispose { listener.destroy() } }
+        val recognizer = remember { RecognizerSession(appContext) { current.value(it) } }
+        DisposableEffect(recognizer) { onDispose { recognizer.cancel() } }
         val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) listener.listen() else current.value(VoiceSearchEvent.Done(VoiceSearchOutcome.Failed(VoiceSearchFailure.Permission)))
+            if (granted) recognizer.listen() else current.value(VoiceSearchEvent.Done(VoiceSearchOutcome.Failed(VoiceSearchFailure.Permission)))
         }
-        return remember(listener, permission) {
+        return remember(recognizer, permission) {
             object : VoiceSearchSession {
                 override fun start() {
                     val granted = appContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                    if (granted) listener.listen() else permission.launch(Manifest.permission.RECORD_AUDIO)
+                    if (granted) recognizer.listen() else permission.launch(Manifest.permission.RECORD_AUDIO)
                 }
 
-                override fun cancel() = listener.cancel()
+                override fun cancel() = recognizer.cancel()
             }
         }
     }
 }
 
 /**
- * One recogniser, created on the first listen and destroyed with the composition. Listening is
- * reported from [listen] itself, not from `onReadyForSpeech`: the recogniser is live from the
- * press, so the pane must own Back and refuse a second press from that moment, not from the
- * callback that lands later. A cancel reports [VoiceSearchOutcome.Cancelled] itself —
- * `SpeechRecognizer.cancel` calls nothing back — and drops any late callback from the session
- * it ended; leaving the composition mid-session is a cancel too, so the pane never keeps a
- * listening state no recogniser backs.
+ * One recogniser per attempt, destroyed when the attempt ends however it ends. A reused
+ * recogniser hands callbacks it had already queued for a cancelled attempt to whatever listener
+ * is current when they dispatch, so a quick cancel-and-press-again could end the new attempt
+ * with the old one's result or error; a destroyed recogniser drops them. Listening is reported
+ * from [listen] itself, not from `onReadyForSpeech`: the recogniser is live from the press, so
+ * the pane must own Back and refuse a second press from that moment, not from the callback that
+ * lands later. A cancel reports [VoiceSearchOutcome.Cancelled] itself — `SpeechRecognizer.cancel`
+ * calls nothing back; leaving the composition mid-session is a cancel too, so the pane never
+ * keeps a listening state no recogniser backs.
  */
 private class RecognizerSession(
     private val context: Context,
     private val onEvent: (VoiceSearchEvent) -> Unit,
-) : RecognitionListener {
-    private var recognizer: SpeechRecognizer? = null
-    private var listening = false
+) {
+    private var active: Attempt? = null
 
     fun listen() {
-        if (listening) return
-        val recognizer = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also {
-            it.setRecognitionListener(this)
-            recognizer = it
-        }
-        listening = true
+        if (active != null) return
+        val attempt = Attempt(SpeechRecognizer.createSpeechRecognizer(context))
+        active = attempt
         onEvent(VoiceSearchEvent.Listening)
-        recognizer.startListening(listenIntent(context.packageName))
+        attempt.recognizer.startListening(listenIntent(context.packageName))
     }
 
     fun cancel() {
-        if (!listening) return
-        listening = false
-        recognizer?.cancel()
+        val attempt = active ?: return
+        end(attempt)
         onEvent(VoiceSearchEvent.Done(VoiceSearchOutcome.Cancelled))
     }
 
-    fun destroy() {
-        cancel()
-        recognizer?.destroy()
-        recognizer = null
+    private fun end(attempt: Attempt) {
+        active = null
+        attempt.recognizer.destroy()
     }
 
-    private fun finish(outcome: VoiceSearchOutcome) {
-        if (!listening) return
-        listening = false
-        onEvent(VoiceSearchEvent.Done(outcome))
+    /** One press's recogniser and its listener; reports only while it is still the [active] one. */
+    private inner class Attempt(val recognizer: SpeechRecognizer) : RecognitionListener {
+        init {
+            recognizer.setRecognitionListener(this)
+        }
+
+        private val current: Boolean get() = active === this
+
+        private fun finish(outcome: VoiceSearchOutcome) {
+            if (!current) return
+            end(this)
+            onEvent(VoiceSearchEvent.Done(outcome))
+        }
+
+        override fun onPartialResults(partialResults: Bundle?) {
+            val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull { it.isNotBlank() }
+            if (current && text != null) onEvent(VoiceSearchEvent.Partial(text))
+        }
+
+        override fun onResults(results: Bundle?) =
+            finish(voiceSearchResult(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)))
+
+        override fun onError(error: Int) = finish(voiceSearchError(error))
+
+        override fun onReadyForSpeech(params: Bundle?) = Unit
+        override fun onBeginningOfSpeech() = Unit
+        override fun onRmsChanged(rmsdB: Float) = Unit
+        override fun onBufferReceived(buffer: ByteArray?) = Unit
+        override fun onEndOfSpeech() = Unit
+        override fun onEvent(eventType: Int, params: Bundle?) = Unit
     }
-
-    override fun onPartialResults(partialResults: Bundle?) {
-        val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull { it.isNotBlank() }
-        if (listening && text != null) onEvent(VoiceSearchEvent.Partial(text))
-    }
-
-    override fun onResults(results: Bundle?) =
-        finish(voiceSearchResult(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)))
-
-    override fun onError(error: Int) = finish(voiceSearchError(error))
-
-    override fun onReadyForSpeech(params: Bundle?) = Unit
-    override fun onBeginningOfSpeech() = Unit
-    override fun onRmsChanged(rmsdB: Float) = Unit
-    override fun onBufferReceived(buffer: ByteArray?) = Unit
-    override fun onEndOfSpeech() = Unit
-    override fun onEvent(eventType: Int, params: Bundle?) = Unit
 }
 
 /** Free-form speech in the device's language, partials as they come, one final hypothesis. */

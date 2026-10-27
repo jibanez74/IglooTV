@@ -213,16 +213,23 @@ class SearchViewModel(
     private var debounceJob: Job? = null
     private var tabDebounceJob: Job? = null
 
-    /** The field's text when a voice session opened the microphone, put back if it hears nothing. */
+    /**
+     * The field's text when a voice session opened the microphone, put back if it hears nothing.
+     * A keystroke or Clear drops it with the listening state: the user's own edit supersedes the
+     * session. The pane cancels the recogniser too; this keeps an outcome that still arrives
+     * from putting back text the user has since replaced.
+     */
     private var queryBeforeVoice: String? = null
 
     /**
      * Every keystroke. The field shows it at once; the search goes out [SEARCH_DEBOUNCE_MS] after
      * the last one, so a word typed on a remote costs one request, not one per letter. Trimming
      * to the query already searched changes nothing; trimming to blank clears the results now.
+     * A keystroke during a voice session ends it: the typed text is the query.
      */
     fun onQueryChange(text: String) {
-        _uiState.update { it.copy(query = text, voiceNotice = null) }
+        queryBeforeVoice = null
+        _uiState.update { it.copy(query = text, voiceListening = false, voiceNotice = null) }
         scheduleSearch(text)
     }
 
@@ -261,7 +268,8 @@ class SearchViewModel(
      * searching — they are not the user's words yet. A recognised phrase replaces the field's
      * text — and any query the debounce has not sent — and goes out on [searchNow]'s rules.
      * Anything else puts back the text the session started over: a cancel says nothing, and no
-     * match or a failure is one line in the header.
+     * match or a failure is one line in the header. After a keystroke or Clear has ended the
+     * session, a late outcome puts back the field's current text instead, and partials are dropped.
      */
     fun onVoiceSearch(event: VoiceSearchEvent) {
         when (event) {
@@ -294,13 +302,13 @@ class SearchViewModel(
         }
     }
 
-    /** The header's Clear: an empty field and the prompt, on every tab. */
+    /** The header's Clear: an empty field and the prompt, on every tab, and the end of any voice session. */
     fun clear() {
         debounceJob?.cancel()
-        _uiState.update { it.copy(query = "", voiceNotice = null) }
+        queryBeforeVoice = null
+        _uiState.update { it.copy(query = "", voiceListening = false, voiceNotice = null) }
         clearResults()
     }
-
 
     /**
      * A tab taking focus. The highlight moves at once, but a tab with nothing loaded waits

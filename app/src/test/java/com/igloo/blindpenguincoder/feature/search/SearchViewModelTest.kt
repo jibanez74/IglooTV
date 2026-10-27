@@ -351,6 +351,50 @@ class SearchViewModelTest {
     }
 
     @Test
+    fun `Clear while listening ends the session and a late outcome does not put the old query back`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+        type(model, "help")
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+
+        model.clear()
+        assertEquals(false, model.uiState.value.voiceListening)
+        model.onVoiceSearch(ended(VoiceSearchOutcome.NoMatch))
+        advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
+
+        assertEquals("", model.uiState.value.query)
+        assertEquals(1, http.requests.size)
+    }
+
+    @Test
+    fun `a keystroke while listening ends the session and later partials are dropped`() = runTest {
+        val model = model(routedHttp())
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        model.onVoiceSearch(VoiceSearchEvent.Partial("cas"))
+
+        model.onQueryChange("abc")
+        model.onVoiceSearch(VoiceSearchEvent.Partial("casino"))
+
+        assertEquals("abc", model.uiState.value.query)
+        assertEquals(false, model.uiState.value.voiceListening)
+    }
+
+    @Test
+    fun `a keystroke while listening survives the cancel that follows it`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+        type(model, "help")
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+
+        model.onQueryChange("abc")
+        model.onVoiceSearch(ended(VoiceSearchOutcome.Cancelled))
+        advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
+
+        assertEquals("abc", model.uiState.value.query)
+        assertEquals(listOf("/api/search?q=help", "/api/search?q=abc"), http.requests)
+    }
+
+    @Test
     fun `a failed query giving way to a new search counts as a replacement`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val http = routedHttp(all = { request ->

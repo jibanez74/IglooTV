@@ -359,6 +359,35 @@ class SearchPaneBehaviorTest {
     }
 
     @Test
+    fun clearWhileListeningStopsTheSessionFirst() {
+        setContent()
+        node("search_voice").requestFocus()
+        deliver(VoiceSearchEvent.Listening)
+
+        node("search_clear").requestFocus()
+        node("search_clear").performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+
+        assertEquals(1, voiceSearch.cancels)
+        assertEquals(1, clearCalls)
+        node("search_voice").assertContentDescriptionEquals("Search by voice")
+    }
+
+    @Test
+    fun aKeystrokeWhileListeningStopsTheSession() {
+        setContent()
+        deliver(VoiceSearchEvent.Listening)
+
+        node("search_field").performTextInput("x")
+        composeRule.waitForIdle()
+
+        // This harness never writes the keystroke back, so the field reverts and echoes "help"
+        // after it; the echo is not an edit and must not cancel a second time.
+        assertEquals(1, voiceSearch.cancels)
+        assertEquals("helpx", queries.first())
+    }
+
+    @Test
     fun aRecognisedPhraseIsTheQueryAndLandsOnTheResults() {
         setContent(testSearchState(query = "help"))
         node("search_voice").requestFocus()
