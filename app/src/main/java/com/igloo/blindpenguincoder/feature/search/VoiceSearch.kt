@@ -27,16 +27,20 @@ interface VoiceSearch {
 }
 
 interface VoiceSearchSession {
-    /** Asks for the microphone the first time, then listens; reports through the session's events. */
+    /**
+     * Reports Starting, asks for the microphone the first time, then listens; reports through the
+     * session's events.
+     */
     fun start()
 
-    /** Cancels startup or listening and reports [VoiceSearchOutcome.Cancelled]. */
+    /** Cancels startup (the microphone prompt included) or listening and reports [VoiceSearchOutcome.Cancelled]. */
     fun cancel()
 }
 
 /**
- * An attempt reports Starting → Listening → partial phrases → Done. It can finish before
- * readiness (or even before Starting when permission is denied), and partials are optional.
+ * An attempt reports Starting → Listening → partial phrases → Done. Starting comes first, before
+ * any microphone prompt, so every Done ends an attempt the pane knows is active; an attempt can
+ * finish before readiness (a denied prompt does), and partials are optional.
  */
 sealed interface VoiceSearchEvent {
     /** The attempt is active, but the microphone is not ready for speech yet. */
@@ -69,7 +73,7 @@ sealed interface VoiceSearchOutcome {
     data class Failed(val reason: VoiceSearchFailure) : VoiceSearchOutcome
 }
 
-enum class VoiceSearchFailure { Audio, Client, Network, Server, Permission }
+enum class VoiceSearchFailure { Audio, Client, Network, Server, Permission, Language }
 
 /**
  * `SpeechRecognizer`'s results list as an outcome: the first non-blank hypothesis, or no match.
@@ -91,7 +95,10 @@ fun voiceSearchError(code: Int): VoiceSearchOutcome = when (code) {
     ERROR_SERVER, ERROR_TOO_MANY_REQUESTS, ERROR_SERVER_DISCONNECTED ->
         VoiceSearchOutcome.Failed(VoiceSearchFailure.Server)
     ERROR_INSUFFICIENT_PERMISSIONS -> VoiceSearchOutcome.Failed(VoiceSearchFailure.Permission)
-    // ERROR_CLIENT, ERROR_RECOGNIZER_BUSY and anything newer than this table.
+    // No retry helps: the device's language is the problem, so the notice must say so.
+    ERROR_LANGUAGE_NOT_SUPPORTED, ERROR_LANGUAGE_UNAVAILABLE -> VoiceSearchOutcome.Failed(VoiceSearchFailure.Language)
+    // ERROR_CLIENT, ERROR_RECOGNIZER_BUSY and anything newer than this table (ERROR_CANNOT_CHECK_SUPPORT
+    // answers checkRecognitionSupport, which the app never calls).
     else -> VoiceSearchOutcome.Failed(VoiceSearchFailure.Client)
 }
 
@@ -109,6 +116,7 @@ fun VoiceSearchOutcome.toNotice(): String? = when (this) {
         VoiceSearchFailure.Audio -> "Couldn't search by voice: the microphone didn't work."
         VoiceSearchFailure.Client -> "Couldn't search by voice. Try again."
         VoiceSearchFailure.Permission -> "Voice search needs the microphone. Allow it when asked, or in the device's app settings."
+        VoiceSearchFailure.Language -> "Couldn't search by voice: the speech service doesn't support this device's language."
     }
 }
 
@@ -124,3 +132,5 @@ internal const val ERROR_RECOGNIZER_BUSY = 8
 internal const val ERROR_INSUFFICIENT_PERMISSIONS = 9
 internal const val ERROR_TOO_MANY_REQUESTS = 10
 internal const val ERROR_SERVER_DISCONNECTED = 11
+internal const val ERROR_LANGUAGE_NOT_SUPPORTED = 12
+internal const val ERROR_LANGUAGE_UNAVAILABLE = 13

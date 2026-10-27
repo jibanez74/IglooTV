@@ -229,6 +229,7 @@ class SearchViewModelTest {
         val http = routedHttp()
         val model = model(http)
         model.onQueryChange("original")
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(ended(VoiceSearchOutcome.NoMatch))
         assertEquals("Didn't catch that. Try again.", model.uiState.value.voiceNotice)
 
@@ -303,6 +304,33 @@ class SearchViewModelTest {
         }
     }
 
+    @Test
+    fun `an outcome with no attempt active is dropped and leaves the pending search alone`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+        model.onQueryChange("star")
+        advanceTimeBy(SEARCH_DEBOUNCE_MS - 100)
+
+        model.onVoiceSearch(ended(VoiceSearchOutcome.Failed(VoiceSearchFailure.Permission)))
+        model.onVoiceSearch(heard("help"))
+
+        assertEquals("star", model.uiState.value.query)
+        assertNull(model.uiState.value.voiceNotice)
+        advanceTimeBy(101)
+        assertEquals(listOf("/api/search?q=star"), http.requests)
+    }
+
+    @Test
+    fun `a denied microphone ends the attempt it started with the permission notice`() = runTest {
+        val model = model(routedHttp())
+        model.onQueryChange("original")
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
+        model.onVoiceSearch(ended(VoiceSearchOutcome.Failed(VoiceSearchFailure.Permission)))
+
+        assertEquals(VoiceSearchPhase.Idle, model.uiState.value.voicePhase)
+        assertEquals("original", model.uiState.value.query)
+        assertEquals(VoiceSearchOutcome.Failed(VoiceSearchFailure.Permission).toNotice(), model.uiState.value.voiceNotice)
+    }
 
     private fun heard(text: String) = VoiceSearchEvent.Done(VoiceSearchOutcome.Recognized(text))
     private fun ended(outcome: VoiceSearchOutcome) = VoiceSearchEvent.Done(outcome)

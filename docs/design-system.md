@@ -2397,7 +2397,9 @@ free-form, the device's language, one hypothesis, partial results as they come. 
 "Speak now" overlay: on the Shield's Android 11 build that overlay refuses to record for anyone
 who opens it, while a recogniser the app binds is checked against the app's own grant. So the
 app declares `RECORD_AUDIO` — its only runtime permission — and asks for it on the first press
-with the platform's own dialog; a refusal is a notice ("Voice search needs the microphone…").
+with the platform's own dialog, already in `Starting` so the attempt can be cancelled while it is
+up; a refusal is a notice ("Voice search needs the microphone…"), and an answer arriving after a
+cancel starts nothing.
 The manifest's `<queries>` entry for `android.speech.RecognitionService` lets API 30+ see the
 recogniser, and the button is composed only where one answers (`VoiceSearch.available`): the
 Shield and Google TV have one, a Fire TV is expected to have none (not yet confirmed on the
@@ -2413,12 +2415,15 @@ prompt ("Listening… say a title, album, musician or track"), and each partial 
 into the field as it arrives. During either startup or listening, Back or the button again
 cancels silently, restores the field's previous text (and the search it was waiting for) and
 leaves focus on the button. Clear, a
-keystroke, a details page, player, track More menu or the sign-out dialog opening over the pane,
-or the app going to the background also stops it first, so nothing heard afterwards overwrites
-the user's edit or pulls focus under an overlay;
+keystroke, focus entering the field (it summons the keyboard, whose cursor a guess would move),
+the navigation rail expanding, a details page, player, track More menu or the sign-out dialog
+opening over the pane, or the app going to the background also stops it first, so nothing heard
+afterwards overwrites the user's edit or pulls focus under an overlay; with the rail expanded,
+Back is the rail's again;
 each press gets its own recogniser, so a cancelled attempt's late callbacks cannot end the next
 one. The internal event order is `Starting → Listening → Done`, with optional partials while
-listening; an attempt may finish before readiness. Starting captures the original query,
+listening; an attempt may finish before readiness, and an outcome with no attempt active is
+dropped whole — the field, its pending search and the header stay the user's. Starting captures the original query,
 suspends its pending search debounce and clears the previous notice. Readiness never captures
 the query again, late readiness after cancellation is ignored, and partials are accepted only
 while listening. A recognised phrase replaces the field's text — and any query the debounce
@@ -2426,7 +2431,9 @@ has not sent — and goes out on
 the keyboard-Search rules, landing focus on the results the same way, one frame later. No match
 or a recogniser error is one line in the same notice slot ("Didn't catch that. Try again.",
 "Couldn't search by voice: …"), cleared by the next keystroke, Clear or attempt; of that line
-and a like failure the newer shows, and the older resurfaces when it clears.
+and a like failure the newer shows — newer per attempt, so the same line twice still takes over —
+and the older resurfaces when it clears. A recogniser that does not support the device's
+language says so ("…doesn't support this device's language"): no retry would help.
 
 **Prompt.** With nothing searched the field is the pane's only focus target — no strip, no
 results — over a decorative hint. The hint is plain text a TV screen reader never reaches, so

@@ -32,6 +32,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
+import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.PagedState
@@ -71,6 +72,7 @@ class SearchPaneBehaviorTest {
     private var searchState by mutableStateOf(testSearchState())
     private var detailsState by mutableStateOf(MovieDetailsUiState())
     private var albumDetailsState by mutableStateOf(AlbumDetailsUiState())
+    private var likesState by mutableStateOf(TrackLikesUiState(likedIds = emptySet()))
     private val queries = mutableListOf<String>()
     private val selectedTabs = mutableListOf<SearchTab>()
     private val pressedTabs = mutableListOf<SearchTab>()
@@ -90,6 +92,7 @@ class SearchPaneBehaviorTest {
         searchState = initial
         detailsState = MovieDetailsUiState()
         albumDetailsState = AlbumDetailsUiState()
+        likesState = TrackLikesUiState(likedIds = emptySet())
         queries.clear()
         selectedTabs.clear()
         pressedTabs.clear()
@@ -158,6 +161,7 @@ class SearchPaneBehaviorTest {
                         onToggleLike = {},
                     ),
                     voiceSearch = voiceSearch,
+                    trackLikes = likesState,
                     searchPlayRequests = playRequests,
                     details = detailsState,
                     onMovieSelected = { movieId ->
@@ -483,6 +487,66 @@ class SearchPaneBehaviorTest {
         // after it; the echo is not an edit and must not cancel a second time.
         assertEquals(1, voiceSearch.cancels)
         assertEquals("helpx", queries.first())
+    }
+
+    @Test
+    fun movingIntoTheFieldWhileListeningStopsTheSession() = movingIntoTheFieldWhileActiveStopsTheSession(ready = true)
+
+    @Test
+    fun movingIntoTheFieldWhileStartingStopsTheSession() = movingIntoTheFieldWhileActiveStopsTheSession(ready = false)
+
+    /** The field's focus summons the keyboard: a guess written under its cursor would scramble the user's typing. */
+    private fun movingIntoTheFieldWhileActiveStopsTheSession(ready: Boolean) {
+        setContent()
+        node("search_voice").requestFocus()
+        deliver(VoiceSearchEvent.Starting)
+        if (ready) deliver(VoiceSearchEvent.Listening)
+
+        node("search_voice").performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.waitForIdle()
+
+        node("search_field").assertIsFocused()
+        assertEquals(1, voiceSearch.cancels)
+        assertSessionEndedSilently()
+    }
+
+    @Test
+    fun movingIntoTheRailWhileListeningStopsTheSessionAndBackIsTheRails() {
+        setContent()
+        node("search_voice").requestFocus()
+        deliver(VoiceSearchEvent.Starting)
+        deliver(VoiceSearchEvent.Listening)
+
+        node("search_voice").performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.waitForIdle()
+        val rail = composeRule.onNodeWithContentDescription("Search")
+        rail.assertIsFocused()
+        assertEquals(1, voiceSearch.cancels)
+        assertSessionEndedSilently()
+
+        // The rail's own Back: it collapses back into the pane.
+        pressBack()
+        rail.assertIsNotFocused()
+        assertEquals(1, voiceSearch.cancels)
+    }
+
+    @Test
+    fun aRepeatedVoiceNoticeIsNewerThanALikeFailure() {
+        setContent()
+        node("search_voice").requestFocus()
+        deliver(VoiceSearchEvent.Starting)
+        deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.NoMatch))
+        likesState = likesState.copy(notice = LIKE_NOTICE)
+        composeRule.waitForIdle()
+        node("search_notice").assertTextEquals(LIKE_NOTICE)
+
+        // The same line again, merged with its Starting into one frame: still the newer notice.
+        composeRule.runOnUiThread {
+            voiceSearch.deliver(VoiceSearchEvent.Starting)
+            voiceSearch.deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.NoMatch))
+        }
+        composeRule.waitForIdle()
+        node("search_notice").assertTextEquals("Didn't catch that. Try again.")
     }
 
     @Test
@@ -940,3 +1004,5 @@ class SearchPaneBehaviorTest {
         node("poster_card_101").assertIsFocused()
     }
 }
+
+private const val LIKE_NOTICE = "Couldn't like the track: no network connection."

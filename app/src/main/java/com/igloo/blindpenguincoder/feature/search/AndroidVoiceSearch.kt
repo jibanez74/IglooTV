@@ -11,6 +11,7 @@ import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.compose.LifecycleStartEffect
@@ -34,17 +35,18 @@ class AndroidVoiceSearch(context: Context) : VoiceSearch {
     override fun rememberSession(onEvent: (VoiceSearchEvent) -> Unit): VoiceSearchSession {
         val current = rememberUpdatedState(onEvent)
         val recognizer = remember { RecognizerSession(appContext) { current.value(it) } }
+        // Leaving the composition ends the attempt, a microphone prompt still up included.
+        DisposableEffect(recognizer) { onDispose { recognizer.cancel() } }
         // Home or another app stops the activity without disposing the pane: a phrase heard
-        // then would rewrite the query, and pull focus, behind the user's back.
-        LifecycleStartEffect(recognizer) { onStopOrDispose { recognizer.cancel() } }
-        val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) recognizer.listen() else current.value(VoiceSearchEvent.Done(VoiceSearchOutcome.Failed(VoiceSearchFailure.Permission)))
-        }
+        // then would rewrite the query, and pull focus, behind the user's back. The prompt is
+        // spared: it may stop the activity itself, and its answer arrives once the app is back.
+        LifecycleStartEffect(recognizer) { onStopOrDispose { recognizer.stopListening() } }
+        val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission(), recognizer::onPermissionResult)
         return remember(recognizer, permission) {
             object : VoiceSearchSession {
                 override fun start() {
                     val granted = appContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                    if (granted) recognizer.listen() else permission.launch(Manifest.permission.RECORD_AUDIO)
+                    recognizer.start(granted) { permission.launch(Manifest.permission.RECORD_AUDIO) }
                 }
 
                 override fun cancel() = recognizer.cancel()
@@ -58,11 +60,12 @@ class AndroidVoiceSearch(context: Context) : VoiceSearch {
  * recogniser hands callbacks it had already queued for a cancelled attempt to whatever listener
  * is current when they dispatch, so a quick cancel-and-press-again could end the new attempt
  * with the old one's result or error; a destroyed recogniser drops them. Starting is reported
- * from [listen] so the pane owns Back and refuses another start immediately. Only the active
- * attempt's `onReadyForSpeech` reports Listening, when the user can begin speaking. A cancel
- * reports [VoiceSearchOutcome.Cancelled] itself — `SpeechRecognizer.cancel`
- * calls nothing back; leaving the composition, or the app going to the background, mid-session
- * is a cancel too, so the pane never keeps an active phase no recogniser backs.
+ * from [start], before any microphone prompt, so the pane owns Back, refuses another start and
+ * cancels the attempt when something covers it, prompt or not. Only the active attempt's
+ * `onReadyForSpeech` reports Listening, when the user can begin speaking. A cancel reports
+ * [VoiceSearchOutcome.Cancelled] itself — `SpeechRecognizer.cancel` calls nothing back; leaving
+ * the composition, or the app going to the background with the microphone open, is a cancel too,
+ * so the pane never keeps an active phase no recogniser or prompt backs.
  */
 private class RecognizerSession(
     private val context: Context,
@@ -70,18 +73,43 @@ private class RecognizerSession(
 ) {
     private var active: Attempt? = null
 
-    fun listen() {
-        if (active != null) return
+    /** Starting was reported and the microphone prompt is up: its answer decides what follows. */
+    private var awaitingPermission = false
+
+    fun start(granted: Boolean, askPermission: () -> Unit) {
+        if (active != null || awaitingPermission) return
+        onEvent(VoiceSearchEvent.Starting)
+        if (granted) {
+            listen()
+        } else {
+            awaitingPermission = true
+            askPermission()
+        }
+    }
+
+    /** The prompt's answer, dropped when the attempt was cancelled while it was up. */
+    fun onPermissionResult(granted: Boolean) {
+        if (!awaitingPermission) return
+        awaitingPermission = false
+        if (granted) listen() else onEvent(VoiceSearchEvent.Done(VoiceSearchOutcome.Failed(VoiceSearchFailure.Permission)))
+    }
+
+    private fun listen() {
         val attempt = Attempt(SpeechRecognizer.createSpeechRecognizer(context))
         active = attempt
-        onEvent(VoiceSearchEvent.Starting)
         attempt.recognizer.startListening(listenIntent(context.packageName))
     }
 
     fun cancel() {
-        val attempt = active ?: return
-        end(attempt)
+        if (active == null && !awaitingPermission) return
+        awaitingPermission = false
+        active?.let(::end)
         onEvent(VoiceSearchEvent.Done(VoiceSearchOutcome.Cancelled))
+    }
+
+    /** The app went to the background: an open microphone closes; a prompt keeps its answer coming. */
+    fun stopListening() {
+        if (active != null) cancel()
     }
 
     private fun end(attempt: Attempt) {

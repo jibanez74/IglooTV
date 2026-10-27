@@ -22,12 +22,14 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.FakeVoiceSearch
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.PagedState
+import com.igloo.blindpenguincoder.inertSearchActions
 import com.igloo.blindpenguincoder.testSearchState
 import org.junit.Rule
 import org.junit.Test
@@ -52,6 +54,7 @@ class SearchPaneAccessibilityTest {
 
     private var searchState by mutableStateOf(testSearchState())
     private var likes by mutableStateOf(TrackLikesUiState(likedIds = emptySet()))
+    private val voiceSearch = FakeVoiceSearch()
 
     private fun setContent(initial: SearchUiState = testSearchState()) {
         searchState = initial
@@ -60,6 +63,13 @@ class SearchPaneAccessibilityTest {
             IglooTheme {
                 TestIglooApp(
                     search = searchState,
+                    // An attempt's notice reaches the pane as the view model writes it, with its Done.
+                    searchActions = inertSearchActions.copy(
+                        onVoiceSearch = { event ->
+                            if (event is VoiceSearchEvent.Done) searchState = searchState.copy(voiceNotice = event.outcome.toNotice())
+                        },
+                    ),
+                    voiceSearch = voiceSearch,
                     trackLikes = likes,
                     onAlbumSelected = {},
                     onMusicianSelected = {},
@@ -198,7 +208,10 @@ class SearchPaneAccessibilityTest {
         likes = TrackLikesUiState(likedIds = emptySet(), notice = "Couldn't update like status: Server down.")
         composeRule.waitForIdle()
 
-        searchState = searchState.copy(voiceNotice = "Didn't catch that. Try again.")
+        composeRule.runOnUiThread {
+            voiceSearch.deliver(VoiceSearchEvent.Starting)
+            voiceSearch.deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.NoMatch))
+        }
         composeRule.waitForIdle()
 
         node("search_notice")

@@ -74,7 +74,6 @@ import com.igloo.blindpenguincoder.feature.shared.loadedItems
 import com.igloo.blindpenguincoder.feature.shared.paneCardlessAnchor
 import com.igloo.blindpenguincoder.feature.shared.paneCountLine
 import com.igloo.blindpenguincoder.feature.shared.showingCountLine
-import kotlinx.coroutines.flow.first
 
 /**
  * The Search pane (docs/design-system.md section 11.6): a heading with the result count, a
@@ -106,7 +105,7 @@ fun SearchScreen(
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
     returnRequester: FocusRequester,
-    /** A details page, a player or the sign-out dialog sits over the pane. */
+    /** A details page, a player, the sign-out dialog or the expanded navigation rail sits over the pane. */
     covered: Boolean,
     onMovieSelected: ((Long) -> Unit)?,
     onShowSelected: ((Long) -> Unit)?,
@@ -141,24 +140,30 @@ fun SearchScreen(
         pendingContentHandoff = false
     }
     val landOnResults = { pendingContentHandoff = true }
+    // Which of the two header notices arrived last; each clears on its own terms.
+    var likeNoticeIsNewer by remember { mutableStateOf(false) }
     val voiceSession = voiceSearch.rememberSession { event ->
         actions.onVoiceSearch(event)
-        if (event is VoiceSearchEvent.Done && event.outcome is VoiceSearchOutcome.Recognized) landOnResults()
+        if (event is VoiceSearchEvent.Done) {
+            // Per attempt, not per notice text: a second identical failure is still the newer line.
+            likeNoticeIsNewer = false
+            if (event.outcome is VoiceSearchOutcome.Recognized) landOnResults()
+        }
     }
     // Back during startup or listening cancels the attempt, as the button's second press does.
-    BackHandler(enabled = state.voiceActive) { voiceSession.cancel() }
-    // Clear or a keystroke during an attempt is the user's own query: the microphone closes first,
-    // so nothing it hears afterwards can write over the edit.
+    // Not under a cover: Back there is the cover's, and the cover cancels the attempt anyway.
+    BackHandler(enabled = state.voiceActive && !covered) { voiceSession.cancel() }
+    // Clear, a keystroke or moving into the field during an attempt makes the field the user's
+    // own: the microphone closes first, so nothing it hears afterwards can write over their text
+    // or move the keyboard's cursor.
     val cancelVoiceSearch = { if (state.voiceActive) voiceSession.cancel() }
     // The row whose More menu is open; the menu is the pane's last child, over everything.
     var trackMenu by remember(tab) { mutableStateOf<Pair<TrackRowUi, Rect>?>(null) }
-    // So does anything opening over the pane, a track's More menu included: a phrase heard under
-    // it would hand focus to results nobody can see, or pull it out of the menu.
+    // So does anything opening over the pane, the expanded rail and a track's More menu
+    // included: a phrase heard under it would hand focus to results nobody can see, or pull it
+    // out of the rail or the menu.
     val menuOpen = trackMenu != null
     LaunchedEffect(covered, menuOpen) { if (covered || menuOpen) cancelVoiceSearch() }
-    // Which of the two header notices arrived last; each clears on its own terms.
-    var likeNoticeIsNewer by remember { mutableStateOf(false) }
-    LaunchedEffect(state.voiceNotice) { if (state.voiceNotice != null) likeNoticeIsNewer = false }
     LaunchedEffect(likes.notice) { if (likes.notice != null) likeNoticeIsNewer = true }
     LaunchedEffect(state.searched) { memory.onSearched(state.searched) }
     // The count line is a polite live region that re-announces on every change, so a search is
@@ -199,20 +204,13 @@ fun SearchScreen(
                 // Composed only where a recogniser answers (section 11.6): on a Fire TV there
                 // is none, and a button that cannot do what it says is the section 12 failure.
                 if (voiceShown) {
+                    val label = voiceButtonLabel(state.voicePhase)
                     IglooButton(
-                        text = when (state.voicePhase) {
-                            VoiceSearchPhase.Idle -> VOICE_LABEL
-                            VoiceSearchPhase.Starting -> VOICE_STARTING_LABEL
-                            VoiceSearchPhase.Listening -> VOICE_LISTENING_LABEL
-                        },
-                        labelVariants = listOf(VOICE_LABEL, VOICE_STARTING_LABEL, VOICE_LISTENING_LABEL),
+                        text = label.text,
+                        labelVariants = VOICE_BUTTON_TEXTS,
                         onClick = if (state.voiceActive) voiceSession::cancel else voiceSession::start,
                         variant = IglooButtonVariant.Ghost,
-                        semanticLabel = when (state.voicePhase) {
-                            VoiceSearchPhase.Idle -> "Search by voice"
-                            VoiceSearchPhase.Starting -> "Cancel voice search"
-                            VoiceSearchPhase.Listening -> "Stop listening"
-                        },
+                        semanticLabel = label.spoken,
                         modifier = Modifier
                             .testTag("search_voice")
                             .focusRequester(voiceRequester)
@@ -231,11 +229,12 @@ fun SearchScreen(
                     IglooButton(
                         text = "Clear",
                         onClick = {
-                            cancelVoiceSearch()
-                            actions.onClear()
                             // In the callback, not an effect: this button leaves with the text,
                             // and the field it hands focus to is still composed (section 9.3).
+                            // First, so the field taking focus closes the microphone before the
+                            // text goes.
                             fieldRequester.requestFocusSafely()
+                            actions.onClear()
                         },
                         variant = IglooButtonVariant.Ghost,
                         semanticLabel = "Clear the search",
@@ -280,7 +279,11 @@ fun SearchScreen(
                 leftFocusRequester = navigationRequester,
                 fieldModifier = Modifier
                     .withRequester(contentStartRequester.takeIf { prompt })
-                    .onFocusChanged { focusOwnership.onChromeFocusChanged(FIELD_FOCUS_KEY, it.isFocused) }
+                    .onFocusChanged {
+                        // Focus summons the keyboard: the field is the user's from here.
+                        if (it.isFocused) cancelVoiceSearch()
+                        focusOwnership.onChromeFocusChanged(FIELD_FOCUS_KEY, it.isFocused)
+                    }
                     .testTag("search_field"),
                 modifier = Modifier.insetHorizontally(contentInset),
             )
@@ -1013,12 +1016,21 @@ private const val PROMPT_COUNT_LINE = "Find anything in your library"
 private const val FIELD_LABEL = "Search movies, TV shows, albums, musicians and tracks"
 private const val FIELD_FOCUS_KEY = "search_field"
 private const val VOICE_FOCUS_KEY = "search_voice"
-private const val VOICE_LABEL = "Voice search"
-private const val VOICE_STARTING_LABEL = "Starting…"
 internal const val VOICE_STARTING_LINE = "Starting voice search…"
-private const val VOICE_LISTENING_LABEL = "Listening…"
 internal const val VOICE_LISTENING_LINE = "Listening… say a title, album, musician or track."
 private const val CLEAR_FOCUS_KEY = "search_clear"
+
+/** The voice button's label in one phase: what it shows, and the action a screen reader speaks. */
+private class VoiceButtonLabel(val text: String, val spoken: String)
+
+private fun voiceButtonLabel(phase: VoiceSearchPhase): VoiceButtonLabel = when (phase) {
+    VoiceSearchPhase.Idle -> VoiceButtonLabel("Voice search", "Search by voice")
+    VoiceSearchPhase.Starting -> VoiceButtonLabel("Starting…", "Cancel voice search")
+    VoiceSearchPhase.Listening -> VoiceButtonLabel("Listening…", "Stop listening")
+}
+
+/** Every text the button can show, so it keeps the widest one's size through the phases. */
+private val VOICE_BUTTON_TEXTS: List<String> = VoiceSearchPhase.entries.map { voiceButtonLabel(it).text }
 
 /** The chrome keys a content swap must not steal focus from: the tabs, the field, Voice search and Clear. */
 private val SEARCH_CHROME_FOCUS_KEYS: Set<String> =

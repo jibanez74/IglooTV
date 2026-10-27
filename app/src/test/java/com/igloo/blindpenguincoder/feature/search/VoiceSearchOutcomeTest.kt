@@ -46,6 +46,8 @@ class VoiceSearchOutcomeTest {
         assertEquals(VoiceSearchOutcome.Failed(VoiceSearchFailure.Permission), voiceSearchError(ERROR_INSUFFICIENT_PERMISSIONS))
         assertEquals(VoiceSearchOutcome.Failed(VoiceSearchFailure.Client), voiceSearchError(ERROR_CLIENT))
         assertEquals(VoiceSearchOutcome.Failed(VoiceSearchFailure.Client), voiceSearchError(ERROR_RECOGNIZER_BUSY))
+        assertEquals(VoiceSearchOutcome.Failed(VoiceSearchFailure.Language), voiceSearchError(ERROR_LANGUAGE_NOT_SUPPORTED))
+        assertEquals(VoiceSearchOutcome.Failed(VoiceSearchFailure.Language), voiceSearchError(ERROR_LANGUAGE_UNAVAILABLE))
     }
 
     @Test
@@ -75,6 +77,10 @@ class VoiceSearchOutcomeTest {
             VoiceSearchOutcome.Failed(VoiceSearchFailure.Audio).toNotice(),
         )
         assertEquals("Couldn't search by voice. Try again.", VoiceSearchOutcome.Failed(VoiceSearchFailure.Client).toNotice())
+        assertEquals(
+            "Couldn't search by voice: the speech service doesn't support this device's language.",
+            VoiceSearchOutcome.Failed(VoiceSearchFailure.Language).toNotice(),
+        )
         assertEquals(
             "Voice search needs the microphone. Allow it when asked, or in the device's app settings.",
             VoiceSearchOutcome.Failed(VoiceSearchFailure.Permission).toNotice(),

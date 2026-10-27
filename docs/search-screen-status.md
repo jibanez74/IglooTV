@@ -264,3 +264,26 @@ The updated debug build was installed on the Shield and reached the listening pr
 a fresh app launch. Cancellation specifically before readiness, immediate retry from that
 cancellation, speech capture at the prompt, and spoken TalkBack announcements still need a
 hands-on pass; the remote ADB check did not establish those behaviors.
+
+**Second review pass (2026-10-27).** A `/code-review` of the branch found nine gaps, all
+fixed. The expanded navigation rail now counts as covering the pane (`covered` includes the
+shell's scrim), so moving Left into the rail cancels an attempt instead of letting a heard phrase
+pull focus out of the rail, and Back there is the rail's again. Focus entering the field cancels
+too: it summons the keyboard, and partial guesses were rewriting the text under its cursor.
+`Starting` is now reported before the microphone prompt, so the prompt is part of the attempt:
+Back, the rail, an overlay or a keystroke cancel it, an answer after a cancel starts nothing, and
+a denial is `Starting → Done`. The view model drops any `Done` with no attempt active, so an early
+denial no longer restarts a pending debounce. The header's newer-notice rule now runs per attempt,
+not per notice text, so the same failure twice still replaces a newer like failure. Error codes 12
+and 13 say the device's language is unsupported instead of "Try again". The voice button's labels
+come from one phase-to-label mapping, and an unused import is gone.
+
+Validation: `:app:testDebugUnitTest` **1,163/1,163** and `lintDebug` clean; the full
+`connectedDebugAndroidTest` run passed **759/759** on the Google TV API 34 emulator (64 in the
+search package, including new rail, field-focus and repeated-notice cases). On the Shield:
+Left into the rail while listening cancelled the recogniser (`onCancel` in its log) with no
+notice, and Back then collapsed the rail; Down into the field cancelled it; Back and Home while
+listening still cancelled. With the microphone revoked, the pane showed "Starting…" behind the
+prompt. "Deny and don't ask again" gave the microphone notice, a second press returned at once
+with the same notice, and "While using the app" went straight to Listening. A spoken phrase was
+not captured (no one spoke at the TV).

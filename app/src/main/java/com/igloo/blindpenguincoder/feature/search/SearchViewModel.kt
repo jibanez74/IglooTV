@@ -218,10 +218,10 @@ class SearchViewModel(
     private var tabDebounceJob: Job? = null
 
     /**
-     * The field's text when a voice attempt started, put back if it hears nothing.
-     * A keystroke or Clear drops it with the active phase: the user's own edit supersedes the
-     * session. The pane cancels the recogniser too; this keeps an outcome that still arrives
-     * from putting back text the user has since replaced.
+     * The field's text when a voice attempt started, put back if it hears nothing; null exactly
+     * while no attempt is active. A keystroke or Clear drops it with the active phase: the user's
+     * own edit supersedes the session. The pane cancels the recogniser too; this keeps an outcome
+     * that still arrives from touching text the user has since replaced.
      */
     private var queryBeforeVoice: String? = null
 
@@ -272,8 +272,9 @@ class SearchViewModel(
      * searching — they are not the user's words yet. A recognised phrase replaces the field's
      * text — and any query the debounce has not sent — and goes out on [searchNow]'s rules.
      * Anything else puts back the text the session started over: a cancel says nothing, and no
-     * match or a failure is one line in the header. After a keystroke or Clear has ended the
-     * session, a late outcome puts back the field's current text instead, and partials are dropped.
+     * match or a failure is one line in the header. With no attempt active — a keystroke or Clear
+     * ended it — readiness, partials and a late outcome are all dropped: the field, its pending
+     * search and the header are the user's.
      */
     fun onVoiceSearch(event: VoiceSearchEvent) {
         when (event) {
@@ -292,9 +293,9 @@ class SearchViewModel(
             }
 
             is VoiceSearchEvent.Done -> {
+                val restored = queryBeforeVoice ?: return
                 val outcome = event.outcome
                 val heard = (outcome as? VoiceSearchOutcome.Recognized)?.text
-                val restored = queryBeforeVoice ?: _uiState.value.query
                 queryBeforeVoice = null
                 _uiState.update {
                     it.copy(

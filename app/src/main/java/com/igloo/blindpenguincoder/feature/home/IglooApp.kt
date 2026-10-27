@@ -1080,7 +1080,8 @@ private fun IglooShell(
                 navigationRequesters = navigationRequesters,
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 signOutConfirming = signOut.confirming,
-                covered = hiddenFromAccessibility,
+                // The expanded rail scrims the pane as an overlay would: focus has left it.
+                covered = hiddenFromAccessibility || scrimmed,
                 // The pane fills the panel and applies no gutter of its own. It used to box every
                 // screen into 752x486dp, which is where the dead margins came from. The gutter is
                 // handed down as contentInset instead, so each section applies the inset it owes
@@ -1176,7 +1177,7 @@ private fun ContentPane(
     navigationRequesters: Map<IglooDestination, FocusRequester>,
     spokenAccessibilityEnabled: Boolean,
     signOutConfirming: Boolean,
-    /** A details page, a player or the sign-out dialog sits over the pane. */
+    /** A details page, a player, the sign-out dialog or the expanded navigation rail sits over the pane. */
     covered: Boolean,
     modifier: Modifier = Modifier,
 ) {
