@@ -145,17 +145,17 @@ fun SearchScreen(
         actions.onVoiceSearch(event)
         if (event is VoiceSearchEvent.Done && event.outcome is VoiceSearchOutcome.Recognized) landOnResults()
     }
-    // Back while the microphone is open stops it, as the button's second press does.
-    BackHandler(enabled = state.voiceListening) { voiceSession.cancel() }
-    // Clear or a keystroke while it listens is the user's own query: the microphone closes first,
+    // Back during startup or listening cancels the attempt, as the button's second press does.
+    BackHandler(enabled = state.voiceActive) { voiceSession.cancel() }
+    // Clear or a keystroke during an attempt is the user's own query: the microphone closes first,
     // so nothing it hears afterwards can write over the edit.
-    val stopListening = { if (state.voiceListening) voiceSession.cancel() }
+    val cancelVoiceSearch = { if (state.voiceActive) voiceSession.cancel() }
     // The row whose More menu is open; the menu is the pane's last child, over everything.
     var trackMenu by remember(tab) { mutableStateOf<Pair<TrackRowUi, Rect>?>(null) }
     // So does anything opening over the pane, a track's More menu included: a phrase heard under
     // it would hand focus to results nobody can see, or pull it out of the menu.
     val menuOpen = trackMenu != null
-    LaunchedEffect(covered, menuOpen) { if (covered || menuOpen) stopListening() }
+    LaunchedEffect(covered, menuOpen) { if (covered || menuOpen) cancelVoiceSearch() }
     // Which of the two header notices arrived last; each clears on its own terms.
     var likeNoticeIsNewer by remember { mutableStateOf(false) }
     LaunchedEffect(state.voiceNotice) { if (state.voiceNotice != null) likeNoticeIsNewer = false }
@@ -183,12 +183,13 @@ fun SearchScreen(
                 countText = countLine(state, content),
                 countDescription = countDescription,
                 countTag = "search_count",
-                // The line under the heading is the voice session's while it listens — the one
-                // polite live region a screen reader hears "Listening" from — then the newer of
+                // The line under the heading reports startup, then readiness, in one polite
+                // live region. Once the attempt ends it shows the newer of
                 // the attempt's notice (if it produced nothing) and a like failure; the older one
                 // resurfaces when the newer clears.
                 notice = when {
-                    state.voiceListening -> VOICE_LISTENING_LINE
+                    state.voicePhase == VoiceSearchPhase.Starting -> VOICE_STARTING_LINE
+                    state.voicePhase == VoiceSearchPhase.Listening -> VOICE_LISTENING_LINE
                     likeNoticeIsNewer -> likes.notice ?: state.voiceNotice
                     else -> state.voiceNotice ?: likes.notice
                 },
@@ -198,13 +199,20 @@ fun SearchScreen(
                 // Composed only where a recogniser answers (section 11.6): on a Fire TV there
                 // is none, and a button that cannot do what it says is the section 12 failure.
                 if (voiceShown) {
-                    val listening = state.voiceListening
                     IglooButton(
-                        text = if (listening) VOICE_LISTENING_LABEL else VOICE_LABEL,
-                        labelVariants = listOf(VOICE_LABEL, VOICE_LISTENING_LABEL),
-                        onClick = if (listening) voiceSession::cancel else voiceSession::start,
+                        text = when (state.voicePhase) {
+                            VoiceSearchPhase.Idle -> VOICE_LABEL
+                            VoiceSearchPhase.Starting -> VOICE_STARTING_LABEL
+                            VoiceSearchPhase.Listening -> VOICE_LISTENING_LABEL
+                        },
+                        labelVariants = listOf(VOICE_LABEL, VOICE_STARTING_LABEL, VOICE_LISTENING_LABEL),
+                        onClick = if (state.voiceActive) voiceSession::cancel else voiceSession::start,
                         variant = IglooButtonVariant.Ghost,
-                        semanticLabel = if (listening) "Stop listening" else "Search by voice",
+                        semanticLabel = when (state.voicePhase) {
+                            VoiceSearchPhase.Idle -> "Search by voice"
+                            VoiceSearchPhase.Starting -> "Cancel voice search"
+                            VoiceSearchPhase.Listening -> "Stop listening"
+                        },
                         modifier = Modifier
                             .testTag("search_voice")
                             .focusRequester(voiceRequester)
@@ -223,7 +231,7 @@ fun SearchScreen(
                     IglooButton(
                         text = "Clear",
                         onClick = {
-                            stopListening()
+                            cancelVoiceSearch()
                             actions.onClear()
                             // In the callback, not an effect: this button leaves with the text,
                             // and the field it hands focus to is still composed (section 9.3).
@@ -248,7 +256,7 @@ fun SearchScreen(
             IglooTextField(
                 value = state.query,
                 onValueChange = { text ->
-                    if (text != state.query) stopListening()
+                    if (text != state.query) cancelVoiceSearch()
                     actions.onQueryChange(text)
                 },
                 // Spoken only: the heading names the pane, and the prompt below is decorative,
@@ -1006,6 +1014,8 @@ private const val FIELD_LABEL = "Search movies, TV shows, albums, musicians and 
 private const val FIELD_FOCUS_KEY = "search_field"
 private const val VOICE_FOCUS_KEY = "search_voice"
 private const val VOICE_LABEL = "Voice search"
+private const val VOICE_STARTING_LABEL = "Starting…"
+internal const val VOICE_STARTING_LINE = "Starting voice search…"
 private const val VOICE_LISTENING_LABEL = "Listening…"
 internal const val VOICE_LISTENING_LINE = "Listening… say a title, album, musician or track."
 private const val CLEAR_FOCUS_KEY = "search_clear"

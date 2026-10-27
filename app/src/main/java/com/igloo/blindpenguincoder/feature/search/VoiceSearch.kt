@@ -30,12 +30,18 @@ interface VoiceSearchSession {
     /** Asks for the microphone the first time, then listens; reports through the session's events. */
     fun start()
 
-    /** Stops listening and reports [VoiceSearchOutcome.Cancelled]. */
+    /** Cancels startup or listening and reports [VoiceSearchOutcome.Cancelled]. */
     fun cancel()
 }
 
-/** What a listening session reports, in order: listening, any partial phrases, then one outcome. */
+/**
+ * An attempt reports Starting → Listening → partial phrases → Done. It can finish before
+ * readiness (or even before Starting when permission is denied), and partials are optional.
+ */
 sealed interface VoiceSearchEvent {
+    /** The attempt is active, but the microphone is not ready for speech yet. */
+    data object Starting : VoiceSearchEvent
+
     /** The microphone is open: the user may speak. */
     data object Listening : VoiceSearchEvent
 

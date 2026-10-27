@@ -94,26 +94,34 @@ internal class FakeVoiceSearch(override val available: Boolean = true) : VoiceSe
     var cancels = 0
         private set
     private var onEvent: ((VoiceSearchEvent) -> Unit)? = null
-    private var listening = false
+    private var active = false
 
     @Composable
     override fun rememberSession(onEvent: (VoiceSearchEvent) -> Unit): VoiceSearchSession {
         SideEffect { this.onEvent = onEvent }
         return remember {
             object : VoiceSearchSession {
-                override fun start() { starts += 1 }
+                override fun start() {
+                    if (active) return
+                    starts += 1
+                    deliver(VoiceSearchEvent.Starting)
+                }
 
-                // As the real session: a cancel while listening reports itself.
+                // As the real session: a cancel during startup or listening reports itself.
                 override fun cancel() {
                     cancels += 1
-                    if (listening) deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.Cancelled))
+                    if (active) deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.Cancelled))
                 }
             }
         }
     }
 
     fun deliver(event: VoiceSearchEvent) {
-        listening = event is VoiceSearchEvent.Listening || (listening && event is VoiceSearchEvent.Partial)
+        active = when (event) {
+            VoiceSearchEvent.Starting -> true
+            VoiceSearchEvent.Listening, is VoiceSearchEvent.Partial -> active
+            is VoiceSearchEvent.Done -> false
+        }
         checkNotNull(onEvent) { "no Search pane has asked for a session" }(event)
     }
 }

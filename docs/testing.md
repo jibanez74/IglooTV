@@ -147,10 +147,13 @@ because it can disturb the accessibility service. On TV, important spoken conten
 reachable through input focus or deliberate reading stops.
 
 Voice search is the same shape: instrumentation cannot speak into the recogniser, so the Search
-suites drive the pane through `FakeVoiceSearch` (`SearchTestFixtures.kt`) — listening, partial
-guesses, a recognised phrase, a cancel, a no-match — and the real round trip (press, speak into
-the remote, results) is a manual check on the Shield. The emulator proves the button composes
-where a recogniser answers; the no-recogniser layout test proves it is absent when
+suites drive the pane through `FakeVoiceSearch` (`SearchTestFixtures.kt`) — starting, delayed
+readiness, partial guesses, a recognised phrase, a cancel, a no-match — including completion
+before readiness and cancellation during both active phases. Startup must display and announce
+only "Starting voice search…"; the speak prompt appears after readiness. The real round trip
+(cold start, wait for the listening prompt, speak into the remote, results) is a manual check
+on the Shield, along with cancellation before readiness and immediate retry. The emulator
+proves the button composes where a recogniser answers; the no-recogniser layout test proves it is absent when
 `VoiceSearch.available` is false, but not that a Fire TV reports false — that device check is
 still pending.
 

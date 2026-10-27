@@ -244,3 +244,23 @@ service does send a late CANCELLED/GRPC error after a cancel. `FakeVoiceSearch.c
 reports `Cancelled` as the real session does, so the cancel tests prove the field comes back.
 On the Shield, rapid press/cancel/press ended cleanly in "Didn't catch that", and Clear while
 listening closed the microphone and kept the field empty. The Fire TV was still offline.
+
+**Readiness prompting (2026-10-27).** Recogniser startup now reports `Starting`, with a
+"Starting…" button, the accessible action "Cancel voice search", and "Starting voice search…"
+in the header's polite live region. Only the active attempt's `onReadyForSpeech` reports
+`Listening` and displays the speak prompt. The usual order is `Starting → Listening → Done`,
+but completion can precede readiness. Both active phases own Back and cancel on a second
+press, typing, Clear or an overlay. Startup captures the query and suspends its debounce;
+readiness only advances the phase, and partial guesses are accepted only while listening.
+
+Validation: `:app:testDebugUnitTest` passed **1,161/1,161**, including **37/37** in
+`SearchViewModelTest`; `:app:compileDebugAndroidTestKotlin` passed. The focused
+`SearchPaneBehaviorTest` and `SearchPaneAccessibilityTest` run passed **60/60** on the
+Google TV API 34 1080p emulator. Coverage includes delayed readiness, debounce suspension,
+query restoration, early completion, ignored late readiness, startup cancellation and retry,
+edit/overlay cancellation in both phases, and the startup-to-listening live-region transition.
+
+The updated debug build was installed on the Shield and reached the listening prompt after
+a fresh app launch. Cancellation specifically before readiness, immediate retry from that
+cancellation, speech capture at the prompt, and spoken TalkBack announcements still need a
+hands-on pass; the remote ADB check did not establish those behaviors.

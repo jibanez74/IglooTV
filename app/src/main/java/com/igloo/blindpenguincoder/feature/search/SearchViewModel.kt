@@ -37,6 +37,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+enum class VoiceSearchPhase { Idle, Starting, Listening }
+
 /** Everything the Search pane draws. */
 data class SearchUiState(
     /** The field's text, exactly as typed. */
@@ -51,14 +53,16 @@ data class SearchUiState(
     val albums: PagedState<AlbumCardUi> = PagedState(),
     val musicians: PagedState<MusicianCardUi> = PagedState(),
     val tracks: PagedState<TracksEntry> = PagedState(),
-    /** The microphone is open for a voice search; the field shows the recogniser's partial guesses. */
-    val voiceListening: Boolean = false,
+    /** Startup is cancellable; only Listening invites speech and accepts partial guesses. */
+    val voicePhase: VoiceSearchPhase = VoiceSearchPhase.Idle,
     /**
      * The last voice attempt that produced no query, worded for the header's notice slot; the
      * next keystroke, Clear or attempt replaces it.
      */
     val voiceNotice: String? = null,
 ) {
+    val voiceActive: Boolean get() = voicePhase != VoiceSearchPhase.Idle
+
     /** The selected tab's list. */
     val selected: PagedState<*>
         get() = when (tab) {
@@ -77,7 +81,7 @@ data class SearchActions(
     /** The keyboard's Search action: the query goes out now, not after the debounce. */
     val onSearchNow: () -> Unit,
     val onClear: () -> Unit,
-    /** The recogniser's reports: listening, partial guesses, then a phrase sent now, a notice, or silence. */
+    /** Starting, readiness, partial guesses, then a phrase sent now, a notice, or silence. */
     val onVoiceSearch: (VoiceSearchEvent) -> Unit,
     /** A tab taking focus — debounced by the view model, because a slide crosses every tab. */
     val onSelectTab: (SearchTab) -> Unit,
@@ -214,8 +218,8 @@ class SearchViewModel(
     private var tabDebounceJob: Job? = null
 
     /**
-     * The field's text when a voice session opened the microphone, put back if it hears nothing.
-     * A keystroke or Clear drops it with the listening state: the user's own edit supersedes the
+     * The field's text when a voice attempt started, put back if it hears nothing.
+     * A keystroke or Clear drops it with the active phase: the user's own edit supersedes the
      * session. The pane cancels the recogniser too; this keeps an outcome that still arrives
      * from putting back text the user has since replaced.
      */
@@ -229,7 +233,7 @@ class SearchViewModel(
      */
     fun onQueryChange(text: String) {
         queryBeforeVoice = null
-        _uiState.update { it.copy(query = text, voiceListening = false, voiceNotice = null) }
+        _uiState.update { it.copy(query = text, voicePhase = VoiceSearchPhase.Idle, voiceNotice = null) }
         scheduleSearch(text)
     }
 
@@ -273,13 +277,17 @@ class SearchViewModel(
      */
     fun onVoiceSearch(event: VoiceSearchEvent) {
         when (event) {
-            VoiceSearchEvent.Listening -> {
+            VoiceSearchEvent.Starting -> if (!_uiState.value.voiceActive) {
                 debounceJob?.cancel()
                 queryBeforeVoice = _uiState.value.query
-                _uiState.update { it.copy(voiceListening = true, voiceNotice = null) }
+                _uiState.update { it.copy(voicePhase = VoiceSearchPhase.Starting, voiceNotice = null) }
             }
 
-            is VoiceSearchEvent.Partial -> if (_uiState.value.voiceListening) {
+            VoiceSearchEvent.Listening -> if (_uiState.value.voicePhase == VoiceSearchPhase.Starting) {
+                _uiState.update { it.copy(voicePhase = VoiceSearchPhase.Listening) }
+            }
+
+            is VoiceSearchEvent.Partial -> if (_uiState.value.voicePhase == VoiceSearchPhase.Listening) {
                 _uiState.update { it.copy(query = event.text) }
             }
 
@@ -290,7 +298,7 @@ class SearchViewModel(
                 queryBeforeVoice = null
                 _uiState.update {
                     it.copy(
-                        voiceListening = false,
+                        voicePhase = VoiceSearchPhase.Idle,
                         voiceNotice = outcome.toNotice(),
                         query = heard ?: restored,
                     )
@@ -306,7 +314,7 @@ class SearchViewModel(
     fun clear() {
         debounceJob?.cancel()
         queryBeforeVoice = null
-        _uiState.update { it.copy(query = "", voiceListening = false, voiceNotice = null) }
+        _uiState.update { it.copy(query = "", voicePhase = VoiceSearchPhase.Idle, voiceNotice = null) }
         clearResults()
     }
 

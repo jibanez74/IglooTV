@@ -224,6 +224,86 @@ class SearchViewModelTest {
 
     // --- voice ---
 
+    @Test
+    fun `startup suspends debounce clears notice and ignores guesses until ready`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+        model.onQueryChange("original")
+        model.onVoiceSearch(ended(VoiceSearchOutcome.NoMatch))
+        assertEquals("Didn't catch that. Try again.", model.uiState.value.voiceNotice)
+
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
+        assertEquals(VoiceSearchPhase.Starting, model.uiState.value.voicePhase)
+        assertTrue(model.uiState.value.voiceActive)
+        assertNull(model.uiState.value.voiceNotice)
+        model.onVoiceSearch(VoiceSearchEvent.Partial("too early"))
+        advanceTimeBy(SEARCH_DEBOUNCE_MS * 3)
+        assertEquals("original", model.uiState.value.query)
+        assertTrue(http.requests.isEmpty())
+
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        assertEquals(VoiceSearchPhase.Listening, model.uiState.value.voicePhase)
+        model.onVoiceSearch(VoiceSearchEvent.Partial("new guess"))
+        // Repeated callbacks must not overwrite the snapshot with a partial guess.
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
+        model.onVoiceSearch(ended(VoiceSearchOutcome.Cancelled))
+        assertEquals("original", model.uiState.value.query)
+        advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
+        assertEquals(listOf("/api/search?q=original"), http.requests)
+    }
+
+    @Test
+    fun `completion before readiness restores the query and readiness cannot revive it`() = runTest {
+        for (outcome in listOf(VoiceSearchOutcome.Cancelled, VoiceSearchOutcome.Failed(VoiceSearchFailure.Audio))) {
+            val http = routedHttp()
+            val model = model(http)
+            model.onQueryChange("original")
+            model.onVoiceSearch(VoiceSearchEvent.Starting)
+            model.onVoiceSearch(ended(outcome))
+            model.onVoiceSearch(VoiceSearchEvent.Listening)
+            model.onVoiceSearch(VoiceSearchEvent.Partial("late"))
+
+            assertEquals(VoiceSearchPhase.Idle, model.uiState.value.voicePhase)
+            assertEquals(false, model.uiState.value.voiceActive)
+            assertEquals("original", model.uiState.value.query)
+            assertEquals(outcome.toNotice(), model.uiState.value.voiceNotice)
+            advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
+            assertEquals(listOf("/api/search?q=original"), http.requests)
+        }
+    }
+
+    @Test
+    fun `a final result before readiness submits immediately`() = runTest {
+        val http = routedHttp()
+        val model = model(http)
+        model.onQueryChange("original")
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
+        model.onVoiceSearch(heard("help"))
+        model.onVoiceSearch(VoiceSearchEvent.Listening)
+
+        assertEquals(VoiceSearchPhase.Idle, model.uiState.value.voicePhase)
+        assertEquals("help", model.uiState.value.query)
+        assertEquals(listOf("/api/search?q=help"), http.requests)
+    }
+
+    @Test
+    fun `typing or Clear during startup ends it and drops late readiness and guesses`() = runTest {
+        for (clear in listOf(false, true)) {
+            val model = model(routedHttp())
+            model.onQueryChange("original")
+            model.onVoiceSearch(VoiceSearchEvent.Starting)
+            if (clear) model.clear() else model.onQueryChange("edited")
+            model.onVoiceSearch(VoiceSearchEvent.Listening)
+            model.onVoiceSearch(VoiceSearchEvent.Partial("late"))
+            model.onVoiceSearch(ended(VoiceSearchOutcome.Cancelled))
+
+            assertEquals(VoiceSearchPhase.Idle, model.uiState.value.voicePhase)
+            assertEquals(if (clear) "" else "edited", model.uiState.value.query)
+        }
+    }
+
+
     private fun heard(text: String) = VoiceSearchEvent.Done(VoiceSearchOutcome.Recognized(text))
     private fun ended(outcome: VoiceSearchOutcome) = VoiceSearchEvent.Done(outcome)
 
@@ -232,12 +312,13 @@ class SearchViewModelTest {
         val http = routedHttp()
         val model = model(http)
 
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
-        assertTrue(model.uiState.value.voiceListening)
+        assertEquals(VoiceSearchPhase.Listening, model.uiState.value.voicePhase)
         model.onVoiceSearch(heard("help"))
 
         assertEquals("help", model.uiState.value.query)
-        assertEquals(false, model.uiState.value.voiceListening)
+        assertEquals(VoiceSearchPhase.Idle, model.uiState.value.voicePhase)
         assertNull(model.uiState.value.voiceNotice)
         assertEquals(listOf("/api/search?q=help"), http.requests)
         advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
@@ -249,6 +330,7 @@ class SearchViewModelTest {
         val http = routedHttp()
         val model = model(http)
 
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
         model.onVoiceSearch(VoiceSearchEvent.Partial("he"))
         model.onVoiceSearch(VoiceSearchEvent.Partial("help"))
@@ -264,6 +346,7 @@ class SearchViewModelTest {
         val model = model(http)
 
         model.onQueryChange("he")
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
         model.onVoiceSearch(heard("help"))
         advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
@@ -277,6 +360,7 @@ class SearchViewModelTest {
         val model = model(http)
         type(model, "help")
 
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
         model.onVoiceSearch(heard("help"))
 
@@ -290,6 +374,7 @@ class SearchViewModelTest {
         val model = model(http)
         type(model, "help")
 
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
         model.onVoiceSearch(VoiceSearchEvent.Partial("hel"))
         model.onVoiceSearch(ended(VoiceSearchOutcome.NoMatch))
@@ -297,6 +382,7 @@ class SearchViewModelTest {
         assertEquals("Didn't catch that. Try again.", model.uiState.value.voiceNotice)
         assertEquals(1, http.requests.size)
 
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
         model.onVoiceSearch(ended(VoiceSearchOutcome.Failed(VoiceSearchFailure.Network)))
         assertEquals("Couldn't search by voice: no network connection.", model.uiState.value.voiceNotice)
@@ -311,6 +397,7 @@ class SearchViewModelTest {
         val model = model(http)
         model.onQueryChange("he")
 
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
         advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
         assertTrue(http.requests.isEmpty())
@@ -327,9 +414,11 @@ class SearchViewModelTest {
         val http = routedHttp()
         val model = model(http)
         type(model, "help")
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
         model.onVoiceSearch(ended(VoiceSearchOutcome.NoMatch))
 
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
         model.onVoiceSearch(VoiceSearchEvent.Partial("casino"))
         model.onVoiceSearch(ended(VoiceSearchOutcome.Cancelled))
@@ -342,6 +431,7 @@ class SearchViewModelTest {
     @Test
     fun `Clear drops a voice notice with the query`() = runTest {
         val model = model(routedHttp())
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
         model.onVoiceSearch(ended(VoiceSearchOutcome.NoMatch))
 
@@ -355,10 +445,11 @@ class SearchViewModelTest {
         val http = routedHttp()
         val model = model(http)
         type(model, "help")
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
 
         model.clear()
-        assertEquals(false, model.uiState.value.voiceListening)
+        assertEquals(VoiceSearchPhase.Idle, model.uiState.value.voicePhase)
         model.onVoiceSearch(ended(VoiceSearchOutcome.NoMatch))
         advanceTimeBy(SEARCH_DEBOUNCE_MS + 1)
 
@@ -369,6 +460,7 @@ class SearchViewModelTest {
     @Test
     fun `a keystroke while listening ends the session and later partials are dropped`() = runTest {
         val model = model(routedHttp())
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
         model.onVoiceSearch(VoiceSearchEvent.Partial("cas"))
 
@@ -376,7 +468,7 @@ class SearchViewModelTest {
         model.onVoiceSearch(VoiceSearchEvent.Partial("casino"))
 
         assertEquals("abc", model.uiState.value.query)
-        assertEquals(false, model.uiState.value.voiceListening)
+        assertEquals(VoiceSearchPhase.Idle, model.uiState.value.voicePhase)
     }
 
     @Test
@@ -384,6 +476,7 @@ class SearchViewModelTest {
         val http = routedHttp()
         val model = model(http)
         type(model, "help")
+        model.onVoiceSearch(VoiceSearchEvent.Starting)
         model.onVoiceSearch(VoiceSearchEvent.Listening)
 
         model.onQueryChange("abc")

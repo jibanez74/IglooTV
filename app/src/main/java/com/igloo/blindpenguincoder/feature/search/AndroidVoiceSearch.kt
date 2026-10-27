@@ -57,12 +57,12 @@ class AndroidVoiceSearch(context: Context) : VoiceSearch {
  * One recogniser per attempt, destroyed when the attempt ends however it ends. A reused
  * recogniser hands callbacks it had already queued for a cancelled attempt to whatever listener
  * is current when they dispatch, so a quick cancel-and-press-again could end the new attempt
- * with the old one's result or error; a destroyed recogniser drops them. Listening is reported
- * from [listen] itself, not from `onReadyForSpeech`: the recogniser is live from the press, so
- * the pane must own Back and refuse a second press from that moment, not from the callback that
- * lands later. A cancel reports [VoiceSearchOutcome.Cancelled] itself — `SpeechRecognizer.cancel`
+ * with the old one's result or error; a destroyed recogniser drops them. Starting is reported
+ * from [listen] so the pane owns Back and refuses another start immediately. Only the active
+ * attempt's `onReadyForSpeech` reports Listening, when the user can begin speaking. A cancel
+ * reports [VoiceSearchOutcome.Cancelled] itself — `SpeechRecognizer.cancel`
  * calls nothing back; leaving the composition, or the app going to the background, mid-session
- * is a cancel too, so the pane never keeps a listening state no recogniser backs.
+ * is a cancel too, so the pane never keeps an active phase no recogniser backs.
  */
 private class RecognizerSession(
     private val context: Context,
@@ -74,7 +74,7 @@ private class RecognizerSession(
         if (active != null) return
         val attempt = Attempt(SpeechRecognizer.createSpeechRecognizer(context))
         active = attempt
-        onEvent(VoiceSearchEvent.Listening)
+        onEvent(VoiceSearchEvent.Starting)
         attempt.recognizer.startListening(listenIntent(context.packageName))
     }
 
@@ -113,7 +113,9 @@ private class RecognizerSession(
 
         override fun onError(error: Int) = finish(voiceSearchError(error))
 
-        override fun onReadyForSpeech(params: Bundle?) = Unit
+        override fun onReadyForSpeech(params: Bundle?) {
+            if (current) onEvent(VoiceSearchEvent.Listening)
+        }
         override fun onBeginningOfSpeech() = Unit
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit

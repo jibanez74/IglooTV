@@ -114,18 +114,23 @@ class SearchPaneBehaviorTest {
                         },
                         onVoiceSearch = { event ->
                             voiceEvents += event
-                            // The view model's emissions: listening, each partial in the field,
+                            // The view model's emissions: startup, readiness, partials in the field,
                             // then the phrase with every tab back to its skeleton (the answer
                             // follows), or the field put back with a notice.
                             searchState = when (event) {
-                                VoiceSearchEvent.Listening -> searchState.copy(voiceListening = true, voiceNotice = null)
-                                is VoiceSearchEvent.Partial -> searchState.copy(query = event.text)
+                                VoiceSearchEvent.Starting -> searchState.copy(voicePhase = VoiceSearchPhase.Starting, voiceNotice = null)
+                                VoiceSearchEvent.Listening -> if (searchState.voicePhase == VoiceSearchPhase.Starting) {
+                                    searchState.copy(voicePhase = VoiceSearchPhase.Listening)
+                                } else searchState
+                                is VoiceSearchEvent.Partial -> if (searchState.voicePhase == VoiceSearchPhase.Listening) {
+                                    searchState.copy(query = event.text)
+                                } else searchState
                                 is VoiceSearchEvent.Done -> when (val outcome = event.outcome) {
                                     is VoiceSearchOutcome.Recognized -> testSearchState(
                                         query = outcome.text,
                                         all = PagedState(IglooRailState.Loading, contentGeneration = 1),
                                     )
-                                    else -> searchState.copy(query = "help", voiceListening = false, voiceNotice = outcome.toNotice())
+                                    else -> searchState.copy(query = "help", voicePhase = VoiceSearchPhase.Idle, voiceNotice = outcome.toNotice())
                                 }
                             }
                         },
@@ -324,8 +329,33 @@ class SearchPaneBehaviorTest {
         composeRule.waitForIdle()
 
         assertEquals(1, voiceSearch.starts)
-        assertEquals(emptyList<VoiceSearchEvent>(), voiceEvents)
+        assertEquals(listOf(VoiceSearchEvent.Starting), voiceEvents)
+        node("search_voice").assertContentDescriptionEquals("Cancel voice search")
+        node("search_notice").assertTextEquals(VOICE_STARTING_LINE)
         node("search_voice").assertIsFocused()
+    }
+
+    @Test
+    fun aSecondPressCancelsStartupAndAnImmediateRetryStartsAgain() {
+        setContent()
+        node("search_voice").requestFocus()
+        node("search_voice").performClick()
+        composeRule.waitForIdle()
+        node("search_voice").performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(1, voiceSearch.starts)
+        assertEquals(1, voiceSearch.cancels)
+        assertSessionEndedSilently()
+        deliver(VoiceSearchEvent.Listening)
+        node("search_notice").assertDoesNotExist()
+
+        node("search_voice").performClick()
+        composeRule.waitForIdle()
+        assertEquals(2, voiceSearch.starts)
+        node("search_notice").assertTextEquals(VOICE_STARTING_LINE)
+        deliver(VoiceSearchEvent.Listening)
+        node("search_notice").assertTextEquals(VOICE_LISTENING_LINE)
     }
 
     @Test
@@ -333,6 +363,7 @@ class SearchPaneBehaviorTest {
         setContent()
         node("search_voice").requestFocus()
 
+        deliver(VoiceSearchEvent.Starting)
         deliver(VoiceSearchEvent.Listening)
         node("search_voice").assertContentDescriptionEquals("Stop listening")
         node("search_notice").assertTextEquals(VOICE_LISTENING_LINE)
@@ -348,10 +379,16 @@ class SearchPaneBehaviorTest {
     }
 
     @Test
-    fun backWhileListeningStopsTheSession() {
+    fun backWhileListeningStopsTheSession() = backWhileActiveStopsTheSession(ready = true)
+
+    @Test
+    fun backWhileStartingStopsTheSession() = backWhileActiveStopsTheSession(ready = false)
+
+    private fun backWhileActiveStopsTheSession(ready: Boolean) {
         setContent()
         node("search_voice").requestFocus()
-        deliver(VoiceSearchEvent.Listening)
+        deliver(VoiceSearchEvent.Starting)
+        if (ready) deliver(VoiceSearchEvent.Listening)
 
         pressBack()
 
@@ -361,9 +398,15 @@ class SearchPaneBehaviorTest {
     }
 
     @Test
-    fun anOverlayOpeningWhileListeningStopsTheSession() {
+    fun anOverlayOpeningWhileListeningStopsTheSession() = anOverlayOpeningWhileActiveStopsTheSession(ready = true)
+
+    @Test
+    fun anOverlayOpeningWhileStartingStopsTheSession() = anOverlayOpeningWhileActiveStopsTheSession(ready = false)
+
+    private fun anOverlayOpeningWhileActiveStopsTheSession(ready: Boolean) {
         setContent()
-        deliver(VoiceSearchEvent.Listening)
+        deliver(VoiceSearchEvent.Starting)
+        if (ready) deliver(VoiceSearchEvent.Listening)
 
         node("poster_card_2").requestFocus()
         node("poster_card_2").performKeyInput { pressKey(Key.DirectionCenter) }
@@ -374,9 +417,15 @@ class SearchPaneBehaviorTest {
     }
 
     @Test
-    fun aTrackMenuOpeningWhileListeningStopsTheSession() {
+    fun aTrackMenuOpeningWhileListeningStopsTheSession() = aTrackMenuOpeningWhileActiveStopsTheSession(ready = true)
+
+    @Test
+    fun aTrackMenuOpeningWhileStartingStopsTheSession() = aTrackMenuOpeningWhileActiveStopsTheSession(ready = false)
+
+    private fun aTrackMenuOpeningWhileActiveStopsTheSession(ready: Boolean) {
         setContent()
-        deliver(VoiceSearchEvent.Listening)
+        deliver(VoiceSearchEvent.Starting)
+        if (ready) deliver(VoiceSearchEvent.Listening)
 
         node("track_more_901").requestFocus()
         node("track_more_901").performKeyInput { pressKey(Key.DirectionCenter) }
@@ -396,10 +445,16 @@ class SearchPaneBehaviorTest {
     }
 
     @Test
-    fun clearWhileListeningStopsTheSessionFirst() {
+    fun clearWhileListeningStopsTheSessionFirst() = clearWhileActiveStopsTheSessionFirst(ready = true)
+
+    @Test
+    fun clearWhileStartingStopsTheSessionFirst() = clearWhileActiveStopsTheSessionFirst(ready = false)
+
+    private fun clearWhileActiveStopsTheSessionFirst(ready: Boolean) {
         setContent()
         node("search_voice").requestFocus()
-        deliver(VoiceSearchEvent.Listening)
+        deliver(VoiceSearchEvent.Starting)
+        if (ready) deliver(VoiceSearchEvent.Listening)
 
         node("search_clear").requestFocus()
         node("search_clear").performKeyInput { pressKey(Key.DirectionCenter) }
@@ -411,9 +466,15 @@ class SearchPaneBehaviorTest {
     }
 
     @Test
-    fun aKeystrokeWhileListeningStopsTheSession() {
+    fun aKeystrokeWhileListeningStopsTheSession() = aKeystrokeWhileActiveStopsTheSession(ready = true)
+
+    @Test
+    fun aKeystrokeWhileStartingStopsTheSession() = aKeystrokeWhileActiveStopsTheSession(ready = false)
+
+    private fun aKeystrokeWhileActiveStopsTheSession(ready: Boolean) {
         setContent()
-        deliver(VoiceSearchEvent.Listening)
+        deliver(VoiceSearchEvent.Starting)
+        if (ready) deliver(VoiceSearchEvent.Listening)
 
         node("search_field").performTextInput("x")
         composeRule.waitForIdle()
@@ -428,6 +489,7 @@ class SearchPaneBehaviorTest {
     fun aRecognisedPhraseIsTheQueryAndLandsOnTheResults() {
         setContent(testSearchState(query = "help"))
         node("search_voice").requestFocus()
+        deliver(VoiceSearchEvent.Starting)
         deliver(VoiceSearchEvent.Listening)
 
         deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.Recognized("casino")))
@@ -445,6 +507,7 @@ class SearchPaneBehaviorTest {
     fun aCancelledSessionLeavesFocusOnVoiceSearch() {
         setContent()
         node("search_voice").requestFocus()
+        deliver(VoiceSearchEvent.Starting)
         deliver(VoiceSearchEvent.Listening)
 
         deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.Cancelled))
@@ -458,6 +521,7 @@ class SearchPaneBehaviorTest {
     fun aSessionThatHeardNothingSaysSoInTheHeader() {
         setContent()
         node("search_voice").requestFocus()
+        deliver(VoiceSearchEvent.Starting)
         deliver(VoiceSearchEvent.Listening)
 
         deliver(VoiceSearchEvent.Done(VoiceSearchOutcome.NoMatch))

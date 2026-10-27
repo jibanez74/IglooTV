@@ -2404,17 +2404,25 @@ Shield and Google TV have one, a Fire TV is expected to have none (not yet confi
 device), and a control that announces an action it cannot perform is the §12 failure. The
 microphone is declared optional (`uses-feature … required="false"`), since `RECORD_AUDIO`
 would otherwise imply it as required and keep the app off TVs that report none. The remote's own microphone key is the platform's (Assistant,
-Alexa) and cannot be taken by an app. While listening the button reads **Listening…** (its
+Alexa) and cannot be taken by an app. An attempt first enters `Starting`: the button reads
+**Starting…** (its action "Cancel voice search") and the header's polite live region says
+"Starting voice search…". Only the active recogniser's `onReadyForSpeech` advances it to
+`Listening` and invites speech. While listening the button reads **Listening…** (its
 action "Stop listening"), the header's notice line — the polite live region — carries the
 prompt ("Listening… say a title, album, musician or track"), and each partial guess is written
-into the field as it arrives; Back, or the button again, stops silently, restores the field's
-previous text (and the search it was waiting for) and leaves focus on the button. Clear, a
+into the field as it arrives. During either startup or listening, Back or the button again
+cancels silently, restores the field's previous text (and the search it was waiting for) and
+leaves focus on the button. Clear, a
 keystroke, a details page, player, track More menu or the sign-out dialog opening over the pane,
 or the app going to the background also stops it first, so nothing heard afterwards overwrites
 the user's edit or pulls focus under an overlay;
 each press gets its own recogniser, so a cancelled attempt's late callbacks cannot end the next
-one. A recognised
-phrase replaces the field's text — and any query the debounce has not sent — and goes out on
+one. The internal event order is `Starting → Listening → Done`, with optional partials while
+listening; an attempt may finish before readiness. Starting captures the original query,
+suspends its pending search debounce and clears the previous notice. Readiness never captures
+the query again, late readiness after cancellation is ignored, and partials are accepted only
+while listening. A recognised phrase replaces the field's text — and any query the debounce
+has not sent — and goes out on
 the keyboard-Search rules, landing focus on the results the same way, one frame later. No match
 or a recogniser error is one line in the same notice slot ("Didn't catch that. Try again.",
 "Couldn't search by voice: …"), cleared by the next keystroke, Clear or attempt; of that line

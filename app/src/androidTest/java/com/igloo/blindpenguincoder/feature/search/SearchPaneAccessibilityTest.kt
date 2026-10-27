@@ -207,10 +207,29 @@ class SearchPaneAccessibilityTest {
     }
 
     @Test
+    fun startupAnnouncesOnlyStartingAndReadinessEnablesTheSpeakPrompt() {
+        setContent(testSearchState().copy(voicePhase = VoiceSearchPhase.Starting))
+
+        node("search_voice").assertContentDescriptionEquals("Cancel voice search").assertHasClickAction()
+        node("search_notice").assertTextEquals(VOICE_STARTING_LINE)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+        composeRule.onNodeWithText(VOICE_LISTENING_LINE).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Stop listening").assertDoesNotExist()
+        val startingWidth = node("search_voice").fetchSemanticsNode().boundsInRoot.width
+
+        searchState = searchState.copy(voicePhase = VoiceSearchPhase.Listening)
+        composeRule.waitForIdle()
+        node("search_voice").assertContentDescriptionEquals("Stop listening")
+        node("search_notice").assertTextEquals(VOICE_LISTENING_LINE)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+        org.junit.Assert.assertEquals(startingWidth, node("search_voice").fetchSemanticsNode().boundsInRoot.width, 0f)
+    }
+
+    @Test
     fun listeningIsSpokenFromTheHeaderAndTheButtonOffersToStop() {
         setContent()
 
-        searchState = searchState.copy(voiceListening = true)
+        searchState = searchState.copy(voicePhase = VoiceSearchPhase.Listening)
         composeRule.waitForIdle()
 
         node("search_voice").assertContentDescriptionEquals("Stop listening")
