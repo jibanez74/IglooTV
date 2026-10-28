@@ -1,5 +1,5 @@
 // Media3's DataSource surface is marked unstable; this file is the one place the app builds on
-// it, and the seam above (VideoPlayerEngine) keeps the instability from spreading.
+// it, and the player engine seams keep the instability from spreading.
 @file:androidx.annotation.OptIn(UnstableApi::class)
 
 package com.igloo.blindpenguincoder.playback.media3
@@ -16,11 +16,11 @@ import com.igloo.blindpenguincoder.core.network.isIglooServerUrl
 import kotlinx.coroutines.runBlocking
 
 /**
- * Media3 bypasses the app's Ktor client, so stream requests get their bearer here (section
+ * Media3 bypasses the app's Ktor client, so stream and artwork requests get their bearer here (section
  * 11.8). Same-origin only, like the image loader's interceptor: a credential sent to a foreign
  * host is a credential leaked. The credential sits behind a suspending source; [runBlocking] is
- * acceptable because [ResolvingDataSource.Resolver.resolveDataSpec] runs on ExoPlayer's own
- * loading thread — never main — which immediately blocks on network I/O anyway, and the
+ * acceptable because [ResolvingDataSource.Resolver.resolveDataSpec] runs on Media3's stream or
+ * bitmap loading thread — never main — which immediately blocks on network I/O anyway, and the
  * source's mutex is uncontended.
  */
 private class BearerResolver(
@@ -86,3 +86,16 @@ fun bearerStreamDataSourceFactory(
         }
     }
 }
+
+/**
+ * Music artwork needs the same-origin bearer, but a failed cover must never report a revoked
+ * stream session. Keep both the resolver and HTTP stack separate from the stream factory and
+ * let the bitmap loader surface HTTP failures without an unauthorized callback.
+ */
+fun bearerArtworkDataSourceFactory(
+    credentials: DeviceCredentialSource,
+    serverUrl: ServerUrlProvider,
+): DataSource.Factory = ResolvingDataSource.Factory(
+    DefaultHttpDataSource.Factory(),
+    BearerResolver(credentials, serverUrl),
+)

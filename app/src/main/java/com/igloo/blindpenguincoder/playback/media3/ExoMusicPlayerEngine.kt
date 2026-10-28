@@ -33,6 +33,7 @@ internal class ExoMusicPlayerEngine(
     context: Context,
     request: MusicPlayRequest,
     dataSourceFactory: DataSource.Factory,
+    artworkDataSourceFactory: DataSource.Factory,
     private val trackStreamUrl: (Long) -> String,
     private val artworkUrl: (String?) -> String?,
 ) : MusicPlayerEngine {
@@ -53,7 +54,7 @@ internal class ExoMusicPlayerEngine(
         context,
         IntentRoutingPlayer(player, playbackIntent, ::play, ::pause),
         request.source.sessionKey,
-        dataSourceFactory,
+        artworkDataSourceFactory = artworkDataSourceFactory,
     )
 
     /** The queue as the player holds it; [appendTracks] grows it, nothing reorders it. */
@@ -236,6 +237,14 @@ fun exoMusicPlayerEngine(
     context: Context,
     request: MusicPlayRequest,
     dataSourceFactory: DataSource.Factory,
+    artworkDataSourceFactory: DataSource.Factory,
     trackStreamUrl: (Long) -> String,
     artworkUrl: (String?) -> String?,
-): MusicPlayerEngine = ExoMusicPlayerEngine(context, request, dataSourceFactory, trackStreamUrl, artworkUrl)
+): MusicPlayerEngine = ExoMusicPlayerEngine(
+    context = context,
+    request = request,
+    dataSourceFactory = dataSourceFactory,
+    artworkDataSourceFactory = artworkDataSourceFactory,
+    trackStreamUrl = trackStreamUrl,
+    artworkUrl = artworkUrl,
+)

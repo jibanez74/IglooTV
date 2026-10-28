@@ -29,22 +29,21 @@ internal fun musicMediaMetadata(track: MusicPlayTrack, artworkUrl: String?): Med
     .build()
 
 /**
- * The music player's system face, on [buildIglooMediaSession]'s shared shape. Like the movie's,
- * artwork loads through the player's own authenticated stack: a cover is a Spotify or Apple URL,
- * which the stack leaves alone (it only decorates same-origin requests), or, with the server's
- * Download images setting on, the server's own `/api/static` copy, which needs the bearer that
- * system surfaces can't attach.
+ * The music player's system face, on [buildIglooMediaSession]'s shared shape. Artwork uses a
+ * separate authenticated stack without stream session-revocation reporting. External covers
+ * need no bearer; the server's own `/api/static` copies do. Either way, a rejected cover stays
+ * an artwork failure rather than invalidating the active profile.
  */
 internal fun buildMusicMediaSession(
     context: Context,
     player: Player,
     sessionKey: String,
-    dataSourceFactory: DataSource.Factory,
+    artworkDataSourceFactory: DataSource.Factory,
 ): MediaSession = buildIglooMediaSession(
     context = context,
     player = player,
     idPrefix = "music-$sessionKey",
     bitmapLoader = DataSourceBitmapLoader.Builder(context)
-        .setDataSourceFactory(dataSourceFactory)
+        .setDataSourceFactory(artworkDataSourceFactory)
         .build(),
 )

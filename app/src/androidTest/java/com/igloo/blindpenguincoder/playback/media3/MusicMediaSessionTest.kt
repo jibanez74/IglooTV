@@ -83,7 +83,12 @@ class MusicMediaSessionTest {
                         .build()
                 },
             )
-            built = buildMusicMediaSession(context, player, request.source.sessionKey, DefaultDataSource.Factory(context)) to player
+            built = buildMusicMediaSession(
+                context = context,
+                player = player,
+                sessionKey = request.source.sessionKey,
+                artworkDataSourceFactory = DefaultDataSource.Factory(context),
+            ) to player
         }
         toRelease += built
         return built

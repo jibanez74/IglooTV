@@ -443,6 +443,7 @@ fun IglooRoot(container: IglooAppContainer) {
                                 // The same bearer-injecting factory the movie's direct stream
                                 // uses; /music/tracks/{id}/stream sits behind the same auth.
                                 dataSourceFactory = container.streamDataSourceFactory,
+                                artworkDataSourceFactory = container.artworkDataSourceFactory,
                                 trackStreamUrl = container.musicRepository::trackStreamUrl,
                                 artworkUrl = container.musicRepository::artworkUrl,
                             )

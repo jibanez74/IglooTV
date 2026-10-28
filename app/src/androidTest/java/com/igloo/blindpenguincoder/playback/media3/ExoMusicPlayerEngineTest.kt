@@ -10,11 +10,17 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.igloo.blindpenguincoder.core.config.ServerAddress
+import com.igloo.blindpenguincoder.core.network.ActiveCredential
+import com.igloo.blindpenguincoder.core.network.DeviceCredentialSource
+import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
 import java.io.FileNotFoundException
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -22,7 +28,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Terminal playlist behavior that only a real ExoPlayer can exercise. */
+/** Playlist failures and session artwork routing exercised through a real ExoPlayer. */
 @RunWith(AndroidJUnit4::class)
 class ExoMusicPlayerEngineTest {
 
@@ -55,6 +61,7 @@ class ExoMusicPlayerEngineTest {
                 context = context,
                 request = request,
                 dataSourceFactory = DataSource.Factory { MissingTrackDataSource() },
+                artworkDataSourceFactory = DataSource.Factory { MissingTrackDataSource() },
                 trackStreamUrl = { id -> "https://example.invalid/tracks/$id.mp3" },
                 artworkUrl = { it },
             ).also {
@@ -86,6 +93,81 @@ class ExoMusicPlayerEngineTest {
             false,
             events.filterIsInstance<MusicPlayerEvent.PlayWhenReadyChanged>().last().playWhenReady,
         )
+    }
+
+    @Test
+    fun artworkUsesItsSeparateFactoryAndFailureLeavesTheStreamReady() {
+        MusicArtworkTestServer().use { server ->
+            val credentials = DeviceCredentialSource { ActiveCredential(42L, "test-token") }
+            val serverUrl = ServerUrlProvider().apply {
+                set(checkNotNull(ServerAddress.fromApiBaseUrl("${server.origin}/api")))
+            }
+            val revoked = CopyOnWriteArrayList<Long?>()
+            val streamRequests = CopyOnWriteArrayList<Uri>()
+            val artworkRequests = CopyOnWriteArrayList<Uri>()
+            val artworkFinished = CountDownLatch(1)
+            val streams = recordingFactory(
+                bearerStreamDataSourceFactory(credentials, serverUrl, revoked::add),
+                streamRequests,
+            )
+            val artwork = recordingFactory(
+                bearerArtworkDataSourceFactory(credentials, serverUrl),
+                artworkRequests,
+                artworkFinished,
+            )
+            val request = MusicPlayRequest(
+                source = MusicQueueSource.Album(albumId = 11, title = "Help!"),
+                startIndex = 0,
+                tracks = listOf(
+                    MusicPlayTrack(
+                        id = 901,
+                        title = "Yesterday",
+                        durationSec = 1.0,
+                        coverUrl = "${server.origin}/cover",
+                    ),
+                ),
+            )
+
+            instrumentation.runOnMainSync {
+                engine = exoMusicPlayerEngine(
+                    context = context,
+                    request = request,
+                    dataSourceFactory = streams,
+                    artworkDataSourceFactory = artwork,
+                    trackStreamUrl = { "${server.origin}/stream" },
+                    artworkUrl = { it },
+                ).also { it.startPlayback(0, 0.0, initialPlayWhenReady = false) }
+            }
+
+            waitFor("the artwork failure and a ready audio stream") {
+                artworkFinished.count == 0L &&
+                    engine?.events?.replayCache?.any { it is MusicPlayerEvent.Ready } == true
+            }
+
+            assertEquals(listOf(Uri.parse("${server.origin}/cover")), artworkRequests.toList())
+            assertTrue(streamRequests.isNotEmpty())
+            assertTrue(streamRequests.all { it.toString() == "${server.origin}/stream" })
+            assertTrue("a cover failure must not revoke the profile", revoked.isEmpty())
+            assertFalse(checkNotNull(engine).events.replayCache.any { it is MusicPlayerEvent.Error })
+        }
+    }
+
+    private fun recordingFactory(
+        delegate: DataSource.Factory,
+        requested: MutableList<Uri>,
+        finished: CountDownLatch? = null,
+    ) = DataSource.Factory {
+        val source = delegate.createDataSource()
+        object : DataSource by source {
+            override fun open(dataSpec: DataSpec): Long {
+                requested.add(dataSpec.uri)
+                return try {
+                    source.open(dataSpec)
+                } finally {
+                    finished?.countDown()
+                }
+            }
+        }
     }
 
     private fun waitFor(what: String, condition: () -> Boolean) {
