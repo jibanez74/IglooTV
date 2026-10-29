@@ -2733,8 +2733,10 @@ prior track under it.
 **No surface on the seam.** The screen draws the current track's cover itself (`AsyncImage`,
 cover-fill over the over-media control fill, Music-glyph fallback, decorative); the engine
 interface is pure Kotlin. Covers reach the session resolved to absolute URLs, and its bitmap
-loader is the movie's kind: the bearer data-source factory the track streams use, which leaves a
-provider URL alone and authenticates the server's own `/api/static` copy.
+loader is the movie's kind on a factory of its own: `IglooRoot` hands it a bearer artwork
+data-source factory separate from the one the track streams use, which leaves a provider URL
+alone, authenticates the server's own `/api/static` copy, and never reports an HTTP 401 as a
+revoked session, so a rejected cover stays an artwork failure.
 
 **Chrome never hides.** §11.8 licenses resting chrome only over a moving picture, and a
 static cover is not one — so there is no auto-hide clock, no reveal step, and **Back always
@@ -2912,6 +2914,12 @@ forgot to change the code.**
   show rails, album covers and musician circles on Home, Music and Search, both music detail
   pages, a movie's cast photos, the music player's cover and the media session's metadata; a
   short play, a trip to the launcher and a relaunch left the profile signed in. No defect found.
+- **Review pass, same day** (CodeRabbit on PR #17): the music session's bitmap loader now caps
+  its decode at the dimension Media3's default loader uses, so a large provider cover is
+  downsampled rather than allocated whole, pinned by a `MusicMediaSessionTest` case; §11.8 names the separate artwork factory instead of
+  the stream one; the server docs were corrected and re-synced (watcher-run refreshes follow
+  `catalog_revision`, moves included; the static `?v=` hashes source and size, not bytes; the
+  show scan's file-move guarantee carries the inode, size and modification-time pairing).
 
 **2026-10-26 — Search (§11.6, §9.1).**
 

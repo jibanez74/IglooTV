@@ -2,13 +2,17 @@
 
 package com.igloo.blindpenguincoder.playback.media3
 
+import android.graphics.Bitmap
 import android.media.session.MediaController as PlatformMediaController
+import android.net.Uri
 import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.ByteArrayDataSource
+import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
@@ -25,6 +29,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.ByteArrayOutputStream
 
 /**
  * The album session's contract with the system (design-system.md section 11.8.2), on a real
@@ -163,6 +168,25 @@ class MusicMediaSessionTest {
         instrumentation.runOnMainSync { commands = player.availableCommands }
         assertTrue(commands.contains(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM))
         assertTrue(commands.contains(Player.COMMAND_SEEK_TO_PREVIOUS))
+    }
+
+    @Test
+    fun aCoverWiderThanTheDecodeLimitIsSubsampledOnTheWayIn() {
+        // Media3's own default loader caps decoding at twice the session's bitmap limit, less
+        // one; a cover past that is decoded at a power-of-two fraction of its size rather than
+        // allocated whole and scaled afterwards by the session's size limiter.
+        val cap = MediaSession.getBitmapDimensionLimit(context) * 2 - 1
+        val sourceWidth = cap * 2 + 2
+        val png = ByteArrayOutputStream().also { out ->
+            Bitmap.createBitmap(sourceWidth, 16, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, out)
+        }.toByteArray()
+        val loader = musicArtworkBitmapLoader(context, DataSource.Factory { ByteArrayDataSource(png) })
+
+        val cover = loader.loadBitmap(Uri.parse("https://i.scdn.co/image/wide.png")).get()
+
+        assertTrue("decoded ${cover.width} px wide, over the $cap px cap", cover.width <= cap)
+        // Subsampled by the smallest power of two that fits, never shrunk past it.
+        assertTrue("decoded ${cover.width} px wide, under half the $cap px cap", cover.width * 2 > cap)
     }
 
     @Test

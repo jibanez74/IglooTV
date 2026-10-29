@@ -8,6 +8,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.util.BitmapLoader
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSourceBitmapLoader
@@ -43,7 +44,19 @@ internal fun buildMusicMediaSession(
     context = context,
     player = player,
     idPrefix = "music-$sessionKey",
-    bitmapLoader = DataSourceBitmapLoader.Builder(context)
-        .setDataSourceFactory(artworkDataSourceFactory)
-        .build(),
+    bitmapLoader = musicArtworkBitmapLoader(context, artworkDataSourceFactory),
 )
+
+/**
+ * The session's cover loader over [artworkDataSourceFactory], capped at the decode dimension
+ * Media3's own default loader uses (twice the session's bitmap limit, less one): a large
+ * provider cover is subsampled on the way in rather than allocated whole and scaled afterwards,
+ * which on a TV is the difference between a cover and an out-of-memory artwork failure.
+ */
+internal fun musicArtworkBitmapLoader(
+    context: Context,
+    artworkDataSourceFactory: DataSource.Factory,
+): BitmapLoader = DataSourceBitmapLoader.Builder(context)
+    .setDataSourceFactory(artworkDataSourceFactory)
+    .setMaximumOutputDimension(MediaSession.getBitmapDimensionLimit(context) * 2 - 1)
+    .build()
