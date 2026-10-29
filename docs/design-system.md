@@ -2898,6 +2898,21 @@ forgot to change the code.**
 
 ## Changelog
 
+**2026-10-29 — Artwork the server downloads (§11.3.2, §11.5.1, §11.5.2, §11.8).**
+
+- **§11.3.2**: album covers and musician photos are used as the API returns them: a provider URL
+  straight from its CDN, or, with the server's Download images setting on, its own
+  `/api/static/...` copy, which the image loader resolves against the origin
+  (`ServerPathInterceptor`) and authenticates. TMDB fields get the same treatment from
+  `tmdbImageUrl`. `avatarImageUrl` is now `serverImageUrl`, shared by avatars and covers.
+- **§11.8**: the music session's bitmap loader is the bearer kind, on a stack of its own, so a
+  rejected cover is an artwork failure and never a revoked profile.
+- **Shield pass, same day**: 362 instrumented tests across the 23 touched suites pass on the
+  device; a live drive against a server with Download images on rendered the hero, poster and
+  show rails, album covers and musician circles on Home, Music and Search, both music detail
+  pages, a movie's cast photos, the music player's cover and the media session's metadata; a
+  short play, a trip to the launcher and a relaunch left the profile signed in. No defect found.
+
 **2026-10-26 — Search (§11.6, §9.1).**
 
 - **§11.6**: rewritten for the built pane: live search debounced after the last keystroke with the
