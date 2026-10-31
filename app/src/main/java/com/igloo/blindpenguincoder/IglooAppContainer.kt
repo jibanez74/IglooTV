@@ -36,6 +36,7 @@ import com.igloo.blindpenguincoder.feature.auth.SessionManager
 import com.igloo.blindpenguincoder.feature.search.AndroidVoiceSearch
 import com.igloo.blindpenguincoder.feature.search.VoiceSearch
 import com.igloo.blindpenguincoder.playback.hls.HLS_SEGMENT_READ_TIMEOUT_MS
+import com.igloo.blindpenguincoder.playback.media3.bearerArtworkDataSourceFactory
 import com.igloo.blindpenguincoder.playback.media3.bearerStreamDataSourceFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,6 +72,11 @@ class IglooAppContainer(context: Context) {
             serverUrlProvider,
             onUnauthorized = { profileId -> authEvents.signalUnauthorized(profileId) },
         )
+    }
+
+    /** Music covers authenticate when needed, without reporting stream session revocation. */
+    val artworkDataSourceFactory by lazy {
+        bearerArtworkDataSourceFactory(credentials, serverUrlProvider)
     }
 
     /** The same stack with the patience HLS needs: segment requests long-poll up to 120s. */

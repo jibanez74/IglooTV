@@ -46,6 +46,18 @@ class ImageUrlResolverTest {
         )
     }
 
+    /**
+     * With the server's Download images setting on, a TMDB field holds the server's own copy,
+     * stored at one size; it loads from the origin, where the bearer is attached.
+     */
+    @Test
+    fun `a downloaded copy is loaded from the server as it is`() {
+        val url = tmdbImageUrl(apiBase, TmdbImageSize.W500, "/api/static/movies/603/the_matrix_poster.jpg?v=1a2b3c4d")
+
+        assertEquals("$origin/api/static/movies/603/the_matrix_poster.jpg?v=1a2b3c4d", url)
+        assertTrue(isIglooServerUrl(url, origin))
+    }
+
     @Test
     fun `youtube thumbnails go through the authenticated proxy`() {
         val url = youtubeThumbnailUrl(apiBase, "0xbkYZbdIVw")
@@ -65,7 +77,7 @@ class ImageUrlResolverTest {
     fun `uploaded avatar paths are resolved against the origin`() {
         assertEquals(
             "$origin/api/static/avatars/7-1735689600.jpg",
-            avatarImageUrl(origin, "/api/static/avatars/7-1735689600.jpg"),
+            serverImageUrl(origin, "/api/static/avatars/7-1735689600.jpg"),
         )
     }
 
@@ -75,7 +87,7 @@ class ImageUrlResolverTest {
      */
     @Test
     fun `a resolved avatar is same-origin, so the bearer is attached`() {
-        val url = avatarImageUrl(origin, "/api/static/avatars/7.jpg")
+        val url = serverImageUrl(origin, "/api/static/avatars/7.jpg")
 
         assertTrue(isIglooServerUrl(url, origin))
     }
@@ -84,30 +96,42 @@ class ImageUrlResolverTest {
     fun `absolute avatar urls pass through untouched`() {
         assertEquals(
             "https://cdn.example.com/jose.png",
-            avatarImageUrl(origin, "https://cdn.example.com/jose.png"),
+            serverImageUrl(origin, "https://cdn.example.com/jose.png"),
         )
         assertEquals(
             "http://cdn.example.com/jose.png",
-            avatarImageUrl(origin, "http://cdn.example.com/jose.png"),
+            serverImageUrl(origin, "http://cdn.example.com/jose.png"),
+        )
+    }
+
+    @Test
+    fun `music covers are a provider url or the server's own copy`() {
+        assertEquals(
+            "https://i.scdn.co/image/ab67616d0000b273",
+            serverImageUrl(origin, "https://i.scdn.co/image/ab67616d0000b273"),
+        )
+        assertEquals(
+            "$origin/api/static/albums/1440746112/blackbird_cover.jpg?v=af7150b0",
+            serverImageUrl(origin, "/api/static/albums/1440746112/blackbird_cover.jpg?v=af7150b0"),
         )
     }
 
     @Test
     fun `a trailing slash on the origin does not double up`() {
-        assertEquals("$origin/api/static/a.jpg", avatarImageUrl("$origin/", "/api/static/a.jpg"))
+        assertEquals("$origin/api/static/a.jpg", serverImageUrl("$origin/", "/api/static/a.jpg"))
     }
 
     @Test
     fun `a missing avatar renders as initials`() {
-        assertNull(avatarImageUrl(origin, null))
-        assertNull(avatarImageUrl(origin, ""))
-        assertNull(avatarImageUrl(origin, "   "))
+        assertNull(serverImageUrl(origin, null))
+        assertNull(serverImageUrl(origin, ""))
+        assertNull(serverImageUrl(origin, "   "))
     }
 
     /** No defined resolution, so it must not be guessed at by pasting onto the origin. */
     @Test
     fun `avatar values that are neither absolute nor rooted are dropped`() {
-        assertNull(avatarImageUrl(origin, "avatars/7.jpg"))
-        assertNull(avatarImageUrl(origin, "data:image/png;base64,AAAA"))
+        assertNull(serverImageUrl(origin, "avatars/7.jpg"))
+        assertNull(serverImageUrl(origin, "data:image/png;base64,AAAA"))
     }
 }

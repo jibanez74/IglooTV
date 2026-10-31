@@ -3,7 +3,7 @@
   "info": {
     "title": "Igloo API",
     "version": "0.1.0",
-    "description": "HTTP API for the Igloo self-hosted media center. Most JSON endpoints return a shared envelope with error, optional message, and optional data fields. Device bearer tokens issued via Quick Connect or device login (Authorization: Bearer igd_...) are accepted on most routes that accept cookieAuth, except device-management, Quick Connect lookup/approval, PIN retrieval, account deletion, and email and password changes, which require a cookie session. See each operation's security block for route-specific requirements. Authentication and session middleware failures return sanitized JSON error envelopes even on media, static-file, subtitle, image-proxy, HLS, and WebSocket routes. HEAD responses never include a body, including errors; their Content-Type describes the corresponding GET representation."
+    "description": "HTTP API for the Igloo self-hosted media center. Most JSON endpoints return a shared envelope with error, optional message, and optional data fields. Device bearer tokens issued via Quick Connect or device login (Authorization: Bearer igd_...) are accepted on most routes that accept cookieAuth, except device-management, Quick Connect lookup/approval, PIN retrieval, account deletion, and email and password changes, which require a cookie session. See each operation's security block for route-specific requirements. Authentication and session middleware failures return sanitized JSON error envelopes even on media, static-file, subtitle, image-proxy, HLS, and WebSocket routes. HEAD responses never include a body, including errors; their Content-Type describes the corresponding GET representation. Movie, show, season and episode images, cast and crew photos, and network logos hold TMDB image paths such as /abc.jpg, which clients request through /api/tmdb/images/{size}/{file}; album covers and musician photos hold the Spotify or Apple image URL. While the download_images setting is on, the server downloads these images into the static directory, and a field whose image it has downloaded holds that copy's URL under /api/static/ instead, with a ?v= version; clients request it as it is, with the same authentication as the API."
   },
   "servers": [
     {
@@ -814,11 +814,20 @@
           "Static"
         ],
         "summary": "Serve a static asset",
-        "description": "Serves files from the configured static directory, such as uploaded avatars. Content-Type comes from the file extension using the host MIME registry, falling back to application/octet-stream. Successful responses set Cache-Control: public, max-age=31536000 and X-Content-Type-Options: nosniff. Last-Modified supports date revalidation; this endpoint does not emit ETag.",
+        "description": "Serves files from the configured static directory: uploaded avatars, and the library artwork downloaded while download_images is on (movies/, people/, shows/, networks/, albums/ and musicians/). A downloaded image's URL carries a ?v= version, a hash of the image's source and size, since responses are cached for a year; a copy downloaded again from the same source at the same size keeps its URL, so a cache may serve the earlier bytes. Content-Type comes from the file extension using the host MIME registry, falling back to application/octet-stream. Successful responses set Cache-Control: public, max-age=31536000 and X-Content-Type-Options: nosniff. Last-Modified supports date revalidation; this endpoint does not emit ETag.",
         "operationId": "serveStaticFiles",
         "parameters": [
           {
             "$ref": "#/components/parameters/StaticPath"
+          },
+          {
+            "name": "v",
+            "in": "query",
+            "required": false,
+            "description": "Version of a downloaded library image; the server ignores it.",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "$ref": "#/components/parameters/RangeHeader"
@@ -4830,7 +4839,7 @@
           "Settings"
         ],
         "summary": "Trigger a music library scan",
-        "description": "Admin-only endpoint. The scan runs asynchronously; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when no music directory is configured. Files are inspected by cleaned catalog path using persisted filesystem fingerprints and full-file SHA-256. Matching filesystem metadata skips hashing and probing; identical bytes with changed metadata update only the fingerprint. New or changed bytes are processed after a 60-second quiet period from the later of modification and status-change time. Recent, future-dated, or unstable files preserve their previous records and retry on the next startup or manual scan; deferred totals are logged separately from failures. New and changed m4a files have the Apple catalog ids of an iTunes purchase read and kept. When Apple lookups are enabled, albums whose files carry an Apple collection id are looked up on Apple Music after the walk, in batches, and their tracks paired by catalog id; an album Apple no longer lists falls back to Spotify in the same scan. When Spotify is available, other missing or failed artist and album enrichment is retried from catalog metadata even for unchanged files, without probing them again; confirmed matches and non-matches are retained. Local sort tags and album dates are reconciled from current track contributions, with Spotify dates used only when no valid local date remains. Music identities normalize surrounding whitespace and case; Apple Music and Spotify id collisions retain the existing owner and preserve track IDs. Track changes and deletions reconcile local artist, album, and genre relationships and derived sorting and dates. Missing-file cleanup runs before the Apple Music and Spotify passes. Startup and manual scans remove confirmed missing catalog files, including broken symlink targets and rows without fingerprints, only within the directory captured at scan start. Cleanup follows a successful walk and final batch; files seen during the scan remain protected even if processing fails or is deferred. Cancellation, fatal walk failures, and unavailable or replaced roots prevent cleanup. Permission and I/O failures and symlink loops preserve records. Root accessibility and identity and file absence are rechecked before each deletion commits; runtime caches are invalidated after commit. Unreferenced shared metadata remains. Renames import the new path and delete the missing old path. No forced refresh is performed. GET returns the current/latest in-memory report; POST duplicate protection lasts for the entire run. Completion logs include local, cleanup and enrichment counts.",
+        "description": "Admin-only endpoint. The scan runs asynchronously; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when no music directory is configured. Files are inspected by cleaned catalog path using persisted filesystem fingerprints and full-file SHA-256. Matching filesystem metadata skips hashing and probing; identical bytes with changed metadata update only the fingerprint. New or changed bytes are processed after a 60-second quiet period from the later of modification and status-change time. Recent, future-dated, or unstable files preserve their previous records and retry on the next startup or manual scan; deferred totals are logged separately from failures. New and changed m4a files have the Apple catalog ids of an iTunes purchase read and kept. When Apple lookups are enabled, albums whose files carry an Apple collection id are looked up on Apple Music after the walk, in batches, and their tracks paired by catalog id; an album Apple no longer lists falls back to Spotify in the same scan. When Spotify is available, other missing or failed artist and album enrichment is retried from catalog metadata even for unchanged files, without probing them again; confirmed matches and non-matches are retained. Local sort tags and album dates are reconciled from current track contributions, with Spotify dates used only when no valid local date remains. Music identities normalize surrounding whitespace and case; Apple Music and Spotify id collisions retain the existing owner and preserve track IDs. Track changes and deletions reconcile local artist, album, and genre relationships and derived sorting and dates. Missing-file cleanup runs before the Apple Music and Spotify passes. Startup and manual scans remove confirmed missing catalog files, including broken symlink targets and rows without fingerprints, only within the directory captured at scan start. A startup scan, like a library watcher catch-up, keeps missing files that look unmounted rather than deleted: every file when its walk finds none while the catalog holds some, otherwise those beneath a mount point an earlier run recorded by path that is not mounted now, such as a disk mounted inside the library that has not come up; it reports an issue per mount point. A manual scan removes them and records only the mount points mounted then; a manual scan queued behind a run of changes keeps that cleanup when a watcher catch-up joins it. Cleanup follows a successful walk and final batch; files seen during the scan remain protected even if processing fails or is deferred. Cancellation, fatal walk failures, and unavailable or replaced roots prevent cleanup. Permission and I/O failures and symlink loops preserve records. Root accessibility and identity and file absence are rechecked before each deletion commits; runtime caches are invalidated after commit. Unreferenced shared metadata remains. A file renamed or moved within the library keeps its catalog row, paired with it by inode, size and modification time once its old path is confirmed missing, so watch progress, likes, playlist entries and its match survive; a copy that leaves the original in place is imported on its own. No forced refresh is performed. GET returns the current/latest in-memory report; POST duplicate protection lasts for the entire run. Completion logs include local, cleanup and enrichment counts.",
         "operationId": "triggerMusicScan",
         "responses": {
           "200": {
@@ -4879,7 +4888,7 @@
           "Settings"
         ],
         "summary": "Trigger a movie library scan",
-        "description": "Admin-only endpoint. The scan runs asynchronously; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when no movies directory is configured. Discovery establishes eligible file totals before two bounded probe workers process new or changed files. Movie scans read no content for change detection: size, nanosecond modification/change times, device and inode form the baseline. Unchanged files skip probing. Changed filesystem metadata triggers a reprobe and playback-cache invalidation even when bytes are identical; scans do not prove byte equality. Files must be quiet for 60 seconds. Deferred paths receive at most two retries within 120 seconds after initial processing; unresolved paths remain deferred. Technical metadata, streams, chapters, baselines and pending enrichment commit atomically before TMDB requests. Imports require accepted video; moving MJPEG is supported, while attached artwork alone is rejected. TMDB failures preserve existing descriptions and relationships; new movies use filename-derived defaults. Later startup or manual scans retry eligible unchanged movies with pending enrichment or no TMDB identity at most once per movie per scan, without probing again, rebuilding streams or chapters, or invalidating playback caches and keyframe/remux data. Unavailable TMDB leaves a movie eligible for the next scan. A definitive no-match is retried once on the next scan; from the second consecutive miss the movie backs off, doubling from one day up to seven days, until Identify resets it; a technical rescan of the same file keeps the backoff. Identified movies fetch details by stored TMDB ID and never automatically rematch. Successful enrichment replaces descriptive metadata, including manual edits, while preserving audience rating and file-derived duration/runtime; it clears the internal retry state. Persistence discards stale enrichment after a concurrent identity change and discards work for deleted or replaced catalog rows. After local processing and cleanup, two workers enrich movies with serialized persistence. Complete TMDB resolution is limited to 30 seconds including HTTP retries. Three consecutive transient provider failures or an authentication failure stop further dispatch; already active requests may finish. No-match responses are distinguished from outages. Catalog identity, pending state and filesystem baseline are checked before applying enrichment. GET returns the current/latest in-memory report; POST duplicate protection lasts for the entire run. Completion logs include successful and outstanding enrichment counts. Startup and manual scans remove confirmed missing catalog files, including broken symlink targets and rows without fingerprints, only within the directory captured at scan start. Cleanup follows successful discovery and local processing, including bounded deferred retries; files seen during the scan remain protected even if processing fails or is deferred. Cancellation, fatal walk failures, and unavailable or replaced roots prevent cleanup. Permission and I/O failures and symlink loops preserve records. Root accessibility and identity and file absence are rechecked before each deletion commits; runtime caches are invalidated after commit. Unreferenced shared metadata remains. Renames import the new path and delete the missing old path. No forced refresh is performed.",
+        "description": "Admin-only endpoint. The scan runs asynchronously; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when no movies directory is configured. Discovery establishes eligible file totals before two bounded probe workers process new or changed files. Movie scans read no content for change detection: size, nanosecond modification/change times, device and inode form the baseline. Unchanged files skip probing. Changed filesystem metadata triggers a reprobe and playback-cache invalidation even when bytes are identical; scans do not prove byte equality. Files must be quiet for 60 seconds. Deferred paths receive at most two retries within 120 seconds after initial processing; unresolved paths remain deferred. Technical metadata, streams, chapters, baselines and pending enrichment commit atomically before TMDB requests. Imports require accepted video; moving MJPEG is supported, while attached artwork alone is rejected. TMDB failures preserve existing descriptions and relationships; new movies use filename-derived defaults. Later startup or manual scans retry eligible unchanged movies with pending enrichment or no TMDB identity at most once per movie per scan, without probing again, rebuilding streams or chapters, or invalidating playback caches and keyframe/remux data. Unavailable TMDB leaves a movie eligible for the next scan. A definitive no-match is retried once on the next scan; from the second consecutive miss the movie backs off, doubling from one day up to seven days, until Identify resets it; a technical rescan of the same file keeps the backoff. Identified movies fetch details by stored TMDB ID and never automatically rematch. Successful enrichment replaces descriptive metadata, including manual edits, while preserving audience rating and file-derived duration/runtime; it clears the internal retry state. Persistence discards stale enrichment after a concurrent identity change and discards work for deleted or replaced catalog rows. After local processing and cleanup, two workers enrich movies with serialized persistence. Complete TMDB resolution is limited to 30 seconds including HTTP retries. Three consecutive transient provider failures or an authentication failure stop further dispatch; already active requests may finish. No-match responses are distinguished from outages. Catalog identity, pending state and filesystem baseline are checked before applying enrichment. GET returns the current/latest in-memory report; POST duplicate protection lasts for the entire run. Completion logs include successful and outstanding enrichment counts. Startup and manual scans remove confirmed missing catalog files, including broken symlink targets and rows without fingerprints, only within the directory captured at scan start. A startup scan, like a library watcher catch-up, keeps missing files that look unmounted rather than deleted: every file when its walk finds none while the catalog holds some, otherwise those beneath a mount point an earlier run recorded by path that is not mounted now, such as a disk mounted inside the library that has not come up; it reports an issue per mount point. A manual scan removes them and records only the mount points mounted then; a manual scan queued behind a run of changes keeps that cleanup when a watcher catch-up joins it. Cleanup follows successful discovery and local processing, including bounded deferred retries; files seen during the scan remain protected even if processing fails or is deferred. Cancellation, fatal walk failures, and unavailable or replaced roots prevent cleanup. Permission and I/O failures and symlink loops preserve records. Root accessibility and identity and file absence are rechecked before each deletion commits; runtime caches are invalidated after commit. Unreferenced shared metadata remains. A file renamed or moved within the library keeps its catalog row, paired with it by inode, size and modification time once its old path is confirmed missing, so watch progress, likes, playlist entries and its match survive; a copy that leaves the original in place is imported on its own. No forced refresh is performed.",
         "operationId": "triggerMovieScan",
         "responses": {
           "200": {
@@ -4928,7 +4937,7 @@
           "Settings"
         ],
         "summary": "Trigger a TV show library scan",
-        "description": "Admin-only endpoint. Starts an asynchronous scan of the configured shows directory; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when unconfigured. Accepts Show/Season N/file, Show/Season N - Title/file, Show/SN/file, Show/Specials/file, and episode files directly inside the show folder, where the token names the season. Hidden entries and nested extras are excluded. Files use the movie video extensions and symlink behavior. Standard season/episode tokens, inclusive ranges, and repeated episode tokens identify logical episodes; filename seasons must match their directories. Each new or changed file is probed once after the shared 60-second quiet period and commits technical metadata, episode links, fingerprints, fallback catalog records, and pending enrichment atomically. Combined files retain one duration without inferred episode boundaries. Unchanged files skip probing; changed filesystem metadata re-probes the file without reading its content, and a technical change never re-queues matched metadata. After safe missing-file cleanup, pending show, season, and locally represented episode metadata is enriched sequentially through TMDB, at most once per entity per scan, with the entity total published before the first request. Failed requests preserve existing metadata and retry state; a definitive no-match is reported as unmatched and backs off before the show is searched again; an authentication failure or repeated transient failures stop enrichment for the run; matched shows use stored TMDB IDs without automatic rematching. Cleanup deletes only confirmed missing files within the captured, readable, unchanged root, prunes the affected season of unreferenced episodes and then the empty season and show, and retains shared metadata. Observed failures and deferred files remain protected. Cancellation, unavailable or replaced roots, and fatal walks prevent cleanup. Saving settings does not start a scan, except that with the library watcher on a library whose path changed is walked once. Scanned shows are browsable and playable through the TV show endpoints; manual identification is not provided.",
+        "description": "Admin-only endpoint. Starts an asynchronous scan of the configured shows directory; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when unconfigured. Accepts Show/Season N/file, Show/Season N - Title/file, Show/SN/file, Show/Specials/file, and episode files directly inside the show folder, where the token names the season. Hidden entries and nested extras are excluded. Files use the movie video extensions and symlink behavior. Standard season/episode tokens, inclusive ranges, and repeated episode tokens identify logical episodes; filename seasons must match their directories. Each new or changed file is probed once after the shared 60-second quiet period and commits technical metadata, episode links, fingerprints, fallback catalog records, and pending enrichment atomically. Combined files retain one duration without inferred episode boundaries. Unchanged files skip probing; changed filesystem metadata re-probes the file without reading its content, and a technical change never re-queues matched metadata. After safe missing-file cleanup, pending show, season, and locally represented episode metadata is enriched sequentially through TMDB, at most once per entity per scan, with the entity total published before the first request. Failed requests preserve existing metadata and retry state; a definitive no-match is reported as unmatched and backs off before the show is searched again; an authentication failure or repeated transient failures stop enrichment for the run; matched shows use stored TMDB IDs without automatic rematching. Cleanup deletes only confirmed missing files within the captured, readable, unchanged root, prunes the affected season of unreferenced episodes and then the empty season and show, and retains shared metadata. A file renamed or moved within its season keeps its row when it is paired by inode, size and modification time; a file changed while it moves, such as a retag that also renames it, is imported as new and its old row is cleaned up. A renamed show folder keeps its show, seasons, episodes and watch progress once the old folder is gone and the new one has no show; an unmatched show is searched again at once. A matched show moves while the folder keeps its title and its year, drops the year, or adds the first air year; any other rename of a matched show imports it as a new show and searches again. An episode file renamed to other episode numbers keeps its row and is linked to them. A startup scan, like a library watcher catch-up, keeps missing files that look unmounted rather than deleted: every file when its walk finds none while the catalog holds some, otherwise those beneath a mount point an earlier run recorded by path that is not mounted now, such as a disk mounted inside the library that has not come up; it reports an issue per mount point. A manual scan removes them and records only the mount points mounted then; a manual scan queued behind a run of changes keeps that cleanup when a watcher catch-up joins it. Observed failures and deferred files remain protected. Cancellation, unavailable or replaced roots, and fatal walks prevent cleanup. Saving settings does not start a scan, except that with the library watcher on a library whose path changed, or that is paused, is walked once. Scanned shows are browsable and playable through the TV show endpoints; manual identification is not provided.",
         "operationId": "triggerShowScan",
         "responses": {
           "200": {
@@ -9535,11 +9544,11 @@
           },
           "download_images": {
             "type": "boolean",
-            "description": "Stored only; no server feature reads this value."
+            "description": "While true, the server downloads movie, show, season and episode images, cast and crew photos, network logos, album covers, and musician photos into static_dir and returns the downloaded copies in place of the TMDB paths and Spotify or Apple URLs, as the API description explains; images not downloaded yet keep those. Turning it off returns them before the response is sent and deletes the downloaded copies in the background; turning it on downloads them in the background. Changing static_dir while it is on also returns them before the response, then downloads the copies again into the new directory."
           },
           "static_dir": {
             "type": "string",
-            "description": "Directory /api/static serves files from and avatar uploads are written to. Read on each request."
+            "description": "Directory /api/static serves files from, where avatar uploads and, while download_images is on, downloaded library artwork are written. Read on each request."
           },
           "transcode_dir": {
             "type": "string",
@@ -9580,7 +9589,7 @@
           },
           "download_images": {
             "type": "boolean",
-            "description": "Stored only; no server feature reads this value."
+            "description": "While true, the server downloads movie, show, season and episode images, cast and crew photos, network logos, album covers, and musician photos into static_dir and returns the downloaded copies in place of the TMDB paths and Spotify or Apple URLs, as the API description explains; images not downloaded yet keep those. Turning it off returns them before the response is sent and deletes the downloaded copies in the background; turning it on downloads them in the background. Changing static_dir while it is on also returns them before the response, then downloads the copies again into the new directory."
           },
           "static_dir": {
             "type": "string",
@@ -9792,7 +9801,8 @@
             "type": "string"
           },
           "poster_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "year": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -9826,7 +9836,8 @@
             "type": "string"
           },
           "poster_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "year": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -9873,7 +9884,8 @@
             "type": "string"
           },
           "poster_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "year": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -9954,7 +9966,8 @@
             "type": "string"
           },
           "poster_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "year": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -10055,7 +10068,8 @@
             "type": "string"
           },
           "poster_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "premiere_year": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -10114,7 +10128,8 @@
             "type": "string"
           },
           "poster_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "premiere_year": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -10349,10 +10364,12 @@
             "$ref": "#/components/schemas/SqlNullString"
           },
           "poster_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "backdrop_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "vote_average": {
             "$ref": "#/components/schemas/SqlNullFloat64"
@@ -10403,7 +10420,8 @@
             "$ref": "#/components/schemas/SqlNullString"
           },
           "poster_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "tmdb_episode_count": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -10450,7 +10468,8 @@
             "$ref": "#/components/schemas/SqlNullString"
           },
           "still_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "tmdb_runtime": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -10509,7 +10528,8 @@
             "type": "string"
           },
           "artist_profile": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "tmdb_id": {
             "type": "integer",
@@ -10554,7 +10574,8 @@
             "type": "string"
           },
           "artist_profile": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "tmdb_id": {
             "type": "integer",
@@ -10582,7 +10603,8 @@
             "type": "string"
           },
           "profile": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "tmdb_id": {
             "type": "integer",
@@ -10627,7 +10649,8 @@
             "type": "string"
           },
           "logo": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "country": {
             "$ref": "#/components/schemas/SqlNullString"
@@ -11034,10 +11057,12 @@
             "$ref": "#/components/schemas/SqlNullString"
           },
           "poster_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "backdrop_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "language": {
             "$ref": "#/components/schemas/SqlNullString"
@@ -11104,7 +11129,8 @@
             "type": "string"
           },
           "artist_profile": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "tmdb_id": {
             "type": "integer",
@@ -13034,13 +13060,15 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "A TMDB image path for the poster. A value equal to the one the movie returns, or the URL of any downloaded copy (/api/static/...), leaves the poster unchanged."
           },
           "backdrop_path": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "A TMDB image path for the backdrop. A value equal to the one the movie returns, or the URL of any downloaded copy (/api/static/...), leaves the backdrop unchanged."
           },
           "language": {
             "type": [
@@ -13327,7 +13355,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "owner": {
             "$ref": "#/components/schemas/UserSummary"
@@ -13381,7 +13410,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "owner": {
             "$ref": "#/components/schemas/UserSummary"
@@ -13692,7 +13722,8 @@
             "type": "string"
           },
           "cover": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "musician": {
             "$ref": "#/components/schemas/SqlNullString"
@@ -13780,7 +13811,7 @@
           },
           "cover": {
             "$ref": "#/components/schemas/SqlNullString",
-            "description": "The matched provider's cover art URL. Valid is false until a match supplies one."
+            "description": "The matched provider's cover art URL, or the /api/static/ URL of the server's downloaded copy; see the API description. Valid is false until a match supplies one."
           },
           "created_at": {
             "type": "string"
@@ -13959,7 +13990,8 @@
             "$ref": "#/components/schemas/SqlNullString"
           },
           "album_cover": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "musician_id": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -13988,7 +14020,8 @@
             "type": "string"
           },
           "thumb": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "album_count": {
             "type": "integer",
@@ -14126,7 +14159,8 @@
             "type": "string"
           },
           "thumb": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           }
         },
         "additionalProperties": false
@@ -14315,7 +14349,8 @@
             "description": "No longer written: Spotify stopped reporting follower counts to this app in 2026, so Valid is false."
           },
           "thumb": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "created_at": {
             "type": "string"
@@ -14345,7 +14380,8 @@
             "type": "string"
           },
           "cover": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "year": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -14400,7 +14436,8 @@
             "$ref": "#/components/schemas/SqlNullString"
           },
           "album_cover": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           }
         },
         "additionalProperties": false
@@ -14902,7 +14939,8 @@
             "$ref": "#/components/schemas/SqlNullString"
           },
           "album_cover": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "musician_name": {
             "$ref": "#/components/schemas/SqlNullString"
@@ -15448,7 +15486,8 @@
             "$ref": "#/components/schemas/SqlNullString"
           },
           "album_cover": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "musician_id": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -15501,7 +15540,8 @@
             "$ref": "#/components/schemas/SqlNullString"
           },
           "album_cover": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "musician_id": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -15571,7 +15611,8 @@
             "type": "string"
           },
           "thumb": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "total_play_count": {
             "$ref": "#/components/schemas/SqlNullFloat64"
@@ -15714,7 +15755,8 @@
             "type": "string"
           },
           "cover": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "musician": {
             "$ref": "#/components/schemas/SqlNullString"
@@ -16718,7 +16760,8 @@
           "enrichment_unmatched",
           "pending_enrichment",
           "issue_count",
-          "issues"
+          "issues",
+          "catalog_revision"
         ],
         "properties": {
           "run_id": {
@@ -16843,7 +16886,8 @@
           },
           "issue_count": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Outstanding issues. A run of changes (scope \"changes\") also lists, after its own, those the previous run left at paths outside its own, or at or beneath a path it could not read (for files it did not see and that still exist), that stay true until a run looks at them again: files that failed or were deferred, and disks kept because they were not mounted. Carried issues do not make its state completed-with-issues; discovery and enrichment issues stay with the run that raised them."
           },
           "issues": {
             "type": "array",
@@ -16851,6 +16895,12 @@
             "items": {
               "$ref": "#/components/schemas/ScanIssue"
             }
+          },
+          "catalog_revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Running count of the catalog changes this scanner has made since the server started: files imported, updated or deleted, and entries enriched, summed across runs. It changes even when the run that made the change finished between two reads of this report, so a client compares it to tell whether the catalog changed. Compare it for change only; it restarts from 0 with the server."
           }
         },
         "additionalProperties": false
@@ -16900,7 +16950,8 @@
           "enrichment_unmatched",
           "pending_enrichment",
           "issue_count",
-          "issues"
+          "issues",
+          "catalog_revision"
         ],
         "properties": {
           "run_id": {
@@ -17034,7 +17085,8 @@
           },
           "issue_count": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Outstanding issues. A run of changes (scope \"changes\") also lists, after its own, those the previous run left at paths outside its own, or at or beneath a path it could not read (for files it did not see and that still exist), that stay true until a run looks at them again: files that failed or were deferred, and disks kept because they were not mounted. Carried issues do not make its state completed-with-issues; discovery and enrichment issues stay with the run that raised them."
           },
           "issues": {
             "type": "array",
@@ -17042,6 +17094,12 @@
             "items": {
               "$ref": "#/components/schemas/ScanIssue"
             }
+          },
+          "catalog_revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Running count of the catalog changes this scanner has made since the server started: files imported, updated or deleted, and entries enriched, summed across runs. It changes even when the run that made the change finished between two reads of this report, so a client compares it to tell whether the catalog changed. Compare it for change only; it restarts from 0 with the server."
           }
         },
         "additionalProperties": false
@@ -17089,7 +17147,8 @@
           "enrichment_failed",
           "enrichment_unmatched",
           "issue_count",
-          "issues"
+          "issues",
+          "catalog_revision"
         ],
         "properties": {
           "run_id": {
@@ -17219,7 +17278,8 @@
           },
           "issue_count": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Outstanding issues. A run of changes (scope \"changes\") also lists, after its own, those the previous run left at paths outside its own, or at or beneath a path it could not read (for files it did not see and that still exist), that stay true until a run looks at them again: files that failed or were deferred, and disks kept because they were not mounted. Carried issues do not make its state completed-with-issues; discovery and enrichment issues stay with the run that raised them."
           },
           "issues": {
             "type": "array",
@@ -17227,6 +17287,12 @@
             "items": {
               "$ref": "#/components/schemas/ScanIssue"
             }
+          },
+          "catalog_revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Running count of the catalog changes this scanner has made since the server started: files imported, updated or deleted, artists and albums enriched, committed Apple Music or Spotify track pairings, and album matches dropped because their tracks contradicted them, summed across runs. Track pairings count even for unchanged files or fingerprint-only updates; they do not increase enriched. A dropped match counts even though it lowers enriched. Rolled-back pairings and repeated publication of the same committed changes add nothing. It changes even when the run that made the change finished between two reads of this report, so a client compares it to tell whether the catalog changed. Compare it for change only; it restarts from 0 with the server."
           }
         },
         "additionalProperties": false
@@ -17281,7 +17347,8 @@
             "$ref": "#/components/schemas/SqlNullString"
           },
           "still_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "tmdb_runtime": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -17313,10 +17380,12 @@
             "type": "string"
           },
           "poster_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "backdrop_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           }
         },
         "additionalProperties": false
@@ -17368,7 +17437,8 @@
             "type": "string"
           },
           "still_path": {
-            "$ref": "#/components/schemas/SqlNullString"
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
           "progress_sec": {
             "$ref": "#/components/schemas/SqlNullFloat64"
@@ -17878,7 +17948,8 @@
             "type": "string"
           },
           "profile_path": {
-            "type": "string"
+            "type": "string",
+            "description": "TMDB image path of the person's photo, which clients show large. When TMDB is unavailable or has no photo, the stored one instead: a TMDB path, or the /api/static/ URL of its downloaded copy, which is stored at cast-card size."
           },
           "homepage": {
             "type": "string"
@@ -17956,7 +18027,8 @@
             "description": "Release/first-air date or stored year; empty when undated."
           },
           "poster_path": {
-            "type": "string"
+            "type": "string",
+            "description": "TMDB image path, or the /api/static/ URL of the downloaded copy of the poster of a title in the library."
           },
           "popularity": {
             "type": "number"

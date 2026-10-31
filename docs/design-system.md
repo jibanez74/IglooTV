@@ -1211,7 +1211,7 @@ This screen is also where a sign-out lands, so it carries the `IglooNotice` slot
 gate has to say about the action that just happened (§10) — above the row, announced.
 
 - Avatar: 96dp circle. The stored value is resolved against the server origin by
-  `avatarImageUrl` before it reaches the composable: an absolute `http(s)` URL passes through,
+  `serverImageUrl` before it reaches the composable: an absolute `http(s)` URL passes through,
   and an uploaded `/api/static/avatars/...` path gets the origin prepended so the image loader
   recognises it as ours and attaches the bearer that route requires. A missing or
   unresolvable value falls back to the initial on `primary`.
@@ -1565,10 +1565,14 @@ case; a failed fetch shows the shared error card instead — the web's error-fla
 deliberately not ported. On a server with no TMDB key the rail sits in its error state with
 Retry, like any other failed rail.
 
-**Album covers are used verbatim.** The music scanner stores an absolute Spotify image URL or
-nothing, so a cover is not run through the TMDB proxy helper and there is no music proxy to
-build. The image loader already withholds the bearer token from foreign origins, which is what
-makes loading straight from the CDN correct rather than merely convenient.
+**Album covers are used as the API returns them.** A cover is an absolute Spotify or Apple image
+URL, or, with the server's Download images setting on, the server's own `/api/static/...` copy,
+so it is not run through the TMDB proxy helper and there is no music proxy to build. The image
+loader resolves a server path against the origin (`ServerPathInterceptor`) and attaches the
+bearer token only to same-origin URLs, which is what makes loading a provider URL straight from
+its CDN correct rather than merely convenient. TMDB fields get the same treatment from
+`tmdbImageUrl`: a downloaded copy's `/api/static/...` path loads from the origin as it is,
+since the server stores it at one size.
 
 Only the first section on the pane holds the entry anchor — the hero when it is visible,
 Continue Watching otherwise — so every rail below passes `entryRequester = null`. Vertical d-pad
@@ -2272,8 +2276,8 @@ for a missing duration).
 
 **Hero.** The web page's treatment: there is no separate music backdrop asset, so the **album
 cover itself** is the full-bleed backdrop, cover-cropped, with §11.4.1's exact two scrims and
-decode-gated over-media licensing. The cover is used **verbatim** (an absolute Spotify URL or
-nothing — no proxy, no bearer, §11.3.2's album-rail rule). Beside a square cover
+decode-gated over-media licensing. The cover is used as the API returns it (§11.3.2's album-rail
+rule: a provider URL straight from its CDN, the server's own copy from its origin). Beside a square cover
 (`posterWidth` × `albumAspect`, Music-glyph fallback, decorative): title at `titleLarge`
 (2 lines), the artist line, three §11.4.1 detail chips (release date — full date, else bare
 year — track count, total duration) cleared into one sentence, the genres line, the popularity
@@ -2343,8 +2347,8 @@ clears its own subtree and the row's text nodes are cleared into Play's sentence
 Opened from a Musicians-tab card (`DetailsOrigin.Music`), a track row's "Go to artist", or an
 album page's artist chip — the last two replacing the overlay that was up, origin untouched.
 
-**Hero.** The artist's **thumbnail** blown up as the full-bleed backdrop (verbatim URL, no
-proxy) with §11.4.1's two scrims and decode-gated over-media licensing; beside a circular thumb
+**Hero.** The artist's **thumbnail** blown up as the full-bleed backdrop (used as the API returns
+it, §11.3.2) with §11.4.1's two scrims and decode-gated over-media licensing; beside a circular thumb
 (`posterWidth` at `radius.pill`, Person-glyph fallback, decorative): name at `titleLarge`,
 three chips cleared into one sentence (album count, track count, total duration), the genres
 line, the §11.5.1 Spotify popularity meter, and the action row — **Play all** (Primary, the
@@ -2728,9 +2732,11 @@ prior track under it.
 
 **No surface on the seam.** The screen draws the current track's cover itself (`AsyncImage`,
 cover-fill over the over-media control fill, Music-glyph fallback, decorative); the engine
-interface is pure Kotlin. Covers are verbatim absolute Spotify URLs — the session's bitmap
-loader is deliberately **not** the movie's bearer-authed one, while the track streams do use
-the bearer data-source factory.
+interface is pure Kotlin. Covers reach the session resolved to absolute URLs, and its bitmap
+loader is the movie's kind on a factory of its own: `IglooRoot` hands it a bearer artwork
+data-source factory separate from the one the track streams use, which leaves a provider URL
+alone, authenticates the server's own `/api/static` copy, and never reports an HTTP 401 as a
+revoked session, so a rejected cover stays an artwork failure.
 
 **Chrome never hides.** §11.8 licenses resting chrome only over a moving picture, and a
 static cover is not one — so there is no auto-hide clock, no reveal step, and **Back always
@@ -2893,6 +2899,27 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-29 — Artwork the server downloads (§11.3.2, §11.5.1, §11.5.2, §11.8).**
+
+- **§11.3.2**: album covers and musician photos are used as the API returns them: a provider URL
+  straight from its CDN, or, with the server's Download images setting on, its own
+  `/api/static/...` copy, which the image loader resolves against the origin
+  (`ServerPathInterceptor`) and authenticates. TMDB fields get the same treatment from
+  `tmdbImageUrl`. `avatarImageUrl` is now `serverImageUrl`, shared by avatars and covers.
+- **§11.8**: the music session's bitmap loader is the bearer kind, on a stack of its own, so a
+  rejected cover is an artwork failure and never a revoked profile.
+- **Shield pass, same day**: 362 instrumented tests across the 23 touched suites pass on the
+  device; a live drive against a server with Download images on rendered the hero, poster and
+  show rails, album covers and musician circles on Home, Music and Search, both music detail
+  pages, a movie's cast photos, the music player's cover and the media session's metadata; a
+  short play, a trip to the launcher and a relaunch left the profile signed in. No defect found.
+- **Review pass, same day** (CodeRabbit on PR #17): the music session's bitmap loader now caps
+  its decode at the dimension Media3's default loader uses, so a large provider cover is
+  downsampled rather than allocated whole, pinned by a `MusicMediaSessionTest` case; §11.8 names the separate artwork factory instead of
+  the stream one; the server docs were corrected and re-synced (watcher-run refreshes follow
+  `catalog_revision`, moves included; the static `?v=` hashes source and size, not bytes; the
+  show scan's file-move guarantee carries the inode, size and modification-time pairing).
 
 **2026-10-26 — Search (§11.6, §9.1).**
 

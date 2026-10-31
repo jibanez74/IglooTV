@@ -2,13 +2,18 @@
 
 package com.igloo.blindpenguincoder.playback.media3
 
+import android.graphics.Bitmap
 import android.media.session.MediaController as PlatformMediaController
+import android.net.Uri
 import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.ByteArrayDataSource
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -24,6 +29,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.ByteArrayOutputStream
 
 /**
  * The album session's contract with the system (design-system.md section 11.8.2), on a real
@@ -78,11 +84,16 @@ class MusicMediaSessionTest {
                     MediaItem.Builder()
                         .setUri("https://203.0.113.1/music/tracks/${track.id}/stream")
                         .setMediaId(track.id.toString())
-                        .setMediaMetadata(musicMediaMetadata(track))
+                        .setMediaMetadata(musicMediaMetadata(track, track.coverUrl))
                         .build()
                 },
             )
-            built = buildMusicMediaSession(context, player, request.source.sessionKey) to player
+            built = buildMusicMediaSession(
+                context = context,
+                player = player,
+                sessionKey = request.source.sessionKey,
+                artworkDataSourceFactory = DefaultDataSource.Factory(context),
+            ) to player
         }
         toRelease += built
         return built
@@ -112,7 +123,7 @@ class MusicMediaSessionTest {
     @Test
     fun metadataCarriesTheTrackTheAlbumAndTheMusicType() {
         val request = album()
-        val first = musicMediaMetadata(request.tracks[0])
+        val first = musicMediaMetadata(request.tracks[0], request.tracks[0].coverUrl)
 
         assertEquals("Yesterday", first.title.toString())
         assertEquals("The Beatles", first.artist.toString())
@@ -122,8 +133,8 @@ class MusicMediaSessionTest {
 
         // The album page's rule: a missing artist or cover is absent, never an empty string.
         val bare = album(artistName = null, coverUrl = null)
-        assertNull(musicMediaMetadata(bare.tracks[0]).artist)
-        assertNull(musicMediaMetadata(bare.tracks[0]).artworkUri)
+        assertNull(musicMediaMetadata(bare.tracks[0], bare.tracks[0].coverUrl).artist)
+        assertNull(musicMediaMetadata(bare.tracks[0], bare.tracks[0].coverUrl).artworkUri)
     }
 
     @Test
@@ -157,6 +168,25 @@ class MusicMediaSessionTest {
         instrumentation.runOnMainSync { commands = player.availableCommands }
         assertTrue(commands.contains(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM))
         assertTrue(commands.contains(Player.COMMAND_SEEK_TO_PREVIOUS))
+    }
+
+    @Test
+    fun aCoverWiderThanTheDecodeLimitIsSubsampledOnTheWayIn() {
+        // Media3's own default loader caps decoding at twice the session's bitmap limit, less
+        // one; a cover past that is decoded at a power-of-two fraction of its size rather than
+        // allocated whole and scaled afterwards by the session's size limiter.
+        val cap = MediaSession.getBitmapDimensionLimit(context) * 2 - 1
+        val sourceWidth = cap * 2 + 2
+        val png = ByteArrayOutputStream().also { out ->
+            Bitmap.createBitmap(sourceWidth, 16, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, out)
+        }.toByteArray()
+        val loader = musicArtworkBitmapLoader(context, DataSource.Factory { ByteArrayDataSource(png) })
+
+        val cover = loader.loadBitmap(Uri.parse("https://i.scdn.co/image/wide.png")).get()
+
+        assertTrue("decoded ${cover.width} px wide, over the $cap px cap", cover.width <= cap)
+        // Subsampled by the smallest power of two that fits, never shrunk past it.
+        assertTrue("decoded ${cover.width} px wide, under half the $cap px cap", cover.width * 2 > cap)
     }
 
     @Test

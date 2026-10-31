@@ -54,7 +54,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.data.model.ProfileSummary
-import com.igloo.blindpenguincoder.images.avatarImageUrl
+import com.igloo.blindpenguincoder.images.serverImageUrl
 
 /**
  * "Who's watching?" — rendered entirely from stored profiles, so it appears instantly
@@ -185,7 +185,7 @@ private fun ProfileTile(
     ) {
         IglooAvatar(
             name = profile.name,
-            avatarUrl = avatarImageUrl(serverOrigin, profile.avatarUrl),
+            avatarUrl = serverImageUrl(serverOrigin, profile.avatarUrl),
             size = AVATAR_SIZE.scaled(),
         )
     }

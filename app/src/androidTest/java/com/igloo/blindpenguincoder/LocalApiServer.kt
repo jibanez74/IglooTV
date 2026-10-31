@@ -164,7 +164,7 @@ class LocalApiServer(private val hasPin: Boolean = true) {
     /**
      * `avatar` carries an uploaded relative path rather than null, so the gates that sign in
      * exercise the shape that used to fail: it is what the server actually stores, and what
-     * `avatarImageUrl` has to resolve before the rail can render it.
+     * `serverImageUrl` has to resolve before the rail can render it.
      */
     private fun authUserJson() = """
         {"error":false,"data":{"user":{

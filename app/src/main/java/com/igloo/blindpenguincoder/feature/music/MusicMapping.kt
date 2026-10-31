@@ -60,8 +60,9 @@ internal fun SimpleAlbum.toCardUi(): AlbumCardUi = AlbumCardUi(
     id = id,
     title = title.ifBlank { UNTITLED_ALBUM },
     subtitle = musician.orNullIfBlank(),
-    // Used verbatim: the scanner stores an absolute Spotify URL or nothing, and there is no
-    // music image proxy to route it through.
+    // As the API returns it: an absolute Spotify or Apple URL, or, with the server's Download
+    // images setting on, its own `/api/static` copy, which the image loader resolves against
+    // the server's origin.
     coverUrl = cover.orNullIfBlank(),
 )
 

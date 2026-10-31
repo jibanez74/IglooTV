@@ -9,7 +9,7 @@ data class AuthUser(
     val name: String,
     @SerialName("is_admin") val isAdmin: Boolean,
     // Either a backend-relative `/api/static/avatars/...` path or an absolute URL; resolve
-    // with avatarImageUrl() before rendering.
+    // with serverImageUrl() before rendering.
     val avatar: String? = null,
     @SerialName("has_pin") val hasPin: Boolean,
 )

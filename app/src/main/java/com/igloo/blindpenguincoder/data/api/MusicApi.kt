@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.data.api
 
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.images.serverImageUrl
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -70,6 +71,14 @@ class MusicApi(
      */
     fun trackStreamUrl(id: Long): String =
         "${serverUrl.require().apiBaseUrl}/music/tracks/$id/stream"
+
+    /**
+     * Absolute URL of a cover or photo as the API returns it: a Spotify or Apple URL as is, or
+     * the server's own `/api/static` copy on its origin. Media3 loads queue artwork itself, so,
+     * like [trackStreamUrl], this is a string rather than a request.
+     */
+    fun artworkUrl(stored: String?): String? =
+        serverUrl.current.value?.let { serverImageUrl(it.origin, stored) }
 
     companion object {
         /** Shuffle clamps `limit` to 200 and ignores `exclude` ids past this count. */

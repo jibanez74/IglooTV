@@ -52,4 +52,6 @@ class MusicRepository(
         envelopeData("music stats") { api.musicStats() }
 
     fun trackStreamUrl(id: Long): String = api.trackStreamUrl(id)
+
+    fun artworkUrl(stored: String?): String? = api.artworkUrl(stored)
 }

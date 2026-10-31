@@ -24,8 +24,7 @@ private val sessionInstance = AtomicLong(0)
  *
  * [idPrefix] names the media ("movie-7", "music-album-11"); the instance suffix is appended
  * here. [bitmapLoader] is null wherever Media3's default will do — the movie's poster proxy
- * needs a bearer token system surfaces cannot attach, while an album cover is an absolute URL
- * that needs none.
+ * and server-hosted music covers need a bearer token system surfaces cannot attach.
  */
 internal fun buildIglooMediaSession(
     context: Context,
