@@ -69,8 +69,8 @@ class VideoPlaybackRepository(
     override fun hlsPlaylistUrl(spec: HlsSessionSpec): String =
         api.hlsPlaylistUrl(spec.media, spec.profileId, hlsQueryParams(spec))
 
-    override fun subtitleUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String =
-        api.subtitleUrl(media, trackIndex, startSec)
+    override fun subtitleStreamUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String =
+        api.subtitleStreamUrl(media, trackIndex, startSec)
 
     suspend fun updateWatchProgress(
         media: PlaybackMediaRef,

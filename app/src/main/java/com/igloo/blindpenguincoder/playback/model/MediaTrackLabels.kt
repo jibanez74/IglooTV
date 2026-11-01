@@ -8,9 +8,6 @@ import java.util.Locale
  * wire model or a Media3 Format.
  */
 
-/** Marks a subtitle row the current mode cannot serve, pre-play and in-player alike. */
-internal const val IMAGE_BASED_SUFFIX = " (image-based)"
-
 /** The web's `describePlaybackChannelLayout`: named layouts first, then channel-count guesses. */
 internal fun describeChannelLayout(channelLayout: String?, channels: Long): String {
     val layout = channelLayout?.lowercase(Locale.US).orEmpty()
@@ -41,6 +38,18 @@ internal fun languageDisplayName(code: String?): String? {
         raw.replaceFirstChar { it.uppercase(Locale.US) }
     }
 }
+
+/**
+ * A language tag as one comparable code — the 639-1 form where the table knows one, so "fre",
+ * "fra" and "fr" agree — or null for no language: blank, `und`, `mul`, `zxx`, `mis`.
+ */
+internal fun normalizedLanguageCode(code: String?): String? {
+    val raw = code?.trim()?.lowercase(Locale.US)?.takeIf { it.isNotEmpty() } ?: return null
+    if (raw in NO_LANGUAGE_CODES) return null
+    return if (raw.length == 3) ISO_639_2_TO_1[raw] ?: raw else raw
+}
+
+private val NO_LANGUAGE_CODES = setOf("und", "mul", "zxx", "mis")
 
 /** ISO 639-2 three-letter codes → 639-1 two-letter codes (web's `ISO_639_2_TO_1`). */
 private val ISO_639_2_TO_1 = mapOf(

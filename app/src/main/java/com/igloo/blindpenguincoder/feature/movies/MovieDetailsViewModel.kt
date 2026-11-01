@@ -279,9 +279,10 @@ class MovieDetailsViewModel(
         publishLoaded()
     }
 
-    /** Null is the "None" row: subtitles off. */
+    /** Null is the "None" row: subtitles off, which the default rule never overrides. */
     fun selectSubtitle(streamId: Long?) {
-        playbackSelection = playbackSelection.copy(subtitleStreamId = streamId)
+        val choice = if (streamId == null) SubtitleChoice.Off else SubtitleChoice.Track(streamId)
+        playbackSelection = playbackSelection.copy(subtitle = choice)
         publishLoaded()
     }
 

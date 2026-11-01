@@ -168,89 +168,57 @@ class TrackOptionsTest {
         assertNull(parseHlsAudioOptionId("audio"))
     }
 
+    /**
+     * The ids a merged source really produces: Media3 prefixes every format id with its child's
+     * index, so the session's own tracks carry `0:` and the subtitle stream's `1:`. The old
+     * engine matched a bare stamped id that no merged track ever carries, and found nothing.
+     */
     @Test
-    fun aSideloadedSubtitleIsFoundByItsStampedIdNotItsGroupPosition() {
-        // The wire list is [0] image-based, [1] text, [2] text. Only text tracks are sideloaded,
-        // so group position and wire ordinal disagree — matching by position would pick track 2
-        // when the user asked for track 1.
-        val tracks = tracks(
-            group(audioFormat("en"), C.TRACK_TYPE_AUDIO, selected = true),
-            group(textFormat("en", id = "sub:1"), C.TRACK_TYPE_TEXT, selected = false),
-            group(textFormat("es", id = "sub:2"), C.TRACK_TYPE_TEXT, selected = false),
+    fun theStreamedSubtitleIsTheTextGroupOfTheMergedSourcesSecondChild() {
+        val streamed = tracks(
+            group(audioFormat("en").buildUpon().setId("0:audio").build(), C.TRACK_TYPE_AUDIO, selected = true),
+            group(textFormat("en", id = "0:cc1"), C.TRACK_TYPE_TEXT, selected = false),
+            group(textFormat("es", id = "1:1"), C.TRACK_TYPE_TEXT, selected = false),
         )
+        assertEquals("2:0", subtitleStreamOptionId(streamed))
 
-        assertEquals("1:0", trackOptionIdForFormatId(tracks, C.TRACK_TYPE_TEXT, "sub:1"))
-        assertEquals("2:0", trackOptionIdForFormatId(tracks, C.TRACK_TYPE_TEXT, "sub:2"))
-        // The image-based track was never sideloaded, so nothing carries its ordinal.
-        assertNull(trackOptionIdForFormatId(tracks, C.TRACK_TYPE_TEXT, "sub:0"))
-        assertNull(trackOptionIdForFormatId(tracks, C.TRACK_TYPE_AUDIO, "sub:1"))
+        val unstreamed = tracks(
+            group(audioFormat("en").buildUpon().setId("0:audio").build(), C.TRACK_TYPE_AUDIO, selected = true),
+            group(textFormat("en", id = "0:cc1"), C.TRACK_TYPE_TEXT, selected = false),
+        )
+        assertNull(subtitleStreamOptionId(unstreamed))
+        assertNull(subtitleStreamOptionId(tracks()))
     }
 
     @Test
-    fun aSubtitleSelectionMapsBackToItsWireOrdinal() {
-        val tracks = tracks(
-            group(audioFormat("en"), C.TRACK_TYPE_AUDIO, selected = true),
-            group(textFormat("es", id = "sub:2"), C.TRACK_TYPE_TEXT, selected = true),
-        )
-
-        assertEquals("sub:2", formatIdForOptionId(tracks, "1:0"))
-        assertNull(formatIdForOptionId(tracks, "1:5"))
-        assertNull(formatIdForOptionId(tracks, "9:0"))
-        assertNull(formatIdForOptionId(tracks, "nonsense"))
+    fun anHlsSubtitleIdIsDistinguishableFromAnExoPlayerSelectionId() {
+        // The two id shapes are how the engine tells a new stream from a selection override.
+        assertEquals(2, parseHlsSubtitleOptionId("sub:2"))
+        assertNull(parseHlsSubtitleOptionId("1:0"))
+        assertNull(parseHlsSubtitleOptionId("sub:x"))
+        assertNull(parseHlsSubtitleOptionId("audio:1"))
+        assertNull(parseTrackOptionId("sub:2"))
     }
 
-    private val mixedWire = listOf(
-        PlayableSubtitleTrack(label = "English · PGS", imageBased = true),
+    private val wire = listOf(
+        PlayableSubtitleTrack(label = "English · PGS"),
         PlayableSubtitleTrack(label = "English"),
         PlayableSubtitleTrack(label = "Spanish"),
     )
 
     @Test
-    fun hlsSubtitleRowsInterleaveInertBitmapRowsInWireOrder() {
-        val tracks = tracks(
-            group(audioFormat("en"), C.TRACK_TYPE_AUDIO, selected = true),
-            group(textFormat("en", id = "sub:1"), C.TRACK_TYPE_TEXT, selected = true),
-            group(textFormat("es", id = "sub:2"), C.TRACK_TYPE_TEXT, selected = false),
-        )
+    fun hlsSubtitleRowsListEveryWireTrackSelectableInWireOrder() {
+        // Image-based tracks stream like any other, so no row is inert or relabeled.
         assertEquals(
             listOf(
-                TrackOption("image:0", "English · PGS (image-based)", selected = false, enabled = false),
-                TrackOption("1:0", "English", selected = true),
-                TrackOption("2:0", "Spanish", selected = false),
+                TrackOption("sub:0", "English · PGS", selected = true),
+                TrackOption("sub:1", "English", selected = false),
+                TrackOption("sub:2", "Spanish", selected = false),
             ),
-            hlsSubtitleTrackOptions(tracks, mixedWire, chosenTypeIndex = 1),
+            hlsSubtitleTrackOptions(wire, chosenTypeIndex = 0),
         )
-    }
-
-    @Test
-    fun aRememberedBitmapChoiceMarksItsInertRowSelected() {
-        // Nothing renders for the choice — prepareSource disabled the text type — but the menu
-        // still shows it as the selected row, so the user sees their choice was kept.
-        val tracks = tracks(
-            group(textFormat("en", id = "sub:1"), C.TRACK_TYPE_TEXT, selected = false),
-            group(textFormat("es", id = "sub:2"), C.TRACK_TYPE_TEXT, selected = false),
-        )
-        val options = hlsSubtitleTrackOptions(tracks, mixedWire, chosenTypeIndex = 0)
-        assertEquals(
-            TrackOption("image:0", "English · PGS (image-based)", selected = true, enabled = false),
-            options.first(),
-        )
-        assertEquals(listOf(false, false), options.drop(1).map { it.selected })
-    }
-
-    @Test
-    fun aTextRowWhoseSideloadHasNotResolvedIsOmittedForThatEmission() {
-        // Only sub:2 has resolved so far; the next tracks change re-emits the full list.
-        val tracks = tracks(
-            group(textFormat("es", id = "sub:2"), C.TRACK_TYPE_TEXT, selected = false),
-        )
-        assertEquals(
-            listOf(
-                TrackOption("image:0", "English · PGS (image-based)", selected = false, enabled = false),
-                TrackOption("0:0", "Spanish", selected = false),
-            ),
-            hlsSubtitleTrackOptions(tracks, mixedWire, chosenTypeIndex = null),
-        )
+        assertEquals(listOf(false, false, false), hlsSubtitleTrackOptions(wire, chosenTypeIndex = null).map { it.selected })
+        assertEquals(listOf(true, true, true), hlsSubtitleTrackOptions(wire, chosenTypeIndex = 2).map { it.enabled })
     }
 
     @Test

@@ -430,7 +430,7 @@ class OpenApiContractTest {
             Route("GET", "/api/movies/{id}/stream"),
             Route("GET", "/api/movies/{id}/hls/{profile}/playlist.m3u8"),
             Route("POST", "/api/movies/{id}/hls/session/stop"),
-            Route("GET", "/api/movies/{id}/subtitles/{trackIndex}/web.vtt"),
+            Route("GET", "/api/movies/{id}/subtitles/{trackIndex}/stream.mkv"),
 
             Route("GET", "/api/shows/library", envelope(ShowsLibraryData.serializer())),
             Route("GET", "/api/shows/genres", envelope(ShowGenresData.serializer())),
@@ -465,7 +465,7 @@ class OpenApiContractTest {
             Route("GET", "/api/shows/episodes/{id}/stream"),
             Route("GET", "/api/shows/episodes/{id}/hls/{profile}/playlist.m3u8"),
             Route("POST", "/api/shows/episodes/{id}/hls/session/stop"),
-            Route("GET", "/api/shows/episodes/{id}/subtitles/{trackIndex}/web.vtt"),
+            Route("GET", "/api/shows/episodes/{id}/subtitles/{trackIndex}/stream.mkv"),
 
             Route("GET", "/api/music/albums/latest", envelope(LatestAlbumsData.serializer())),
             Route("GET", "/api/music/albums", envelope(AlbumsData.serializer())),

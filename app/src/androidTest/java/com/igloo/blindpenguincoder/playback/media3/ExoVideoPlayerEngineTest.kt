@@ -24,6 +24,8 @@ import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.SUBTITLES_UNAVAILABLE_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.TrackOption
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import kotlinx.coroutines.CompletableDeferred
@@ -71,6 +73,7 @@ class ExoVideoPlayerEngineTest {
         val fetched = mutableListOf<HlsSessionSpec>()
         val fetchedAtMs = mutableListOf<Long>()
         val stopped = mutableListOf<String>()
+        val subtitleUrls = mutableListOf<String>()
         var result: HlsManifestResult = HlsManifestResult.Ready("remux", 0.0)
         var throwOnFetch: (() -> Nothing)? = null
         var suspendedResult: CompletableDeferred<HlsManifestResult>? = null
@@ -92,8 +95,11 @@ class ExoVideoPlayerEngineTest {
         override fun hlsPlaylistUrl(spec: HlsSessionSpec): String =
             "https://203.0.113.1$pathPrefix/movies/${spec.media.id}/hls/${spec.profileId}/playlist.m3u8"
 
-        override fun subtitleUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String =
-            "https://203.0.113.1/movies/${media.id}/subtitles/$trackIndex/web.vtt"
+        override fun subtitleStreamUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String {
+            val query = if (startSec > 0.0) "?start=$startSec" else ""
+            return "https://203.0.113.1$pathPrefix/movies/${media.id}/subtitles/$trackIndex/stream.mkv$query"
+                .also { subtitleUrls += it }
+        }
     }
 
     private fun playRequest(
@@ -660,7 +666,7 @@ class ExoVideoPlayerEngineTest {
     /** The wire list of a movie mixing text and image-based streams; ordinal 1 is the bitmap. */
     private fun mixedSubtitles() = listOf(
         PlayableSubtitleTrack(label = "English"),
-        PlayableSubtitleTrack(label = "English · PGS", imageBased = true),
+        PlayableSubtitleTrack(label = "English · PGS"),
         PlayableSubtitleTrack(label = "Spanish"),
     )
 
@@ -683,7 +689,9 @@ class ExoVideoPlayerEngineTest {
         params.overrides.keys.any { it.type == C.TRACK_TYPE_TEXT }
 
     @Test
-    fun switchingToHlsWithABitmapSubtitleGoesDeterministicallyOffAndKeepsTheChoice() {
+    fun switchingToHlsWithABitmapSubtitleKeepsItOn() {
+        // An HLS session streams the original track next to the video, so a bitmap choice
+        // renders there exactly as under Direct.
         val api = FakeHlsApi()
         val engine = engine(
             playRequest(subtitleTypeIndex = 1, subtitleTracks = mixedSubtitles()),
@@ -695,29 +703,39 @@ class ExoVideoPlayerEngineTest {
         onMain { engine.selectPlaybackMode(PlaybackMode.Remux.name) }
         waitFor("the committed remux source") { selectedQualityId(engine) == PlaybackMode.Remux.name }
 
-        // The choice survives, but nothing may render for it: text off, no stale override left
-        // for Media3 to trade against a sideloaded VTT.
         assertEquals(1, engine.currentSubtitleTypeIndex)
-        val params = selectionParameters(engine)
-        assertTrue(params.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
-        assertFalse(hasTextOverride(params))
+        assertFalse(selectionParameters(engine).disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+        assertEquals(listOf("https://203.0.113.1/movies/7/subtitles/1/stream.mkv"), api.subtitleUrls)
     }
 
     @Test
-    fun reconstructingIntoHlsWithABitmapOrdinalStaysOffButKeepsTheOrdinal() {
+    fun reconstructingIntoHlsWithABitmapOrdinalStreamsIt() {
         // The lifecycle path: a rebuilt engine is seeded straight from the persisted request.
         val api = FakeHlsApi()
+        api.result = HlsManifestResult.Ready("remux", 584.25)
         val engine = engine(
             playRequest(mode = PlaybackMode.Remux, subtitleTypeIndex = 1, subtitleTracks = mixedSubtitles()),
             api,
         )
-        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = false) }
+        onMain { engine.startPlayback(590.0, initialPlayWhenReady = false, rewindOnResume = false) }
         waitFor("the committed remux source") { selectedQualityId(engine) == PlaybackMode.Remux.name }
 
         assertEquals(1, engine.currentSubtitleTypeIndex)
-        val params = selectionParameters(engine)
-        assertTrue(params.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
-        assertFalse(hasTextOverride(params))
+        assertFalse(selectionParameters(engine).disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+        // The stream's start is the session's actual start, which puts it on the same timeline.
+        assertEquals(listOf("https://203.0.113.1/movies/7/subtitles/1/stream.mkv?start=584.25"), api.subtitleUrls)
+    }
+
+    @Test
+    fun anHlsSessionWithoutSubtitlesStreamsNone() {
+        val api = FakeHlsApi()
+        val engine = engine(playRequest(mode = PlaybackMode.Remux, subtitleTracks = mixedSubtitles()), api)
+        onMain { engine.startPlayback(null, initialPlayWhenReady = false, rewindOnResume = false) }
+        waitFor("the committed remux source") { selectedQualityId(engine) == PlaybackMode.Remux.name }
+
+        assertNull(engine.currentSubtitleTypeIndex)
+        assertTrue(selectionParameters(engine).disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+        assertTrue(api.subtitleUrls.isEmpty())
     }
 
     @Test
@@ -866,5 +884,184 @@ class ExoVideoPlayerEngineTest {
         // Each one after waits out the spacing from the recovery before it.
         val gaps = api.fetchedAtMs.zipWithNext { earlier, later -> later - earlier }
         gaps.drop(1).forEach { gap -> assertTrue("recoveries $gap ms apart", gap >= 1_900) }
+    }
+
+    // --- subtitle streams over a real session (fixtures served by SubtitleFixtureServer) ---
+
+    private fun streamedSubtitleSelected(engine: VideoPlayerEngine): Boolean {
+        var selected = false
+        onMain {
+            selected = (engine as ExoVideoPlayerEngine).currentTracks.groups.any {
+                it.type == C.TRACK_TYPE_TEXT && it.isSelected &&
+                    it.getTrackFormat(0).id?.startsWith(SUBTITLE_STREAM_ID_PREFIX) == true
+            }
+        }
+        return selected
+    }
+
+    private fun VideoPlayerEngine.subtitleRows(): List<TrackOption> =
+        events.replayCache.filterIsInstance<VideoPlayerEvent.TracksChanged>().lastOrNull()?.subtitles.orEmpty()
+
+    private fun VideoPlayerEngine.statusMessages(): List<String?> =
+        events.replayCache.filterIsInstance<VideoPlayerEvent.StatusMessage>().map { it.message }
+
+    private fun VideoPlayerEngine.latestTimeSec(): Double =
+        events.replayCache.filterIsInstance<VideoPlayerEvent.Time>().lastOrNull()?.currentSec ?: 0.0
+
+    private fun SubtitleFixtureServer.playlistRequests(): Int =
+        synchronized(requests) { requests.count { it.endsWith("playlist.m3u8") } }
+
+    private fun streamingEngine(
+        server: SubtitleFixtureServer,
+        api: FakeHlsApi,
+        subtitleTypeIndex: Int?,
+    ): VideoPlayerEngine {
+        val engine = engine(
+            playRequest(mode = PlaybackMode.Remux, subtitleTypeIndex = subtitleTypeIndex, subtitleTracks = mixedSubtitles()),
+            api,
+            hlsDataSourceFactory = server.factory,
+        )
+        onMain { engine.startPlayback(null, initialPlayWhenReady = true, rewindOnResume = false) }
+        return engine
+    }
+
+    @Test
+    fun aChosenBitmapTrackStreamsNextToTheSessionAndIsTheSelectedText() {
+        val server = SubtitleFixtureServer()
+        val api = FakeHlsApi(pathPrefix = "/api")
+        val engine = streamingEngine(server, api, subtitleTypeIndex = 0)
+
+        waitFor("the streamed subtitle to be selected", timeoutMs = 15_000) { streamedSubtitleSelected(engine) }
+
+        assertTrue(server.subtitleRequests(0) >= 1)
+        assertEquals(listOf(true, false, false), engine.subtitleRows().map { it.selected })
+        assertEquals(listOf("sub:0", "sub:1", "sub:2"), engine.subtitleRows().map { it.id })
+        assertTrue("${engine.errors()}", engine.errors().isEmpty())
+    }
+
+    private fun VideoPlayerEngine.cueTexts(): List<String> {
+        var texts = emptyList<String>()
+        onMain { texts = (this as ExoVideoPlayerEngine).currentCues.mapNotNull { it.text?.toString() } }
+        return texts
+    }
+
+    /**
+     * A subtitle chosen before playback — by the default rule or the dialog — on a session played
+     * from its start: the cues must reach the screen without any in-player pick.
+     */
+    @Test
+    fun aSubtitleChosenBeforePlaybackRendersFromTheSessionStart() {
+        val server = SubtitleFixtureServer()
+        val api = FakeHlsApi(pathPrefix = "/api")
+        val engine = streamingEngine(server, api, subtitleTypeIndex = 1)
+
+        waitFor("the cue at 1.0 s", timeoutMs = 15_000) { "One" in engine.cueTexts() }
+        assertTrue("${engine.errors()}", engine.errors().isEmpty())
+    }
+
+    /** A remux session still being produced: Media3 plays its EVENT playlist as live. */
+    @Test
+    fun aSubtitleChosenBeforePlaybackRendersOnALiveRemuxSession() {
+        val server = SubtitleFixtureServer()
+        server.eventPlaylist = true
+        val api = FakeHlsApi(pathPrefix = "/api")
+        val engine = streamingEngine(server, api, subtitleTypeIndex = 1)
+
+        waitFor("the cue at 1.0 s", timeoutMs = 15_000) { "One" in engine.cueTexts() }
+        assertTrue("${engine.errors()}", engine.errors().isEmpty())
+    }
+
+    /**
+     * The default rule turns forced tracks on, and a forced track is sparse: between its cues the
+     * server's stream sends nothing but keepalives. The video must load and play on regardless —
+     * here through the start-up path, where the engine's own pick restarts the stream.
+     */
+    @Test
+    fun aSubtitleStreamWaitingForItsNextCueDoesNotStallTheVideo() {
+        val server = SubtitleFixtureServer()
+        server.subtitleHoldMs = 9_000
+        val api = FakeHlsApi(pathPrefix = "/api")
+        val startedAt = SystemClock.uptimeMillis()
+        val engine = streamingEngine(server, api, subtitleTypeIndex = 1)
+
+        waitFor("playback past 6 s", timeoutMs = 20_000) { engine.latestTimeSec() >= 6.0 }
+
+        val tookMs = SystemClock.uptimeMillis() - startedAt
+        assertTrue("6 s of video took $tookMs ms: it waited for the subtitle stream", tookMs < 8_500)
+        val afterReady = engine.events.replayCache.dropWhile { it !is VideoPlayerEvent.Ready }
+        assertTrue("rebuffered: $afterReady", afterReady.none { it is VideoPlayerEvent.Buffering })
+        assertTrue("${engine.errors()}", engine.errors().isEmpty())
+    }
+
+    @Test
+    fun anotherTrackUnderHlsStreamsOnTheSameSession() {
+        val server = SubtitleFixtureServer()
+        val api = FakeHlsApi(pathPrefix = "/api")
+        val engine = streamingEngine(server, api, subtitleTypeIndex = 0)
+        waitFor("the first stream", timeoutMs = 15_000) { streamedSubtitleSelected(engine) }
+
+        onMain { engine.selectSubtitleTrack("sub:2") }
+        waitFor("the second stream", timeoutMs = 15_000) {
+            server.subtitleRequests(2) >= 1 && streamedSubtitleSelected(engine)
+        }
+
+        // A subtitle change never costs a new server session, or a transcode permit.
+        assertEquals(1, api.fetched.size)
+        assertEquals(2, engine.currentSubtitleTypeIndex)
+        assertEquals(listOf(false, false, true), engine.subtitleRows().map { it.selected })
+        assertTrue("${engine.errors()}", engine.errors().isEmpty())
+    }
+
+    @Test
+    fun noneTurnsTextOffAndTheSameTrackComesBackInPlace() {
+        val server = SubtitleFixtureServer()
+        val api = FakeHlsApi(pathPrefix = "/api")
+        val engine = streamingEngine(server, api, subtitleTypeIndex = 1)
+        waitFor("the stream", timeoutMs = 15_000) { streamedSubtitleSelected(engine) }
+        val playlistsBefore = server.playlistRequests()
+
+        onMain { engine.selectSubtitleTrack(null) }
+        waitFor("text to turn off") { !streamedSubtitleSelected(engine) }
+        assertNull(engine.currentSubtitleTypeIndex)
+        assertTrue(selectionParameters(engine).disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+
+        onMain { engine.selectSubtitleTrack("sub:1") }
+        waitFor("text to come back", timeoutMs = 15_000) { streamedSubtitleSelected(engine) }
+
+        // Back in place: the source was not prepared again, so the playlist was not reloaded.
+        assertEquals(playlistsBefore, server.playlistRequests())
+        assertEquals(1, engine.currentSubtitleTypeIndex)
+        assertEquals(1, api.fetched.size)
+    }
+
+    @Test
+    fun aFailingSubtitleStreamCostsTheSubtitlesNeverTheMovie() {
+        val server = SubtitleFixtureServer()
+        server.subtitleFailure = 404
+        val api = FakeHlsApi(pathPrefix = "/api")
+        val engine = streamingEngine(server, api, subtitleTypeIndex = 1)
+
+        waitFor("the track to be dropped", timeoutMs = 15_000) { engine.currentSubtitleTypeIndex == null }
+        waitFor("playback to carry on", timeoutMs = 15_000) { engine.latestTimeSec() > 1.0 }
+
+        assertTrue(engine.statusMessages().contains(SUBTITLES_UNAVAILABLE_MESSAGE))
+        assertTrue("${engine.errors()}", engine.errors().isEmpty())
+        assertEquals(1, api.fetched.size)
+        assertEquals(listOf(false, false, false), engine.subtitleRows().map { it.selected })
+    }
+
+    @Test
+    fun aLostSessionWithASubtitleStreamIsStillRecoveredAsASession() {
+        // A segment 404 is the session's loss, not the subtitles': it must take the session
+        // recovery path and keep the subtitle choice.
+        val server = SubtitleFixtureServer()
+        server.segmentFailure = 404
+        val api = FakeHlsApi(pathPrefix = "/api")
+        val engine = streamingEngine(server, api, subtitleTypeIndex = 1)
+
+        waitFor("a session recovery", timeoutMs = 15_000) { api.fetched.size >= 2 }
+
+        assertEquals(1, engine.currentSubtitleTypeIndex)
+        assertFalse(engine.statusMessages().contains(SUBTITLES_UNAVAILABLE_MESSAGE))
     }
 }

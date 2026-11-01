@@ -67,11 +67,11 @@ class VideoPlaybackApi(
         }
 
     /**
-     * Sideloaded WebVTT for one text subtitle track. [startSec] must be the session's
-     * effective start so cues land on the rebased timeline; zero (direct play) omits it.
+     * One subtitle track, as the original track in a Matroska stream. [startSec] must be the
+     * session's actual start so its packets land on the rebased timeline; zero omits it.
      */
-    fun subtitleUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String {
-        val base = "${mediaBase(media)}/subtitles/$trackIndex/web.vtt"
+    fun subtitleStreamUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String {
+        val base = "${mediaBase(media)}/subtitles/$trackIndex/stream.mkv"
         return if (startSec > 0.0) "$base?start=$startSec" else base
     }
 

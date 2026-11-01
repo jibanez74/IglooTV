@@ -17,6 +17,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
@@ -146,7 +147,7 @@ class VideoPlayerScreenTest {
     /** A wire list whose ordinal 1 is a bitmap stream an HLS source cannot serve. */
     private fun mixedSubtitleTracks() = listOf(
         PlayableSubtitleTrack(label = "English"),
-        PlayableSubtitleTrack(label = "English · PGS", imageBased = true),
+        PlayableSubtitleTrack(label = "English · PGS"),
         PlayableSubtitleTrack(label = "Spanish"),
     )
 
@@ -331,22 +332,18 @@ class VideoPlayerScreenTest {
     }
 
     /**
-     * What the engine emits under HLS for [mixedSubtitleTracks] with the bitmap choice
-     * remembered: the live VTT row plus the inert, selected image-based row.
+     * What the engine emits under HLS for [mixedSubtitleTracks] with the bitmap track streamed:
+     * a `sub:` row per wire track, every one selectable.
      */
     private fun emitHlsSubtitleRows() {
-        engine.subtitleTypeIndices["3:0"] = 0
+        engine.subtitleTypeIndices["sub:0"] = 0
+        engine.subtitleTypeIndices["sub:1"] = 1
         engine.emit(
             VideoPlayerEvent.TracksChanged(
                 audio = emptyList(),
                 subtitles = listOf(
-                    TrackOption(id = "3:0", label = "English", selected = false),
-                    TrackOption(
-                        id = "image:1",
-                        label = "English · PGS (image-based)",
-                        selected = true,
-                        enabled = false,
-                    ),
+                    TrackOption(id = "sub:0", label = "English", selected = false),
+                    TrackOption(id = "sub:1", label = "English · PGS", selected = true),
                 ),
             ),
         )
@@ -720,7 +717,7 @@ class VideoPlayerScreenTest {
     }
 
     @Test
-    fun anInertImageBasedSubtitleRowIsFocusableSelectedAndNotActivatable() {
+    fun anImageBasedSubtitleRowUnderHlsIsSelectedAndActivatable() {
         setContent(
             playRequest(
                 mode = PlaybackMode.Remux,
@@ -733,25 +730,20 @@ class VideoPlayerScreenTest {
 
         openPlayerMenu("movie_subtitles")
 
-        // Entry focus lands on the remembered choice even though its row is inert.
-        val inert = composeRule.onNodeWithTag("movie_track_image:1")
-        inert.assertIsFocused()
-        inert.assertIsSelected()
-        inert.performKeyInput { pressKey(Key.DirectionCenter) }
+        // Entry focus lands on the streamed choice, and it is an ordinary row.
+        val streamed = composeRule.onNodeWithTag("movie_track_sub:1")
+        streamed.assertIsFocused()
+        streamed.assertIsSelected()
+        streamed.assertIsEnabled()
+        composeRule.onNodeWithTag("movie_track_none").assertIsNotSelected()
+        streamed.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
 
-        // Inert means inert: no selection command crossed the seam, and the remembered choice
-        // still owns the mark — "None" must not claim it.
-        assertTrue(engine.playbackCommands.none { it.startsWith("subtitle:") })
-        composeRule.onNodeWithTag("movie_track_none").assertIsNotSelected()
-
-        // The focus chain continues past the inert row.
-        inert.performKeyInput { pressKey(Key.DirectionUp) }
-        composeRule.onNodeWithTag("movie_track_3:0").assertIsFocused()
+        assertTrue("subtitle:sub:1" in engine.playbackCommands)
     }
 
     @Test
-    fun selectingARealVttUnderHlsReplacesTheBitmapMemory() {
+    fun selectingAnotherTrackUnderHlsReplacesTheBitmapChoice() {
         setContent(
             playRequest(
                 mode = PlaybackMode.Remux,
@@ -763,14 +755,14 @@ class VideoPlayerScreenTest {
         emitHlsSubtitleRows()
 
         openPlayerMenu("movie_subtitles")
-        composeRule.onNodeWithTag("movie_track_image:1")
+        composeRule.onNodeWithTag("movie_track_sub:1")
             .performKeyInput { pressKey(Key.DirectionUp) }
-        composeRule.onNodeWithTag("movie_track_3:0")
+        composeRule.onNodeWithTag("movie_track_sub:0")
             .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
 
         // An explicit new choice wins: the persisted request now carries the text ordinal.
-        assertTrue("subtitle:3:0" in engine.playbackCommands)
+        assertTrue("subtitle:sub:0" in engine.playbackCommands)
         assertEquals(0, requireNotNull(currentRequest).subtitleTypeIndex)
     }
 
@@ -1297,8 +1289,8 @@ class VideoPlayerScreenTest {
 
     @Test
     fun aBitmapSubtitleChoiceSurvivesSavedStateRecreationUnderHls() {
-        // The persist path must not launder the remembered bitmap ordinal into null (or into a
-        // text track) just because the HLS engine cannot render it.
+        // The persist path must keep the streamed bitmap ordinal, not launder it into null or
+        // into a text track.
         setRestorableContent(
             playRequest(
                 mode = PlaybackMode.Remux,

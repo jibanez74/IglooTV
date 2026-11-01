@@ -95,7 +95,7 @@ class VideoPlayRequestMappingTest {
             posterUrl = null,
             technical = tech,
             progress = null,
-            selection = PlaybackSelection(audioStreamId = 20, subtitleStreamId = 60),
+            selection = PlaybackSelection(audioStreamId = 20, subtitle = SubtitleChoice.Track(60)),
         )
 
         // id 20 is second in stream_index order (1, 2, 3) though last-but-one on the wire.
@@ -143,7 +143,7 @@ class VideoPlayRequestMappingTest {
     }
 
     @Test
-    fun `no subtitle selection means subtitles off`() {
+    fun `no subtitle selection and no flagged default means subtitles off`() {
         val request = build(
             movie = movie(),
             posterUrl = null,
@@ -153,6 +153,24 @@ class VideoPlayRequestMappingTest {
         )
 
         assertNull(request.subtitleTypeIndex)
+    }
+
+    /** Episodes always build with no selection, so this is how their subtitles turn on. */
+    @Test
+    fun `no subtitle selection plays a flagged default in another language than the soundtrack`() {
+        val subtitles = listOf(
+            subtitle(id = 50, streamIndex = 5),
+            subtitle(id = 60, streamIndex = 6, codec = "hdmv_pgs_subtitle", language = "spa", isDefault = true),
+        )
+        val request = build(
+            movie = movie(),
+            posterUrl = null,
+            technical = technical(subtitles = subtitles),
+            progress = null,
+            selection = PlaybackSelection(),
+        )
+
+        assertEquals(1, request.subtitleTypeIndex)
     }
 
     @Test
@@ -252,7 +270,7 @@ class VideoPlayRequestMappingTest {
 
         assertEquals(listOf("English · 5.1 surround", "French · Stereo"), request.audioTracks.map { it.label })
         assertEquals(listOf(true, false), request.audioTracks.map { it.isDefault })
-        assertEquals(listOf(false, true), request.subtitleTracks.map { it.imageBased })
+        assertEquals(listOf("English", "English"), request.subtitleTracks.map { it.label })
     }
 
     @Test
@@ -443,13 +461,15 @@ class VideoPlayRequestMappingTest {
         id: Long,
         streamIndex: Long,
         codec: String = "subrip",
+        language: String = "eng",
+        isDefault: Boolean = false,
     ) = Subtitle(
         id = id,
         streamIndex = streamIndex,
         codec = codec,
-        language = SqlNullString("eng", valid = true),
+        language = SqlNullString(language, valid = true),
         isForced = false,
-        isDefault = false,
+        isDefault = isDefault,
     )
 
     private fun progress(progressSec: Double?, durationSec: Double?) = WatchProgress(

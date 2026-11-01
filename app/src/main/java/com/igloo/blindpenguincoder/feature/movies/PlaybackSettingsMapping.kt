@@ -7,12 +7,11 @@ import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.audioCodecDisplayName
 import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
 import com.igloo.blindpenguincoder.playback.model.describeChannelLayout
-import com.igloo.blindpenguincoder.playback.model.IMAGE_BASED_SUFFIX
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.isUnreliableHlsAudio
 import com.igloo.blindpenguincoder.playback.model.languageDisplayName
+import com.igloo.blindpenguincoder.playback.model.normalizedLanguageCode
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
-import java.util.Locale
 
 /**
  * The Playback Settings dialog's wire-to-UI rules (section 11.4.1), ported from the web client's
@@ -23,14 +22,21 @@ import java.util.Locale
 
 /**
  * What the user picked, session-only — reset when the overlay opens or closes, never persisted.
- * Null ids mean "no explicit choice": audio falls back to the file's default track, subtitle
- * null is "off".
+ * A null audio id means "no explicit choice": the file's default track. Subtitles tell "no
+ * choice" ([SubtitleChoice.Default], resolved by [defaultSubtitle]) apart from the "None" row.
  */
 internal data class PlaybackSelection(
     val mode: PlaybackMode = PlaybackMode.Direct,
     val audioStreamId: Long? = null,
-    val subtitleStreamId: Long? = null,
+    val subtitle: SubtitleChoice = SubtitleChoice.Default,
 )
+
+/** A subtitle choice: none made yet, the "None" row, or one track by wire id. */
+internal sealed interface SubtitleChoice {
+    data object Default : SubtitleChoice
+    data object Off : SubtitleChoice
+    data class Track(val streamId: Long) : SubtitleChoice
+}
 
 /** One quality/mode radio row. */
 data class PlaybackModeOptionUi(val mode: PlaybackMode, val label: String)
@@ -72,9 +78,10 @@ data class PlaybackSettingsUi(
  *   selection degrades to the default instead of pointing at nothing. Unlike the web client,
  *   any track works under Direct — ExoPlayer demuxes the container and selects the track
  *   itself, so lossless audio survives on every track and no mode upgrade is needed.
- * - Effective subtitle: the selected id if present, else off. Image-based tracks (PGS/DVD/DVB)
- *   are selectable under Direct — ExoPlayer renders their bitmaps — but inert for every other
- *   mode, where the backend can only serve text tracks as VTT.
+ * - Effective subtitle: the selected id if the file still has it; "None" is off; otherwise
+ *   [defaultSubtitle] against the effective audio track. Every track is selectable in every
+ *   mode — Direct reads it from the file, and an HLS session streams the original track next
+ *   to the video, image-based ones included, for ExoPlayer to render.
  */
 internal fun playbackSettingsUi(
     audioStreams: List<AudioStream>?,
@@ -106,25 +113,19 @@ internal fun playbackSettingsUi(
         }
     }
 
-    val imageBasedSelectable = selection.mode == PlaybackMode.Direct
     val subtitleList = subtitles.orEmpty().sortedBy { it.streamIndex }
     val subtitleTracks = buildList {
         add(PlaybackTrackOptionUi(id = null, label = SUBTITLES_NONE_LABEL))
         subtitleList.forEachIndexed { index, subtitle ->
-            val inert = isImageBasedSubtitleCodec(subtitle.codec) && !imageBasedSelectable
-            add(
-                PlaybackTrackOptionUi(
-                    id = subtitle.id,
-                    label = subtitleTrackLabel(subtitle, index) +
-                        if (inert) IMAGE_BASED_SUFFIX else "",
-                    enabled = !inert,
-                ),
-            )
+            add(PlaybackTrackOptionUi(id = subtitle.id, label = subtitleTrackLabel(subtitle, index)))
         }
     }
-    val effectiveSubtitle = subtitleList
-        .firstOrNull { it.id == selection.subtitleStreamId }
-        ?.takeUnless { isImageBasedSubtitleCodec(it.codec) && !imageBasedSelectable }
+    val effectiveSubtitle = when (val choice = selection.subtitle) {
+        SubtitleChoice.Off -> null
+        SubtitleChoice.Default -> defaultSubtitle(subtitleList, effectiveAudio)
+        is SubtitleChoice.Track -> subtitleList.firstOrNull { it.id == choice.streamId }
+            ?: defaultSubtitle(subtitleList, effectiveAudio)
+    }
 
     // The same check, in the same words, that will refuse Play — shown here so the user
     // learns about an unplayable Direct combination while still inside the dialog.
@@ -167,6 +168,21 @@ internal fun playbackSettingsUi(
             },
         ) + conversionNote + directCaution?.let { " ${it.message}" }.orEmpty(),
     )
+}
+
+/**
+ * The subtitle that plays when the user made no choice: the first track the file flags as
+ * default, but only when it is forced or in another language than [audio] — a default English
+ * track on an English soundtrack is the rip's habit, not a request. An unknown language on
+ * either side counts as another language. Null = off.
+ */
+internal fun defaultSubtitle(subtitles: List<Subtitle>, audio: AudioStream?): Subtitle? {
+    val flagged = subtitles.firstOrNull { it.isDefault } ?: return null
+    if (flagged.isForced) return flagged
+    val subtitleLanguage = normalizedLanguageCode(flagged.language?.orNull())
+    val audioLanguage = normalizedLanguageCode(audio?.language?.orNull())
+    val sameLanguage = subtitleLanguage != null && subtitleLanguage == audioLanguage
+    return flagged.takeUnless { sameLanguage }
 }
 
 /**
@@ -215,16 +231,6 @@ internal fun subtitleTrackLabel(subtitle: Subtitle, index: Int): String {
     }
     return if (parts.isNotEmpty()) parts.joinToString(" · ") else "Track ${index + 1}"
 }
-
-/** PGS/DVD/DVB tracks are bitmaps the backend cannot serve as VTT (web parity). */
-internal fun isImageBasedSubtitleCodec(codec: String): Boolean =
-    codec.lowercase(Locale.US) in BITMAP_SUBTITLE_CODECS
-
-private val BITMAP_SUBTITLE_CODECS = setOf(
-    "hdmv_pgs_subtitle",
-    "dvd_subtitle",
-    "dvb_subtitle",
-)
 
 internal const val AUDIO_DEFAULT_LABEL = "Default"
 internal const val SUBTITLES_NONE_LABEL = "None"

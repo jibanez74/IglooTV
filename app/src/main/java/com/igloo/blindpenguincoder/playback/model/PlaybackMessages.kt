@@ -31,3 +31,6 @@ const val HLS_RECONNECTING_MESSAGE = "Reconnecting to the stream…"
 /** Narration when the server refuses a requested audio conversion and the start retries legacy. */
 const val HLS_AUDIO_CONVERSION_UNAVAILABLE_MESSAGE =
     "Audio conversion unavailable — using standard audio."
+
+/** Narration while the player drops a subtitle stream that failed and keeps the movie going. */
+const val SUBTITLES_UNAVAILABLE_MESSAGE = "Subtitles unavailable for this track."
