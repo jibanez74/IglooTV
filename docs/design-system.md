@@ -1856,8 +1856,9 @@ exit animation, `dialogWidth` card, focus trapped, Back dismisses — holding th
 direct and remux say "Original quality" outright, the five transcode profiles carry their
 height and intent — "1080p — best quality"), **Audio** (per-track "Language · layout" labels
 through the shared web-parity formatters in `PlaybackSettingsMapping.kt`), and **Subtitles**
-("None" first; image-based PGS/DVD/DVB tracks render as inert rows labelled "(image-based)" —
-the backend can only serve text tracks as VTT). Flat lists, not expanding selects: a popup
+("None" first, then every track, image-based PGS/DVD/DVB ones included, selectable in every mode:
+an HLS session streams the original track next to the video for ExoPlayer to render, and Direct
+reads it from the file). Flat lists, not expanding selects: a popup
 inside a modal breaks the one-layer focus-trap recipe, and on a TV every visible option beats a
 nested picker. Below the scroll, always visible, a plain-language explanation line
 (`bodyMedium` on `cardForeground`, `liveRegion = Polite` — it changes only on a deliberate OK
@@ -1867,7 +1868,10 @@ then a full-width Done.
 OK selects without dismissing; entry focus lands on the *selected* mode row. Selections are
 **session-only** — held in `MovieDetailsViewModel`, consumed when Play lands, reset when the
 overlay closes; nothing is persisted or sent. Resolution is web parity: the default audio is
-the file's `is_default` track (else the first), subtitles default off, and Direct plus any
+the file's `is_default` track (else the first); with no subtitle choice made, the file's first
+`is_default` subtitle plays only when it is forced or its language differs from the chosen
+audio track's (an unknown language counts as different), otherwise subtitles start off, and
+"None" always wins; episodes, which have no dialog, start with the same rule; and Direct plus any
 non-first audio track resolves to Remux with the explanation saying why — direct play serves
 the raw container, which always sounds its first track. The host wiring repeats the menu's
 split once more: `IglooApp` owns the open flag, gates its details-closing Back on it, and
@@ -2899,6 +2903,27 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-10-30 — Subtitles under HLS stream the original track (§11.4.1).**
+
+- **§11.4.1**: every subtitle row is selectable in every mode — no more inert "(image-based)" rows
+  — and with no choice made the file's default subtitle plays when it is forced or in another
+  language than the chosen audio. The in-player Subtitles menu under HLS lists every track as a
+  `sub:<n>` row in the same order and words as the dialog.
+- **Engine**: an HLS session no longer sideloads every text track as WebVTT. The chosen track
+  alone streams from the server's `subtitles/{trackIndex}/stream.mkv` — the original PGS, VobSub,
+  DVB, SSA or SubRip track in Matroska, its packets on the session's timeline — merged with the
+  session's source and rendered by ExoPlayer. The old sideload never worked: Media3 prefixes a
+  merged source's format ids with its child's index (`1:sub:0`), the exact `sub:0` match found
+  nothing, and the Subtitles button never appeared under HLS. A track change rebuilds the source
+  on the same server session; "None" turns text off in place; a stream that fails drops the track
+  with "Subtitles unavailable for this track." and the movie keeps playing.
+- **Tests**: the Media3 pipeline runs on the device over generated fixtures
+  (`androidTest/fixtures/generate-subtitle-streams.sh`): a PGS cue on the session timeline from a
+  start past zero, a SubRip cue after a seek back inside the session, a failed stream reported
+  once and never retried, and the engine's track switch, None, failure and session-loss paths on
+  a real session. The synthetic bare-id `TrackOptions` cases that hid the bug are replaced by the
+  merged-id shapes Media3 produces.
 
 **2026-10-29 — Artwork the server downloads (§11.3.2, §11.5.1, §11.5.2, §11.8).**
 

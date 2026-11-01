@@ -64,10 +64,7 @@ internal fun buildVideoPlayRequest(
             )
         },
         subtitleTracks = orderedSubtitles.mapIndexed { index, subtitle ->
-            PlayableSubtitleTrack(
-                label = subtitleTrackLabel(subtitle, index),
-                imageBased = isImageBasedSubtitleCodec(subtitle.codec),
-            )
+            PlayableSubtitleTrack(label = subtitleTrackLabel(subtitle, index))
         },
         resumeAtSec = resumePositionSec(progress),
         durationSec = progress?.durationSec ?: fileDurationSec,

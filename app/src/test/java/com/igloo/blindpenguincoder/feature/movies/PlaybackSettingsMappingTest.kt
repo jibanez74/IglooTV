@@ -91,14 +91,6 @@ class PlaybackSettingsMappingTest {
         assertEquals("Track 3", subtitleTrackLabel(subtitle(language = null), 2))
     }
 
-    @Test
-    fun `image based codecs are recognized case-insensitively`() {
-        assertTrue(isImageBasedSubtitleCodec("hdmv_pgs_subtitle"))
-        assertTrue(isImageBasedSubtitleCodec("DVD_subtitle"))
-        assertTrue(isImageBasedSubtitleCodec("dvb_subtitle"))
-        assertFalse(isImageBasedSubtitleCodec("subrip"))
-    }
-
     // --- playbackSettingsUi ---
 
     @Test
@@ -145,7 +137,7 @@ class PlaybackSettingsMappingTest {
         val ui = playbackSettingsUi(
             audioStreams = listOf(audioStream()),
             subtitles = listOf(subtitle(id = 20, codec = "hdmv_pgs_subtitle")),
-            selection = PlaybackSelection(mode = PlaybackMode.Direct, subtitleStreamId = 20),
+            selection = PlaybackSelection(mode = PlaybackMode.Direct, subtitle = SubtitleChoice.Track(20)),
         )
         val row = ui.subtitleTracks.single { it.id == 20L }
         assertTrue(row.enabled)
@@ -155,17 +147,23 @@ class PlaybackSettingsMappingTest {
     }
 
     @Test
-    fun `image based subtitle rows are inert outside direct play`() {
-        val ui = playbackSettingsUi(
-            audioStreams = listOf(audioStream()),
-            subtitles = listOf(subtitle(id = 20, codec = "hdmv_pgs_subtitle")),
-            selection = PlaybackSelection(mode = PlaybackMode.Remux, subtitleStreamId = 20),
-        )
-        val row = ui.subtitleTracks.single { it.id == 20L }
-        assertFalse(row.enabled)
-        assertTrue(row.label.endsWith("(image-based)"))
-        assertNull(ui.selectedSubtitleId)
-        assertTrue(ui.explanation.contains("Subtitles are off."))
+    fun `image based subtitles are selectable in every mode`() {
+        // An HLS session streams the original track next to the video, so a bitmap track
+        // renders under Remux and every transcode exactly as it does under Direct.
+        for (mode in PlaybackMode.entries) {
+            val ui = playbackSettingsUi(
+                audioStreams = listOf(audioStream()),
+                subtitles = listOf(
+                    subtitle(id = 20, codec = "hdmv_pgs_subtitle"),
+                    subtitle(id = 21, streamIndex = 3, codec = "dvd_subtitle"),
+                ),
+                selection = PlaybackSelection(mode = mode, subtitle = SubtitleChoice.Track(20)),
+            )
+            assertTrue(mode.name, ui.subtitleTracks.all { it.enabled })
+            assertFalse(mode.name, ui.subtitleTracks.any { it.label.contains("image-based") })
+            assertEquals(mode.name, 20L, ui.selectedSubtitleId)
+            assertTrue(mode.name, ui.explanation.contains("Subtitles: English."))
+        }
     }
 
     @Test
@@ -188,7 +186,7 @@ class PlaybackSettingsMappingTest {
         val ui = playbackSettingsUi(
             audioStreams = listOf(audioStream(id = 10, isDefault = true)),
             subtitles = listOf(subtitle(id = 20)),
-            selection = PlaybackSelection(audioStreamId = 99, subtitleStreamId = 99),
+            selection = PlaybackSelection(audioStreamId = 99, subtitle = SubtitleChoice.Track(99)),
         )
         assertEquals(10L, ui.selectedAudioId)
         assertNull(ui.selectedSubtitleId)
@@ -369,5 +367,94 @@ class PlaybackSettingsMappingTest {
             selection = PlaybackSelection(mode = PlaybackMode.Direct),
         )
         assertTrue(!stereoAac.explanation.contains("adjusted automatically"))
+    }
+
+    // --- the default subtitle rule ---
+
+    private fun defaultFor(
+        subtitles: List<Subtitle>,
+        audio: List<AudioStream> = listOf(audioStream(id = 10, language = "eng", isDefault = true)),
+        selection: PlaybackSelection = PlaybackSelection(),
+    ): Long? = playbackSettingsUi(audioStreams = audio, subtitles = subtitles, selection = selection)
+        .selectedSubtitleId
+
+    @Test
+    fun `a default track in the soundtrack's language stays off`() {
+        assertNull(defaultFor(listOf(subtitle(id = 20, language = "eng", isDefault = true))))
+    }
+
+    @Test
+    fun `a default track in another language turns on`() {
+        val subtitles = listOf(subtitle(id = 20, language = "eng", isDefault = true))
+        val japaneseAudio = listOf(audioStream(id = 10, language = "jpn", isDefault = true))
+        assertEquals(20L, defaultFor(subtitles, audio = japaneseAudio))
+    }
+
+    @Test
+    fun `a forced default track turns on even in the soundtrack's language`() {
+        val subtitles = listOf(subtitle(id = 20, language = "eng", isForced = true, isDefault = true))
+        assertEquals(20L, defaultFor(subtitles))
+    }
+
+    @Test
+    fun `an unknown language on either side counts as another language`() {
+        assertEquals(20L, defaultFor(listOf(subtitle(id = 20, language = null, isDefault = true))))
+        assertEquals(20L, defaultFor(listOf(subtitle(id = 20, language = "und", isDefault = true))))
+        val untaggedAudio = listOf(audioStream(id = 10, language = null, isDefault = true))
+        assertEquals(20L, defaultFor(listOf(subtitle(id = 20, isDefault = true)), audio = untaggedAudio))
+        assertEquals(20L, defaultFor(listOf(subtitle(id = 20, isDefault = true)), audio = emptyList()))
+    }
+
+    @Test
+    fun `bibliographic and terminology codes name the same language`() {
+        val frenchAudio = listOf(audioStream(id = 10, language = "fra", isDefault = true))
+        assertNull(defaultFor(listOf(subtitle(id = 20, language = "fre", isDefault = true)), audio = frenchAudio))
+        val chineseAudio = listOf(audioStream(id = 10, language = "zh", isDefault = true))
+        assertNull(defaultFor(listOf(subtitle(id = 20, language = "chi", isDefault = true)), audio = chineseAudio))
+    }
+
+    @Test
+    fun `only flagged tracks are candidates, the first in stream order`() {
+        val japaneseAudio = listOf(audioStream(id = 10, language = "jpn", isDefault = true))
+        assertNull(defaultFor(listOf(subtitle(id = 20, language = "eng")), audio = japaneseAudio))
+        val twoFlagged = listOf(
+            subtitle(id = 31, streamIndex = 5, language = "spa", isDefault = true),
+            subtitle(id = 30, streamIndex = 4, language = "eng", isDefault = true),
+        )
+        assertEquals(30L, defaultFor(twoFlagged, audio = japaneseAudio))
+    }
+
+    @Test
+    fun `the default is judged against the chosen soundtrack`() {
+        val audio = listOf(
+            audioStream(id = 10, streamIndex = 1, language = "eng", isDefault = true),
+            audioStream(id = 11, streamIndex = 2, language = "jpn"),
+        )
+        val subtitles = listOf(subtitle(id = 20, language = "eng", isDefault = true))
+        assertNull(defaultFor(subtitles, audio = audio))
+        assertEquals(20L, defaultFor(subtitles, audio = audio, selection = PlaybackSelection(audioStreamId = 11)))
+    }
+
+    @Test
+    fun `none wins over the default and a pick wins over both`() {
+        val japaneseAudio = listOf(audioStream(id = 10, language = "jpn", isDefault = true))
+        val subtitles = listOf(
+            subtitle(id = 20, language = "eng", isDefault = true),
+            subtitle(id = 21, streamIndex = 3, language = "spa"),
+        )
+        assertNull(defaultFor(subtitles, japaneseAudio, PlaybackSelection(subtitle = SubtitleChoice.Off)))
+        assertEquals(21L, defaultFor(subtitles, japaneseAudio, PlaybackSelection(subtitle = SubtitleChoice.Track(21))))
+        assertEquals(20L, defaultFor(subtitles, japaneseAudio, PlaybackSelection(subtitle = SubtitleChoice.Default)))
+    }
+
+    @Test
+    fun `the dialog shows the resolved default as the selected row`() {
+        val ui = playbackSettingsUi(
+            audioStreams = listOf(audioStream(id = 10, language = "jpn", isDefault = true)),
+            subtitles = listOf(subtitle(id = 20, language = "eng", isDefault = true)),
+            selection = PlaybackSelection(),
+        )
+        assertEquals(20L, ui.selectedSubtitleId)
+        assertTrue(ui.explanation.contains("Subtitles: English · Default."))
     }
 }

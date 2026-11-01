@@ -90,16 +90,16 @@ class VideoPlaybackRepositoryTest(
     }
 
     @Test
-    fun `the subtitle url shifts by the session start and omits a zero start`() = runTest {
+    fun `the subtitle stream url shifts by the session start and omits a zero start`() = runTest {
         val http = TestHttp { error("the subtitle url is built, never fetched") }
 
         assertEquals(
-            "$TEST_SERVER/$prefix/subtitles/2/web.vtt?start=87.417",
-            http.videoPlaybackRepository.subtitleUrl(media, 2, 87.417),
+            "$TEST_SERVER/$prefix/subtitles/2/stream.mkv?start=87.417",
+            http.videoPlaybackRepository.subtitleStreamUrl(media, 2, 87.417),
         )
         assertEquals(
-            "$TEST_SERVER/$prefix/subtitles/2/web.vtt",
-            http.videoPlaybackRepository.subtitleUrl(media, 2, 0.0),
+            "$TEST_SERVER/$prefix/subtitles/2/stream.mkv",
+            http.videoPlaybackRepository.subtitleStreamUrl(media, 2, 0.0),
         )
     }
 

@@ -2,7 +2,6 @@ package com.igloo.blindpenguincoder.playback.media3
 
 import androidx.media3.common.C
 import androidx.media3.common.Tracks
-import com.igloo.blindpenguincoder.playback.model.IMAGE_BASED_SUFFIX
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.TrackOption
@@ -73,44 +72,44 @@ internal fun parseHlsAudioOptionId(optionId: String): Int? =
 private const val HLS_AUDIO_OPTION_PREFIX = "audio:"
 
 /**
- * An HLS session sideloads only the text subtitle streams, so ExoPlayer's [Tracks] cannot list
- * the movie's image-based rows; the wire summaries can. Rows come out in wire-ordinal order —
- * the same order and words as the pre-play dialog. An image-based row is inert (never
- * selectable here) yet still shows a remembered choice as selected; its `image:<typeIndex>` id
- * is deliberately unlike both "group:track" and `audio:` ids so nothing can mistake it for an
- * applicable selection. A text row whose sideloaded group has not resolved yet is omitted for
- * that emission; the next tracks change re-emits it. The wire list itself is never filtered —
- * positions are backend `trackIndex` ordinals.
+ * An HLS session streams only the chosen subtitle track, so ExoPlayer's [Tracks] cannot list
+ * the others; the wire summaries can. Rows come out in wire-ordinal order — the same order and
+ * words as the pre-play dialog — and every one is selectable: picking one streams that track.
+ * Ids are `sub:<typeIndex>`, deliberately unlike "group:track" ids, so the engine can tell a
+ * new stream apart from a selection override. The wire list is never filtered — positions are
+ * backend `trackIndex` ordinals.
  */
 internal fun hlsSubtitleTrackOptions(
-    tracks: Tracks,
     wireTracks: List<PlayableSubtitleTrack>,
     chosenTypeIndex: Int?,
-): List<TrackOption> = wireTracks.mapIndexedNotNull { index, track ->
-    if (track.imageBased) {
-        TrackOption(
-            id = "$IMAGE_BASED_OPTION_PREFIX$index",
-            label = track.label + IMAGE_BASED_SUFFIX,
-            selected = index == chosenTypeIndex,
-            enabled = false,
-        )
-    } else {
-        groupWithFormatId(tracks, C.TRACK_TYPE_TEXT, "$SIDELOADED_SUBTITLE_ID_PREFIX$index")
-            ?.let { (groupIndex, group) ->
-                TrackOption(
-                    id = groupOptionId(groupIndex),
-                    label = track.label,
-                    selected = group.isTrackSelected(0),
-                )
-            }
-    }
+): List<TrackOption> = wireTracks.mapIndexed { index, track ->
+    TrackOption(
+        id = "$HLS_SUBTITLE_OPTION_PREFIX$index",
+        label = track.label,
+        selected = index == chosenTypeIndex,
+    )
 }
 
-/** Stamped on sideloaded VTT formats: `sub:<typeIndex>`, the backend's subtitle ordinal. */
-internal const val SIDELOADED_SUBTITLE_ID_PREFIX = "sub:"
+/** The `sub:<typeIndex>` ordinal, or null when [optionId] is an ExoPlayer "group:track" id. */
+internal fun parseHlsSubtitleOptionId(optionId: String): Int? =
+    optionId.removePrefix(HLS_SUBTITLE_OPTION_PREFIX)
+        .takeIf { it != optionId }
+        ?.toIntOrNull()
 
-/** An inert image-based subtitle row: `image:<typeIndex>`. Never resolvable to a selection. */
-internal const val IMAGE_BASED_OPTION_PREFIX = "image:"
+private const val HLS_SUBTITLE_OPTION_PREFIX = "sub:"
+
+/**
+ * The option id of the streamed subtitle track: the text group the merged source's second
+ * child carries. A merged source prefixes every format id with its child's index, and the
+ * session's own media is child 0.
+ */
+internal fun subtitleStreamOptionId(tracks: Tracks): String? =
+    typeGroups(tracks, C.TRACK_TYPE_TEXT)
+        .firstOrNull { (_, group) -> group.getTrackFormat(0).id?.startsWith(SUBTITLE_STREAM_ID_PREFIX) == true }
+        ?.let { (groupIndex, _) -> groupOptionId(groupIndex) }
+
+/** The id prefix a merged source gives its second child's formats. */
+internal const val SUBTITLE_STREAM_ID_PREFIX = "1:"
 
 /**
  * The pre-play dialog picks the Nth ffprobe stream of a type (in `stream_index` order); the
@@ -120,20 +119,6 @@ internal const val IMAGE_BASED_OPTION_PREFIX = "image:"
 internal fun trackOptionId(tracks: Tracks, trackType: Int, typeIndex: Int): String? =
     typeGroups(tracks, trackType).getOrNull(typeIndex)
         ?.let { (groupIndex, _) -> groupOptionId(groupIndex) }
-
-/**
- * The option id of the group carrying [formatId]. Sideloaded subtitle groups are matched this
- * way — by the `sub:<typeIndex>` id stamped on their format — because image-based tracks are
- * never sideloaded, so group position and wire ordinal disagree whenever the file mixes both.
- */
-internal fun trackOptionIdForFormatId(tracks: Tracks, trackType: Int, formatId: String): String? =
-    groupWithFormatId(tracks, trackType, formatId)
-        ?.let { (groupIndex, _) -> groupOptionId(groupIndex) }
-
-/** The format id behind a menu option, for mapping a selection back to its wire ordinal. */
-internal fun formatIdForOptionId(tracks: Tracks, optionId: String): String? =
-    resolveTrackOption(tracks, optionId)
-        ?.let { (group, trackIndex) -> group.getTrackFormat(trackIndex).id }
 
 /** The group and track a "group:track" option names; null when malformed or out of range. */
 internal fun resolveTrackOption(tracks: Tracks, optionId: String): Pair<Tracks.Group, Int>? {
@@ -161,14 +146,6 @@ internal fun parseTrackOptionId(id: String): Pair<Int, Int>? {
 
 /** The option id for a group's first track, the only one a menu row ever names. */
 private fun groupOptionId(groupIndex: Int): String = "$groupIndex:0"
-
-private fun groupWithFormatId(
-    tracks: Tracks,
-    trackType: Int,
-    formatId: String,
-): Pair<Int, Tracks.Group>? =
-    typeGroups(tracks, trackType)
-        .firstOrNull { (_, group) -> group.getTrackFormat(0).id == formatId }
 
 private fun typeGroups(tracks: Tracks, trackType: Int): List<Pair<Int, Tracks.Group>> =
     tracks.groups.withIndex()

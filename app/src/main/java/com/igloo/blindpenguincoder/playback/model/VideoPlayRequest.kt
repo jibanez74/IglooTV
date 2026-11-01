@@ -23,13 +23,13 @@ data class VideoPlayRequest(
     val videoCodec: String? = null,
     /** Null = the container's default track. */
     val audioTypeIndex: Int?,
-    /** Null = subtitles off. */
+    /** Null = subtitles off; the launching screen has already resolved the file's default. */
     val subtitleTypeIndex: Int?,
     /** All audio streams in `stream_index` order; list position is the type index. */
     val audioTracks: List<PlayableAudioTrack> = emptyList(),
     /**
-     * All subtitle streams in `stream_index` order, image-based rows included — their position
-     * is the backend's `trackIndex` ordinal, so filtering here would shift every URL after them.
+     * All subtitle streams in `stream_index` order — their position is the backend's
+     * `trackIndex` ordinal, so filtering here would shift every URL after them.
      */
     val subtitleTracks: List<PlayableSubtitleTrack> = emptyList(),
     /** Null = nothing to resume; the player then starts from the beginning without asking. */
@@ -64,21 +64,6 @@ data class VideoPlayRequest(
 }
 
 /**
- * Whether the chosen subtitle ordinal can actually render on a source in the given mode. The
- * chosen ordinal is remembered even where it cannot render — an HLS session only serves the
- * text streams as sideloaded VTT — so the player must disable the text renderer outright
- * rather than leave Media3 free to auto-select an unrelated track. Direct trusts the container
- * over [VideoPlayRequest.subtitleTracks]: the wire list can be degraded or empty while the
- * demuxed file still carries the stream.
- */
-internal fun VideoPlayRequest.subtitleRenderableInMode(typeIndex: Int?, hls: Boolean): Boolean =
-    when {
-        typeIndex == null -> false
-        !hls -> true
-        else -> subtitleTracks.getOrNull(typeIndex)?.imageBased == false
-    }
-
-/**
  * The episode behind a request: the season it belongs to, so the page the player closes onto can
  * follow it, and the episode the player advances to when this one ends (null after the show's
  * last playable episode).
@@ -111,11 +96,10 @@ data class PlayableAudioTrack(
     val isDefault: Boolean = false,
 )
 
-/** One subtitle stream; image-based tracks exist only for direct play and ordinal stability. */
+/** One subtitle stream as the player's menu names it. */
 @Serializable
 data class PlayableSubtitleTrack(
     val label: String,
-    val imageBased: Boolean = false,
 )
 
 /**

@@ -48,8 +48,8 @@ class HlsSessionControllerTest {
         override fun hlsPlaylistUrl(spec: HlsSessionSpec): String =
             "https://server/api/movies/${spec.media.id}/hls/${spec.profileId}/playlist.m3u8"
 
-        override fun subtitleUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String =
-            "https://server/api/movies/${media.id}/subtitles/$trackIndex/web.vtt"
+        override fun subtitleStreamUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String =
+            "https://server/api/movies/${media.id}/subtitles/$trackIndex/stream.mkv"
     }
 
     private val movie = PlaybackMediaRef.Movie(7)

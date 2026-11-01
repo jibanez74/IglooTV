@@ -11,9 +11,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -41,8 +40,8 @@ import org.junit.runner.RunWith
 /**
  * The Playback Settings dialog's contract through the real host wiring (section 11.4.1): the
  * More menu's item opens it with focus on the selected mode row, OK selects without dismissing
- * and the explanation follows, image-based subtitle rows are selectable under Direct but inert
- * for every other mode, and Back or Done dismisses with focus restored to the More trigger —
+ * and the explanation follows, image-based subtitle rows are selectable in every mode, and Back
+ * or Done dismisses with focus restored to the More trigger —
  * never escaping the card while it is up.
  *
  * Assertions are semantics-based, not announcement-based, so a Shield with TalkBack on cannot
@@ -103,7 +102,9 @@ class PlaybackSettingsDialogTest {
                             repaint()
                         },
                         onSelectSubtitle = {
-                            selection = selection.copy(subtitleStreamId = it)
+                            selection = selection.copy(
+                                subtitle = it?.let(SubtitleChoice::Track) ?: SubtitleChoice.Off,
+                            )
                             repaint()
                         },
                         onRetry = {},
@@ -209,23 +210,21 @@ class PlaybackSettingsDialogTest {
     }
 
     @Test
-    fun anImageBasedSubtitleRowIsFocusableButInertOutsideDirectPlay() {
+    fun anImageBasedSubtitleRowIsSelectableUnderRemuxToo() {
         setShellContent()
         openDialog()
 
-        // Move the mode to Remux first; the PGS row then loses its click action.
+        // An HLS session streams the original track, so Remux keeps the PGS row live.
         press(Key.DirectionDown)
         composeRule.onNodeWithTag("playback_mode_remux").assertIsFocused()
         press(Key.DirectionCenter)
 
         press(Key.DirectionDown, times = 10)
         val row = composeRule.onNodeWithTag("subtitle_402")
-        row.assertIsFocused().assertIsNotEnabled().assertHasNoClickAction()
-
+        row.assertIsFocused().assertIsEnabled()
         press(Key.DirectionCenter)
 
-        // The selection did not move: subtitles stay off.
-        composeRule.onNodeWithTag("subtitle_none").assertIsSelected()
+        row.assertIsSelected()
     }
 
     @Test

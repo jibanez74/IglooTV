@@ -25,7 +25,7 @@ interface HlsSessionApi {
     suspend fun fetchHlsManifest(spec: HlsSessionSpec, keepalive: Boolean = false): HlsManifestResult
     suspend fun stopHlsSession(media: PlaybackMediaRef, sessionUuid: String)
     fun hlsPlaylistUrl(spec: HlsSessionSpec): String
-    fun subtitleUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String
+    fun subtitleStreamUrl(media: PlaybackMediaRef, trackIndex: Int, startSec: Double): String
 }
 
 /** A session could not be established within the retry budget. */

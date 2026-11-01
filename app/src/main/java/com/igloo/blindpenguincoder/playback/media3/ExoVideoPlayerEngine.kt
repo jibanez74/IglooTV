@@ -5,7 +5,6 @@
 package com.igloo.blindpenguincoder.playback.media3
 
 import android.content.Context
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -22,12 +21,15 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.HttpDataSource
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
@@ -45,18 +47,19 @@ import com.igloo.blindpenguincoder.playback.hls.sessionLostRecoveryDelayMs
 import com.igloo.blindpenguincoder.playback.hls.shouldRebaseHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRebasePendingHlsSeek
 import com.igloo.blindpenguincoder.playback.hls.shouldRecoverLostHlsSession
+import com.igloo.blindpenguincoder.core.network.causeChain
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
+import com.igloo.blindpenguincoder.playback.model.SUBTITLES_UNAVAILABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.TrackOption
 import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.hlsAudioConversionFor
 import com.igloo.blindpenguincoder.playback.model.noun
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
-import com.igloo.blindpenguincoder.playback.model.subtitleRenderableInMode
 import kotlin.math.floor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -69,6 +72,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import java.io.IOException
 
 /**
  * The real engine: one ExoPlayer whose source is swapped in place between the direct
@@ -110,6 +114,17 @@ internal class ExoVideoPlayerEngine(
         private set
     override var currentSubtitleTypeIndex: Int? = request.subtitleTypeIndex
         private set
+    /** The HLS session the prepared source plays; null under Direct. */
+    private var preparedHlsStart: HlsSessionStart? = null
+    /** The subtitle ordinal the prepared HLS source streams; null when it streams none. */
+    private var streamedSubtitleTypeIndex: Int? = null
+    /**
+     * Counts subtitle streams, so a failure reported for a stream an earlier source carried —
+     * Media3 reports it off the main thread — cannot drop the track the current one streams.
+     */
+    private var subtitleStreamGeneration = 0L
+    /** The last failure a subtitle stream reported, matched against the player's error. */
+    private var subtitleStreamFailure: IOException? = null
     /** Absolute movie second where the prepared source's own zero sits; 0 for direct play. */
     private var timelineOffsetSec = 0.0
     private var restartJob: Job? = null
@@ -178,11 +193,7 @@ internal class ExoVideoPlayerEngine(
                         else -> audioTrackOptions(tracks)
                     },
                     subtitles = when {
-                        isHls -> hlsSubtitleTrackOptions(
-                            tracks,
-                            request.subtitleTracks,
-                            currentSubtitleTypeIndex,
-                        )
+                        isHls -> hlsSubtitleTrackOptions(request.subtitleTracks, currentSubtitleTypeIndex)
                         else -> subtitleTrackOptions(tracks)
                     },
                 ),
@@ -190,10 +201,15 @@ internal class ExoVideoPlayerEngine(
         }
 
         override fun onCues(cueGroup: CueGroup) {
+            currentCues = cueGroup.cues
             subtitleView.setCues(cueGroup.cues)
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            if (isHls && isSubtitleStreamFailure(error)) {
+                dropFailedSubtitleStream()
+                return
+            }
             if (isHls && endAtPastEndSegment(error)) return
             if (isHls && recoverFromLostHlsSession(error)) return
             transitionToTerminal(errorEvent(error))
@@ -350,6 +366,11 @@ internal class ExoVideoPlayerEngine(
 
     override fun selectSubtitleTrack(optionId: String?) {
         if (!playbackIntent.acceptsCommands) return
+        val streamOrdinal = optionId?.let(::parseHlsSubtitleOptionId)
+        if (streamOrdinal != null) {
+            selectStreamedSubtitle(streamOrdinal)
+            return
+        }
         val builder = player.trackSelectionParameters.buildUpon()
         if (optionId == null) {
             currentSubtitleTypeIndex = null
@@ -366,6 +387,39 @@ internal class ExoVideoPlayerEngine(
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
         }
         player.trackSelectionParameters = builder.build()
+    }
+
+    /**
+     * Under HLS a subtitle is a stream of its own next to the session. The track the source
+     * already streams is turned back on in place; another track means a source that streams it,
+     * rebuilt on the same session at the same position.
+     */
+    private fun selectStreamedSubtitle(typeIndex: Int) {
+        currentSubtitleTypeIndex = typeIndex
+        val streamedOptionId = subtitleStreamOptionId(player.currentTracks)
+        val alreadyStreamed = typeIndex == streamedSubtitleTypeIndex && streamedOptionId != null
+        if (!alreadyStreamed) {
+            rebuildHlsSourceInPlace()
+            return
+        }
+        val override = overrideFor(requireNotNull(streamedOptionId)) ?: return
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setOverrideForType(override)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .build()
+    }
+
+    /**
+     * Prepares the current session's source again where the player is, for the subtitle choice
+     * as it is now. No new server session: the video keeps its copy or transcode, and a choice
+     * cannot fail for want of transcode capacity. A source still being established builds from
+     * the current choice already.
+     */
+    private fun rebuildHlsSourceInPlace() {
+        if (pendingRestart != null || heldRebaseTargetSec != null || pendingMode != null) return
+        val start = preparedHlsStart ?: return
+        initialSelectionApplied = false
+        prepareSource(hlsMediaSource(start), player.currentPosition)
     }
 
     override fun selectPlaybackMode(optionId: String) {
@@ -461,6 +515,7 @@ internal class ExoVideoPlayerEngine(
             controller.releaseAndStop()
             effectiveMode = PlaybackMode.Direct
             timelineOffsetSec = 0.0
+            preparedHlsStart = null
             prepareSource(directMediaSource(), (targetAbsoluteSec * 1000).toLong())
             committedRequestedMode = mode
             pendingMode = null
@@ -493,6 +548,7 @@ internal class ExoVideoPlayerEngine(
                 // Seeks made during the preflight may have moved the target within the session.
                 val targetSec = pendingRestart?.targetSec ?: targetAbsoluteSec
                 val relativeMs = ((targetSec - start.actualStartSec).coerceAtLeast(0.0) * 1000).toLong()
+                preparedHlsStart = start
                 prepareSource(hlsMediaSource(start), relativeMs)
                 committedRequestedMode = mode
                 pendingMode = null
@@ -534,11 +590,9 @@ internal class ExoVideoPlayerEngine(
 
     private fun prepareSource(source: MediaSource, positionMs: Long) {
         if (!playbackIntent.acceptsCommands) return
-        // The chosen ordinal may name a stream this source cannot serve (an image-based
-        // subtitle under HLS). Then the text renderer goes off outright and the stale override
-        // is dropped: leaving the type enabled with no resolvable override would let Media3
-        // auto-select an unrelated sideloaded track.
-        val subtitleOn = request.subtitleRenderableInMode(currentSubtitleTypeIndex, isHls)
+        // With no subtitle chosen the text renderer goes off outright and any stale override is
+        // dropped, so Media3 never auto-selects a track the container flags.
+        val subtitleOn = currentSubtitleTypeIndex != null
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !subtitleOn)
             .apply { if (!subtitleOn) clearOverridesOfType(C.TRACK_TYPE_TEXT) }
@@ -567,6 +621,10 @@ internal class ExoVideoPlayerEngine(
         player.playWhenReady = playbackIntent.shouldPlay
         emit(VideoPlayerEvent.StatusMessage(null))
         emitQualityOptions()
+        // A track picked while the switch was pending waited for the new source. The old one
+        // stays, so it streams the pick now; None needed no wait, as it applies in place.
+        val picked = currentSubtitleTypeIndex
+        if (isHls && picked != null && picked != streamedSubtitleTypeIndex) rebuildHlsSourceInPlace()
     }
 
     private fun rollbackPendingMode() {
@@ -599,13 +657,17 @@ internal class ExoVideoPlayerEngine(
                     .build(),
             )
 
-    private fun hlsMediaSource(start: HlsSessionStart): MediaSource =
-        hlsMediaSourceFactory.createMediaSource(
+    /**
+     * The session's playlist, merged with the chosen subtitle track's stream when there is one.
+     * The playlist itself never carries subtitles, and only the chosen track is streamed, so a
+     * session without subtitles costs the server nothing for them.
+     */
+    private fun hlsMediaSource(start: HlsSessionStart): MediaSource {
+        val session = hlsMediaSourceFactory.createMediaSource(
             MediaItem.Builder()
                 .setUri(start.playlistUrl)
                 .setMimeType(MimeTypes.APPLICATION_M3U8)
                 .setMediaMetadata(videoMediaMetadata(request))
-                .setSubtitleConfigurations(textSubtitleConfigs(start.actualStartSec))
                 // A remux session is a live EVENT playlist until FFmpeg finishes; pinning the
                 // speed stops ExoPlayer's live catch-up from subtly fast-forwarding the movie.
                 .setLiveConfiguration(
@@ -616,26 +678,65 @@ internal class ExoVideoPlayerEngine(
                 )
                 .build(),
         )
+        streamedSubtitleTypeIndex = currentSubtitleTypeIndex
+        subtitleStreamGeneration++
+        subtitleStreamFailure = null
+        val typeIndex = streamedSubtitleTypeIndex ?: return session
+        val generation = subtitleStreamGeneration
+        // Its `start` is the session's actual start, which puts the stream's packets on the
+        // session's timeline.
+        val subtitles = subtitleStreamSource(
+            url = services.hlsSessionApi.subtitleStreamUrl(request.media, typeIndex, start.actualStartSec),
+            dataSourceFactory = services.hlsDataSourceFactory,
+            onLoadFailed = { failure ->
+                handler.post { onSubtitleStreamFailed(generation, failure) }
+            },
+        )
+        return MergingMediaSource(session, subtitles)
+    }
+
+    private fun onSubtitleStreamFailed(generation: Long, failure: IOException) {
+        if (!playbackIntent.acceptsCommands || generation != subtitleStreamGeneration) return
+        subtitleStreamFailure = failure
+        dropFailedSubtitleStream()
+    }
 
     /**
-     * Every text subtitle rides as a sideloaded WebVTT extraction (the playlist itself never
-     * carries subtitle renditions), stamped with its wire ordinal so selection survives the
-     * image-based rows that are absent here. The URL's `start` matches the session's actual
-     * start, which is what puts the cues on this session's rebased timeline.
+     * A subtitle stream that fails costs the subtitles, never the movie: the track is dropped
+     * and the session's source prepared again without it, where the player is.
      */
-    private fun textSubtitleConfigs(actualStartSec: Double): List<MediaItem.SubtitleConfiguration> =
-        request.subtitleTracks.mapIndexedNotNull { index, track ->
-            if (track.imageBased) return@mapIndexedNotNull null
-            MediaItem.SubtitleConfiguration.Builder(
-                Uri.parse(
-                    services.hlsSessionApi.subtitleUrl(request.media, index, actualStartSec),
-                ),
-            )
-                .setMimeType(MimeTypes.TEXT_VTT)
-                .setId("$SIDELOADED_SUBTITLE_ID_PREFIX$index")
-                .setLabel(track.label)
-                .build()
-        }
+    private fun dropFailedSubtitleStream() {
+        if (streamedSubtitleTypeIndex == null) return
+        currentSubtitleTypeIndex = null
+        emit(VideoPlayerEvent.StatusMessage(SUBTITLES_UNAVAILABLE_MESSAGE))
+        val start = preparedHlsStart ?: return
+        val pending = pendingRestart != null || heldRebaseTargetSec != null || pendingMode != null
+        if (pending) return
+        initialSelectionApplied = false
+        prepareSource(hlsMediaSource(start), player.currentPosition)
+    }
+
+    /**
+     * Whether [error] came from the subtitle stream: the failure its load policy reported, an
+     * HTTP failure on its URL, or the text renderer choking on what it delivered. A failed text
+     * load surfaces only when the player next rebuffers, so the policy's report is the first
+     * signal and this is the backstop.
+     */
+    private fun isSubtitleStreamFailure(error: PlaybackException): Boolean {
+        if (streamedSubtitleTypeIndex == null) return false
+        val reported = subtitleStreamFailure
+        if (reported != null && error.causeChain().any { it === reported }) return true
+        val requestPath = error.causeChain()
+            .filterIsInstance<HttpDataSource.HttpDataSourceException>()
+            .firstOrNull()
+            ?.dataSpec?.uri?.path
+        if (requestPath != null && SUBTITLE_STREAM_PATH.containsMatchIn(requestPath)) return true
+        val rendererFormat = (error as? ExoPlaybackException)
+            ?.takeIf { it.type == ExoPlaybackException.TYPE_RENDERER }
+            ?.rendererFormat
+        return rendererFormat != null &&
+            MimeTypes.getTrackType(rendererFormat.sampleMimeType) == C.TRACK_TYPE_TEXT
+    }
 
     private fun applySelectionAfterSourceSwap(tracks: Tracks) {
         val builder = player.trackSelectionParameters.buildUpon()
@@ -645,10 +746,8 @@ internal class ExoVideoPlayerEngine(
                 ?.let { overrideFor(it, tracks) }
                 ?.let(builder::setOverrideForType)
         }
-        // A null option id here is the deterministic-off path, not a gap: under HLS a
-        // remembered image-based ordinal matches no sideloaded group, and prepareSource has
-        // already disabled the text type for it. Back under Direct the container's Nth text
-        // group re-resolves and the override below restores the choice.
+        // Under HLS the chosen track is the streamed group; under Direct the container's Nth
+        // text group. A null option id leaves prepareSource's choice in force.
         currentSubtitleTypeIndex
             ?.let { subtitleOptionIdFor(tracks, it) }
             ?.let { overrideFor(it, tracks) }
@@ -659,22 +758,14 @@ internal class ExoVideoPlayerEngine(
         player.trackSelectionParameters = builder.build()
     }
 
-    /** Direct exposes the container's Nth text group; HLS matches the stamped format id. */
+    /** Direct exposes the container's Nth text group; HLS streams the chosen one alone. */
     private fun subtitleOptionIdFor(tracks: Tracks, typeIndex: Int): String? = when {
-        isHls -> trackOptionIdForFormatId(
-            tracks,
-            C.TRACK_TYPE_TEXT,
-            "$SIDELOADED_SUBTITLE_ID_PREFIX$typeIndex",
-        )
+        isHls -> subtitleStreamOptionId(tracks)
         else -> trackOptionId(tracks, C.TRACK_TYPE_TEXT, typeIndex)
     }
 
-    private fun subtitleTypeIndexForOption(tracks: Tracks, optionId: String): Int? = when {
-        isHls -> formatIdForOptionId(tracks, optionId)
-            ?.removePrefix(SIDELOADED_SUBTITLE_ID_PREFIX)
-            ?.toIntOrNull()
-        else -> typeIndexForOptionId(tracks, C.TRACK_TYPE_TEXT, optionId)
-    }
+    private fun subtitleTypeIndexForOption(tracks: Tracks, optionId: String): Int? =
+        typeIndexForOptionId(tracks, C.TRACK_TYPE_TEXT, optionId)
 
     /** The concrete audio ordinal an HLS session would use right now. */
     private fun effectiveAudioOrdinal(): Int? =
@@ -869,6 +960,17 @@ internal class ExoVideoPlayerEngine(
     /** Instrumentation seam: the deterministic subtitle off/on contract is asserted on these. */
     internal val currentTrackSelectionParameters get() = player.trackSelectionParameters
 
+    /** Instrumentation seam: the tracks the prepared source exposes, and which are selected. */
+    internal val currentTracks get() = player.currentTracks
+
+    /** Instrumentation seam: the cues on screen now. */
+    internal var currentCues: List<androidx.media3.common.text.Cue> = emptyList()
+        private set
+
+    private companion object {
+        val SUBTITLE_STREAM_PATH = Regex("/subtitles/[0-9]+/stream\\.mkv$")
+    }
+
     /** A session being established from [startSec] whose source will be prepared at [targetSec]. */
     private data class PendingRestart(val startSec: Int, val targetSec: Double)
 }
@@ -878,3 +980,4 @@ fun exoVideoPlayerEngine(
     request: VideoPlayRequest,
     services: VideoPlaybackServices,
 ): VideoPlayerEngine = ExoVideoPlayerEngine(context, request, services)
+
