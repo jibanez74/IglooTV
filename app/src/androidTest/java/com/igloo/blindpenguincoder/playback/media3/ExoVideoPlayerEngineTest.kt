@@ -1012,6 +1012,38 @@ class ExoVideoPlayerEngineTest {
         assertTrue("${engine.errors()}", engine.errors().isEmpty())
     }
 
+    /**
+     * A track picked while a mode switch is pending waits for the new source; cancelling the
+     * switch keeps the old source, which must then stream the pick the menu shows.
+     */
+    @Test
+    fun aTrackPickedDuringAPendingSwitchStreamsWhenTheSwitchIsCancelled() {
+        val server = SubtitleFixtureServer()
+        val api = FakeHlsApi(pathPrefix = "/api")
+        val engine = streamingEngine(server, api, subtitleTypeIndex = 0)
+        waitFor("the first stream", timeoutMs = 15_000) { streamedSubtitleSelected(engine) }
+
+        val preflight = CompletableDeferred<HlsManifestResult>()
+        api.suspendedResult = preflight
+        onMain { engine.selectPlaybackMode(PlaybackMode.P720Mbps3.name) }
+        waitFor("the pending source") { api.fetched.size == 2 }
+        onMain { engine.selectSubtitleTrack("sub:2") }
+        instrumentation.waitForIdleSync()
+        assertEquals("a stream started while the switch was pending", 0, server.subtitleRequests(2))
+
+        // Selecting the effective row cancels the switch.
+        onMain { engine.selectPlaybackMode(PlaybackMode.Remux.name) }
+        waitFor("the picked stream", timeoutMs = 15_000) {
+            server.subtitleRequests(2) >= 1 && streamedSubtitleSelected(engine)
+        }
+        preflight.complete(HlsManifestResult.Ready("720p_3mbps", 0.0))
+        instrumentation.waitForIdleSync()
+
+        assertEquals(2, engine.currentSubtitleTypeIndex)
+        assertEquals(listOf(false, false, true), engine.subtitleRows().map { it.selected })
+        assertTrue("${engine.errors()}", engine.errors().isEmpty())
+    }
+
     @Test
     fun noneTurnsTextOffAndTheSameTrackComesBackInPlace() {
         val server = SubtitleFixtureServer()

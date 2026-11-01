@@ -621,6 +621,10 @@ internal class ExoVideoPlayerEngine(
         player.playWhenReady = playbackIntent.shouldPlay
         emit(VideoPlayerEvent.StatusMessage(null))
         emitQualityOptions()
+        // A track picked while the switch was pending waited for the new source. The old one
+        // stays, so it streams the pick now; None needed no wait, as it applies in place.
+        val picked = currentSubtitleTypeIndex
+        if (isHls && picked != null && picked != streamedSubtitleTypeIndex) rebuildHlsSourceInPlace()
     }
 
     private fun rollbackPendingMode() {
