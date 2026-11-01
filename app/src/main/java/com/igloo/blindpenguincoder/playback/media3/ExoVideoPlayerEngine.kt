@@ -143,6 +143,7 @@ internal class ExoVideoPlayerEngine(
 
     private val player: ExoPlayer = ExoPlayer.Builder(context)
         .setAudioAttributes(videoPlaybackAudioAttributes, /* handleAudioFocus= */ true)
+        .setLoadControl(heapBoundedLoadControl())
         .build()
 
     private val session = buildVideoMediaSession(

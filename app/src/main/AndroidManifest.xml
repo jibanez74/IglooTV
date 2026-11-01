@@ -38,12 +38,18 @@
         </intent>
     </queries>
 
+    <!--
+        largeHeap: the video player buffers media on the Java heap (see PlayerBufferBudget.kt),
+        which on a Shield is capped at 192 MB for an app that does not ask for more, and at
+        512 MB for one that does.
+    -->
     <application
         android:name=".IglooApplication"
         android:allowBackup="false"
         android:banner="@drawable/igloo_banner"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
+        android:largeHeap="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.Igloo"
         android:usesCleartextTraffic="true">
