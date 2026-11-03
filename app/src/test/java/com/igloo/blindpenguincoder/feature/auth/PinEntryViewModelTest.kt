@@ -104,7 +104,7 @@ class PinEntryViewModelTest {
 
         // Signing in behind the verified PIN must not bounce back to the keypad, even though
         // the user still has a PIN.
-        assertTrue(fixture.sessionManager.state.first { it is AppAuthState.Authenticated } != null)
+        fixture.sessionManager.state.first { it is AppAuthState.Authenticated }
     }
 
     @Test

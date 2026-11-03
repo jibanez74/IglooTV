@@ -127,6 +127,7 @@ class OpenApiContractTest {
         val isOpenObject get() = "object" in types && properties.isEmpty() && variants.isEmpty()
     }
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private inner class Walker {
         val problems = mutableListOf<Problem>()
         val visited = mutableSetOf<String>()
@@ -333,8 +334,8 @@ class OpenApiContractTest {
      * class, or its class-level `@SerialName`.
      */
     private fun serializableModelNames(): Set<String> {
-        val packagePath = ApiEnvelope::class.java.`package`.name.replace('.', '/')
-        val location = File(ApiEnvelope::class.java.protectionDomain.codeSource.location.toURI())
+        val packagePath = requireNotNull(ApiEnvelope::class.java.`package`).name.replace('.', '/')
+        val location = File(requireNotNull(ApiEnvelope::class.java.protectionDomain).codeSource.location.toURI())
         val classFiles = if (location.isDirectory) {
             File(location, packagePath).listFiles().orEmpty().map { it.name }
         } else {
@@ -346,7 +347,7 @@ class OpenApiContractTest {
         }
         return classFiles
             .filter { it.endsWith(SERIALIZER_CLASS_SUFFIX) }
-            .map { Class.forName("${ApiEnvelope::class.java.`package`.name}.${it.removeSuffix(SERIALIZER_CLASS_SUFFIX)}") }
+            .map { Class.forName("${requireNotNull(ApiEnvelope::class.java.`package`).name}.${it.removeSuffix(SERIALIZER_CLASS_SUFFIX)}") }
             .map { it.getAnnotation(SerialName::class.java)?.value ?: it.canonicalName }
             .toSet()
     }

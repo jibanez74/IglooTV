@@ -93,7 +93,7 @@ class ProfilePickerViewModelTest {
 
         fixture.viewModel.select(fixture.picker.profiles.first { it.userId == 1L })
 
-        assertTrue(fixture.sessionManager.state.first { it is AppAuthState.Authenticated } != null)
+        fixture.sessionManager.state.first { it is AppAuthState.Authenticated }
     }
 
     @Test
@@ -116,7 +116,7 @@ class ProfilePickerViewModelTest {
 
         fixture.viewModel.select(fixture.picker.profiles.first { it.userId == 1L })
 
-        assertTrue(fixture.sessionManager.state.first { it is AppAuthState.Authenticated } != null)
+        fixture.sessionManager.state.first { it is AppAuthState.Authenticated }
     }
 
     @Test

@@ -324,11 +324,10 @@ class MovieDetailsViewModel(
             fileDurationSec = details.movie.duration?.orNull(),
             selection = playbackSelection,
         )
-        return when (val gate = evaluatePlaybackGate(request, canPlayVideoMime, canPlayAudioMime)) {
+        when (val gate = evaluatePlaybackGate(request, canPlayVideoMime, canPlayAudioMime)) {
             PlaybackGateResult.Proceed -> {
                 playIntentPending = false
                 playRequestChannel.trySend(request)
-                Unit
             }
             is PlaybackGateResult.Blocked -> {
                 playIntentPending = false

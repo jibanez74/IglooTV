@@ -31,14 +31,17 @@ play-stat reporting, and background music playback are also unfinished. See [kno
   [the version catalog](gradle/libs.versions.toml).
 - JDK 17 or a newer JDK compatible with the Gradle wrapper and Android Gradle Plugin. Java source
   and target compatibility are 17; AGP's minimum is documented in its
-  [compatibility requirements](https://developer.android.com/build/releases/agp-9-2-0-release-notes#compatibility).
+  [compatibility requirements](https://developer.android.com/build/releases/agp-9-5-0-release-notes#compatibility).
 - Android SDK Platform 37 and SDK Build-Tools, plus Android SDK Platform-Tools (`adb`). Install
   Android Emulator and a TV system image if using an emulator.
 - Git to clone the repository.
 
 The build uses `compileSdk = 37`, `targetSdk = 36`, and `minSdk = 28`. Build settings live in
 [app/build.gradle.kts](app/build.gradle.kts); dependency versions live in the version catalog.
-Use the included Gradle wrapper.
+Use the included Gradle 9.8.2 wrapper with AGP 9.5.0 and the built-in Kotlin compiler
+resolved to 2.4.21, matching the Compose and serialization plugins. JDK/JVM 17 remains supported.
+This toolchain is newer than Kotlin's [fully tested compatibility range](https://kotlinlang.org/docs/gradle-configure-project.html);
+run the full build and tests when changing it.
 
 ## Build and run
 
