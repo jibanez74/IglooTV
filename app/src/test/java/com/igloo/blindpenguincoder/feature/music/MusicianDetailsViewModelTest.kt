@@ -9,6 +9,7 @@ import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -71,10 +72,14 @@ class MusicianDetailsViewModelTest {
     @Test
     fun `a failed open is an error and Retry re-reads`() = runTest {
         var fail = true
+        val retryResponse = CompletableDeferred<Unit>()
         val model = viewModel(
             http {
                 if (fail) jsonResponse("""{"error":true,"message":"musician not found"}""", HttpStatusCode.NotFound)
-                else jsonResponse(musicianDetailsJson())
+                else {
+                    retryResponse.await()
+                    jsonResponse(musicianDetailsJson())
+                }
             },
         )
 
@@ -84,6 +89,8 @@ class MusicianDetailsViewModelTest {
 
         fail = false
         model.retry()
+        assertTrue(model.uiState.value.details is DetailsState.Loading)
+        retryResponse.complete(Unit)
         assertTrue(model.uiState.value.details is DetailsState.Loaded)
     }
 
@@ -115,5 +122,35 @@ class MusicianDetailsViewModelTest {
         assertTrue(model.uiState.value.details is DetailsState.Loading)
         model.refresh()
         assertNull(model.uiState.value.openMusicianId)
+    }
+
+    @Test
+    fun `closing during a request cancels it and keeps the overlay closed`() = runTest {
+        val response = CompletableDeferred<Unit>()
+        var started = false
+        var cancelled = false
+        val model = viewModel(
+            http {
+                started = true
+                try {
+                    response.await()
+                    jsonResponse(musicianDetailsJson())
+                } finally {
+                    cancelled = !response.isCompleted
+                }
+            },
+        )
+        model.open(4)
+        testScheduler.runCurrent()
+        assertTrue(started)
+
+        model.close()
+        testScheduler.runCurrent()
+        assertTrue(cancelled)
+        response.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertNull(model.uiState.value.openMusicianId)
+        assertTrue(model.uiState.value.details is DetailsState.Loading)
     }
 }

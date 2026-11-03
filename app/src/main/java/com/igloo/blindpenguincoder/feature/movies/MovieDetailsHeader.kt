@@ -33,9 +33,9 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.feature.shared.DetailsHeroInfo
+import com.igloo.blindpenguincoder.feature.shared.DetailsProgressSyncRetry
 import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
 import com.igloo.blindpenguincoder.feature.shared.HeroSingleActionRow
-import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
 
 /**
@@ -154,20 +154,13 @@ internal fun MovieDetailsHeader(
                 )
             }
             if (progressSyncError != null) {
-                ProgressSyncRetry(
+                DetailsProgressSyncRetry(
                     message = progressSyncError,
                     onRetry = onRetryProgressSync,
-                    retryModifier = Modifier
-                        .focusRequester(progressRetryRequester)
-                        .focusProperties {
-                            up = progressRetryUpRequester ?: Cancel
-                            down = progressRetryDownRequester ?: Cancel
-                            left = Cancel
-                            right = Cancel
-                        }
-                        .onFocusChanged { onProgressRetryFocusChanged(it.isFocused) }
-                        .testTag("details_progress_retry"),
-                    modifier = Modifier.testTag("details_progress_error"),
+                    requester = progressRetryRequester,
+                    upRequester = progressRetryUpRequester,
+                    downRequester = progressRetryDownRequester,
+                    onFocusChanged = onProgressRetryFocusChanged,
                 )
             }
         }

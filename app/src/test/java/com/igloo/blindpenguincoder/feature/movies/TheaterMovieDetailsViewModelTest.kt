@@ -16,6 +16,7 @@ import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -353,6 +354,7 @@ class TheaterMovieDetailsViewModelTest {
     @Test
     fun `a failed open shows the error and retry reloads`() = runTest {
         var fail = true
+        val retryResponse = CompletableDeferred<Unit>()
         val viewModel = viewModel(
             http {
                 if (fail) {
@@ -361,6 +363,7 @@ class TheaterMovieDetailsViewModelTest {
                         HttpStatusCode.InternalServerError,
                     )
                 } else {
+                    retryResponse.await()
                     jsonResponse(tmdbMovieJson())
                 }
             },
@@ -375,6 +378,8 @@ class TheaterMovieDetailsViewModelTest {
 
         fail = false
         viewModel.retry()
+        assertTrue(viewModel.uiState.value.details is DetailsState.Loading)
+        retryResponse.complete(Unit)
         testScheduler.advanceUntilIdle()
 
         assertEquals("Heat 2", viewModel.loaded().title)
@@ -421,5 +426,35 @@ class TheaterMovieDetailsViewModelTest {
         viewModel.refresh()
         testScheduler.advanceUntilIdle()
         assertNull(viewModel.uiState.value.openMovieId)
+    }
+
+    @Test
+    fun `closing during a request cancels it and keeps the overlay closed`() = runTest {
+        val response = CompletableDeferred<Unit>()
+        var started = false
+        var cancelled = false
+        val model = viewModel(
+            http {
+                started = true
+                try {
+                    response.await()
+                    jsonResponse(tmdbMovieJson())
+                } finally {
+                    cancelled = !response.isCompleted
+                }
+            },
+        )
+        model.open(21)
+        testScheduler.runCurrent()
+        assertTrue(started)
+
+        model.close()
+        testScheduler.runCurrent()
+        assertTrue(cancelled)
+        response.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertNull(model.uiState.value.openMovieId)
+        assertTrue(model.uiState.value.details is DetailsState.Loading)
     }
 }

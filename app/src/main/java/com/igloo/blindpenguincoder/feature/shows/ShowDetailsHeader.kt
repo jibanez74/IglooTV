@@ -15,8 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -28,9 +26,9 @@ import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.announcedSection
 import com.igloo.blindpenguincoder.feature.shared.DetailsHeroInfo
+import com.igloo.blindpenguincoder.feature.shared.DetailsProgressSyncRetry
 import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
 import com.igloo.blindpenguincoder.feature.shared.HeroSingleActionRow
-import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
 
 /**
@@ -163,22 +161,14 @@ internal fun ShowDetailsHeader(
                 )
             }
             if (progressSyncError != null) {
-                ProgressSyncRetry(
+                DetailsProgressSyncRetry(
                     message = progressSyncError,
                     onRetry = onRetryProgressSync,
-                    retryModifier = Modifier
-                        .focusRequester(progressRetryRequester)
-                        .focusProperties {
-                            up = progressRetryUpRequester ?: Cancel
-                            down = progressRetryDownRequester ?: Cancel
-                            left = Cancel
-                            right = Cancel
-                        }
-                        .onFocusChanged { onProgressRetryFocusChanged(it.isFocused) }
-                        .testTag("details_progress_retry"),
-                    modifier = Modifier
-                        .announcedSection(progressRetrySection)
-                        .testTag("details_progress_error"),
+                    requester = progressRetryRequester,
+                    upRequester = progressRetryUpRequester,
+                    downRequester = progressRetryDownRequester,
+                    onFocusChanged = onProgressRetryFocusChanged,
+                    modifier = Modifier.announcedSection(progressRetrySection),
                 )
             }
         }

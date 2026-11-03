@@ -2,17 +2,10 @@ package com.igloo.blindpenguincoder.feature.music
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
-import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
-import com.igloo.blindpenguincoder.feature.shared.errorOrKeep
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.igloo.blindpenguincoder.feature.shared.ReadOnlyDetailsLoader
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
 /**
  * The album detail screen (docs/design-system.md section 11.5.1): one read, nothing to write —
@@ -25,67 +18,36 @@ class AlbumDetailsViewModel(
     private val music: MusicRepository,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(AlbumDetailsUiState())
-    val uiState: StateFlow<AlbumDetailsUiState> = _uiState.asStateFlow()
-
-    private var loadJob: Job? = null
+    private val loader = ReadOnlyDetailsLoader(
+        scope = viewModelScope,
+        createState = { AlbumDetailsUiState(openAlbumId = it) },
+        openId = AlbumDetailsUiState::openAlbumId,
+        details = AlbumDetailsUiState::details,
+        withDetails = { state, details -> state.copy(details = details) },
+        fetch = music::albumDetails,
+        toUi = ::toAlbumDetailsUi,
+    )
+    val uiState: StateFlow<AlbumDetailsUiState> = loader.uiState
 
     /** Opens the overlay on album [id] and starts its one load. */
-    fun open(id: Long) {
-        loadJob?.cancel()
-        _uiState.value = AlbumDetailsUiState(openAlbumId = id)
-        load(id, userInitiated = true)
-    }
+    fun open(id: Long) = loader.open(id)
 
     /**
      * Back from the overlay. Cancels the in-flight read so a late response cannot reopen state.
      * Idempotent, because the host closes every detail view model on Back without asking which
      * one was up.
      */
-    fun close() {
-        loadJob?.cancel()
-        loadJob = null
-        _uiState.value = AlbumDetailsUiState()
-    }
+    fun close() = loader.close()
 
     /** The full-screen error's Retry: user-initiated, so the screen returns to Loading truth. */
-    fun retry() {
-        val id = _uiState.value.openAlbumId ?: return
-        loadJob?.cancel()
-        _uiState.update { it.copy(details = DetailsState.Loading) }
-        load(id, userInitiated = true)
-    }
+    fun retry() = loader.retry()
 
     /**
      * Background re-read while the overlay is open (the host's start effect): a failure keeps
      * what is on screen — a TV waking from standby must not swap a readable page for an error
      * card the user never asked for.
      */
-    fun refresh() {
-        val id = _uiState.value.openAlbumId ?: return
-        load(id, userInitiated = false)
-    }
-
-    private fun load(id: Long, userInitiated: Boolean) {
-        loadJob = viewModelScope.launch {
-            val result = music.albumDetails(id)
-            if (_uiState.value.openAlbumId != id) return@launch
-            when (result) {
-                is ApiResult.Success -> _uiState.update {
-                    it.copy(details = DetailsState.Loaded(toAlbumDetailsUi(result.value)))
-                }
-
-                is ApiResult.Failure -> _uiState.update {
-                    it.copy(
-                        details = it.details.errorOrKeep(
-                            result.error.toLibraryDisplayMessage(),
-                            userInitiated,
-                        ),
-                    )
-                }
-            }
-        }
-    }
+    fun refresh() = loader.refresh()
 }
 
 data class AlbumDetailsUiState(

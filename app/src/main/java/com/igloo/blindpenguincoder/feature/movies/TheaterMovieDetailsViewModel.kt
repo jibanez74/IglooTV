@@ -2,7 +2,6 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
@@ -10,24 +9,17 @@ import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.TmdbMovie
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
-import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.shared.CastCredit
-import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
+import com.igloo.blindpenguincoder.feature.shared.ReadOnlyDetailsLoader
 import com.igloo.blindpenguincoder.feature.shared.VideoSource
 import com.igloo.blindpenguincoder.feature.shared.castMembers
-import com.igloo.blindpenguincoder.feature.shared.errorOrKeep
 import com.igloo.blindpenguincoder.feature.shared.normalizedVideoValue
 import com.igloo.blindpenguincoder.feature.shared.youTubeExtraVideos
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import com.igloo.blindpenguincoder.playback.model.languageDisplayName
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
 /**
  * The in-theaters detail screen (docs/design-system.md section 11.4.2): one TMDB movie the
@@ -45,67 +37,36 @@ class TheaterMovieDetailsViewModel(
     private val serverUrl: ServerUrlProvider,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(MovieDetailsUiState())
-    val uiState: StateFlow<MovieDetailsUiState> = _uiState.asStateFlow()
-
-    private var loadJob: Job? = null
+    private val loader = ReadOnlyDetailsLoader(
+        scope = viewModelScope,
+        createState = { MovieDetailsUiState(openMovieId = it) },
+        openId = MovieDetailsUiState::openMovieId,
+        details = MovieDetailsUiState::details,
+        withDetails = { state, details -> state.copy(details = details) },
+        fetch = movies::tmdbMovie,
+        toUi = ::toUi,
+    )
+    val uiState: StateFlow<MovieDetailsUiState> = loader.uiState
 
     /** Opens the overlay on the TMDB movie [tmdbId] and starts its one load. */
-    fun open(tmdbId: Long) {
-        loadJob?.cancel()
-        _uiState.value = MovieDetailsUiState(openMovieId = tmdbId)
-        load(tmdbId, userInitiated = true)
-    }
+    fun open(tmdbId: Long) = loader.open(tmdbId)
 
     /**
      * Back from the overlay. Cancels the in-flight read so a late response cannot reopen state.
      * Idempotent, because the host closes both detail view models on Back without asking which
      * one was up.
      */
-    fun close() {
-        loadJob?.cancel()
-        loadJob = null
-        _uiState.value = MovieDetailsUiState()
-    }
+    fun close() = loader.close()
 
     /** The full-screen error's Retry: user-initiated, so the screen returns to Loading truth. */
-    fun retry() {
-        val tmdbId = _uiState.value.openMovieId ?: return
-        loadJob?.cancel()
-        _uiState.update { it.copy(details = DetailsState.Loading) }
-        load(tmdbId, userInitiated = true)
-    }
+    fun retry() = loader.retry()
 
     /**
      * Background re-read while the overlay is open (the host's start effect): a failure keeps
      * what is on screen — a TV waking from standby must not swap a readable page for an error
      * card the user never asked for.
      */
-    fun refresh() {
-        val tmdbId = _uiState.value.openMovieId ?: return
-        load(tmdbId, userInitiated = false)
-    }
-
-    private fun load(tmdbId: Long, userInitiated: Boolean) {
-        loadJob = viewModelScope.launch {
-            val result = movies.tmdbMovie(tmdbId)
-            if (_uiState.value.openMovieId != tmdbId) return@launch
-            when (result) {
-                is ApiResult.Success -> _uiState.update {
-                    it.copy(details = DetailsState.Loaded(toUi(result.value)))
-                }
-
-                is ApiResult.Failure -> _uiState.update {
-                    it.copy(
-                        details = it.details.errorOrKeep(
-                            result.error.toLibraryDisplayMessage(),
-                            userInitiated,
-                        ),
-                    )
-                }
-            }
-        }
-    }
+    fun refresh() = loader.refresh()
 
     private fun toUi(movie: TmdbMovie): MovieDetailsUi {
         val apiBaseUrl = serverUrl.require().apiBaseUrl

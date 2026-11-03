@@ -14,6 +14,7 @@ import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -401,6 +402,7 @@ class AlbumDetailsViewModelTest {
     @Test
     fun `a failed open shows the error and retry reloads`() = runTest {
         var fail = true
+        val retryResponse = CompletableDeferred<Unit>()
         val viewModel = viewModel(
             http {
                 if (fail) {
@@ -409,6 +411,7 @@ class AlbumDetailsViewModelTest {
                         HttpStatusCode.InternalServerError,
                     )
                 } else {
+                    retryResponse.await()
                     jsonResponse(albumDetailsJson(album = albumJson(title = "Help!")))
                 }
             },
@@ -423,6 +426,8 @@ class AlbumDetailsViewModelTest {
 
         fail = false
         viewModel.retry()
+        assertTrue(viewModel.uiState.value.details is DetailsState.Loading)
+        retryResponse.complete(Unit)
         testScheduler.advanceUntilIdle()
 
         assertEquals("Help!", viewModel.loaded().title)
@@ -469,5 +474,35 @@ class AlbumDetailsViewModelTest {
         viewModel.refresh()
         testScheduler.advanceUntilIdle()
         assertNull(viewModel.uiState.value.openAlbumId)
+    }
+
+    @Test
+    fun `closing during a request cancels it and keeps the overlay closed`() = runTest {
+        val response = CompletableDeferred<Unit>()
+        var started = false
+        var cancelled = false
+        val model = viewModel(
+            http {
+                started = true
+                try {
+                    response.await()
+                    jsonResponse(albumDetailsJson())
+                } finally {
+                    cancelled = !response.isCompleted
+                }
+            },
+        )
+        model.open(1)
+        testScheduler.runCurrent()
+        assertTrue(started)
+
+        model.close()
+        testScheduler.runCurrent()
+        assertTrue(cancelled)
+        response.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertNull(model.uiState.value.openAlbumId)
+        assertTrue(model.uiState.value.details is DetailsState.Loading)
     }
 }
