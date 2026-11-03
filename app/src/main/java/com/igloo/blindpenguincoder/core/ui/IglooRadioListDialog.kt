@@ -21,6 +21,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
@@ -61,7 +63,13 @@ internal fun IglooRadioListDialog(
 
     val rowRequesters = remember(rowCount) { List(rowCount) { FocusRequester() } }
     val doneRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { rowRequesters.getOrNull(entryIndex)?.requestFocus() }
+    // Entry focus, and again when the remote takes over from touch: a card opened by touch
+    // opens in touch mode, where its clickable rows cannot take focus, so the first key would
+    // otherwise land wherever focus search from nothing goes.
+    val inputMode = LocalInputModeManager.current.inputMode
+    LaunchedEffect(inputMode) {
+        if (inputMode == InputMode.Keyboard) rowRequesters.getOrNull(entryIndex)?.requestFocus()
+    }
 
     val rowFocus: Modifier.(Int) -> Modifier = { index ->
         focusRequester(rowRequesters[index]).focusProperties {

@@ -1,6 +1,9 @@
 package com.igloo.blindpenguincoder.feature.player
 
 import android.app.Activity
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -22,18 +25,23 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.error.ApiResult
@@ -944,6 +952,108 @@ class VideoPlayerScreenTest {
         assertTrue("seek:600.0" in engine.playbackCommands)
         composeRule.onNodeWithTag("movie_chapter_menu").assertDoesNotExist()
         composeRule.onNodeWithTag("movie_chapters").assertIsFocused()
+    }
+
+    /** A real file's chapter list: long enough that the menu scrolls. */
+    private fun longChapterFixture() = List(24) { index ->
+        PlaybackChapter(title = "Chapter title ${index + 1}", startTimeSec = index * 300.0)
+    }
+
+    /** The engine's position tick while playing, which the open chapter menu follows. */
+    private fun tick(currentSec: Double) {
+        engine.emit(VideoPlayerEvent.Time(currentSec = currentSec, durationSec = 7200.0))
+        composeRule.waitForIdle()
+    }
+
+    /**
+     * On the Shield the chapter menu showed no focused row, Up from Done left it for the player's
+     * Back button, and taps on rows did nothing. Unlike the track menus it recomposes on every
+     * position tick, so this drives it while the playhead moves.
+     */
+    @Test
+    fun theChapterMenuKeepsFocusAndTakesClicksWhileThePlayheadMoves() {
+        setContent(playRequest(chapters = longChapterFixture()))
+        startPlaying()
+        tick(3_100.0)
+
+        openPlayerMenu("movie_chapters")
+        var position = 3_100.0
+        repeat(6) {
+            position += 0.5
+            tick(position)
+        }
+        composeRule.onNodeWithTag("movie_chapter_10").assertIsFocused()
+
+        // Walk to Done past the playhead's row, ticking all the way.
+        for (index in 10 until 23) {
+            composeRule.onNodeWithTag("movie_chapter_$index").performKeyInput { pressKey(Key.DirectionDown) }
+            position += 0.5
+            tick(position)
+            composeRule.onNodeWithTag("movie_chapter_${index + 1}").assertIsFocused()
+        }
+        composeRule.onNodeWithTag("movie_chapter_23").performKeyInput { pressKey(Key.DirectionDown) }
+        tick(position + 0.5)
+        composeRule.onNodeWithTag("movie_chapter_done").assertIsFocused()
+
+        composeRule.onNodeWithTag("movie_chapter_done").performKeyInput { pressKey(Key.DirectionUp) }
+        tick(position + 1.0)
+        composeRule.onNodeWithTag("movie_chapter_23").assertIsFocused()
+        composeRule.onNodeWithTag("movie_chapter_menu").assertExists()
+        assertEquals(0, closes)
+
+        // A tap, not a key: the rows must take touch input as the track menus' rows do.
+        composeRule.onNodeWithTag("movie_chapter_20").performClick()
+        composeRule.waitForIdle()
+        assertTrue("seek:6000.0" in engine.playbackCommands)
+        composeRule.onNodeWithTag("movie_chapter_menu").assertDoesNotExist()
+    }
+
+    /**
+     * A touch puts the app in touch mode, where the menu's clickable rows cannot take focus, so
+     * the menu opens with nothing focused. The remote's first key then searches the whole screen:
+     * it found the player's Back button under the scrim, and Select closed the player — what the
+     * Shield showed when its menus were opened with taps.
+     */
+    @Test
+    fun theRemoteStaysInsideAMenuThatATouchOpened() {
+        setContent(playRequest(chapters = chapterFixture()))
+        startPlaying()
+
+        tapThroughTheWindow("movie_chapters")
+        composeRule.onNodeWithTag("movie_chapter_menu").assertExists()
+
+        // Real key events through the window, which leave touch mode as a remote's do.
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_UP)
+        composeRule.waitForIdle()
+        composeRule.onNode(isFocused() and hasAnyAncestor(hasTestTag("movie_chapter_menu"))).assertExists()
+        composeRule.onNodeWithTag("movie_chapter_0").assertIsFocused()
+
+        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+        composeRule.waitForIdle()
+        assertEquals(0, closes)
+        assertTrue("seek:0.0" in engine.playbackCommands)
+    }
+
+    /**
+     * A tap injected into the window like a real one, which puts the app in touch mode; the
+     * compose test's own touch input does not.
+     */
+    private fun tapThroughTheWindow(tag: String) {
+        val center = composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInWindow.center
+        val origin = IntArray(2)
+        composeRule.runOnUiThread { checkNotNull(hostActivity).window.decorView.getLocationOnScreen(origin) }
+        val x = origin[0] + center.x
+        val y = origin[1] + center.y
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val downAt = SystemClock.uptimeMillis()
+        for ((action, at) in listOf(MotionEvent.ACTION_DOWN to downAt, MotionEvent.ACTION_UP to downAt + 50)) {
+            val event = MotionEvent.obtain(downAt, at, action, x, y, 0)
+            event.source = InputDevice.SOURCE_TOUCHSCREEN
+            instrumentation.sendPointerSync(event)
+            event.recycle()
+        }
+        composeRule.waitForIdle()
     }
 
     @Test
