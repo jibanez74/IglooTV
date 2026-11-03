@@ -959,6 +959,24 @@ class ExoVideoPlayerEngineTest {
         assertTrue("${engine.errors()}", engine.errors().isEmpty())
     }
 
+    /**
+     * The SubRip fixture has no default flag, so Media3's first track selection used to skip it:
+     * its period cancelled the load it had started, and the engine's override reopened the
+     * stream from byte 0. The server saw two requests, each starting FFmpeg and taking a slot.
+     */
+    @Test
+    fun aSubtitleChosenBeforePlaybackOpensItsStreamOnce() {
+        val server = SubtitleFixtureServer()
+        val api = FakeHlsApi(pathPrefix = "/api")
+        val engine = streamingEngine(server, api, subtitleTypeIndex = 1)
+
+        waitFor("the cue at 1.0 s", timeoutMs = 15_000) { "One" in engine.cueTexts() }
+        waitFor("playback past 3 s", timeoutMs = 15_000) { engine.latestTimeSec() >= 3.0 }
+
+        assertEquals(1, server.subtitleRequests(1))
+        assertTrue("${engine.errors()}", engine.errors().isEmpty())
+    }
+
     /** A remux session still being produced: Media3 plays its EVENT playlist as live. */
     @Test
     fun aSubtitleChosenBeforePlaybackRendersOnALiveRemuxSession() {

@@ -5,6 +5,7 @@
 package com.igloo.blindpenguincoder.playback.media3
 
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
@@ -21,6 +22,7 @@ import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.ForwardingExtractorOutput
 import androidx.media3.extractor.IndexSeekMap
 import androidx.media3.extractor.SeekMap
+import androidx.media3.extractor.TrackOutput
 import androidx.media3.extractor.mkv.MatroskaExtractor
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import java.io.IOException
@@ -89,6 +91,12 @@ internal class SubtitleStreamPeriod(val stream: MediaPeriod) : MediaPeriod by st
  * stream's first byte: a seek requests the stream again, which the server answers from its
  * cached copy, and the samples before the target are dropped. The server writes the same bytes
  * up to the Segment's payload on every request, which re-reading the header requires.
+ *
+ * The track is also marked default. Only the chosen track is streamed, so it is always the one
+ * to show; but its own flags come from the source, and a track without the default flag or a
+ * preferred language was left unselected by the first track selection. Its period then cancelled
+ * the load it had started, and the engine's override restarted the stream from byte 0, so every
+ * such start opened the stream twice on the server.
  */
 internal class SubtitleStreamExtractor(
     private val inner: Extractor = MatroskaExtractor(DefaultSubtitleParserFactory(), /* flags= */ 0),
@@ -98,6 +106,11 @@ internal class SubtitleStreamExtractor(
             object : ForwardingExtractorOutput(output) {
                 override fun seekMap(seekMap: SeekMap) {
                     super.seekMap(STREAM_START_SEEK_MAP)
+                }
+
+                override fun track(id: Int, type: Int): TrackOutput {
+                    val track = super.track(id, type)
+                    return if (type == C.TRACK_TYPE_TEXT) DefaultSelectedTrackOutput(track) else track
                 }
             },
         )
@@ -109,6 +122,13 @@ internal class SubtitleStreamExtractor(
             /* timesUs= */ longArrayOf(0),
             /* durationUs= */ C.TIME_UNSET,
         )
+    }
+}
+
+/** Adds [C.SELECTION_FLAG_DEFAULT] to the format of the track it forwards. */
+internal class DefaultSelectedTrackOutput(private val inner: TrackOutput) : TrackOutput by inner {
+    override fun format(format: Format) {
+        inner.format(format.buildUpon().setSelectionFlags(format.selectionFlags or C.SELECTION_FLAG_DEFAULT).build())
     }
 }
 
