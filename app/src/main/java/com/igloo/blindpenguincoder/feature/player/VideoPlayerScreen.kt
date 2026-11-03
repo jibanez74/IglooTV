@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -464,8 +465,15 @@ fun VideoPlayerScreen(
                 // A menu is a partial overlay, so the controls it covers leave the semantics tree
                 // rather than being flagged: otherwise TalkBack stays parked on the button that
                 // opened it (design system section 9.3). The tag sits outside the clear.
+                // They also refuse focus while it is up. A menu opened by touch opens with
+                // nothing focused (touch mode), and the remote's first key then searched the
+                // whole screen: it moved among the controls under the scrim, Up reached Back, and
+                // Select closed the player. The group stays in place so closing the menu can hand
+                // focus straight back to the button that opened it.
                 modifier = Modifier
                     .testTag("movie_chrome")
+                    .focusProperties { onEnter = { if (playerMenu != null) cancelFocusChange() } }
+                    .focusGroup()
                     .then(if (playerMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
             )
         }
