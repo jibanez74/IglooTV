@@ -6,10 +6,12 @@ import com.igloo.blindpenguincoder.core.image.CoilImageCache
 import com.igloo.blindpenguincoder.core.network.AuthEventBus
 import com.igloo.blindpenguincoder.core.network.BearerTokenProvider
 import com.igloo.blindpenguincoder.core.network.DeviceCredentialSource
+import com.igloo.blindpenguincoder.core.network.LocalNetworkPermissionCoordinator
+import com.igloo.blindpenguincoder.core.network.ServerHealthProbe
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.androidLocalNetworkPermission
 import com.igloo.blindpenguincoder.core.network.createIglooHttpClient
 import com.igloo.blindpenguincoder.core.network.createServerProbeHttpClient
-import com.igloo.blindpenguincoder.core.network.ServerHealthProbe
 import com.igloo.blindpenguincoder.core.storage.AndroidKeystoreCipher
 import com.igloo.blindpenguincoder.core.storage.DataStoreProfileStore
 import com.igloo.blindpenguincoder.core.storage.SecretCipher
@@ -22,13 +24,13 @@ import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.api.MusicApi
 import com.igloo.blindpenguincoder.data.api.SearchApi
 import com.igloo.blindpenguincoder.data.api.ShowApi
-import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
 import com.igloo.blindpenguincoder.data.api.UserApi
+import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
-import com.igloo.blindpenguincoder.data.repository.SearchRepository
 import com.igloo.blindpenguincoder.data.repository.ProfileRepository
+import com.igloo.blindpenguincoder.data.repository.SearchRepository
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
 import com.igloo.blindpenguincoder.data.repository.ShowRepository
 import com.igloo.blindpenguincoder.data.repository.VideoPlaybackRepository
@@ -42,7 +44,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
-class IglooAppContainer(context: Context) {
+class IglooAppContainer(
+    context: Context,
+    val localNetworkPermission: LocalNetworkPermissionCoordinator =
+        androidLocalNetworkPermission(context),
+) {
     private val appContext = context.applicationContext
 
     val serverSettingsStore by lazy { ServerSettingsStore(appContext.settingsDataStore) }
@@ -59,7 +65,7 @@ class IglooAppContainer(context: Context) {
         )
     }
     private val identity by lazy { deviceIdentity(appContext) }
-    val httpClient by lazy { createIglooHttpClient(credentials, authEvents) }
+    val httpClient by lazy { createIglooHttpClient(credentials, authEvents, networkAccess = localNetworkPermission) }
 
     /**
      * Media3's HTTP stack for the direct stream, with the bearer resolver and the 401 bridge.
@@ -71,12 +77,13 @@ class IglooAppContainer(context: Context) {
             credentials,
             serverUrlProvider,
             onUnauthorized = { profileId -> authEvents.signalUnauthorized(profileId) },
+            networkAccess = localNetworkPermission,
         )
     }
 
     /** Music covers authenticate when needed, without reporting stream session revocation. */
     val artworkDataSourceFactory by lazy {
-        bearerArtworkDataSourceFactory(credentials, serverUrlProvider)
+        bearerArtworkDataSourceFactory(credentials, serverUrlProvider, localNetworkPermission)
     }
 
     /** The same stack with the patience HLS needs: segment requests long-poll up to 120s. */
@@ -85,10 +92,11 @@ class IglooAppContainer(context: Context) {
             credentials,
             serverUrlProvider,
             onUnauthorized = { profileId -> authEvents.signalUnauthorized(profileId) },
+            networkAccess = localNetworkPermission,
             readTimeoutMs = HLS_SEGMENT_READ_TIMEOUT_MS,
         )
     }
-    private val serverProbeHttpClient by lazy { createServerProbeHttpClient() }
+    private val serverProbeHttpClient by lazy { createServerProbeHttpClient(networkAccess = localNetworkPermission) }
     private val serverHealthProbe by lazy { ServerHealthProbe(serverProbeHttpClient) }
     private val authApi by lazy { AuthApi(httpClient, serverUrlProvider) }
     private val userApi by lazy { UserApi(httpClient, serverUrlProvider) }
@@ -107,7 +115,7 @@ class IglooAppContainer(context: Context) {
         AuthRepository(authApi, userApi, profileRepository, identity)
     }
     val serverRepository by lazy {
-        ServerRepository(serverHealthProbe, serverSettingsStore, serverUrlProvider, profileRepository)
+        ServerRepository(serverHealthProbe, serverSettingsStore, serverUrlProvider, profileRepository, localNetworkPermission)
     }
 
     /**
@@ -125,6 +133,7 @@ class IglooAppContainer(context: Context) {
             authEvents = authEvents,
             scope = applicationScope,
             imageCache = CoilImageCache(appContext),
+            networkAccess = localNetworkPermission,
         )
     }
 }

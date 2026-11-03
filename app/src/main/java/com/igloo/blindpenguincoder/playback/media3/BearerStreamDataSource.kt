@@ -11,7 +11,9 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import com.igloo.blindpenguincoder.core.network.DeviceCredentialSource
+import com.igloo.blindpenguincoder.core.network.NetworkAccess
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.UnrestrictedNetworkAccess
 import com.igloo.blindpenguincoder.core.network.isIglooServerUrl
 import kotlinx.coroutines.runBlocking
 
@@ -26,6 +28,7 @@ import kotlinx.coroutines.runBlocking
 private class BearerResolver(
     private val credentials: DeviceCredentialSource,
     private val serverUrl: ServerUrlProvider,
+    private val networkAccess: NetworkAccess,
 ) : ResolvingDataSource.Resolver {
 
     /** Who the last attached token belonged to, for the 401 bridge's signal. */
@@ -33,6 +36,7 @@ private class BearerResolver(
     var attachedProfileId: Long? = null
 
     override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
+        networkAccess.checkAccess(dataSpec.uri.toString())
         val origin = serverUrl.current.value?.origin
         if (!isIglooServerUrl(dataSpec.uri.toString(), origin)) return dataSpec
         val credential = runBlocking { credentials.current() } ?: return dataSpec
@@ -74,8 +78,9 @@ fun bearerStreamDataSourceFactory(
     serverUrl: ServerUrlProvider,
     onUnauthorized: (Long?) -> Unit,
     readTimeoutMs: Int = DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS,
+    networkAccess: NetworkAccess = UnrestrictedNetworkAccess,
 ): DataSource.Factory {
-    val resolver = BearerResolver(credentials, serverUrl)
+    val resolver = BearerResolver(credentials, serverUrl, networkAccess)
     val resolving = ResolvingDataSource.Factory(
         DefaultHttpDataSource.Factory().setReadTimeoutMs(readTimeoutMs),
         resolver,
@@ -95,7 +100,8 @@ fun bearerStreamDataSourceFactory(
 fun bearerArtworkDataSourceFactory(
     credentials: DeviceCredentialSource,
     serverUrl: ServerUrlProvider,
+    networkAccess: NetworkAccess = UnrestrictedNetworkAccess,
 ): DataSource.Factory = ResolvingDataSource.Factory(
     DefaultHttpDataSource.Factory(),
-    BearerResolver(credentials, serverUrl),
+    BearerResolver(credentials, serverUrl, networkAccess),
 )

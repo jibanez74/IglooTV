@@ -125,6 +125,8 @@ internal class ExoVideoPlayerEngine(
     private var subtitleStreamGeneration = 0L
     /** The last failure a subtitle stream reported, matched against the player's error. */
     private var subtitleStreamFailure: IOException? = null
+    /** A discarded source can report its terminal error after its replacement was prepared. */
+    private var droppedSubtitleStreamFailure: IOException? = null
     /** Absolute movie second where the prepared source's own zero sits; 0 for direct play. */
     private var timelineOffsetSec = 0.0
     private var restartJob: Job? = null
@@ -207,6 +209,7 @@ internal class ExoVideoPlayerEngine(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            if (isReportedSubtitleFailure(error, droppedSubtitleStreamFailure)) return
             if (isHls && isSubtitleStreamFailure(error)) {
                 dropFailedSubtitleStream()
                 return
@@ -708,6 +711,7 @@ internal class ExoVideoPlayerEngine(
      */
     private fun dropFailedSubtitleStream() {
         if (streamedSubtitleTypeIndex == null) return
+        subtitleStreamFailure?.let { droppedSubtitleStreamFailure = it }
         currentSubtitleTypeIndex = null
         emit(VideoPlayerEvent.StatusMessage(SUBTITLES_UNAVAILABLE_MESSAGE))
         val start = preparedHlsStart ?: return

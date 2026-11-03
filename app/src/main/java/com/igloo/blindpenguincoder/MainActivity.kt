@@ -3,9 +3,18 @@ package com.igloo.blindpenguincoder
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.igloo.blindpenguincoder.core.design.UiScale
+import com.igloo.blindpenguincoder.feature.auth.LocalNetworkPermissionHost
 
 class MainActivity : ComponentActivity() {
+    override fun onResume() {
+        (application as IglooApplication).container.localNetworkPermission.refresh()
+        super.onResume()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Before super, and with no keep-on-screen condition: the system splash hands off at the
         // first Compose frame, where feature/boot/SplashScreen draws the same mark on the same
@@ -18,9 +27,20 @@ class MainActivity : ComponentActivity() {
         // fetches — on the first frame, before restoreOnLaunch() re-published the gate. Has to be
         // synchronous and before setContent; a LaunchedEffect runs a whole composition too late.
         // A configuration change arrives with a saved bundle and keeps the session it had.
-        if (savedInstanceState == null) container.sessionManager.beginLaunch()
+        if (savedInstanceState == null) {
+            container.localNetworkPermission.onNewHost()
+            container.sessionManager.beginLaunch()
+        }
         setContent {
-            IglooRoot(container)
+            val uiScale by container.uiPreferencesStore.uiScale
+                .collectAsStateWithLifecycle(initialValue = UiScale.Standard)
+            LocalNetworkPermissionHost(
+                coordinator = container.localNetworkPermission,
+                uiScale = uiScale,
+                onChangeServer = container.sessionManager::requireServerChange,
+            ) {
+                IglooRoot(container)
+            }
         }
     }
 }

@@ -83,6 +83,7 @@ class MusicPlayerScreenTest {
 
     /** The host contract: closing unmounts the screen. */
     private var open by mutableStateOf(true)
+    private var networkRecovery by mutableStateOf(0)
 
     private lateinit var lifecycleOwner: TestLifecycleOwner
 
@@ -128,7 +129,10 @@ class MusicPlayerScreenTest {
                 hostView = view
             }
             IglooTheme {
-                CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
+                CompositionLocalProvider(
+                    LocalLifecycleOwner provides lifecycleOwner,
+                    com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery provides networkRecovery,
+                ) {
                     if (open) {
                         MusicPlayerScreen(
                             request = request,
@@ -163,7 +167,10 @@ class MusicPlayerScreenTest {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
-                CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
+                CompositionLocalProvider(
+                    LocalLifecycleOwner provides lifecycleOwner,
+                    com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery provides networkRecovery,
+                ) {
                     if (open) {
                         MusicPlayerScreen(
                             request = request,
@@ -216,6 +223,24 @@ class MusicPlayerScreenTest {
         engine.emit(MusicPlayerEvent.TrackChanged(index = 1, durationSec = 190.0))
         engine.emit(MusicPlayerEvent.Time(currentSec = 42.0, durationSec = 190.0))
         composeRule.waitForIdle()
+    }
+
+    @Test
+    fun permissionRecoveryRebuildsOnceAtTheSavedTrackAndPosition() {
+        setContent()
+        startPlaying()
+        advanceToSecondTrack()
+        val failedEngine = engine
+        engine.emit(MusicPlayerEvent.Error("Local network access was revoked."))
+        composeRule.waitForIdle()
+        engine = FakeMusicPlayerEngine(playRequest().tracks.map { it.durationSec })
+        composeRule.runOnIdle { networkRecovery = 1 }
+        composeRule.waitForIdle()
+        assertTrue(failedEngine.released)
+        assertEquals(listOf("start:1:42.0:true"), engine.playbackCommands)
+        composeRule.runOnIdle { networkRecovery = 1 }
+        composeRule.waitForIdle()
+        assertEquals(listOf("start:1:42.0:true"), engine.playbackCommands)
     }
 
     @Test

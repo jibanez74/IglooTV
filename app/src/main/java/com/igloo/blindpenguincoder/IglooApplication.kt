@@ -10,5 +10,5 @@ class IglooApplication : Application(), SingletonImageLoader.Factory {
     val container by lazy { IglooAppContainer(this) }
 
     override fun newImageLoader(context: Context): ImageLoader =
-        createIglooImageLoader(context, container.credentials, container.serverUrlProvider)
+        createIglooImageLoader(context, container.credentials, container.serverUrlProvider, container.localNetworkPermission)
 }

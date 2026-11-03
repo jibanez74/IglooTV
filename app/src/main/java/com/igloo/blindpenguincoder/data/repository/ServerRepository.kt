@@ -5,8 +5,10 @@ import com.igloo.blindpenguincoder.core.config.ServerAddressParseResult
 import com.igloo.blindpenguincoder.core.config.parseServerAddress
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.core.network.NetworkAccess
 import com.igloo.blindpenguincoder.core.network.ServerHealthProbe
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.UnrestrictedNetworkAccess
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 
 class ServerRepository(
@@ -14,6 +16,7 @@ class ServerRepository(
     private val settings: ServerSettingsStore,
     private val serverUrl: ServerUrlProvider,
     private val profiles: ProfileRepository,
+    private val networkAccess: NetworkAccess = UnrestrictedNetworkAccess,
 ) {
     suspend fun connect(rawInput: String): ApiResult<ServerAddress> {
         val candidate = when (val parsed = parseServerAddress(rawInput)) {
@@ -22,6 +25,8 @@ class ServerRepository(
                 return ApiResult.Failure(AppError.Validation(parsed.message))
             }
         }
+
+        networkAccess.awaitAccess(candidate.origin)
 
         val finalAddress = when (val result = probe.probe(candidate)) {
             is ApiResult.Success -> result.value

@@ -7,7 +7,9 @@ import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.ImageResult
 import com.igloo.blindpenguincoder.core.network.DeviceCredentialSource
+import com.igloo.blindpenguincoder.core.network.NetworkAccess
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.UnrestrictedNetworkAccess
 import com.igloo.blindpenguincoder.core.network.isIglooServerUrl
 import com.igloo.blindpenguincoder.images.serverImageUrl
 
@@ -63,9 +65,14 @@ fun createIglooImageLoader(
     context: Context,
     credentials: DeviceCredentialSource,
     serverUrl: ServerUrlProvider,
+    networkAccess: NetworkAccess = UnrestrictedNetworkAccess,
 ): ImageLoader = ImageLoader.Builder(context)
     .components {
         add(ServerPathInterceptor(serverUrl))
+        add(Interceptor { chain ->
+            (chain.request.data as? String)?.let { networkAccess.awaitAccess(it) }
+            chain.proceed()
+        })
         add(BearerImageInterceptor(credentials, serverUrl))
     }
     .build()

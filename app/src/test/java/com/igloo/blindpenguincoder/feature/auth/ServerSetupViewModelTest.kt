@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -58,6 +59,7 @@ class ServerSetupViewModelTest {
 
     private fun TestScope.fixture(
         initialOrigin: String = "",
+        networkAccess: com.igloo.blindpenguincoder.core.network.NetworkAccess = com.igloo.blindpenguincoder.core.network.UnrestrictedNetworkAccess,
         handler: MockRequestHandler,
     ): Fixture {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
@@ -69,6 +71,7 @@ class ServerSetupViewModelTest {
             settings,
             http.serverUrl,
             http.profiles,
+            networkAccess,
         )
         val sessionManager = SessionManager(
             authRepository = authRepository,
@@ -88,6 +91,30 @@ class ServerSetupViewModelTest {
             sessionManager,
             http,
         )
+    }
+
+    @Test
+    fun `denied connection can be cancelled and replaced with a public server`() = runTest {
+        val permission = com.igloo.blindpenguincoder.core.network.LocalNetworkPermissionCoordinator(
+            { false }, { true }, {}, { it.contains("igloo.local") }, UnconfinedTestDispatcher(testScheduler),
+        )
+        var probes = 0
+        val fixture = fixture(networkAccess = permission) { probes++; respond("") }
+        fixture.sessionManager.requireServerChange()
+        fixture.viewModel.onInputChange("http://igloo.local")
+        fixture.viewModel.connect()
+        runCurrent()
+        assertTrue(fixture.viewModel.uiState.value.isConnecting)
+        permission.cancelPending()
+        fixture.sessionManager.requireServerChange()
+        runCurrent()
+        assertFalse(fixture.viewModel.uiState.value.isConnecting)
+        assertEquals(0, probes)
+        fixture.viewModel.onInputChange("https://public.example")
+        fixture.viewModel.connect()
+        fixture.sessionManager.state.first { it is AppAuthState.NeedsLogin }
+        assertFalse(fixture.viewModel.uiState.value.isConnecting)
+        assertEquals(1, probes)
     }
 
     @Test

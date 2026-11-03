@@ -97,6 +97,7 @@ class VideoPlayerScreenTest {
 
     /** The host contract: closing unmounts the screen, which is what fires the exit save. */
     private var open by mutableStateOf(true)
+    private var networkRecovery by mutableStateOf(0)
 
     /** The hand-off contract: the host replaces this screen with one for [advanced]'s last request. */
     private val advanced = mutableListOf<VideoPlayRequest>()
@@ -195,7 +196,10 @@ class VideoPlayerScreenTest {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
-                CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
+                CompositionLocalProvider(
+                    LocalLifecycleOwner provides lifecycleOwner,
+                    com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery provides networkRecovery,
+                ) {
                     if (open) {
                         VideoPlayerScreen(
                             request = requireNotNull(currentRequest),
@@ -262,7 +266,10 @@ class VideoPlayerScreenTest {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
-                CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
+                CompositionLocalProvider(
+                    LocalLifecycleOwner provides lifecycleOwner,
+                    com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery provides networkRecovery,
+                ) {
                     if (open) {
                         VideoPlayerScreen(
                             request = requireNotNull(currentRequest),
@@ -425,6 +432,23 @@ class VideoPlayerScreenTest {
         button.assertIsFocused()
         button.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
+    }
+
+    @Test
+    fun permissionRecoveryRebuildsOnceAtTheSavedVideoPosition() {
+        setContent()
+        engine.emit(VideoPlayerEvent.Time(currentSec = 600.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Error("Local network access was revoked."))
+        composeRule.waitForIdle()
+        val failedEngine = engine
+        engine = FakeVideoPlayerEngine()
+        composeRule.runOnIdle { networkRecovery = 1 }
+        composeRule.waitForIdle()
+        assertTrue(failedEngine.released)
+        assertEquals(listOf("start:600.0:true"), engine.playbackCommands)
+        composeRule.runOnIdle { networkRecovery = 1 }
+        composeRule.waitForIdle()
+        assertEquals(listOf("start:600.0:true"), engine.playbackCommands)
     }
 
     @Test

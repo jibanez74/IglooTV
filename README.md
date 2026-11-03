@@ -36,7 +36,7 @@ play-stat reporting, and background music playback are also unfinished. See [kno
   Android Emulator and a TV system image if using an emulator.
 - Git to clone the repository.
 
-The build uses `compileSdk = 37`, `targetSdk = 36`, and `minSdk = 28`. Build settings live in
+The build uses `compileSdk = 37`, `targetSdk = 37`, and `minSdk = 28`. Build settings live in
 [app/build.gradle.kts](app/build.gradle.kts); dependency versions live in the version catalog.
 Use the included Gradle 9.8.2 wrapper with AGP 9.5.0 and the built-in Kotlin compiler
 resolved to 2.4.21, matching the Compose and serialization plugins. JDK/JVM 17 remains supported.
@@ -91,6 +91,8 @@ The install command updates an existing installation while retaining its local d
 
 1. Continue through the welcome screen and enter your Igloo server address, including its scheme
    (`http://` or `https://`) and port if needed. The app checks the server before continuing.
+   On Android 17 / API 37 or later, allow **Nearby devices** when connecting to a LAN server.
+   Earlier Android versions do not request this permission.
 2. On **Quick Connect**, scan the QR code or open the displayed address in a browser. Sign in
    to Igloo's Account settings if asked, then enter and approve the six-character TV code.
    Alternatively, choose **Use email & password instead** to sign in on the TV.
@@ -111,6 +113,13 @@ actual port. Check server binding and firewall rules if it only accepts connecti
 development computer. Both HTTP and HTTPS are supported; HTTPS needs a certificate trusted by
 the device. The server address is saved in the app, with no build-time URL to configure.
 
+If local network permission is denied, Igloo keeps the server address and saved profiles.
+Choose **Retry** to ask again, **Open Settings** to allow Nearby devices (including after a
+permanent denial), or **Use another server** to enter a public internet server, which does not
+need LAN permission. Returning from Settings rechecks the permission and resumes pending
+connections once. Players retain their position and keep the existing pause-on-background
+behavior. This permission covers API requests, artwork, direct streams, HLS, and music.
+
 ## Troubleshooting
 
 - **SDK not found or Gradle fails on Java configuration:** Check the Gradle JDK in Android Studio
@@ -122,6 +131,9 @@ the device. The server address is saved in the app, with no build-time URL to co
 - **Installation or target compatibility problems:** Use a TV target running API 28 or later.
   The manifest requires `android.software.leanback`; phones, tablets, and generic emulator images
   are outside the supported targets.
+- **Local server blocked on Android 17 or later:** Allow Nearby devices in the app's permission
+  settings, then return to Igloo. Local IP addresses, `.local` names, and other hostnames resolving
+  to a LAN address need this permission for both HTTP and HTTPS. Public servers remain available.
 - **Server check or sign-in cannot connect:** Verify the URL and port, that the server is running,
   and that the TV can reach it. Use `10.0.2.2` for the emulator's host computer and a reachable
   LAN address or hostname for a physical TV. Check firewall, DNS/VPN access, and HTTPS trust.

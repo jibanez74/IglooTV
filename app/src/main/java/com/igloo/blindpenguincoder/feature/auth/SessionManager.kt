@@ -6,13 +6,15 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.image.ImageCache
 import com.igloo.blindpenguincoder.core.network.AuthEventBus
+import com.igloo.blindpenguincoder.core.network.NetworkAccess
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.UnrestrictedNetworkAccess
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.model.ProfileSummary
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.ProfileRepository
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,6 +56,7 @@ class SessionManager(
     private val scope: CoroutineScope,
     private val imageCache: ImageCache,
     private val elapsed: () -> Long = SystemClock::elapsedRealtime,
+    private val networkAccess: NetworkAccess = UnrestrictedNetworkAccess,
 ) {
     private val _state = MutableStateFlow<AppAuthState>(AppAuthState.Loading)
     val state: StateFlow<AppAuthState> = _state.asStateFlow()
@@ -119,6 +122,7 @@ class SessionManager(
             return
         }
         serverUrl.set(storedAddress)
+        networkAccess.awaitAccess(storedAddress.origin)
 
         val stored = profiles.load()
         when {

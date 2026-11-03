@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.api.SendingRequest
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.HttpRequestBuilder
@@ -77,8 +78,13 @@ fun createIglooHttpClient(
     credentials: DeviceCredentialSource,
     authEvents: AuthEventBus,
     engine: HttpClientEngine = OkHttp.create(),
+    networkAccess: NetworkAccess = UnrestrictedNetworkAccess,
 ): HttpClient = HttpClient(engine) {
     expectSuccess = false
+    install(createClientPlugin("LocalNetworkAccess") {
+        onRequest { request, _ -> networkAccess.awaitAccess(request.url.toString()) }
+        on(SendingRequest) { request, _ -> networkAccess.awaitAccess(request.url.toString()) }
+    })
     install(ContentNegotiation) {
         json(IglooJson)
     }
@@ -97,8 +103,13 @@ fun createServerProbeHttpClient(
             followSslRedirects(false)
         }
     },
+    networkAccess: NetworkAccess = UnrestrictedNetworkAccess,
 ): HttpClient = HttpClient(engine) {
     expectSuccess = false
+    install(createClientPlugin("LocalNetworkAccess") {
+        onRequest { request, _ -> networkAccess.awaitAccess(request.url.toString()) }
+        on(SendingRequest) { request, _ -> networkAccess.awaitAccess(request.url.toString()) }
+    })
     followRedirects = false
     install(HttpTimeout) {
         connectTimeoutMillis = SERVER_PROBE_TIMEOUT_MILLIS

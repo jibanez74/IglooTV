@@ -47,19 +47,25 @@ class ServerSetupViewModel(
         if (_uiState.value.isConnecting) return
         _uiState.update { it.copy(isConnecting = true, error = null) }
         connectionJob = viewModelScope.launch {
-            when (val result = serverRepository.connect(_uiState.value.input)) {
-                is ApiResult.Success -> {
-                    _uiState.update {
-                        it.copy(isConnecting = false, completedAttempts = it.completedAttempts + 1)
+            try {
+                when (val result = serverRepository.connect(_uiState.value.input)) {
+                    is ApiResult.Success -> {
+                        _uiState.update {
+                            it.copy(isConnecting = false, completedAttempts = it.completedAttempts + 1)
+                        }
+                        sessionManager.onServerChanged(result.value)
                     }
-                    sessionManager.onServerChanged(result.value)
+                    is ApiResult.Failure -> _uiState.update {
+                        it.copy(
+                            isConnecting = false,
+                            error = result.error.toDisplayMessage(),
+                            completedAttempts = it.completedAttempts + 1,
+                        )
+                    }
                 }
-                is ApiResult.Failure -> _uiState.update {
-                    it.copy(
-                        isConnecting = false,
-                        error = result.error.toDisplayMessage(),
-                        completedAttempts = it.completedAttempts + 1,
-                    )
+            } finally {
+                if (connectionJob == coroutineContext[Job]) {
+                    _uiState.update { it.copy(isConnecting = false) }
                 }
             }
         }

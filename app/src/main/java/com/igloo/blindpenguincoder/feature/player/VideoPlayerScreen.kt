@@ -20,8 +20,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -48,12 +48,12 @@ import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooMotion
-import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.rememberOverlayReveal
+import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
@@ -68,6 +68,7 @@ import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
+import com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
@@ -80,10 +81,10 @@ import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerPhase
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerState
 import com.igloo.blindpenguincoder.playback.model.endedPositionSec
+import com.igloo.blindpenguincoder.playback.model.noun
 import com.igloo.blindpenguincoder.playback.model.onEvent
 import com.igloo.blindpenguincoder.playback.model.upNextOffer
 import com.igloo.blindpenguincoder.playback.model.upNextOutsideLead
-import com.igloo.blindpenguincoder.playback.model.noun
 import com.igloo.blindpenguincoder.playback.model.videoPlayerAnnouncement
 import kotlinx.coroutines.delay
 
@@ -256,6 +257,16 @@ fun VideoPlayerScreen(
                 is VideoPlayerEvent.Ended -> lastPositionSec = next.currentTimeSec
                 else -> Unit
             }
+        }
+    }
+
+    val networkRecovery = LocalNetworkRecovery.current
+    var handledNetworkRecovery by remember { mutableIntStateOf(networkRecovery) }
+    LaunchedEffect(networkRecovery) {
+        if (networkRecovery != handledNetworkRecovery) {
+            handledNetworkRecovery = networkRecovery
+            persistTrackSelection(engine)
+            host.rebuildEngine(playWhenReady = host.playWhenReadyIntent)
         }
     }
 

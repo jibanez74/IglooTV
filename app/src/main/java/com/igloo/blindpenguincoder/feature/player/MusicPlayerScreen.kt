@@ -10,8 +10,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,6 +33,8 @@ import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
+import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
+import com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
@@ -41,7 +43,6 @@ import com.igloo.blindpenguincoder.playback.model.MusicPlayerState
 import com.igloo.blindpenguincoder.playback.model.musicPlayerAnnouncement
 import com.igloo.blindpenguincoder.playback.model.onEvent
 import com.igloo.blindpenguincoder.playback.queue.MusicQueueController
-import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -145,6 +146,15 @@ fun MusicPlayerScreen(
                 is MusicPlayerEvent.Time -> lastPositionSec = event.currentSec
                 else -> Unit
             }
+        }
+    }
+
+    val networkRecovery = LocalNetworkRecovery.current
+    var handledNetworkRecovery by remember { mutableIntStateOf(networkRecovery) }
+    LaunchedEffect(networkRecovery) {
+        if (networkRecovery != handledNetworkRecovery) {
+            handledNetworkRecovery = networkRecovery
+            host.rebuildEngine(playWhenReady = host.playWhenReadyIntent)
         }
     }
 

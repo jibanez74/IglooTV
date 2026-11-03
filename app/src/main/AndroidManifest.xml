@@ -24,6 +24,7 @@
         android:required="false" />
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <!--
         Voice search binds the platform's speech recogniser from this process
         (feature/search/AndroidVoiceSearch.kt), which the platform checks against this app's own
