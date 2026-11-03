@@ -175,7 +175,7 @@ private fun AlbumDetailsContent(
                         playLaunchSite = PlayLaunchSite.Shuffle
                         onShuffle()
                     },
-                    modifier = heroHeaderModifier(),
+                    modifier = Modifier.heroHeaderModifier(this),
                 )
             }
         },

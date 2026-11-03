@@ -482,7 +482,7 @@ private fun DetailsContent(
                     progressRetryUpRequester = lastFocusedAction,
                     progressRetryDownRequester = belowProgressError,
                     onProgressRetryFocusChanged = onProgressRetryFocus,
-                    modifier = heroHeaderModifier(),
+                    modifier = Modifier.heroHeaderModifier(this),
                 )
             }
         },

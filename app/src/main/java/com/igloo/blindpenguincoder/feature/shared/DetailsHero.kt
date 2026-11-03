@@ -165,9 +165,9 @@ internal fun DetailsHero(
  * while the scroll container is bringing it into view.
  */
 @Composable
-internal fun BoxScope.heroHeaderModifier(): Modifier {
+internal fun Modifier.heroHeaderModifier(boxScope: BoxScope): Modifier = with(boxScope) {
     val layout = IglooTheme.layout
-    return Modifier
+    this@heroHeaderModifier
         .align(Alignment.BottomStart)
         .fillMaxWidth()
         .padding(
@@ -453,7 +453,7 @@ internal fun DetailsHeroSkeleton(
             .heightIn(min = HERO_MIN_HEIGHT.scaled()),
     ) {
         Row(
-            modifier = heroHeaderModifier(),
+            modifier = Modifier.heroHeaderModifier(this),
             horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xl),
             verticalAlignment = Alignment.Bottom,
         ) {

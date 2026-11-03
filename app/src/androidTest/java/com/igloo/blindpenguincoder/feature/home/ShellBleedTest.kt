@@ -63,7 +63,7 @@ class ShellBleedTest {
     private fun setShellContent() {
         composeRule.setContent {
             IglooTheme {
-                assertReferenceViewport()
+                AssertReferenceViewport()
                 railWidth = IglooTheme.layout.navRailCollapsedWidth
                 gutter = IglooTheme.spacing.xl
                 safeAreaHorizontal = IglooTheme.layout.safeAreaHorizontal
@@ -96,7 +96,7 @@ class ShellBleedTest {
      * wrong reason.
      */
     @Composable
-    private fun assertReferenceViewport() {
+    private fun AssertReferenceViewport() {
         val widthDp = LocalWindowInfo.current.containerSize.width / LocalDensity.current.density
         assertTrue(
             "test device reports ${widthDp}dp wide; this suite assumes the 960dp reference viewport",

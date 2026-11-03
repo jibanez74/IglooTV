@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -127,9 +128,9 @@ fun VideoPlayerScreen(
     // position prevents an hour-long movie from restarting at zero; the independent intent
     // prevents a replacement engine from autoplaying a movie the user had paused.
     var resumeDecided by rememberSaveable { mutableStateOf(request.resumePromptSec == null) }
-    var chosenStartSec by rememberSaveable { mutableStateOf(request.resumeAtSec ?: 0.0) }
-    var lastPositionSec by rememberSaveable { mutableStateOf(0.0) }
-    var lastDurationSec by rememberSaveable { mutableStateOf(request.durationSec ?: 0.0) }
+    var chosenStartSec by rememberSaveable { mutableDoubleStateOf(request.resumeAtSec ?: 0.0) }
+    var lastPositionSec by rememberSaveable { mutableDoubleStateOf(0.0) }
+    var lastDurationSec by rememberSaveable { mutableDoubleStateOf(request.durationSec ?: 0.0) }
 
     var state by remember(engine) {
         mutableStateOf(

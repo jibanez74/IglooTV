@@ -185,7 +185,7 @@ private fun MusicianDetailsContent(
                         playLaunchSite = PlayLaunchSite.Shuffle
                         onShuffle()
                     },
-                    modifier = heroHeaderModifier(),
+                    modifier = Modifier.heroHeaderModifier(this),
                 )
             }
         },

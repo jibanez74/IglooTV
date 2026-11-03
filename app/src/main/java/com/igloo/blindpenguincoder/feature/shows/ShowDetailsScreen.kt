@@ -376,7 +376,7 @@ private fun ShowDetailsContent(
                     progressRetrySection = sectionColumn.section(ShowSection.ProgressRetry),
                     onActionFocusChanged = onActionFocus,
                     onProgressRetryFocusChanged = onProgressRetryFocus,
-                    modifier = heroHeaderModifier(),
+                    modifier = Modifier.heroHeaderModifier(this),
                 )
             }
         },

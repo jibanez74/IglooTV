@@ -133,7 +133,7 @@ class QuickConnectLayoutTest {
         notice: String? = null,
     ) {
         composeRule.setContent {
-            assertReferenceViewport()
+            AssertReferenceViewport()
             IglooTheme(uiScale = UiScale.Standard) {
                 CompositionLocalProvider(LocalIglooReducedMotion provides true) {
                     Box(
@@ -160,7 +160,7 @@ class QuickConnectLayoutTest {
 
     /** IglooTheme derives its viewport factor from the window, not from the box above. */
     @Composable
-    private fun assertReferenceViewport() {
+    private fun AssertReferenceViewport() {
         val widthDp = LocalWindowInfo.current.containerSize.width / LocalDensity.current.density
         assertTrue(
             "test device reports ${widthDp}dp wide; the budget assumes the 960dp reference viewport",

@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -90,7 +91,7 @@ fun MusicPlayerScreen(
     // The queue position survives recreation alongside the transport intent [host] keeps; it
     // begins at the entry the press named.
     var lastTrackIndex by rememberSaveable { mutableIntStateOf(request.startIndex) }
-    var lastPositionSec by rememberSaveable { mutableStateOf(0.0) }
+    var lastPositionSec by rememberSaveable { mutableDoubleStateOf(0.0) }
 
     var state by remember(engine) {
         mutableStateOf(

@@ -54,7 +54,7 @@ class AuthSurfaceLayoutTest {
     private fun setCanvas(canvas: AuthCanvas) {
         composeRule.setContent {
             IglooTheme(uiScale = uiScale) {
-                assertReferenceViewport()
+                AssertReferenceViewport()
                 safeAreaHorizontal = IglooTheme.layout.safeAreaHorizontal
                 // The backdrop's ambient loop never lets the Compose clock go idle.
                 CompositionLocalProvider(LocalIglooReducedMotion provides true) {
@@ -87,7 +87,7 @@ class AuthSurfaceLayoutTest {
     }
 
     @Composable
-    private fun assertReferenceViewport() {
+    private fun AssertReferenceViewport() {
         val widthDp = LocalWindowInfo.current.containerSize.width / LocalDensity.current.density
         assertTrue(
             "test device reports ${widthDp}dp wide; this suite assumes the 960dp reference viewport",
