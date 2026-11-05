@@ -7,6 +7,7 @@ import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
 import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.progress.COMPLETION_RATIO
 import com.igloo.blindpenguincoder.playback.progress.FLUSH_DEDUPE_SEC
 import com.igloo.blindpenguincoder.playback.progress.MAX_TICK_DELTA_SEC
 import com.igloo.blindpenguincoder.playback.progress.ProgressReporter
@@ -53,6 +54,12 @@ private data class ProgressSaveAttempt(
  * trace. Played time accumulates from position deltas between ticks — a seek's jump is excluded
  * by [MAX_TICK_DELTA_SEC] — so the cadence's "15 seconds of actual playback" means playback, not
  * wall-clock or seek distance; the other writes skip that floor, like the web.
+ *
+ * Every screen visit is a new save session, and the server takes any write from another session,
+ * so a player re-sending a position it already saved — paused here while the viewer went on
+ * watching on another device, or restored at its saved position after the process died — would
+ * roll the newer progress back. Pause, background and exit writes therefore go out only once this
+ * session has played (or already saved), and only for a position the server does not hold yet.
  */
 class VideoPlayerViewModel(
     private val saveProgress: suspend (PlaybackMediaRef, UpdateWatchProgressRequest) ->
@@ -72,6 +79,7 @@ class VideoPlayerViewModel(
     private var playedAtLastSave: Double? = null
     private var lastPositionSec: Double? = null
     private var lastDispatchedPositionSec: Double? = null
+    private var hasPlayed = false
     private var nextFailureResolutionOrder = 0L
     private var retryInFlight = false
 
@@ -86,12 +94,14 @@ class VideoPlayerViewModel(
         playedAtLastSave = null
         lastPositionSec = null
         lastDispatchedPositionSec = null
+        hasPlayed = false
     }
 
     fun onTick(positionSec: Double, durationSec: Double, isPlaying: Boolean) {
         val session = activeSession ?: return
         val previous = lastPositionSec
         lastPositionSec = positionSec
+        if (isPlaying) hasPlayed = true
         if (isPlaying && previous != null) {
             val delta = positionSec - previous
             if (delta > 0.0 && delta <= MAX_TICK_DELTA_SEC) playedSec += delta
@@ -114,26 +124,40 @@ class VideoPlayerViewModel(
      */
     fun flushProgress(positionSec: Double, durationSec: Double) {
         val session = activeSession ?: return
-        if (!shouldPersistProgress(positionSec, durationSec)) return
+        if (!mayReport() || !shouldPersistProgress(positionSec, durationSec)) return
         val lastDispatched = lastDispatchedPositionSec
-        if (lastDispatched != null && abs(positionSec - lastDispatched) < FLUSH_DEDUPE_SEC) return
+        if (lastDispatched != null && sameReport(positionSec, lastDispatched, durationSec)) return
         playedAtLastSave = playedSec
         launchSave(session, positionSec, durationSec, refreshAfterSuccess = false, outlivesOwner = true)
     }
 
     /**
-     * The player is closing [media]: one last eligible save, never deduplicated because its
-     * success is what refreshes the details page and Continue Watching on return. A failure stays
-     * available for an explicit retry after the screen is gone. The media names which session is
-     * ending: an episode handing off to the next one disposes its screen in the same pass the new
-     * screen starts its session, so the old screen's exit must not end — or write onto — the new
-     * episode's session.
+     * The player is closing [media]: one last eligible save, whose success refreshes the details
+     * page and Continue Watching on return. A position the session already saved is not sent
+     * again (see the class notes), but the refresh still runs, since the earlier save did not
+     * trigger one; an earlier save still in flight or failed does not count, so the exit writes
+     * then. A failure stays available for an explicit retry after the screen is gone. The media
+     * names which session is ending: an episode handing off to the next one disposes its screen in
+     * the same pass the new screen starts its session, so the old screen's exit must not end — or
+     * write onto — the new episode's session.
      */
     fun endSession(media: PlaybackMediaRef, finalPositionSec: Double, durationSec: Double) {
         val session = activeSession?.takeIf { it.reporter.media == media } ?: return
         activeSession = null
+        if (!mayReport()) {
+            // Nothing to write, but another device may have moved on: the page underneath
+            // re-reads, as every close does.
+            discardSettledSession(session)
+            onWatchedStateCommitted()
+            return
+        }
         if (!shouldPersistProgress(finalPositionSec, durationSec)) {
             discardSettledSession(session)
+            return
+        }
+        if (alreadySaved(session, finalPositionSec, durationSec)) {
+            discardSettledSession(session)
+            onWatchedStateCommitted()
             return
         }
         launchSave(session, finalPositionSec, durationSec, refreshAfterSuccess = true, outlivesOwner = true)
@@ -164,6 +188,30 @@ class VideoPlayerViewModel(
             if (shouldRefresh) onWatchedStateCommitted()
         }
     }
+
+    /** Nothing played in this session and nothing saved: its position is not this visit's news. */
+    private fun mayReport(): Boolean = hasPlayed || lastDispatchedPositionSec != null
+
+    /** The latest dispatched save is [positionSec]'s, and it landed: nothing in flight or failed. */
+    private fun alreadySaved(
+        session: ProgressSaveSession,
+        positionSec: Double,
+        durationSec: Double,
+    ): Boolean {
+        val lastDispatched = lastDispatchedPositionSec ?: return false
+        return sameReport(positionSec, lastDispatched, durationSec) &&
+            session.savesInFlight == 0 &&
+            session.failedSnapshot == null
+    }
+
+    /**
+     * Two positions say the same thing: within [FLUSH_DEDUPE_SEC], and on the same side of the
+     * watched threshold, so a pause just short of it never swallows an exit just past it.
+     */
+    private fun sameReport(positionSec: Double, otherSec: Double, durationSec: Double): Boolean =
+        abs(positionSec - otherSec) < FLUSH_DEDUPE_SEC &&
+            (positionSec / durationSec >= COMPLETION_RATIO) ==
+            (otherSec / durationSec >= COMPLETION_RATIO)
 
     /** Sends one snapshot as [session]'s next save, reporting a watched flip it commits. */
     private fun launchSave(
