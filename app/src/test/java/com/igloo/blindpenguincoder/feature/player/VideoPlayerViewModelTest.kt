@@ -307,16 +307,29 @@ class VideoPlayerViewModelTest {
     }
 
     @Test
-    fun `a session that never played writes nothing`() = test { viewModel ->
-        // A player restored after the process died sits at its saved position in a new session;
-        // the viewer may have gone on watching elsewhere since.
-        viewModel.onTick(300.0, 600.0, isPlaying = false)
-        viewModel.flushProgress(300.0, 600.0)
-        viewModel.endSession(PlaybackMediaRef.Movie(7), 300.0, 600.0)
-        advanceUntilIdle()
-        assertTrue(requests.isEmpty())
-        assertEquals(0, refreshes)
-    }
+    fun `an exit that crosses the watched threshold writes though it barely moved`() =
+        test { viewModel ->
+            viewModel.play(560.0, 565.0)
+            viewModel.flushProgress(569.8, 600.0)
+            advanceUntilIdle()
+            viewModel.endSession(PlaybackMediaRef.Movie(7), 570.2, 600.0)
+            advanceUntilIdle()
+            assertEquals(listOf(569.8, 570.2), requests.map { it.progressSec })
+        }
+
+    @Test
+    fun `a session that never played writes nothing but still refreshes on exit`() =
+        test { viewModel ->
+            // A player restored after the process died sits at its saved position in a new
+            // session; the viewer may have gone on watching elsewhere since, and the page
+            // underneath should show that.
+            viewModel.onTick(300.0, 600.0, isPlaying = false)
+            viewModel.flushProgress(300.0, 600.0)
+            viewModel.endSession(PlaybackMediaRef.Movie(7), 300.0, 600.0)
+            advanceUntilIdle()
+            assertTrue(requests.isEmpty())
+            assertEquals(1, refreshes)
+        }
 
     @Test
     fun `one playing tick is enough to write on exit`() = test { viewModel ->

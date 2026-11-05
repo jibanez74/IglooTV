@@ -7,6 +7,7 @@ import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
 import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.progress.COMPLETION_RATIO
 import com.igloo.blindpenguincoder.playback.progress.FLUSH_DEDUPE_SEC
 import com.igloo.blindpenguincoder.playback.progress.MAX_TICK_DELTA_SEC
 import com.igloo.blindpenguincoder.playback.progress.ProgressReporter
@@ -125,7 +126,7 @@ class VideoPlayerViewModel(
         val session = activeSession ?: return
         if (!mayReport() || !shouldPersistProgress(positionSec, durationSec)) return
         val lastDispatched = lastDispatchedPositionSec
-        if (lastDispatched != null && abs(positionSec - lastDispatched) < FLUSH_DEDUPE_SEC) return
+        if (lastDispatched != null && sameReport(positionSec, lastDispatched, durationSec)) return
         playedAtLastSave = playedSec
         launchSave(session, positionSec, durationSec, refreshAfterSuccess = false, outlivesOwner = true)
     }
@@ -143,11 +144,18 @@ class VideoPlayerViewModel(
     fun endSession(media: PlaybackMediaRef, finalPositionSec: Double, durationSec: Double) {
         val session = activeSession?.takeIf { it.reporter.media == media } ?: return
         activeSession = null
-        if (!mayReport() || !shouldPersistProgress(finalPositionSec, durationSec)) {
+        if (!mayReport()) {
+            // Nothing to write, but another device may have moved on: the page underneath
+            // re-reads, as every close does.
+            discardSettledSession(session)
+            onWatchedStateCommitted()
+            return
+        }
+        if (!shouldPersistProgress(finalPositionSec, durationSec)) {
             discardSettledSession(session)
             return
         }
-        if (alreadySaved(session, finalPositionSec)) {
+        if (alreadySaved(session, finalPositionSec, durationSec)) {
             discardSettledSession(session)
             onWatchedStateCommitted()
             return
@@ -185,12 +193,25 @@ class VideoPlayerViewModel(
     private fun mayReport(): Boolean = hasPlayed || lastDispatchedPositionSec != null
 
     /** The latest dispatched save is [positionSec]'s, and it landed: nothing in flight or failed. */
-    private fun alreadySaved(session: ProgressSaveSession, positionSec: Double): Boolean {
+    private fun alreadySaved(
+        session: ProgressSaveSession,
+        positionSec: Double,
+        durationSec: Double,
+    ): Boolean {
         val lastDispatched = lastDispatchedPositionSec ?: return false
-        return abs(positionSec - lastDispatched) < FLUSH_DEDUPE_SEC &&
+        return sameReport(positionSec, lastDispatched, durationSec) &&
             session.savesInFlight == 0 &&
             session.failedSnapshot == null
     }
+
+    /**
+     * Two positions say the same thing: within [FLUSH_DEDUPE_SEC], and on the same side of the
+     * watched threshold, so a pause just short of it never swallows an exit just past it.
+     */
+    private fun sameReport(positionSec: Double, otherSec: Double, durationSec: Double): Boolean =
+        abs(positionSec - otherSec) < FLUSH_DEDUPE_SEC &&
+            (positionSec / durationSec >= COMPLETION_RATIO) ==
+            (otherSec / durationSec >= COMPLETION_RATIO)
 
     /** Sends one snapshot as [session]'s next save, reporting a watched flip it commits. */
     private fun launchSave(
