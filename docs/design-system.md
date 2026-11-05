@@ -2622,7 +2622,11 @@ Progress saves to the backend every 15s, starting only after ~15s of real playba
 a pause, a trip to the background, and the exit or end of the movie each write at once, with no
 played-time minimum: any position past 30s, or at 95% of the runtime, is eligible, so resuming
 near the end and leaving seconds later still marks the movie watched, and so does seeking to the
-end and leaving. A pause and the background stop that follows it write once, not twice. The exit
+end and leaving. A pause and the background stop that follows it write once, not twice. Only a
+position that moved since this visit's last save goes out, and nothing before the visit has
+played: the server takes any other session's write, so a paused player left while the viewer
+went on watching elsewhere, or restored at its saved position after the process died, must not
+roll that newer progress back. Leaving still refreshes the page underneath. The exit
 write is never cancelled by the client, so backing out of the app right after the player cannot
 lose the end of a movie. Save failures never pause playback. They hold the chrome open with a polite,
 D-pad-reachable inline Retry and follow the user back to the page that launched if exit finishes

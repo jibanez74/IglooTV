@@ -245,12 +245,85 @@ class VideoPlayerViewModelTest {
     }
 
     @Test
-    fun `an exit right after a pause still writes and refreshes`() = test { viewModel ->
+    fun `an exit at the saved pause position writes nothing more but still refreshes`() =
+        test { viewModel ->
+            // A paused player left while the viewer went on watching elsewhere: re-sending the
+            // pause position would roll the newer progress back.
+            viewModel.play(0.0, 5.0)
+            viewModel.flushProgress(100.0, 600.0)
+            advanceUntilIdle()
+            viewModel.endSession(PlaybackMediaRef.Movie(7), 100.4, 600.0)
+            advanceUntilIdle()
+            assertEquals(listOf(1L), requests.map { it.saveSequence })
+            assertEquals(1, refreshes)
+        }
+
+    @Test
+    fun `an exit while the pause save is in flight still writes`() = test { viewModel ->
+        val pauseLanded = CompletableDeferred<Unit>()
+        val record = save
+        save = { id, request ->
+            if (request.saveSequence == 1L) pauseLanded.await()
+            record(id, request)
+        }
         viewModel.play(0.0, 5.0)
         viewModel.flushProgress(100.0, 600.0)
         viewModel.endSession(PlaybackMediaRef.Movie(7), 100.0, 600.0)
+        pauseLanded.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf(1L, 2L), requests.map { it.saveSequence }.sorted())
+        assertEquals(1, refreshes)
+    }
+
+    @Test
+    fun `an exit after the pause save failed writes again`() = test { viewModel ->
+        save = { _, request ->
+            requests += request
+            if (request.saveSequence == 1L) {
+                ApiResult.Failure(AppError.Network)
+            } else {
+                ApiResult.Success(WatchProgressUpdateData(watched = false))
+            }
+        }
+        viewModel.play(0.0, 5.0)
+        viewModel.flushProgress(100.0, 600.0)
+        advanceUntilIdle()
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 100.0, 600.0)
         advanceUntilIdle()
         assertEquals(listOf(1L, 2L), requests.map { it.saveSequence })
+        assertEquals(ProgressSyncUiState.Synced, viewModel.progressSyncUiState.value)
+        assertEquals(1, refreshes)
+    }
+
+    @Test
+    fun `an exit a second past the saved pause position writes`() = test { viewModel ->
+        viewModel.play(0.0, 5.0)
+        viewModel.flushProgress(100.0, 600.0)
+        advanceUntilIdle()
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 101.0, 600.0)
+        advanceUntilIdle()
+        assertEquals(listOf(100.0, 101.0), requests.map { it.progressSec })
+        assertEquals(1, refreshes)
+    }
+
+    @Test
+    fun `a session that never played writes nothing`() = test { viewModel ->
+        // A player restored after the process died sits at its saved position in a new session;
+        // the viewer may have gone on watching elsewhere since.
+        viewModel.onTick(300.0, 600.0, isPlaying = false)
+        viewModel.flushProgress(300.0, 600.0)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 300.0, 600.0)
+        advanceUntilIdle()
+        assertTrue(requests.isEmpty())
+        assertEquals(0, refreshes)
+    }
+
+    @Test
+    fun `one playing tick is enough to write on exit`() = test { viewModel ->
+        viewModel.onTick(300.0, 600.0, isPlaying = true)
+        viewModel.endSession(PlaybackMediaRef.Movie(7), 300.0, 600.0)
+        advanceUntilIdle()
+        assertEquals(300.0, requests.single().progressSec, 0.0)
         assertEquals(1, refreshes)
     }
 
