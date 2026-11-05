@@ -8,7 +8,8 @@
 # 1.0-2.5, 3.0-4.5, 6.0-7.0 and 8.0-9.5 s. The PGS track is built by hand, a solid 64x16 box per
 # cue, because FFmpeg encodes image-based subtitles only from other image-based subtitles.
 #
-# Needs the Jellyfin FFmpeg the server uses: FFMPEG defaults to $IGLOO_FFMPEG_PATH, else ffmpeg.
+# Needs the FFmpeg the server embeds (Igloo's `make media-payloads`): FFMPEG defaults to
+# $IGLOO_FFMPEG_PATH, else ffmpeg.
 set -euo pipefail
 
 FFMPEG="${FFMPEG:-${IGLOO_FFMPEG_PATH:-ffmpeg}}"
