@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.playback.hls
 
+import com.igloo.blindpenguincoder.playback.model.HLS_VIDEO_CODEC_HEVC
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import org.junit.Assert.assertEquals
@@ -14,6 +15,7 @@ class HlsSessionTest {
         startSec: Int = 90,
         reload: Int = 0,
         audioProfile: HlsAudioProfile? = null,
+        videoCodecs: String? = null,
     ) = HlsSessionSpec(
         media = PlaybackMediaRef.Movie(7),
         profileId = "remux",
@@ -22,6 +24,7 @@ class HlsSessionTest {
         sessionUuid = "5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1",
         reload = reload,
         audioProfile = audioProfile,
+        videoCodecs = videoCodecs,
     )
 
     // --- query construction ---
@@ -97,6 +100,37 @@ class HlsSessionTest {
                 params.any { it.first == "audio_channels" },
             )
         }
+    }
+
+    @Test
+    fun `a declared video codec follows the audio pair and survives reload and keepalive`() {
+        assertEquals(
+            listOf(
+                "playback_session" to "5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1",
+                "start" to "90",
+                "audio_track" to "1",
+                "audio_codec" to "eac3",
+                "audio_channels" to "6",
+                "video_codecs" to "hevc",
+                "reload" to "2",
+                "keepalive" to "1",
+            ),
+            hlsQueryParams(
+                spec(
+                    reload = 2,
+                    audioProfile = HlsAudioProfile.DolbyDigitalPlus,
+                    videoCodecs = HLS_VIDEO_CODEC_HEVC,
+                ),
+                keepalive = true,
+            ),
+        )
+    }
+
+    /** The server 400s an empty `video_codecs`, so an undeclared device sends no parameter. */
+    @Test
+    fun `no declaration sends no video codecs parameter`() {
+        assertTrue(hlsQueryParams(spec()).none { it.first == "video_codecs" })
+        assertTrue(hlsQueryParams(spec(), keepalive = true).none { it.first == "video_codecs" })
     }
 
     // --- manifest response classification ---

@@ -54,7 +54,11 @@ class VideoPlaybackRepositoryTest(
         assertEquals("$TEST_SERVER/$prefix/stream", http.videoPlaybackRepository.streamUrl(media))
     }
 
-    private fun hlsSpec(reload: Int = 0, audioProfile: HlsAudioProfile? = null) = HlsSessionSpec(
+    private fun hlsSpec(
+        reload: Int = 0,
+        audioProfile: HlsAudioProfile? = null,
+        videoCodecs: String? = null,
+    ) = HlsSessionSpec(
         media = media,
         profileId = "remux",
         audioTypeIndex = 1,
@@ -62,6 +66,7 @@ class VideoPlaybackRepositoryTest(
         sessionUuid = "5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1",
         reload = reload,
         audioProfile = audioProfile,
+        videoCodecs = videoCodecs,
     )
 
     @Test
@@ -86,6 +91,18 @@ class VideoPlaybackRepositoryTest(
             http.videoPlaybackRepository.hlsPlaylistUrl(
                 hlsSpec(audioProfile = HlsAudioProfile.DolbyDigitalPlus),
             ),
+        )
+    }
+
+    @Test
+    fun `a declared video codec rides the playlist url so media3 keys the same session`() = runTest {
+        val http = TestHttp { error("the playlist url is built, never fetched") }
+
+        assertEquals(
+            "$TEST_SERVER/$prefix/hls/remux/playlist.m3u8" +
+                "?playback_session=5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1&start=90&audio_track=1" +
+                "&video_codecs=hevc",
+            http.videoPlaybackRepository.hlsPlaylistUrl(hlsSpec(videoCodecs = "hevc")),
         )
     }
 
@@ -130,6 +147,8 @@ class VideoPlaybackRepositoryTest(
         // A legacy spec must not leak half a conversion pair onto the wire.
         assertEquals(null, captured.url.parameters["audio_codec"])
         assertEquals(null, captured.url.parameters["audio_channels"])
+        // An undeclared device must not send an empty video_codecs, which the server 400s.
+        assertEquals(null, captured.url.parameters["video_codecs"])
         // Only a keepalive ping is refresh-only; this fetch must be free to create the session.
         assertEquals(null, captured.url.parameters["keepalive"])
         assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])

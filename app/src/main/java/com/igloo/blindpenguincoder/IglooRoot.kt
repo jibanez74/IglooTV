@@ -64,6 +64,7 @@ import com.igloo.blindpenguincoder.feature.shows.showLibrarySource
 import com.igloo.blindpenguincoder.playback.media3.VideoPlaybackServices
 import com.igloo.blindpenguincoder.playback.media3.deviceCanDecodeVideoMime
 import com.igloo.blindpenguincoder.playback.media3.deviceCanPlayAudioMime
+import com.igloo.blindpenguincoder.playback.media3.deviceHlsVideoCodecs
 import com.igloo.blindpenguincoder.playback.media3.exoVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.exoMusicPlayerEngine
 import kotlinx.coroutines.delay
@@ -433,6 +434,7 @@ fun IglooRoot(container: IglooAppContainer) {
                                     canPlayVideoMime = ::deviceCanDecodeVideoMime,
                                     canPlayAudioMime = canPlayAudioMime,
                                     stopScope = container.applicationScope,
+                                    hlsVideoCodecs = deviceHlsVideoCodecs(context),
                                 ),
                             )
                         },

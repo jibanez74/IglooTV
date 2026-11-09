@@ -20,4 +20,9 @@ class VideoPlaybackServices(
     val canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean,
     /** App-lifetime scope: the HLS stop request must survive the engine's release. */
     val stopScope: CoroutineScope,
+    /**
+     * The `video_codecs` value every HLS manifest declares, from [deviceHlsVideoCodecs]: `hevc`
+     * or null. The one place a future user setting would override the device check.
+     */
+    val hlsVideoCodecs: String? = null,
 )
