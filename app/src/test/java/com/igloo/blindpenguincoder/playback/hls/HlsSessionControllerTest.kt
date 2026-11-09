@@ -316,6 +316,30 @@ class HlsSessionControllerTest {
         assertNull(api.fetchedSpecs.single().videoCodecs)
     }
 
+    /** Only the audio pair is dropped on a rejection; the device's declaration still stands. */
+    @Test
+    fun `the legacy audio fallback keeps the video codec declaration`() = runTest {
+        val api = FakeHlsApi()
+        api.queuedResults += HlsManifestResult.Failed(
+            "The server refused the stream (HTTP 400).",
+            rejectedRequest = true,
+        )
+        api.queuedResults += HlsManifestResult.Ready("remux", 0.0)
+        val controller = HlsSessionController(
+            movie,
+            api,
+            backgroundScope,
+            backgroundScope,
+            videoCodecs = HLS_VIDEO_CODEC_HEVC,
+        )
+
+        controller.start("remux", 0, HlsAudioProfile.DolbyDigital, 0)
+
+        assertEquals(2, api.fetchedSpecs.size)
+        assertNull(api.fetchedSpecs.last().audioProfile)
+        assertTrue(api.fetchedSpecs.all { it.videoCodecs == HLS_VIDEO_CODEC_HEVC })
+    }
+
     @Test
     fun `a rejected conversion falls back to legacy audio once, narrating the change`() = runTest {
         val api = FakeHlsApi()

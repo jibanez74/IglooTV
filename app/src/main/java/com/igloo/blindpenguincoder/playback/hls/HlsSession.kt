@@ -66,7 +66,8 @@ sealed interface HlsManifestResult {
  * requires it), `audio_track` only when the movie has audio, the `audio_codec`/`audio_channels`
  * pair only when a conversion is requested (the server 400s a lone half; the single
  * [HlsAudioProfile] value makes that unrepresentable), `video_codecs` only when the device
- * declared one (the server 400s an empty value), `reload` only once recovery has bumped it.
+ * declared a non-blank one (the server 400s an empty value, which would end HLS playback on
+ * that device), `reload` only once recovery has bumped it.
  * Segment URLs need none of this — the server propagates the query onto them itself.
  *
  * [keepalive] marks a refresh-only ping: the server refreshes the session's idle TTL but never
@@ -82,7 +83,7 @@ fun hlsQueryParams(spec: HlsSessionSpec, keepalive: Boolean = false): List<Pair<
             add("audio_codec" to it.audioCodec)
             add("audio_channels" to it.audioChannels.toString())
         }
-        spec.videoCodecs?.let { add("video_codecs" to it) }
+        spec.videoCodecs?.takeIf { it.isNotBlank() }?.let { add("video_codecs" to it) }
         if (spec.reload > 0) add("reload" to spec.reload.toString())
         if (keepalive) add("keepalive" to "1")
     }

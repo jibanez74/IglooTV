@@ -133,6 +133,14 @@ class HlsSessionTest {
         assertTrue(hlsQueryParams(spec(), keepalive = true).none { it.first == "video_codecs" })
     }
 
+    /** A blank value, say an unset setting, must read as no declaration rather than a 400. */
+    @Test
+    fun `a blank declaration is omitted, not sent empty`() {
+        for (blank in listOf("", " ")) {
+            assertTrue(hlsQueryParams(spec(videoCodecs = blank)).none { it.first == "video_codecs" })
+        }
+    }
+
     // --- manifest response classification ---
 
     private fun headers(vararg pairs: Pair<String, String>): (String) -> String? =

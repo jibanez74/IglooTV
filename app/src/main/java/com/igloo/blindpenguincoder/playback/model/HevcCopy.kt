@@ -20,7 +20,9 @@ data class HevcDecoderInfo(
  * false positive is a 4K HDR stream the device stutters on or shows in washed-out colors,
  * while a false negative only keeps the server's H.264 transcode, the behavior before the
  * declaration existed. It needs one hardware decoder with Main 10 at 3840x2160, and a display
- * that renders HDR10 so a copied HDR10 picture is not shown with the wrong transfer.
+ * that renders HDR10, the transfer of nearly every HDR title, so a copied HDR10 picture is not
+ * shown with the wrong one. The rarer HLG sources are copied too and rely on the device's own
+ * handling when the display lacks HLG.
  */
 fun canDeclareHevcCopy(decoders: List<HevcDecoderInfo>, displaySupportsHdr10: Boolean): Boolean =
     displaySupportsHdr10 && decoders.any { it.hardware && it.main10 && it.uhd }

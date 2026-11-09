@@ -1,13 +1,17 @@
+@file:androidx.annotation.OptIn(UnstableApi::class)
+
 package com.igloo.blindpenguincoder.playback.media3
 
 import android.content.Context
 import android.hardware.display.DisplayManager
-import android.media.MediaCodecInfo
 import android.media.MediaCodecInfo.CodecProfileLevel
 import android.media.MediaCodecList
-import android.media.MediaFormat
 import android.os.Build
 import android.view.Display
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import com.igloo.blindpenguincoder.playback.model.HLS_VIDEO_CODEC_HEVC
 import com.igloo.blindpenguincoder.playback.model.HevcDecoderInfo
 import com.igloo.blindpenguincoder.playback.model.canDeclareHevcCopy
@@ -26,24 +30,27 @@ fun deviceCanDecodeVideoMime(mimeType: String): Boolean = runCatching {
 /**
  * The `video_codecs` value this device's HLS manifests declare: [HLS_VIDEO_CODEC_HEVC] when
  * [canDeclareHevcCopy] holds for its decoders and display, null otherwise. Read at every engine
- * start, so a display that gains or loses HDR10 (another TV on the HDMI port, HDR turned off in
- * the system settings) is honored by the next playback. Any failure reads as "no": the server
- * then transcodes, as it would without the declaration.
+ * start, so a display that gains or loses HDR10 (another TV on the HDMI port) is honored by the
+ * next playback. The decoders are the ones Media3's renderer chooses from, classified the way
+ * it classifies them. A decoder whose capabilities cannot be read is skipped rather than
+ * failing the whole probe, and any other failure reads as "no": the server then transcodes, as
+ * it would without the declaration.
  */
 fun deviceHlsVideoCodecs(context: Context): String? = runCatching {
-    val decoders = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
-        .filter { info ->
-            !info.isEncoder &&
-                info.supportedTypes.any { it.equals(MediaFormat.MIMETYPE_VIDEO_HEVC, ignoreCase = true) }
-        }
-        .map(::hevcDecoderInfo)
+    val decoders = MediaCodecUtil.getDecoderInfos(MimeTypes.VIDEO_H265, false, false)
+        .mapNotNull { runCatching { hevcDecoderInfo(it) }.getOrNull() }
     HLS_VIDEO_CODEC_HEVC.takeIf { canDeclareHevcCopy(decoders, displaySupportsHdr10(context)) }
 }.getOrNull()
 
+/**
+ * Media3's `hardwareAccelerated` comes from the platform on API 29+; before it, Media3 infers
+ * it from the codec name (Google's, FFmpeg's and vendor `sw` decoders count as software), so
+ * this check and the renderer agree on what a software decoder is.
+ */
 private fun hevcDecoderInfo(info: MediaCodecInfo): HevcDecoderInfo {
-    val capabilities = info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_HEVC)
+    val capabilities = requireNotNull(info.capabilities)
     return HevcDecoderInfo(
-        hardware = isHardwareDecoder(info),
+        hardware = info.hardwareAccelerated && !info.softwareOnly,
         // A decoder that lists HDR10+ also lists one of these, and that constant needs API 29.
         main10 = capabilities.profileLevels.any {
             it.profile == CodecProfileLevel.HEVCProfileMain10 ||
@@ -52,19 +59,6 @@ private fun hevcDecoderInfo(info: MediaCodecInfo): HevcDecoderInfo {
         uhd = capabilities.videoCapabilities?.isSizeSupported(UHD_WIDTH, UHD_HEIGHT) == true,
     )
 }
-
-/**
- * API 29 reports this directly. Before it, the platform's own software codecs are recognized
- * by name: Google's OMX and Codec2 implementations are the only software HEVC decoders a TV
- * ships with.
- */
-private fun isHardwareDecoder(info: MediaCodecInfo): Boolean =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        info.isHardwareAccelerated
-    } else {
-        val name = info.name.lowercase()
-        !name.startsWith("omx.google.") && !name.startsWith("c2.android.")
-    }
 
 private fun displaySupportsHdr10(context: Context): Boolean {
     val display = context.getSystemService(DisplayManager::class.java)
@@ -76,7 +70,6 @@ private fun displaySupportsHdr10(context: Context): Boolean {
         @Suppress("DEPRECATION")
         display.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()
     }
-    @Suppress("DEPRECATION")
     return Display.HdrCapabilities.HDR_TYPE_HDR10 in hdrTypes
 }
 
