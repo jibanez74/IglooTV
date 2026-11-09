@@ -97,8 +97,13 @@ internal class ExoVideoPlayerEngine(
 
     private val handler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val controller =
-        HlsSessionController(request.media, services.hlsSessionApi, scope, services.stopScope)
+    private val controller = HlsSessionController(
+        media = request.media,
+        api = services.hlsSessionApi,
+        scope = scope,
+        stopScope = services.stopScope,
+        videoCodecs = services.hlsVideoCodecs,
+    )
 
     /**
      * Last successfully committed user intent; every seek, audio swap, and recovery asks for it

@@ -7,9 +7,9 @@ import com.igloo.blindpenguincoder.playback.model.playbackServerRefusedMessage
 
 /**
  * One HLS playback session as the backend keys it: media + profile + audio ordinal + audio
- * conversion + client UUID + start second. Any change to these is a new server session (and a
- * new FFmpeg run); `reload` is an opaque cache-buster echoed into rewritten asset URLs,
- * deliberately outside the session key.
+ * conversion + declared video codecs + client UUID + start second. Any change to these is a new
+ * server session (and a new FFmpeg run); `reload` is an opaque cache-buster echoed into
+ * rewritten asset URLs, deliberately outside the session key.
  */
 data class HlsSessionSpec(
     val media: PlaybackMediaRef,
@@ -21,6 +21,12 @@ data class HlsSessionSpec(
     val reload: Int = 0,
     /** Server-side audio conversion for the selected track; null = legacy audio handling. */
     val audioProfile: HlsAudioProfile? = null,
+    /**
+     * The `video_codecs` declaration: the codecs besides H.264 this device decodes from
+     * fragmented MP4, which lets a Remux copy them instead of transcoding. Only `hevc` exists;
+     * null = H.264 only, so the server transcodes HEVC as it always has.
+     */
+    val videoCodecs: String? = null,
 )
 
 /**
@@ -59,8 +65,10 @@ sealed interface HlsManifestResult {
  * The one place the manifest query parameters are spelled. `start` is always sent (the server
  * requires it), `audio_track` only when the movie has audio, the `audio_codec`/`audio_channels`
  * pair only when a conversion is requested (the server 400s a lone half; the single
- * [HlsAudioProfile] value makes that unrepresentable), `reload` only once recovery has bumped
- * it. Segment URLs need none of this — the server propagates the query onto them itself.
+ * [HlsAudioProfile] value makes that unrepresentable), `video_codecs` only when the device
+ * declared a non-blank one (the server 400s an empty value, which would end HLS playback on
+ * that device), `reload` only once recovery has bumped it.
+ * Segment URLs need none of this — the server propagates the query onto them itself.
  *
  * [keepalive] marks a refresh-only ping: the server refreshes the session's idle TTL but never
  * creates one, answering 404 once it is gone. It is a request flag, not part of the session, so
@@ -75,6 +83,7 @@ fun hlsQueryParams(spec: HlsSessionSpec, keepalive: Boolean = false): List<Pair<
             add("audio_codec" to it.audioCodec)
             add("audio_channels" to it.audioChannels.toString())
         }
+        spec.videoCodecs?.takeIf { it.isNotBlank() }?.let { add("video_codecs" to it) }
         if (spec.reload > 0) add("reload" to spec.reload.toString())
         if (keepalive) add("keepalive" to "1")
     }

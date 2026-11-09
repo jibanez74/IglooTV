@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.playback.hls
 
 import com.igloo.blindpenguincoder.playback.model.HLS_AUDIO_CONVERSION_UNAVAILABLE_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.HLS_VIDEO_CODEC_HEVC
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import kotlinx.coroutines.CompletableDeferred
@@ -280,6 +281,63 @@ class HlsSessionControllerTest {
         assertTrue(api.fetchedSpecs.all { it.audioProfile == HlsAudioProfile.DolbyDigitalPlus })
         // The lost retry still bumped reload alongside the profile.
         assertEquals(1, api.fetchedSpecs.last().reload)
+    }
+
+    @Test
+    fun `a declared video codec rides every retry, every restart, and the keepalive`() = runTest {
+        val api = FakeHlsApi()
+        api.queuedResults += HlsManifestResult.Busy(retryAfterSec = 1)
+        api.queuedResults += HlsManifestResult.Lost
+        api.queuedResults += HlsManifestResult.Ready("remux", 0.0)
+        val controller = HlsSessionController(
+            movie,
+            api,
+            backgroundScope,
+            backgroundScope,
+            videoCodecs = HLS_VIDEO_CODEC_HEVC,
+        )
+
+        controller.start("remux", 0, null, 0)
+        controller.startKeepalive { }
+        advanceTimeBy(HLS_KEEPALIVE_INTERVAL_MS + 1)
+        controller.start("1080p_8mbps", 0, null, 600)
+
+        assertEquals(listOf(false, false, false, true, false), api.keepaliveFlags)
+        assertTrue(api.fetchedSpecs.all { it.videoCodecs == HLS_VIDEO_CODEC_HEVC })
+    }
+
+    @Test
+    fun `without a declaration no manifest names a video codec`() = runTest {
+        val api = FakeHlsApi()
+        val controller = HlsSessionController(movie, api, backgroundScope, backgroundScope)
+
+        controller.start("remux", 0, null, 0)
+
+        assertNull(api.fetchedSpecs.single().videoCodecs)
+    }
+
+    /** Only the audio pair is dropped on a rejection; the device's declaration still stands. */
+    @Test
+    fun `the legacy audio fallback keeps the video codec declaration`() = runTest {
+        val api = FakeHlsApi()
+        api.queuedResults += HlsManifestResult.Failed(
+            "The server refused the stream (HTTP 400).",
+            rejectedRequest = true,
+        )
+        api.queuedResults += HlsManifestResult.Ready("remux", 0.0)
+        val controller = HlsSessionController(
+            movie,
+            api,
+            backgroundScope,
+            backgroundScope,
+            videoCodecs = HLS_VIDEO_CODEC_HEVC,
+        )
+
+        controller.start("remux", 0, HlsAudioProfile.DolbyDigital, 0)
+
+        assertEquals(2, api.fetchedSpecs.size)
+        assertNull(api.fetchedSpecs.last().audioProfile)
+        assertTrue(api.fetchedSpecs.all { it.videoCodecs == HLS_VIDEO_CODEC_HEVC })
     }
 
     @Test

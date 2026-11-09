@@ -46,6 +46,8 @@ class HlsSessionController(
     /** App-lifetime scope; the stop POST must survive the engine's release. */
     private val stopScope: CoroutineScope,
     sessionUuid: String = UUID.randomUUID().toString(),
+    /** The device's `video_codecs` declaration, sent on every manifest (see [HlsSessionSpec]). */
+    private val videoCodecs: String? = null,
 ) {
     private var sessionUuid: String = sessionUuid
     private var currentSpec: HlsSessionSpec? = null
@@ -113,6 +115,7 @@ class HlsSessionController(
                 sessionUuid = startUuid,
                 reload = reload,
                 audioProfile = audioProfile,
+                videoCodecs = videoCodecs,
             )
             manifestRequestIssued = true
             val result = api.fetchHlsManifest(spec)
