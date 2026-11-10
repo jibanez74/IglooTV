@@ -374,7 +374,7 @@ private fun MusicianTrackList(
                 focus = focus,
                 onPlay = { onPlayTrack(index) },
                 onToggleLike = { onToggleLike(track.id) },
-                canOpenAlbum = true, canOpenArtist = false,
+                canOpenArtist = false,
                 onOpenMore = { bounds -> onOpenMore(index, bounds) },
             )
         }

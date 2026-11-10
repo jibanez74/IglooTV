@@ -65,10 +65,6 @@ sealed interface MovieDetailsActions {
     data class Library(
         val onToggleWatched: () -> Unit,
         val onToggleLike: () -> Unit,
-        val onWatchTogether: () -> Unit,
-        val onTechnicalDetails: () -> Unit,
-        val onIdentifyMovie: () -> Unit,
-        val onDeleteMovie: () -> Unit,
         /**
          * The Playback Settings dialog's selections. Opening the dialog is the host's business
          * (like `onPlayVideo` — it is a host-owned overlay), so there is no open callback here;
@@ -227,22 +223,22 @@ fun MovieDetailsScreen(
         }
 
         // Last child, over the body, like every overlay in the stack. Playback Settings opens
-        // the host-owned dialog below; the remaining items fire stubbed callbacks and close the
-        // menu, nothing more, until each feature lands.
+        // the host-owned dialog below; the remaining items only close the menu until each
+        // feature lands.
         val menuAnchor = moreAnchor
         if (moreMenuOpen && actions is MovieDetailsActions.Library && menuAnchor != null) {
             IglooMenu(
                 title = "More options",
                 items = buildList {
                     add(menuItem("Playback Settings", onOpenPlaybackSettings, onDismissMoreMenu))
-                    add(menuItem("Watch Together", actions.onWatchTogether, onDismissMoreMenu))
-                    add(menuItem("Technical Details", actions.onTechnicalDetails, onDismissMoreMenu))
+                    add(menuItem("Watch Together", {}, onDismissMoreMenu))
+                    add(menuItem("Technical Details", {}, onDismissMoreMenu))
                     if (isAdmin) {
-                        add(menuItem("Identify Movie", actions.onIdentifyMovie, onDismissMoreMenu))
+                        add(menuItem("Identify Movie", {}, onDismissMoreMenu))
                         add(
                             menuItem(
                                 "Delete Movie",
-                                actions.onDeleteMovie,
+                                {},
                                 onDismissMoreMenu,
                             ).copy(destructive = true, separatorBefore = true),
                         )

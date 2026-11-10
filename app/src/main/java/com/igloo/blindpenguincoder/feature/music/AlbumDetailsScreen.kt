@@ -45,7 +45,7 @@ fun AlbumDetailsScreen(
     onPlayTrack: (Int) -> Unit,
     likes: TrackLikesUiState,
     onToggleLike: (Long) -> Unit,
-    onOpenMusician: ((Long) -> Unit)?,
+    onOpenMusician: (Long) -> Unit,
     playReturnRequester: FocusRequester,
     modifier: Modifier = Modifier,
     // Parameterized so tests can force both states: the reading-stop chain below depends on it,
@@ -105,7 +105,7 @@ private fun AlbumDetailsContent(
     onShuffle: () -> Unit,
     onPlayTrack: (Int) -> Unit,
     onToggleLike: (Long) -> Unit,
-    onOpenMusician: ((Long) -> Unit)?,
+    onOpenMusician: (Long) -> Unit,
     onOpenMore: (Int, Rect) -> Unit,
 ) {
     val layout = IglooTheme.layout
@@ -127,8 +127,8 @@ private fun AlbumDetailsContent(
     val summaryFirst = spokenAccessibilityEnabled
     val heroInfoRequester = if (summaryFirst) entryRequester else heroInfoStop
     val primaryRequester = if (summaryFirst) primaryAction else entryRequester
-    // Chips are focus targets only with a musician screen to open and a real id to open it on.
-    val actionableArtists = onOpenMusician != null && album.artists.all { it.id != null }
+    // Chips are focus targets only with a real id to open the musician screen on.
+    val actionableArtists = album.artists.all { it.id != null }
     val artistRequesters = remember(album.artists.size, actionableArtists) {
         if (actionableArtists) List(album.artists.size) { FocusRequester() } else emptyList()
     }
@@ -189,7 +189,7 @@ private fun AlbumDetailsContent(
             upFromBelow = upFromBelow,
             playReturnRow = playReturnRow,
             playReturnRequester = playReturnRequester,
-            onOpenMusician = onOpenMusician?.takeIf { actionableArtists },
+            onOpenMusician = onOpenMusician.takeIf { actionableArtists },
             onPlayTrack = { index ->
                 playLaunchSite = PlayLaunchSite.Row(index)
                 onPlayTrack(index)

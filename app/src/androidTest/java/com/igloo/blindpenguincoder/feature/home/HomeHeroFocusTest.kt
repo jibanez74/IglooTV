@@ -16,7 +16,6 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
-import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -74,8 +73,6 @@ class HomeHeroFocusTest {
 
     private fun setShellContent(
         initialHero: HomeHeroState,
-        canOpenMovies: Boolean = false,
-        canOpenShows: Boolean = false,
     ) {
         heroState = initialHero
         opened.clear()
@@ -91,8 +88,8 @@ class HomeHeroFocusTest {
                         latestMovies = IglooRailState.Loaded(testHomeMovies),
                         latestShows = IglooRailState.Loaded(testHomeShows),
                     ),
-                    onMovieSelected = if (canOpenMovies) { id -> opened += id } else null,
-                    onShowSelected = if (canOpenShows) { id -> showsOpened += id } else null,
+                    onMovieSelected = { id -> opened += id },
+                    onShowSelected = { id -> showsOpened += id },
                 )
             }
         }
@@ -314,7 +311,7 @@ class HomeHeroFocusTest {
 
     @Test
     fun eachPageAnnouncesItsFeatureAndPlaceAsOneNode() {
-        setShellContent(bothPages, canOpenMovies = true, canOpenShows = true)
+        setShellContent(bothPages)
 
         hero().assertContentDescriptionEquals(moviePageDescription).assertHasClickAction()
         // The words on the plate are the target's to speak, not nodes of their own.
@@ -326,25 +323,10 @@ class HomeHeroFocusTest {
         composeRule.onAllNodesWithText("Severance").assertCountEquals(0)
     }
 
-    @Test
-    fun withNothingToOpenTheMoviePageAnnouncesNoAction() {
-        setShellContent(bothPages, canOpenMovies = false)
-
-        hero().assertHasNoClickAction()
-    }
-
-    @Test
-    fun withNothingToOpenTheShowPageAnnouncesNoAction() {
-        setShellContent(bothPages, canOpenMovies = true, canOpenShows = false)
-        press(Key.DirectionRight)
-
-        hero().assertContentDescriptionEquals(showPageDescription).assertHasNoClickAction()
-    }
-
     /** Each page opens its own details page: the movie's, then the show's. */
     @Test
     fun selectOpensWhicheverPageIsShowing() {
-        setShellContent(bothPages, canOpenMovies = true, canOpenShows = true)
+        setShellContent(bothPages)
         press(Key.DirectionRight)
 
         press(Key.DirectionCenter)

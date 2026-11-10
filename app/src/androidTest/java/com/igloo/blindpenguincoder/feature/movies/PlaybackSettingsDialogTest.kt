@@ -89,10 +89,6 @@ class PlaybackSettingsDialogTest {
                     detailsActions = MovieDetailsActions.Library(
                         onToggleWatched = {},
                         onToggleLike = {},
-                        onWatchTogether = {},
-                        onTechnicalDetails = {},
-                        onIdentifyMovie = {},
-                        onDeleteMovie = {},
                         onSelectPlaybackMode = {
                             selection = selection.copy(mode = it)
                             repaint()

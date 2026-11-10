@@ -70,8 +70,6 @@ data class LibraryActions(
  * list — an empty Liked view or a failed first page must still let the user switch sections.
  *
  * [returnRequester] rides the entry cell so an overlay's Back lands on the card that opened it.
- * A null [onItemSelected] renders inert cards — focus targets with no action and no "Open"
- * announcement.
  */
 @Composable
 fun LibraryScreen(
@@ -84,7 +82,7 @@ fun LibraryScreen(
     returnRequester: FocusRequester,
     lastFocusedId: Long?,
     onItemFocused: (Long) -> Unit,
-    onItemSelected: ((Long) -> Unit)?,
+    onItemSelected: (Long) -> Unit,
     spokenAccessibilityEnabled: Boolean,
 ) {
     val kind = state.kind
@@ -243,7 +241,7 @@ fun LibraryScreen(
             ) { item, modifier ->
                 PosterItemCard(
                     item = item,
-                    onClick = onItemSelected?.let { open -> { open(item.id) } },
+                    onClick = { onItemSelected(item.id) },
                     // Unspecified so the card fills its grid cell rather than taking the rail's
                     // fixed card width and leaving ragged gutters.
                     width = Dp.Unspecified,

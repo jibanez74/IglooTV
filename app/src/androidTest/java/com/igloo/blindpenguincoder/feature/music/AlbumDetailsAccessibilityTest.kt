@@ -151,7 +151,7 @@ class AlbumDetailsAccessibilityTest {
         composeRule.onNodeWithText("Ticket to Ride").assertDoesNotExist()
         composeRule.onNodeWithTag("track_like_902").assertContentDescriptionEquals("Like")
         composeRule.onNodeWithTag("track_more_902")
-            .assertContentDescriptionEquals("More actions for Ticket to Ride. None available.")
+            .assertContentDescriptionEquals("More actions for Ticket to Ride")
     }
 
     @Test

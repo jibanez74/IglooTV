@@ -118,8 +118,8 @@ fun MusicScreen(
     onAlbumFocused: (Long) -> Unit,
     lastFocusedTrack: TrackFocusMemory?,
     onTrackFocused: (TrackFocusMemory) -> Unit,
-    onMusicianSelected: ((Long) -> Unit)?,
-    onAlbumSelected: ((Long) -> Unit)?,
+    onMusicianSelected: (Long) -> Unit,
+    onAlbumSelected: (Long) -> Unit,
     spokenAccessibilityEnabled: Boolean,
 ) {
     val columns = IglooTheme.layout.gridColumns
@@ -307,7 +307,7 @@ fun MusicScreen(
                     ) { musician, modifier ->
                         MusicianCard(
                             musician = musician,
-                            onClick = onMusicianSelected?.let { open -> { open(musician.id) } },
+                            onClick = { onMusicianSelected(musician.id) },
                             width = Dp.Unspecified,
                             modifier = modifier,
                         )
@@ -339,7 +339,7 @@ fun MusicScreen(
                     ) { album, modifier ->
                         AlbumCard(
                             album = album,
-                            onClick = onAlbumSelected?.let { open -> { open(album.id) } },
+                            onClick = { onAlbumSelected(album.id) },
                             width = Dp.Unspecified,
                             modifier = modifier,
                         )
@@ -362,8 +362,6 @@ fun MusicScreen(
                         lastFocusedTrack = lastFocusedTrack,
                         onTrackFocused = onTrackFocused,
                         focusOwnership = focusOwnership,
-                        canOpenAlbum = onAlbumSelected != null,
-                        canOpenArtist = onMusicianSelected != null,
                         onLoadMore = actions.onLoadMore,
                         onRetryAppend = actions.onRetryAppend,
                         onPlayTrack = actions.onPlayTrack,

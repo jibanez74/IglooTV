@@ -409,10 +409,6 @@ fun IglooRoot(container: IglooAppContainer) {
                                 onToggleLike = detailsViewModel::toggleLike,
                                 // The remaining More menu items, wired to nothing until each
                                 // feature lands; selecting one only closes the menu for now.
-                                onWatchTogether = {},
-                                onTechnicalDetails = {},
-                                onIdentifyMovie = {},
-                                onDeleteMovie = {},
                                 onSelectPlaybackMode = detailsViewModel::selectPlaybackMode,
                                 onSelectAudioTrack = detailsViewModel::selectAudioTrack,
                                 onSelectSubtitle = detailsViewModel::selectSubtitle,

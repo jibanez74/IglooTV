@@ -234,13 +234,13 @@ fun IglooApp(
     detailsActions: MovieDetailsActions,
     showDetails: ShowDetailsUiState,
     showDetailsActions: ShowDetailsActions,
-    onShowSelected: ((Long) -> Unit)?,
+    onShowSelected: (Long) -> Unit,
     albumDetails: AlbumDetailsUiState,
     onRetryAlbumDetails: () -> Unit,
-    onAlbumSelected: ((Long) -> Unit)?,
+    onAlbumSelected: (Long) -> Unit,
     musicianDetails: MusicianDetailsUiState,
     onRetryMusicianDetails: () -> Unit,
-    onMusicianSelected: ((Long) -> Unit)?,
+    onMusicianSelected: (Long) -> Unit,
     trackLikes: TrackLikesUiState,
     onToggleTrackLike: (Long) -> Unit,
     onRequestPlayback: () -> Unit,
@@ -266,8 +266,8 @@ fun IglooApp(
      */
     onPlayerLandedOnEpisode: (seasonNumber: Long, episodeId: Long, site: EpisodeLaunchSite) -> Unit,
     onRetryRail: (HomeRail) -> Unit,
-    onMovieSelected: ((Long) -> Unit)?,
-    onTheaterMovieSelected: ((Long) -> Unit)?,
+    onMovieSelected: (Long) -> Unit,
+    onTheaterMovieSelected: (Long) -> Unit,
     onCloseDetails: () -> Unit,
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
@@ -411,12 +411,12 @@ fun IglooApp(
     // preparation landing after they opened an overlay or left the pane would put a player
     // over a surface that never asked for one. There is no overlay under this launch, so the
     // details effect below leaves it alone, like the music pane's launches.
-    val homeCanPlay by rememberUpdatedState(
-        currentDestination == IglooDestination.Home && !shellCovered && !signOut.confirming,
+    val launchablePane by rememberUpdatedState(
+        currentDestination.takeIf { !shellCovered && !signOut.confirming },
     )
     LaunchedEffect(homePlayRequests) {
         homePlayRequests.collect { request ->
-            if (homeCanPlay) {
+            if (launchablePane == IglooDestination.Home) {
                 videoPlayRequest = request
                 videoPlayOrigin = VideoPlayOrigin.ContinueWatchingRail
             }
@@ -435,10 +435,7 @@ fun IglooApp(
             showPlayArmedSite = null
             if (site != null && showCanPlay) {
                 videoPlayRequest = request
-                videoPlayOrigin = when (site) {
-                    EpisodeLaunchSite.Hero -> VideoPlayOrigin.ShowDetailsHero
-                    EpisodeLaunchSite.EpisodesRail -> VideoPlayOrigin.ShowDetailsEpisode
-                }
+                videoPlayOrigin = VideoPlayOrigin.entries.first { it.episodeSite == site }
             }
         }
     }
@@ -480,24 +477,18 @@ fun IglooApp(
     // first batch has landed. Accepted only while the pane is what the user is looking at — a
     // batch landing after they opened an overlay or left for Home would put a player over a
     // surface that never asked for one.
-    val musicPaneCanPlay by rememberUpdatedState(
-        currentDestination == IglooDestination.Music && !shellCovered && !signOut.confirming,
-    )
     LaunchedEffect(musicPlayRequests) {
         musicPlayRequests.collect { request ->
-            if (musicPaneCanPlay) {
+            if (launchablePane == IglooDestination.Music) {
                 musicPlayRequest = request
                 musicPlayOrigin = MusicPlayOrigin.MusicPane
             }
         }
     }
     // The Search pane's launches, under the Music pane's rule.
-    val searchPaneCanPlay by rememberUpdatedState(
-        currentDestination == IglooDestination.Search && !shellCovered && !signOut.confirming,
-    )
     LaunchedEffect(searchPlayRequests) {
         searchPlayRequests.collect { request ->
-            if (searchPaneCanPlay) {
+            if (launchablePane == IglooDestination.Search) {
                 musicPlayRequest = request
                 musicPlayOrigin = MusicPlayOrigin.SearchPane
             }
@@ -543,11 +534,7 @@ fun IglooApp(
         // After one or more hand-offs the show page follows the episode that last played; told
         // before the restore below, with the page still composed under the player, so the
         // page's own landing moves focus on from wherever the restore puts it (section 11.4.3).
-        val landedSite = when (videoPlayOrigin) {
-            VideoPlayOrigin.ShowDetailsHero -> EpisodeLaunchSite.Hero
-            VideoPlayOrigin.ShowDetailsEpisode -> EpisodeLaunchSite.EpisodesRail
-            else -> null
-        }
+        val landedSite = videoPlayOrigin?.episodeSite
         val landedEpisode = landed?.episode
         if (landedEpisode != null && landedSite != null) {
             onPlayerLandedOnEpisode(
@@ -588,21 +575,12 @@ fun IglooApp(
     }
 
     // Records where a details page was opened from, so Back can return there.
-    fun withOrigin(select: ((Long) -> Unit)?): ((DetailsOrigin, Long) -> Unit)? =
-        select?.let {
-            { origin, id ->
-                detailsOrigin = origin
-                select(id)
-            }
-        }
-    val openMovie = withOrigin(onMovieSelected)
-    // The theaters rail is the in-theaters page's only entrance, so its origin is not a parameter.
-    val openTheaterMovie: ((Long) -> Unit)? = onTheaterMovieSelected?.let { select ->
-        { tmdbId ->
-            detailsOrigin = DetailsOrigin.Rail(HomeRail.InTheaters)
-            select(tmdbId)
-        }
+    fun withOrigin(select: (Long) -> Unit): (DetailsOrigin, Long) -> Unit = { origin, id ->
+        detailsOrigin = origin
+        select(id)
     }
+    val openMovie = withOrigin(onMovieSelected)
+    val openTheaterMovie = withOrigin(onTheaterMovieSelected)
     val openShow = withOrigin(onShowSelected)
     val openAlbum = withOrigin(onAlbumSelected)
     val openMusician = withOrigin(onMusicianSelected)
@@ -650,58 +628,22 @@ fun IglooApp(
     // Whether anything in the app holds focus, overlays included: the entry anchor's announced
     // request below must not take focus from a node the user has already pressed their way to.
     var appHasFocus by remember { mutableStateOf(false) }
+    val railOpen = railHasFocus || signOut.confirming
+    // An overlay covers the shell completely, so the whole thing leaves TalkBack's traversal
+    // while it is up — the same treatment the confirm dialog gets. Either player can sit
+    // directly over the pane, with no overlay between.
+    val shellHidden = signOut.confirming || anyDetailsOpen || musicPlayerOpen || playerOpen
     Box(modifier = Modifier.fillMaxSize().onFocusChanged { appHasFocus = it.hasFocus }) {
         IglooShell(
             user = user,
             serverOrigin = serverOrigin,
             currentDestination = currentDestination,
-            home = home,
-            movies = movies,
-            moviesActions = moviesActions,
-            shows = shows,
-            showsActions = showsActions,
-            music = music,
-            musicActions = musicActions,
-            search = search,
-            searchActions = searchActions,
-            voiceSearch = voiceSearch,
-            trackLikes = trackLikes,
-            // The details header owns the notice while the overlay is up; rendering it here too
-            // would only shift Home's rails behind a screen nobody can see. It surfaces here
-            // when Back closes an overlay whose write had already failed.
-            // Home adds its own: why an episode press went nowhere.
-            mutationNotice = (details.mutationNotice ?: trackLikes.notice ?: home.playbackNotice)
-                .takeIf { !anyDetailsOpen },
-            // An exit save that failed under a Home launch has no details page to follow the
-            // user back to, so Home carries its Retry once the player has closed (section 11.8).
-            progressSyncError = progressSyncError.takeIf {
-                videoPlayOrigin == VideoPlayOrigin.ContinueWatchingRail && !playerOpen &&
-                    !anyDetailsOpen
-            },
-            onRetryProgressSync = videoPlayerViewModel::retryFailedSave,
-            onRetryRail = onRetryRail,
-            onResumeEpisode = onResumeEpisode,
-            openMovie = openMovie,
-            openTheaterMovie = openTheaterMovie,
-            openShow = openShow,
-            openAlbum = openAlbum,
-            openMusician = openMusician,
-            railReturnRequesters = railReturnRequesters,
-            moviesReturnRequester = moviesReturnRequester,
-            showsReturnRequester = showsReturnRequester,
-            musicReturnRequester = musicReturnRequester,
-            searchReturnRequester = searchReturnRequester,
             // The rail stays open behind the dialog: the row that opened it must still be legible,
-            // so the focus it gets back on cancel is not a surprise.
-            railExpanded = railHasFocus || signOut.confirming,
-            // Keep the hidden animation state at 0.60 so cancellation restores the rail scrim in
-            // the same frame; IglooShell unmounts its actual draw node for the modal's lifetime.
-            scrimmed = railHasFocus || signOut.confirming,
-            // The overlay covers the shell completely, so the whole thing leaves TalkBack's
-            // traversal while it is up — the same treatment the confirm dialog gets.
-            // Either player can sit directly over the pane, with no overlay between.
-            hiddenFromAccessibility = signOut.confirming || anyDetailsOpen || musicPlayerOpen ||
-                playerOpen,
+            // so the focus it gets back on cancel is not a surprise. Its scrim keeps the hidden
+            // animation state at 0.60 so cancellation restores it in the same frame; IglooShell
+            // unmounts the actual draw node for the modal's lifetime.
+            railOpen = railOpen,
+            hiddenFromAccessibility = shellHidden,
             onRailFocusChanged = { hasFocus ->
                 if (!hasFocus) railOpenedByBack = false
                 railHasFocus = hasFocus
@@ -709,7 +651,6 @@ fun IglooApp(
             contentStartRequester = contentStartRequester,
             signOutRequester = signOutRequester,
             navigationRequesters = navigationRequesters,
-            spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             onDestinationSelected = { currentDestinationName = it.name },
             onSwitchProfile = onSwitchProfile,
             onSignOut = onSignOut,
@@ -722,7 +663,53 @@ fun IglooApp(
                 onSignOutDismiss()
                 signOutRequester.requestFocus()
             },
-        )
+        ) {
+            ContentPane(
+                currentDestination = currentDestination,
+                home = home,
+                movies = movies,
+                moviesActions = moviesActions,
+                shows = shows,
+                showsActions = showsActions,
+                music = music,
+                musicActions = musicActions,
+                search = search,
+                searchActions = searchActions,
+                voiceSearch = voiceSearch,
+                trackLikes = trackLikes,
+                // The details header owns the notice while the overlay is up; rendering it here too
+                // would only shift Home's rails behind a screen nobody can see. It surfaces here
+                // when Back closes an overlay whose write had already failed.
+                // Home adds its own: why an episode press went nowhere.
+                mutationNotice = (details.mutationNotice ?: trackLikes.notice ?: home.playbackNotice)
+                    .takeIf { !anyDetailsOpen },
+                // An exit save that failed under a Home launch has no details page to follow the
+                // user back to, so Home carries its Retry once the player has closed (section 11.8).
+                progressSyncError = progressSyncError.takeIf {
+                    videoPlayOrigin == VideoPlayOrigin.ContinueWatchingRail && !playerOpen &&
+                        !anyDetailsOpen
+                },
+                onRetryProgressSync = videoPlayerViewModel::retryFailedSave,
+                onRetryRail = onRetryRail,
+                onResumeEpisode = onResumeEpisode,
+                openMovie = openMovie,
+                openTheaterMovie = openTheaterMovie,
+                openShow = openShow,
+                openAlbum = openAlbum,
+                openMusician = openMusician,
+                railReturnRequesters = railReturnRequesters,
+                moviesReturnRequester = moviesReturnRequester,
+                showsReturnRequester = showsReturnRequester,
+                musicReturnRequester = musicReturnRequester,
+                searchReturnRequester = searchReturnRequester,
+                contentStartRequester = contentStartRequester,
+                navigationRequesters = navigationRequesters,
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                signOutConfirming = signOut.confirming,
+                // The expanded rail scrims the pane as an overlay would: focus has left it.
+                covered = shellHidden || railOpen,
+            )
+        }
 
         // Drawn over the rail so nothing clips its focus glow. The shell stays composed
         // underneath: its rails keep their scroll and focus memory, which is what Back restores
@@ -744,7 +731,7 @@ fun IglooApp(
                     onToggleLike = onToggleTrackLike,
                     // A same-slot replacement: the origin stays what opened this overlay, so
                     // Back from the album lands where the musician was opened from.
-                    onOpenAlbum = { albumId -> onAlbumSelected?.invoke(albumId) },
+                    onOpenAlbum = onAlbumSelected,
                     playReturnRequester = musicianPlayReturnRequester,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
@@ -897,19 +884,11 @@ fun IglooApp(
                         videoPlayRequest = videoPlayRequest?.copy(mode = mode)
                     },
                     onTrackSelectionChanged = { audioTypeIndex, subtitleTypeIndex ->
-                        videoPlayRequest = videoPlayRequest?.let { current ->
-                            if (
-                                current.audioTypeIndex == audioTypeIndex &&
-                                current.subtitleTypeIndex == subtitleTypeIndex
-                            ) {
-                                current
-                            } else {
-                                current.copy(
-                                    audioTypeIndex = audioTypeIndex,
-                                    subtitleTypeIndex = subtitleTypeIndex,
-                                )
-                            }
-                        }
+                        // An equal copy is no write: the state compares structurally.
+                        videoPlayRequest = videoPlayRequest?.copy(
+                            audioTypeIndex = audioTypeIndex,
+                            subtitleTypeIndex = subtitleTypeIndex,
+                        )
                     },
                     engineFactory = videoPlayerEngineFactory,
                     prepareUpNext = prepareUpNext,
@@ -951,47 +930,20 @@ private fun IglooShell(
     user: AuthUser,
     serverOrigin: String,
     currentDestination: IglooDestination,
-    home: HomeUiState,
-    movies: LibraryUiState,
-    moviesActions: LibraryActions,
-    shows: LibraryUiState,
-    showsActions: LibraryActions,
-    music: MusicUiState,
-    musicActions: MusicActions,
-    search: SearchUiState,
-    searchActions: SearchActions,
-    /** The platform's speech recogniser, or a fake under instrumentation. */
-    voiceSearch: VoiceSearch,
-    trackLikes: TrackLikesUiState,
-    mutationNotice: String?,
-    progressSyncError: String?,
-    onRetryProgressSync: () -> Unit,
-    onRetryRail: (HomeRail) -> Unit,
-    onResumeEpisode: (Long) -> Unit,
-    openMovie: ((DetailsOrigin, Long) -> Unit)?,
-    openTheaterMovie: ((Long) -> Unit)?,
-    openShow: ((DetailsOrigin, Long) -> Unit)?,
-    openAlbum: ((DetailsOrigin, Long) -> Unit)?,
-    openMusician: ((DetailsOrigin, Long) -> Unit)?,
-    railReturnRequesters: Map<HomeRail, FocusRequester>,
-    moviesReturnRequester: FocusRequester,
-    showsReturnRequester: FocusRequester,
-    musicReturnRequester: FocusRequester,
-    searchReturnRequester: FocusRequester,
-    railExpanded: Boolean,
-    scrimmed: Boolean,
+    railOpen: Boolean,
     hiddenFromAccessibility: Boolean,
     onRailFocusChanged: (Boolean) -> Unit,
     contentStartRequester: FocusRequester,
     signOutRequester: FocusRequester,
     navigationRequesters: Map<IglooDestination, FocusRequester>,
-    spokenAccessibilityEnabled: Boolean,
     onDestinationSelected: (IglooDestination) -> Unit,
     onSwitchProfile: () -> Unit,
     onSignOut: () -> Unit,
     signOut: SignOutUiState,
     onSignOutConfirm: () -> Unit,
     onSignOutDismiss: () -> Unit,
+    /** The pane; it fills the panel and applies no gutter of its own (sections 2.5, 8.3). */
+    content: @Composable () -> Unit,
 ) {
     val colors = IglooTheme.colors
     val layout = IglooTheme.layout
@@ -1000,15 +952,15 @@ private fun IglooShell(
     // pane is padded by the collapsed width only, so expansion overlays it and the content
     // never reflows. Under reduced motion both drivers snap.
     val railWidth by animateDpAsState(
-        targetValue = if (railExpanded) layout.navRailExpandedWidth else layout.navRailCollapsedWidth,
+        targetValue = if (railOpen) layout.navRailExpandedWidth else layout.navRailCollapsedWidth,
         animationSpec = iglooTween(
             durationMillis = IglooMotion.STANDARD_MS,
-            easing = if (railExpanded) IglooEasing.standard else IglooEasing.exit,
+            easing = if (railOpen) IglooEasing.standard else IglooEasing.exit,
         ),
         label = "railWidth",
     )
     val scrimAlpha by animateFloatAsState(
-        targetValue = if (scrimmed) SCRIM_ALPHA else 0f,
+        targetValue = if (railOpen) SCRIM_ALPHA else 0f,
         animationSpec = iglooTween(IglooMotion.STANDARD_MS),
         label = "railScrim",
     )
@@ -1028,46 +980,7 @@ private fun IglooShell(
                 .testTag("shell_content")
                 .hiddenFromAccessibilityIf(hiddenFromAccessibility),
         ) {
-            ContentPane(
-                currentDestination = currentDestination,
-                home = home,
-                movies = movies,
-                moviesActions = moviesActions,
-                shows = shows,
-                showsActions = showsActions,
-                music = music,
-                musicActions = musicActions,
-                search = search,
-                searchActions = searchActions,
-                voiceSearch = voiceSearch,
-                trackLikes = trackLikes,
-                mutationNotice = mutationNotice,
-                progressSyncError = progressSyncError,
-                onRetryProgressSync = onRetryProgressSync,
-                onRetryRail = onRetryRail,
-                onResumeEpisode = onResumeEpisode,
-                openMovie = openMovie,
-                openTheaterMovie = openTheaterMovie,
-                openShow = openShow,
-                openAlbum = openAlbum,
-                openMusician = openMusician,
-                railReturnRequesters = railReturnRequesters,
-                moviesReturnRequester = moviesReturnRequester,
-                showsReturnRequester = showsReturnRequester,
-                musicReturnRequester = musicReturnRequester,
-                searchReturnRequester = searchReturnRequester,
-                contentStartRequester = contentStartRequester,
-                navigationRequesters = navigationRequesters,
-                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
-                signOutConfirming = signOut.confirming,
-                // The expanded rail scrims the pane as an overlay would: focus has left it.
-                covered = hiddenFromAccessibility || scrimmed,
-                // The pane fills the panel and applies no gutter of its own. It used to box every
-                // screen into 752x486dp, which is where the dead margins came from. The gutter is
-                // handed down as contentInset instead, so each section applies the inset it owes
-                // — and art, which owes none, reaches the physical edge (sections 2.5, 8.3).
-                modifier = Modifier.fillMaxSize(),
-            )
+            content()
             // The modal owns the only scrim while mounted. Removing this node immediately avoids
             // compositing the rail's animated 0.60 layer under the dialog reveal.
             if (!signOut.confirming) {
@@ -1076,7 +989,7 @@ private fun IglooShell(
             NavigationRail(
                 user = user,
                 serverOrigin = serverOrigin,
-                expanded = railExpanded,
+                expanded = railOpen,
                 currentDestination = currentDestination,
                 contentStartRequester = contentStartRequester,
                 signOutRequester = signOutRequester,
@@ -1143,11 +1056,11 @@ private fun ContentPane(
     onRetryProgressSync: () -> Unit,
     onRetryRail: (HomeRail) -> Unit,
     onResumeEpisode: (Long) -> Unit,
-    openMovie: ((DetailsOrigin, Long) -> Unit)?,
-    openTheaterMovie: ((Long) -> Unit)?,
-    openShow: ((DetailsOrigin, Long) -> Unit)?,
-    openAlbum: ((DetailsOrigin, Long) -> Unit)?,
-    openMusician: ((DetailsOrigin, Long) -> Unit)?,
+    openMovie: (DetailsOrigin, Long) -> Unit,
+    openTheaterMovie: (DetailsOrigin, Long) -> Unit,
+    openShow: (DetailsOrigin, Long) -> Unit,
+    openAlbum: (DetailsOrigin, Long) -> Unit,
+    openMusician: (DetailsOrigin, Long) -> Unit,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     moviesReturnRequester: FocusRequester,
     showsReturnRequester: FocusRequester,
@@ -1159,7 +1072,6 @@ private fun ContentPane(
     signOutConfirming: Boolean,
     /** A details page, a player, the sign-out dialog or the expanded navigation rail sits over the pane. */
     covered: Boolean,
-    modifier: Modifier = Modifier,
 ) {
     // Hoisted above the destination branch so a Home -> Movies -> Home round trip still knows
     // the card to restore (section 6.3), and saveable so process death does not forget it.
@@ -1206,7 +1118,8 @@ private fun ContentPane(
 
     var paneHasFocus by remember { mutableStateOf(false) }
     Box(
-        modifier = modifier
+        modifier = Modifier
+            .fillMaxSize()
             .testTag("content_pane")
             .onFocusChanged { paneHasFocus = it.hasFocus }
             .semantics {
@@ -1258,9 +1171,7 @@ private fun ContentPane(
                 onItemFocused = { lastFocusedMovieId = it },
                 // The pane's mutationNotice is the details overlay's write report; the grid has
                 // its own notice for a refresh that failed, and two in one header would confuse.
-                onItemSelected = openMovie?.let { open ->
-                    { movieId -> open(DetailsOrigin.MoviesGrid, movieId) }
-                },
+                onItemSelected = { movieId -> openMovie(DetailsOrigin.MoviesGrid, movieId) },
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
@@ -1276,9 +1187,7 @@ private fun ContentPane(
                 returnRequester = showsReturnRequester,
                 lastFocusedId = lastFocusedShowId,
                 onItemFocused = { lastFocusedShowId = it },
-                onItemSelected = openShow?.let { open ->
-                    { showId -> open(DetailsOrigin.ShowsGrid, showId) }
-                },
+                onItemSelected = { showId -> openShow(DetailsOrigin.ShowsGrid, showId) },
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
@@ -1299,12 +1208,8 @@ private fun ContentPane(
                 onAlbumFocused = { lastFocusedAlbumId = it },
                 lastFocusedTrack = lastFocusedTrack,
                 onTrackFocused = { lastFocusedTrack = it },
-                onMusicianSelected = openMusician?.let { open ->
-                    { musicianId -> open(DetailsOrigin.Music, musicianId) }
-                },
-                onAlbumSelected = openAlbum?.let { open ->
-                    { albumId -> open(DetailsOrigin.Music, albumId) }
-                },
+                onMusicianSelected = { musicianId -> openMusician(DetailsOrigin.Music, musicianId) },
+                onAlbumSelected = { albumId -> openAlbum(DetailsOrigin.Music, albumId) },
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
@@ -1319,18 +1224,10 @@ private fun ContentPane(
                 navigationRequester = navigationRequesters.getValue(IglooDestination.Search),
                 returnRequester = searchReturnRequester,
                 covered = covered,
-                onMovieSelected = openMovie?.let { open ->
-                    { movieId -> open(DetailsOrigin.Search, movieId) }
-                },
-                onShowSelected = openShow?.let { open ->
-                    { showId -> open(DetailsOrigin.Search, showId) }
-                },
-                onAlbumSelected = openAlbum?.let { open ->
-                    { albumId -> open(DetailsOrigin.Search, albumId) }
-                },
-                onMusicianSelected = openMusician?.let { open ->
-                    { musicianId -> open(DetailsOrigin.Search, musicianId) }
-                },
+                onMovieSelected = { movieId -> openMovie(DetailsOrigin.Search, movieId) },
+                onShowSelected = { showId -> openShow(DetailsOrigin.Search, showId) },
+                onAlbumSelected = { albumId -> openAlbum(DetailsOrigin.Search, albumId) },
+                onMusicianSelected = { musicianId -> openMusician(DetailsOrigin.Search, musicianId) },
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
@@ -1384,18 +1281,19 @@ private enum class MusicPlayOrigin { AlbumDetails, MusicianDetails, MusicPane, S
 
 /**
  * Which surface launched the video player; see `videoPlayOrigin` in [IglooApp]. The show page has
- * one per launching control, because the close restores focus to the one that pressed.
+ * one per launching control, [episodeSite], because the close restores focus to the one that
+ * pressed.
  */
-private enum class VideoPlayOrigin {
+private enum class VideoPlayOrigin(val episodeSite: EpisodeLaunchSite? = null) {
     MovieDetails,
     ContinueWatchingRail,
-    ShowDetailsHero,
-    ShowDetailsEpisode,
+    ShowDetailsHero(EpisodeLaunchSite.Hero),
+    ShowDetailsEpisode(EpisodeLaunchSite.EpisodesRail),
 }
 
 /** Either of the show page's origins: its launches share one kill-on-close and Retry routing. */
 private val VideoPlayOrigin?.isShowDetails: Boolean
-    get() = this == VideoPlayOrigin.ShowDetailsHero || this == VideoPlayOrigin.ShowDetailsEpisode
+    get() = this?.episodeSite != null
 
 @Composable
 private fun HomeRails(
@@ -1407,10 +1305,10 @@ private fun HomeRails(
     contentInset: PaddingValues,
     onRetryRail: (HomeRail) -> Unit,
     onResumeEpisode: (Long) -> Unit,
-    openMovie: ((DetailsOrigin, Long) -> Unit)?,
-    openTheaterMovie: ((Long) -> Unit)?,
-    openShow: ((DetailsOrigin, Long) -> Unit)?,
-    openAlbum: ((DetailsOrigin, Long) -> Unit)?,
+    openMovie: (DetailsOrigin, Long) -> Unit,
+    openTheaterMovie: (DetailsOrigin, Long) -> Unit,
+    openShow: (DetailsOrigin, Long) -> Unit,
+    openAlbum: (DetailsOrigin, Long) -> Unit,
     railReturnRequesters: Map<HomeRail, FocusRequester>,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
@@ -1484,12 +1382,8 @@ private fun HomeRails(
                 leftFocusRequester = navigationRequester,
                 downFocusRequester = continueEntryRequester,
                 contentInset = contentInset,
-                onOpenMovie = openMovie?.let { open ->
-                    { movieId -> open(DetailsOrigin.Hero, movieId) }
-                },
-                onOpenShow = openShow?.let { open ->
-                    { showId -> open(DetailsOrigin.Hero, showId) }
-                },
+                onOpenMovie = { movieId -> openMovie(DetailsOrigin.Hero, movieId) },
+                onOpenShow = { showId -> openShow(DetailsOrigin.Hero, showId) },
                 modifier = Modifier.announcedSection(tools(HERO_SECTION)).onFocusChanged { onHeroFocus(it.hasFocus) },
             )
         }
@@ -1528,9 +1422,8 @@ private fun HomeRails(
             state = home.continueWatching,
             itemKey = { it.railKey },
             wiring = wiring,
-            entryRequester = if (heroVisible) continueEntryRequester else contentStartRequester,
-            // The section tools' own requester is this one; the first rail hands its anchor to
-            // the pane's entry instead when the hero is away.
+            // The first rail hands its anchor to the pane's entry when the hero is away.
+            entryRequester = contentStartRequester.takeIf { !heroVisible },
         ) { item, itemModifier, cardAspect ->
             when (item) {
                 is HomeContinueItem.Movie -> PosterItemCard(
@@ -1608,7 +1501,7 @@ private fun HomeRails(
             InTheatersCard(
                 movie = movie,
                 aspect = cardAspect,
-                onClick = openTheaterMovie?.let { open -> { open(movie.id) } },
+                onClick = railOpener(openTheaterMovie, HomeRail.InTheaters, movie.id),
                 modifier = itemModifier.testTag("theater_card_${movie.id}"),
             )
         }
@@ -1710,12 +1603,12 @@ private val HomeRail.copy: HomeRailCopy
         )
     }
 
-/** A card's press, when there is a page to open: the overlay opens from [rail], for Back. */
+/** A card's press: the overlay opens from [rail], for Back. */
 private fun railOpener(
-    open: ((DetailsOrigin, Long) -> Unit)?,
+    open: (DetailsOrigin, Long) -> Unit,
     rail: HomeRail,
     id: Long,
-): (() -> Unit)? = open?.let { { it(DetailsOrigin.Rail(rail), id) } }
+): () -> Unit = { open(DetailsOrigin.Rail(rail), id) }
 
 /**
  * The non-Home destinations, until each grows a real screen. Full-bleed like the hero, so the

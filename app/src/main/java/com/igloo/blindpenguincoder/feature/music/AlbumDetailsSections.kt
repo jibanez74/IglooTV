@@ -140,7 +140,7 @@ private fun ArtistsSection(
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         ) {
             artists.forEachIndexed { index, artist ->
-                if (actionable && onOpenMusician != null) {
+                if (actionable) {
                     IglooButton(
                         text = artist.name,
                         onClick = { artist.id?.let(onOpenMusician) },

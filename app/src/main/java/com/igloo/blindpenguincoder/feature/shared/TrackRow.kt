@@ -131,9 +131,9 @@ fun TrackRow(
     focus: TrackRowFocus,
     onPlay: () -> Unit,
     onToggleLike: () -> Unit,
-    canOpenAlbum: Boolean,
-    canOpenArtist: Boolean,
     onOpenMore: (Rect) -> Unit,
+    canOpenAlbum: Boolean = true,
+    canOpenArtist: Boolean = true,
     modifier: Modifier = Modifier,
     onColumnFocused: (TrackRowColumn) -> Unit = {},
 ) {

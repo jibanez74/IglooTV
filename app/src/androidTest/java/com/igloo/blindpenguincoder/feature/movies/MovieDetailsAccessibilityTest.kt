@@ -93,10 +93,6 @@ class MovieDetailsAccessibilityTest {
                     actions = MovieDetailsActions.Library(
                         onToggleWatched = { watchedToggles += 1 },
                         onToggleLike = { likeToggles += 1 },
-                        onWatchTogether = { menuSelections += "Watch Together" },
-                        onTechnicalDetails = { menuSelections += "Technical Details" },
-                        onIdentifyMovie = { menuSelections += "Identify Movie" },
-                        onDeleteMovie = { menuSelections += "Delete Movie" },
                         onSelectPlaybackMode = {},
                         onSelectAudioTrack = {},
                         onSelectSubtitle = {},

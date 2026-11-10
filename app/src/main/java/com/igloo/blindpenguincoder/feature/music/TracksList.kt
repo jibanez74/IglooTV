@@ -61,8 +61,6 @@ internal fun TracksList(
     lastFocusedTrack: TrackFocusMemory?,
     onTrackFocused: (TrackFocusMemory) -> Unit,
     focusOwnership: PaneFocusOwnership,
-    canOpenAlbum: Boolean,
-    canOpenArtist: Boolean,
     onLoadMore: () -> Unit,
     onRetryAppend: () -> Unit,
     onPlayTrack: (Long) -> Unit,
@@ -159,7 +157,6 @@ internal fun TracksList(
                         focus = focus,
                         onPlay = { onPlayTrack(track.id) },
                         onToggleLike = { onToggleLike(track.id) },
-                        canOpenAlbum = canOpenAlbum, canOpenArtist = canOpenArtist,
                         onOpenMore = { bounds -> onOpenMore(track, bounds) },
                         onColumnFocused = { column ->
                             focusOwnership.onItemFocusChanged(track.id, true)

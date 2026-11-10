@@ -55,7 +55,6 @@ import com.igloo.blindpenguincoder.testHomeMovies
 import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testTheaterMovies
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -107,10 +106,10 @@ class HomeRailBehaviorTest {
         initialShows: IglooRailState<PosterItem> = IglooRailState.Loaded(shows),
         initialAlbums: IglooRailState<AlbumCardUi> = IglooRailState.Loaded(albums),
         initialTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loaded(theaterMovies),
-        onMovieSelected: ((Long) -> Unit)? = { opened += it },
-        onTheaterMovieSelected: ((Long) -> Unit)? = { theatersOpened += it },
-        onAlbumSelected: ((Long) -> Unit)? = { albumsOpened += it },
-        onShowSelected: ((Long) -> Unit)? = { showsOpened += it },
+        onMovieSelected: (Long) -> Unit = { opened += it },
+        onTheaterMovieSelected: (Long) -> Unit = { theatersOpened += it },
+        onAlbumSelected: (Long) -> Unit = { albumsOpened += it },
+        onShowSelected: (Long) -> Unit = { showsOpened += it },
         spokenAccessibilityEnabled: Boolean = false,
     ) {
         continueState = initialContinue
@@ -424,21 +423,6 @@ class HomeRailBehaviorTest {
     }
 
     @Test
-    fun cardsWithNothingToOpenAnnounceNoAction() {
-        setShellContent(IglooRailState.Loaded(continueMovies), onMovieSelected = null)
-
-        // Until the details screen lands there is nothing to open, and a card that announced
-        // "double tap to Open Heat" would promise a screen reader an action nobody implements.
-        // It stays focusable, because the rails' focus model needs every card to be a landing site.
-        continueCard(1)
-            .assertContentDescriptionEquals("Continue Watching. Heat, 1995, 2 hours and 7 minutes remaining")
-            .assertHasNoClickAction()
-        continueCard(1).assertIsFocused()
-        continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
-        continueCard(2).assertIsFocused()
-    }
-
-    @Test
     fun dpadDownReachesTheAlbumsRailAndItKeepsItsOwnFocusMemory() {
         setShellContent(IglooRailState.Loaded(continueMovies))
 
@@ -538,18 +522,6 @@ class HomeRailBehaviorTest {
         assertEquals(listOf(11L), albumsOpened)
         // The album id goes to its own callback: a movie with the same id must not open.
         assertEquals(emptyList<Long>(), opened)
-    }
-
-    @Test
-    fun albumCardsWithNothingToOpenAnnounceNoAction() {
-        setShellContent(IglooRailState.Loaded(continueMovies), onAlbumSelected = null)
-
-        // With no destination wired the card must not promise one — the same contract the
-        // movie cards keep — while staying focusable as a rail landing site.
-        albumCard(11)
-            .performScrollTo()
-            .assertContentDescriptionEquals("Recently Added Albums. Help!, The Beatles")
-            .assertHasNoClickAction()
     }
 
     @Test
@@ -658,15 +630,6 @@ class HomeRailBehaviorTest {
     }
 
     @Test
-    fun theaterCardsWithNoDestinationAnnounceNoAction() {
-        setShellContent(IglooRailState.Loaded(continueMovies), onTheaterMovieSelected = null)
-
-        theaterCard(21)
-            .performScrollTo()
-            .assertHasNoClickAction()
-    }
-
-    @Test
     fun showsKeepFocusMemoryAcrossStateSwapsAndRespectBothHorizontalEdges() {
         setShellContent(IglooRailState.Loaded(continueMovies))
         continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
@@ -756,15 +719,6 @@ class HomeRailBehaviorTest {
         assertEquals(emptyList<Long>(), theatersOpened)
         // Focus is inside the rail and did not enter on this card: it speaks itself alone.
         showCard(7).assertContentDescriptionEquals("Untitled Show").assertHasClickAction()
-    }
-
-    /** With no show page to open, a card is a landing site that announces no action. */
-    @Test
-    fun withNothingToOpenAShowCardAnnouncesNoAction() {
-        setShellContent(IglooRailState.Loaded(continueMovies), onShowSelected = null)
-        showCard(40).performScrollTo().requestFocus()
-        showCard(40).assertIsFocused().assertHasNoClickAction()
-        assertFalse(showCard(40).fetchSemanticsNode().config.contains(SemanticsProperties.Role))
     }
 
     /** The exported Android tree must contain one focused, clickable card, without caption stops. */
