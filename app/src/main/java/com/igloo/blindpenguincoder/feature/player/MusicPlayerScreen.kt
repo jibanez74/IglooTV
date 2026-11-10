@@ -34,7 +34,6 @@ import androidx.compose.ui.semantics.semantics
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
-import com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayerEvent
@@ -149,14 +148,7 @@ fun MusicPlayerScreen(
         }
     }
 
-    val networkRecovery = LocalNetworkRecovery.current
-    var handledNetworkRecovery by remember { mutableIntStateOf(networkRecovery) }
-    LaunchedEffect(networkRecovery) {
-        if (networkRecovery != handledNetworkRecovery) {
-            handledNetworkRecovery = networkRecovery
-            host.rebuildEngine(playWhenReady = host.playWhenReadyIntent)
-        }
-    }
+    OnNetworkRecovered { host.rebuildEngine(playWhenReady = host.playWhenReadyIntent) }
 
     // Started once per engine. There is no resume prompt — the queue starts where the press
     // named, and a retry or recreation resumes this visit's own playhead.
@@ -186,11 +178,11 @@ fun MusicPlayerScreen(
     val togglePlayPause = {
         if (state.playWhenReady) pause() else play()
     }
-    val seekToSec = { targetSec: Double ->
+    val seekBy = { deltaSec: Double ->
+        val targetSec = state.seekTarget(deltaSec)
         engine.seekTo(targetSec)
         state = state.onSeekApplied(targetSec)
     }
-    val seekBy = { deltaSec: Double -> seekToSec(state.seekTarget(deltaSec)) }
     val controlsDisabled = state.phase == MusicPlayerPhase.Error
     val skipNext = { engine.skipToNext() }
     val skipPrevious = { engine.skipToPrevious() }

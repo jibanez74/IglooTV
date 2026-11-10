@@ -24,7 +24,7 @@ import com.igloo.blindpenguincoder.feature.library.LibraryGenre
 import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
-import com.igloo.blindpenguincoder.feature.movies.AboutUi
+import com.igloo.blindpenguincoder.feature.movies.movieAboutFacts
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
@@ -351,7 +351,7 @@ internal fun testMovieDetails(
     keyCrew = listOf(CrewEntry("Director", "Michael Mann")),
     cast = cast,
     extraVideos = extraVideos,
-    about = AboutUi(
+    about = movieAboutFacts(
         production = "Regency Enterprises",
         language = "English",
         budget = "$60,000,000",
@@ -385,7 +385,7 @@ internal fun testTheaterMovieDetails(
     extraVideos = extraVideos,
 ).copy(
     mediaBadges = emptyList(),
-    about = AboutUi(
+    about = movieAboutFacts(
         production = "Regency Enterprises",
         language = "English",
         budget = "$60,000,000",

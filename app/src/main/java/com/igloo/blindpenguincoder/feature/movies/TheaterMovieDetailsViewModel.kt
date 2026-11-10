@@ -106,7 +106,7 @@ class TheaterMovieDetailsViewModel(
                 apiBaseUrl,
             ),
             extraVideos = extraVideos,
-            about = AboutUi(
+            about = movieAboutFacts(
                 production = joinedLine(movie.productionCompanies.orEmpty().map { it.name }, ", "),
                 language = languageDisplayName(movie.originalLanguage.orNullIfBlank()),
                 budget = movie.budget.takeIf { it > 0 }?.toDouble()?.let(::formatUsd),

@@ -47,12 +47,7 @@ class LoginViewModel(
         val current = _uiState.value
         if (current.isSubmitting) return
         if (!awaitingUser && (current.email.isBlank() || current.password.isBlank())) {
-            _uiState.update {
-                it.copy(
-                    error = "Enter your email and password.",
-                    completedAttempts = it.completedAttempts + 1,
-                )
-            }
+            finishAttempt("Enter your email and password.")
             return
         }
         _uiState.update { it.copy(isSubmitting = true, error = null) }
@@ -62,13 +57,7 @@ class LoginViewModel(
             if (!awaitingUser) {
                 val login = authRepository.deviceLogin(current.email.trim(), current.password)
                 if (login is ApiResult.Failure) {
-                    _uiState.update {
-                        it.copy(
-                            isSubmitting = false,
-                            error = login.error.toDisplayMessage(),
-                            completedAttempts = it.completedAttempts + 1,
-                        )
-                    }
+                    finishAttempt(login.error.toDisplayMessage())
                     return@launch
                 }
                 // The password is no longer needed once the token has been minted. From this
@@ -82,33 +71,25 @@ class LoginViewModel(
                 // PinRequired cannot actually arrive here.
                 SignInResult.Authenticated, SignInResult.PinRequired -> {
                     awaitingUser = false
-                    _uiState.update {
-                        it.copy(
-                            isSubmitting = false,
-                            password = "",
-                            completedAttempts = it.completedAttempts + 1,
-                        )
-                    }
+                    finishAttempt(error = null, clearPassword = true)
                 }
                 SignInResult.Revoked -> {
                     awaitingUser = false
-                    _uiState.update {
-                        it.copy(
-                            isSubmitting = false,
-                            error = AppError.Unauthorized.toDisplayMessage(),
-                            completedAttempts = it.completedAttempts + 1,
-                        )
-                    }
+                    finishAttempt(AppError.Unauthorized.toDisplayMessage())
                 }
-                is SignInResult.Failed -> _uiState.update {
-                    it.copy(
-                        isSubmitting = false,
-                        error = result.error.toDisplayMessage(),
-                        completedAttempts = it.completedAttempts + 1,
-                    )
-                }
+                is SignInResult.Failed -> finishAttempt(result.error.toDisplayMessage())
             }
         }
+    }
+
+    /** Ends an attempt with [error] shown; the screen counts it to re-announce a repeat. */
+    private fun finishAttempt(error: String?, clearPassword: Boolean = false) = _uiState.update {
+        it.copy(
+            isSubmitting = false,
+            error = error,
+            password = if (clearPassword) "" else it.password,
+            completedAttempts = it.completedAttempts + 1,
+        )
     }
 
     private fun updateCredentials(transform: (LoginUiState) -> LoginUiState) {

@@ -49,11 +49,8 @@ internal fun buildVideoPlayRequest(
         mimeType = mimeType,
         mode = settings.selectedMode,
         videoCodec = primaryVideoStream(videoStreams)?.codec,
-        audioTypeIndex = typeIndexOf(settings.selectedAudioId, audioStreams.map { it.id to it.streamIndex }),
-        subtitleTypeIndex = typeIndexOf(
-            settings.selectedSubtitleId,
-            subtitles.map { it.id to it.streamIndex },
-        ),
+        audioTypeIndex = typeIndexOf(settings.selectedAudioId, orderedAudio.map { it.id }),
+        subtitleTypeIndex = typeIndexOf(settings.selectedSubtitleId, orderedSubtitles.map { it.id }),
         audioTracks = orderedAudio.mapIndexed { index, stream ->
             PlayableAudioTrack(
                 label = audioTrackLabel(stream, index),
@@ -78,17 +75,12 @@ internal fun buildVideoPlayRequest(
 
 /**
  * The wire id of an effective choice, as the type-relative index [VideoPlayRequest] carries:
- * the Nth stream of that type in `stream_index` order — the ordering that survives demuxing,
- * where ExoPlayer exposes the same streams as the Nth track group of the type. The wire list is
- * not trusted to arrive sorted. Null in, null out: no explicit track, or subtitles off.
+ * its position among [orderedIds], the streams of that type in `stream_index` order — the
+ * ordering that survives demuxing, where ExoPlayer exposes the same streams as the Nth track
+ * group of the type. Null in, null out: no explicit track, or subtitles off.
  */
-private fun typeIndexOf(selectedId: Long?, idsWithStreamIndex: List<Pair<Long, Long>>): Int? {
-    selectedId ?: return null
-    return idsWithStreamIndex
-        .sortedBy { (_, streamIndex) -> streamIndex }
-        .indexOfFirst { (id, _) -> id == selectedId }
-        .takeIf { it >= 0 }
-}
+private fun typeIndexOf(selectedId: Long?, orderedIds: List<Long>): Int? =
+    selectedId?.let { orderedIds.indexOf(it) }?.takeIf { it >= 0 }
 
 /**
  * The file's main picture: the widest video stream, so an embedded cover-art thumbnail never

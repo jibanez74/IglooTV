@@ -22,8 +22,9 @@ import com.igloo.blindpenguincoder.feature.shared.CastMemberUi
 import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
+import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.ProgressUi
-import com.igloo.blindpenguincoder.feature.shared.VideoSource
+import com.igloo.blindpenguincoder.feature.shared.toVideoSources
 import com.igloo.blindpenguincoder.feature.shared.castMembers
 import com.igloo.blindpenguincoder.feature.shared.errorOrKeep
 import com.igloo.blindpenguincoder.feature.shared.heroInfoDescription
@@ -46,19 +47,23 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** The fine-print rows at the page's end; every field may be absent. */
-data class AboutUi(
-    val production: String?,
-    val language: String?,
-    val budget: String?,
-    val revenue: String?,
-    /** TMDB's release status, which only the in-theaters page has (web parity). */
-    val status: String? = null,
-) {
-    val isEmpty: Boolean
-        get() = production == null && language == null && budget == null && revenue == null &&
-            status == null
-}
+/**
+ * The fine-print rows at the page's end, each dropped when the movie has no value. [status] is
+ * TMDB's release status, which only the in-theaters page has (web parity).
+ */
+fun movieAboutFacts(
+    production: String?,
+    language: String?,
+    budget: String?,
+    revenue: String?,
+    status: String? = null,
+): List<FactUi> = listOfNotNull(
+    production?.let { FactUi("Production", it) },
+    status?.let { FactUi("Status", it) },
+    language?.let { FactUi("Original language", it) },
+    budget?.let { FactUi("Budget", it) },
+    revenue?.let { FactUi("Revenue", it) },
+)
 
 /**
  * The details screen, render-ready: `SqlNull*` wrappers unwrapped, image URLs built, badges
@@ -81,7 +86,7 @@ data class MovieDetailsUi(
     val keyCrew: List<CrewEntry>,
     val cast: List<CastMemberUi>,
     val extraVideos: List<ExtraVideoUi>,
-    val about: AboutUi,
+    val about: List<FactUi>,
     val progress: ProgressUi?,
     val watched: Boolean?,
     val liked: Boolean?,
@@ -209,10 +214,7 @@ class MovieDetailsViewModel(
 
     /** Opens the overlay on [movieId] and starts the four loads. */
     fun open(movieId: Long) {
-        cancelReads()
-        clearFragments()
-        playbackSelection = PlaybackSelection()
-        pruneSettledMutations(keep = movieId)
+        reset(keep = movieId)
         _uiState.value = MovieDetailsUiState(openMovieId = movieId)
         loadAll(movieId, userInitiated = true)
     }
@@ -224,13 +226,18 @@ class MovieDetailsViewModel(
      * already stop a late mutation from writing to a screen that has moved on.
      */
     fun close() {
-        cancelReads()
-        clearFragments()
-        playbackSelection = PlaybackSelection()
-        pruneSettledMutations(keep = null)
+        reset(keep = null)
         _uiState.update {
             it.copy(openMovieId = null, details = DetailsState.Loading)
         }
+    }
+
+    /** Forgets the open movie's reads, fragments and choices; [keep]'s mutations survive. */
+    private fun reset(keep: Long?) {
+        cancelReads()
+        clearFragments()
+        playbackSelection = PlaybackSelection()
+        pruneSettledMutations(keep)
     }
 
     /** The full-screen error's Retry: user-initiated, so the screen returns to Loading truth. */
@@ -412,26 +419,13 @@ class MovieDetailsViewModel(
 
     private fun loadLikeStatus(movieId: Long) {
         val epochAtStart = mutationState(MutationType.Like, movieId).epoch
-        loadSecondary(movieId, Read.Like, { movies.movieLikeStatus(movieId) }) {
-            confirmIfFresh(MutationType.Like, movieId, epochAtStart, it.isLiked)
-        }
-    }
-
-    /**
-     * Like status degrades instead of failing the screen. Technical details and progress use
-     * [PlaybackRead] because their last success stays renderable after a failed refresh while
-     * playback preparation independently requires a fresh success.
-     */
-    private fun <T> loadSecondary(
-        movieId: Long,
-        read: Read,
-        fetch: suspend () -> ApiResult<T>,
-        apply: (T) -> Unit,
-    ) {
-        launchRead(read) {
-            val result = fetch()
+        // Like status degrades instead of failing the screen.
+        launchRead(Read.Like) {
+            val result = movies.movieLikeStatus(movieId)
             if (_uiState.value.openMovieId != movieId) return@launchRead
-            if (result is ApiResult.Success) apply(result.value)
+            if (result is ApiResult.Success) {
+                confirmIfFresh(MutationType.Like, movieId, epochAtStart, result.value.isLiked)
+            }
             publishLoaded()
         }
     }
@@ -626,19 +620,8 @@ class MovieDetailsViewModel(
                 },
                 apiBaseUrl,
             ),
-            extraVideos = youTubeExtraVideos(
-                details.extraVideos.map {
-                    VideoSource(
-                        id = it.id,
-                        title = it.title,
-                        type = it.type,
-                        site = it.site,
-                        key = it.key,
-                    )
-                },
-                apiBaseUrl,
-            ),
-            about = AboutUi(
+            extraVideos = youTubeExtraVideos(details.extraVideos.toVideoSources(), apiBaseUrl),
+            about = movieAboutFacts(
                 production = joinedLine(details.productionCompanies.map { it.name }, ", "),
                 language = languageDisplayName(movie.language?.orNullIfBlank()),
                 budget = movie.budget?.orNull()?.takeIf { it > 0 }?.let(::formatUsd),

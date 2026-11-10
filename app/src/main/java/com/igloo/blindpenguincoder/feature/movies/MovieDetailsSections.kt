@@ -12,7 +12,6 @@ import com.igloo.blindpenguincoder.feature.shared.AboutSection
 import com.igloo.blindpenguincoder.feature.shared.CastSection
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideosSection
-import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.KeyCrewSection
 import com.igloo.blindpenguincoder.feature.shared.OverviewSection
 
@@ -46,7 +45,7 @@ internal fun MovieDetailsSections(
 ) {
     val hasCast = movie.cast.isNotEmpty()
     val hasExtras = movie.extraVideos.isNotEmpty()
-    val hasAbout = !movie.about.isEmpty
+    val hasAbout = movie.about.isNotEmpty()
 
     // The vertical chain, one entry per section actually on the page. With the reading stops out
     // (no screen reader) this reduces to exactly the old wiring: cast → extras → about.
@@ -109,7 +108,7 @@ internal fun MovieDetailsSections(
         if (hasAbout) {
             AboutSection(
                 title = movie.title,
-                facts = movie.about.facts(),
+                facts = movie.about,
                 modifier = Modifier.padding(contentInset),
                 requester = aboutRequester,
                 upRequester = above(aboutRequester),
@@ -117,12 +116,3 @@ internal fun MovieDetailsSections(
         }
     }
 }
-
-/** The movie's fine print, as facts rows; each row is dropped when the movie has no value. */
-private fun AboutUi.facts(): List<FactUi> = listOfNotNull(
-    production?.let { FactUi("Production", it) },
-    status?.let { FactUi("Status", it) },
-    language?.let { FactUi("Original language", it) },
-    budget?.let { FactUi("Budget", it) },
-    revenue?.let { FactUi("Revenue", it) },
-)

@@ -53,7 +53,6 @@ import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
-import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooRadioListDialog
 import com.igloo.blindpenguincoder.core.ui.IglooRadioRow
@@ -64,7 +63,6 @@ import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
-import com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
@@ -82,7 +80,6 @@ import com.igloo.blindpenguincoder.playback.model.onEvent
 import com.igloo.blindpenguincoder.playback.model.upNextOffer
 import com.igloo.blindpenguincoder.playback.model.upNextOutsideLead
 import com.igloo.blindpenguincoder.playback.model.videoPlayerAnnouncement
-import kotlinx.coroutines.delay
 
 /**
  * The movie player (docs/design-system.md section 11.8): a full-screen in-tree overlay whose
@@ -142,10 +139,12 @@ fun VideoPlayerScreen(
         )
     }
     var unauthorized by remember(engine) { mutableStateOf(false) }
-    var chromeVisible by remember { mutableStateOf(true) }
     var playerMenu by remember { mutableStateOf<PlayerMenu?>(null) }
-    // Bumped by any key press or chrome focus move; each bump restarts the auto-hide clock.
-    var interactionTick by remember { mutableIntStateOf(0) }
+    val playing = state.phase == VideoPlayerPhase.Playing
+    val chrome = rememberChromeAutoHide(
+        canHide = playing && playerMenu == null && progressSyncError == null,
+        mustShow = !playing || progressSyncError != null,
+    )
 
     // The Up Next card (section 11.8): offered over an episode's last seconds and at its end.
     // A dismissal is the viewer's, and survives recreation; it lapses once they seek back past
@@ -163,10 +162,7 @@ fun VideoPlayerScreen(
     val backRequester = remember { FocusRequester() }
     val retryRequester = remember { FocusRequester() }
     val progressRetryRequester = remember { FocusRequester() }
-    val chaptersButtonRequester = remember { FocusRequester() }
-    val audioButtonRequester = remember { FocusRequester() }
-    val subtitlesButtonRequester = remember { FocusRequester() }
-    val qualityButtonRequester = remember { FocusRequester() }
+    val menuButtonRequesters = remember { PlayerMenu.entries.associateWith { FocusRequester() } }
 
     val persistTrackSelection: (VideoPlayerEngine) -> Unit = { source ->
         val audioTypeIndex = source.currentAudioTypeIndex
@@ -180,16 +176,12 @@ fun VideoPlayerScreen(
         }
     }
 
-    DisposableEffect(engine) {
-        onDispose {
-            persistTrackSelection(engine)
-            engine.release()
-        }
-    }
-
     val releaseEngine: () -> Unit = {
         persistTrackSelection(engine)
         engine.release()
+    }
+    DisposableEffect(engine) {
+        onDispose { releaseEngine() }
     }
     val closeAndRelease: () -> Unit = {
         releaseEngine()
@@ -256,14 +248,9 @@ fun VideoPlayerScreen(
         }
     }
 
-    val networkRecovery = LocalNetworkRecovery.current
-    var handledNetworkRecovery by remember { mutableIntStateOf(networkRecovery) }
-    LaunchedEffect(networkRecovery) {
-        if (networkRecovery != handledNetworkRecovery) {
-            handledNetworkRecovery = networkRecovery
-            persistTrackSelection(engine)
-            host.rebuildEngine(playWhenReady = host.playWhenReadyIntent)
-        }
+    OnNetworkRecovered {
+        persistTrackSelection(engine)
+        host.rebuildEngine(playWhenReady = host.playWhenReadyIntent)
     }
 
     // Started once per engine, the moment the resume decision exists. A retry or recreation
@@ -280,15 +267,10 @@ fun VideoPlayerScreen(
         }
     }
 
-    LaunchedEffect(state.phase, progressSyncError) {
+    LaunchedEffect(state.phase) {
         // A menu must not survive into the error surface: it would swallow the screen while
         // entry focus lands on the Retry button hidden underneath it.
         if (state.phase == VideoPlayerPhase.Error) playerMenu = null
-        when (state.phase) {
-            // Chrome may only rest hidden over a moving picture; any other phase surfaces it.
-            VideoPlayerPhase.Playing -> if (progressSyncError != null) chromeVisible = true
-            else -> chromeVisible = true
-        }
     }
 
     val upNextOffer: UpNextOffer? = upNext?.let { upNextOffer(state, upNextDismissed) }
@@ -325,20 +307,6 @@ fun VideoPlayerScreen(
         }
     }
 
-    LaunchedEffect(chromeVisible, state.phase, interactionTick, playerMenu, progressSyncError) {
-        if (
-            chromeVisible && state.phase == VideoPlayerPhase.Playing && playerMenu == null &&
-            progressSyncError == null
-        ) {
-            delay(CHROME_HIDE_MS)
-            chromeVisible = false
-        }
-    }
-
-    val showChrome: () -> Unit = {
-        chromeVisible = true
-        interactionTick++
-    }
     val play = { engine.play() }
     val pause = { engine.pause() }
     val togglePlayPause = {
@@ -379,8 +347,7 @@ fun VideoPlayerScreen(
         when {
             // The card goes first: the episode plays out, and its end closes the player.
             upNextOffer != null -> upNextDismissed = true
-            chromeVisible && state.phase == VideoPlayerPhase.Playing && progressSyncError == null ->
-                chromeVisible = false
+            chrome.visible && playing && progressSyncError == null -> chrome.visible = false
             else -> closeAndRelease()
         }
     }
@@ -405,9 +372,9 @@ fun VideoPlayerScreen(
             .onPreviewKeyEvent { event ->
                 handlePlayerKey(
                     event = event,
-                    chromeVisible = chromeVisible,
+                    chromeVisible = chrome.visible,
                     controlsDisabled = state.phase == VideoPlayerPhase.Error || modalUp,
-                    showChrome = showChrome,
+                    showChrome = chrome::show,
                     play = play,
                     pause = pause,
                     togglePlayPause = togglePlayPause,
@@ -451,20 +418,17 @@ fun VideoPlayerScreen(
                 title = request.title,
                 mediaNoun = request.media.noun,
                 state = state,
-                visible = chromeVisible,
+                visible = chrome.visible,
                 chapterCount = request.chapters.size,
                 playPauseRequester = playPauseRequester,
                 backRequester = backRequester,
-                chaptersButtonRequester = chaptersButtonRequester,
-                audioButtonRequester = audioButtonRequester,
-                subtitlesButtonRequester = subtitlesButtonRequester,
-                qualityButtonRequester = qualityButtonRequester,
+                menuButtonRequesters = menuButtonRequesters,
                 progressRetryRequester = progressRetryRequester,
                 upNextRequester = upNextRequester.takeIf { upNextOffer != null },
                 progressSyncError = progressSyncError,
                 onRetryProgressSync = viewModel::retryFailedSave,
                 onProgressRetryFocusChanged = onProgressRetryFocus,
-                onAnyControlFocused = { interactionTick++ },
+                onAnyControlFocused = chrome::interact,
                 onBottomBlockSizeChanged = { bottomBlockHeightPx = it },
                 onBack = closeAndRelease,
                 onTogglePlayPause = togglePlayPause,
@@ -496,7 +460,7 @@ fun VideoPlayerScreen(
             // In the corner over the picture; lifted above the transport block while the chrome
             // is up, so the two never overlap and the card never fades with the chrome.
             val bottomInset by animateDpAsState(
-                targetValue = if (chromeVisible) {
+                targetValue = if (chrome.visible) {
                     with(LocalDensity.current) { bottomBlockHeightPx.toDp() }
                 } else {
                     IglooTheme.layout.safeAreaVertical
@@ -529,35 +493,28 @@ fun VideoPlayerScreen(
             )
         }
 
-        when (state.phase) {
-            VideoPlayerPhase.AwaitingResume -> ResumePrompt(
+        if (state.phase == VideoPlayerPhase.AwaitingResume) {
+            val resume = {
+                host.playWhenReadyIntent = true
+                resumeDecided = true
+                state = state.onResumeChosen()
+            }
+            ResumePrompt(
                 resumeAtSec = requireNotNull(request.resumePromptSec),
-                onResume = {
-                    host.playWhenReadyIntent = true
-                    resumeDecided = true
-                    state = state.onResumeChosen()
-                },
+                onResume = resume,
                 onStartOver = {
                     chosenStartSec = 0.0
-                    host.playWhenReadyIntent = true
-                    resumeDecided = true
-                    state = state.onResumeChosen()
+                    resume()
                 },
                 onClose = closeAndRelease,
             )
-            else -> Unit
         }
 
         playerMenu?.let { menu ->
             val closeMenu: () -> Unit = {
                 playerMenu = null
                 state = state.onModeRefusalDismissed()
-                when (menu) {
-                    PlayerMenu.Chapters -> chaptersButtonRequester.requestFocus()
-                    PlayerMenu.Audio -> audioButtonRequester.requestFocus()
-                    PlayerMenu.Subtitles -> subtitlesButtonRequester.requestFocus()
-                    PlayerMenu.Quality -> qualityButtonRequester.requestFocus()
-                }
+                menuButtonRequesters.getValue(menu).requestFocus()
             }
             when (menu) {
                 PlayerMenu.Chapters -> ChapterMenuDialog(
@@ -616,14 +573,19 @@ fun VideoPlayerScreen(
     }
 }
 
-/** The in-player menus; which one is up is plain screen state. */
-private enum class PlayerMenu { Chapters, Audio, Subtitles, Quality }
+/**
+ * The in-player menus, in transport order, with their buttons' words; which one is up is plain
+ * screen state.
+ */
+private enum class PlayerMenu(val text: String, val semanticLabel: String, val tag: String) {
+    Chapters("Chapters", "Chapters", "movie_chapters"),
+    Audio("Audio", "Audio track", "movie_audio"),
+    Subtitles("Subtitles", "Subtitles", "movie_subtitles"),
+    Quality("Quality", "Playback quality", "movie_quality"),
+}
 
 /** Where entry focus belongs for the current phase; modals place their own. */
 private enum class FocusAnchor { Transport, ErrorAction, UpNext, Modal }
-
-/** The transport row's last visible control — the one whose right edge cancels. */
-private enum class LastControl { Forward, Chapters, Audio, Subtitles, Quality }
 
 /** The chrome: a top title bar and a bottom transport, each on its own section 3.2 scrim. */
 @Composable
@@ -635,10 +597,7 @@ private fun VideoPlayerChrome(
     chapterCount: Int,
     playPauseRequester: FocusRequester,
     backRequester: FocusRequester,
-    chaptersButtonRequester: FocusRequester,
-    audioButtonRequester: FocusRequester,
-    subtitlesButtonRequester: FocusRequester,
-    qualityButtonRequester: FocusRequester,
+    menuButtonRequesters: Map<PlayerMenu, FocusRequester>,
     progressRetryRequester: FocusRequester,
     /** The Up Next card while it is up: it joins the vertical route between the transport and what sits above. */
     upNextRequester: FocusRequester?,
@@ -666,18 +625,13 @@ private fun VideoPlayerChrome(
     // a single track because "None" is its second option. Chapters follow the same rule — one
     // chapter spans the whole movie. Unlike the track buttons, the chapter button is request-
     // driven, so it exists before the engine reports anything.
-    val showChapters = chapterCount >= 2
-    val showAudio = state.audioOptions.size >= 2
-    val showSubtitles = state.subtitleOptions.isNotEmpty()
-    val showQuality = state.qualityOptions.size >= 2
-    // Right cancels only on the row's last visible control; derived once so the per-button
-    // expressions stop compounding as optional controls are added.
-    val lastControl = when {
-        showQuality -> LastControl.Quality
-        showSubtitles -> LastControl.Subtitles
-        showAudio -> LastControl.Audio
-        showChapters -> LastControl.Chapters
-        else -> LastControl.Forward
+    val menus = PlayerMenu.entries.filter { menu ->
+        when (menu) {
+            PlayerMenu.Chapters -> chapterCount >= 2
+            PlayerMenu.Audio -> state.audioOptions.size >= 2
+            PlayerMenu.Subtitles -> state.subtitleOptions.isNotEmpty()
+            PlayerMenu.Quality -> state.qualityOptions.size >= 2
+        }
     }
 
     Column(
@@ -764,94 +718,32 @@ private fun VideoPlayerChrome(
                 ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TransportButton(
-                    icon = IglooIcons.Rewind,
-                    label = "Rewind 10 seconds",
-                    onClick = { onSeekBy(-SEEK_STEP_SEC) },
-                    modifier = Modifier
-                        .transportEdges(isFirst = true)
-                        .testTag("movie_rewind"),
-                )
-                TransportButton(
-                    icon = if (playing) IglooIcons.Pause else IglooIcons.Play,
-                    label = if (playing) "Pause" else "Play",
-                    onClick = onTogglePlayPause,
-                    modifier = Modifier
-                        .focusRequester(playPauseRequester)
-                        .transportEdges()
-                        .testTag("movie_play_pause"),
-                )
-                TransportButton(
-                    icon = IglooIcons.FastForward,
-                    label = "Forward 10 seconds",
-                    onClick = { onSeekBy(SEEK_STEP_SEC) },
-                    modifier = Modifier
-                        .transportEdges(isLast = lastControl == LastControl.Forward)
-                        .testTag("movie_forward"),
+                SeekTransportButtons(
+                    tagPrefix = "movie_",
+                    playing = playing,
+                    playPauseRequester = playPauseRequester,
+                    upRequester = transportUp,
+                    onTogglePlayPause = onTogglePlayPause,
+                    onSeekBy = onSeekBy,
+                    isLast = menus.isEmpty(),
+                    onFocused = onAnyControlFocused,
                 )
                 // Text, not icons: IglooIcons has no chapter/audio/CC glyphs, and section 5.4
                 // prefers a readable word over a novel symbol at TV distance. Chapters sits
                 // with the seek controls — a chapter jump is a seek — ahead of the track pair,
                 // matching section 11.8's transport order.
-                @Composable
-                fun MenuButton(
-                    menu: PlayerMenu,
-                    text: String,
-                    semanticLabel: String,
-                    requester: FocusRequester,
-                    control: LastControl,
-                    tag: String,
-                ) {
+                // Right cancels only on the row's last visible control.
+                menus.forEach { menu ->
                     IglooButton(
-                        text = text,
+                        text = menu.text,
                         onClick = { onOpenMenu(menu) },
                         variant = IglooButtonVariant.Ghost,
-                        semanticLabel = semanticLabel,
+                        semanticLabel = menu.semanticLabel,
                         overMedia = true,
                         modifier = Modifier
-                            .focusRequester(requester)
-                            .transportEdges(isLast = lastControl == control)
-                            .testTag(tag),
-                    )
-                }
-                if (showChapters) {
-                    MenuButton(
-                        menu = PlayerMenu.Chapters,
-                        text = "Chapters",
-                        semanticLabel = "Chapters",
-                        requester = chaptersButtonRequester,
-                        control = LastControl.Chapters,
-                        tag = "movie_chapters",
-                    )
-                }
-                if (showAudio) {
-                    MenuButton(
-                        menu = PlayerMenu.Audio,
-                        text = "Audio",
-                        semanticLabel = "Audio track",
-                        requester = audioButtonRequester,
-                        control = LastControl.Audio,
-                        tag = "movie_audio",
-                    )
-                }
-                if (showSubtitles) {
-                    MenuButton(
-                        menu = PlayerMenu.Subtitles,
-                        text = "Subtitles",
-                        semanticLabel = "Subtitles",
-                        requester = subtitlesButtonRequester,
-                        control = LastControl.Subtitles,
-                        tag = "movie_subtitles",
-                    )
-                }
-                if (showQuality) {
-                    MenuButton(
-                        menu = PlayerMenu.Quality,
-                        text = "Quality",
-                        semanticLabel = "Playback quality",
-                        requester = qualityButtonRequester,
-                        control = LastControl.Quality,
-                        tag = "movie_quality",
+                            .focusRequester(menuButtonRequesters.getValue(menu))
+                            .transportEdges(isLast = menu == menus.last())
+                            .testTag(menu.tag),
                     )
                 }
             }
@@ -980,9 +872,7 @@ private fun TrackMenuDialog(
             IglooRadioRow(
                 label = option.label,
                 selected = option.selected,
-                // Inert rows (an image-based subtitle under HLS) stay focusable and announced
-                // but never activate — matching the pre-play dialog.
-                onSelect = if (option.enabled) ({ onSelect(option.id) }) else null,
+                onSelect = { onSelect(option.id) },
                 modifier = Modifier
                     .rowFocus(row++)
                     .testTag("movie_track_${option.id}"),

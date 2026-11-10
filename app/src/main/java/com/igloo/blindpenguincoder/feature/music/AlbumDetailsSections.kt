@@ -28,9 +28,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.feature.shared.DetailChip
 import com.igloo.blindpenguincoder.feature.shared.FactsSection
-import com.igloo.blindpenguincoder.feature.shared.TrackRow
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
-import com.igloo.blindpenguincoder.feature.shared.rememberPlainColumnTrackRowFocus
 
 /**
  * Everything below the album hero: the artists row, the disc-grouped track list, and the facts
@@ -79,20 +77,42 @@ internal fun AlbumDetailsSections(
             modifier = Modifier.padding(contentInset),
         )
     }
-    TrackListSection(
-        album = album,
+    MusicDetailsTrackList(
+        heading = "Track List",
+        // Web parity: an album whose scan produced no tracks says so rather than rendering a
+        // bare heading.
+        emptyText = "No tracks in this album",
+        isEmpty = album.discs.isEmpty(),
         likes = likes,
         trackRequesters = trackRequesters,
         upRequester = upFromRows,
         downRequester = factsRequester,
         playReturnRow = playReturnRow,
         playReturnRequester = playReturnRequester,
+        canOpenAlbum = false,
         canOpenArtist = onOpenMusician != null,
         onPlayTrack = onPlayTrack,
         onToggleLike = onToggleLike,
         onOpenMore = onOpenMore,
         modifier = Modifier.padding(contentInset),
-    )
+    ) { row ->
+        var rowIndex = 0
+        album.discs.forEach { disc ->
+            if (album.hasMultipleDiscs) {
+                // Plain text a TV screen reader never reaches; the disc is folded into its
+                // first row's spoken sentence at mapping time.
+                IglooText(
+                    text = "Disc ${disc.disc}",
+                    style = IglooTheme.typography.label,
+                    color = IglooTheme.colors.mutedForeground,
+                    modifier = Modifier
+                        .padding(top = IglooTheme.spacing.sm)
+                        .clearAndSetSemantics { },
+                )
+            }
+            disc.tracks.forEach { track -> row(rowIndex++, track) }
+        }
+    }
     FactsSection(
         heading = "Album Details",
         tag = "album_details_facts",
@@ -166,72 +186,3 @@ private fun ArtistsSection(
     }
 }
 
-@Composable
-private fun TrackListSection(
-    album: AlbumDetailsUi,
-    likes: TrackLikesUiState,
-    trackRequesters: List<TrackRowRequesters>,
-    upRequester: FocusRequester?,
-    downRequester: FocusRequester,
-    playReturnRow: Int?,
-    playReturnRequester: FocusRequester,
-    canOpenArtist: Boolean,
-    onPlayTrack: (Int) -> Unit,
-    onToggleLike: (Long) -> Unit,
-    onOpenMore: (Int, Rect) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = IglooTheme.colors
-    var rowIndex = 0
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-    ) {
-        SectionHeading("Track List")
-        if (album.discs.isEmpty()) {
-            // Web parity: an album whose scan produced no tracks says so rather than rendering
-            // a bare heading. Plain prose — the facts panel below is the section's focus stop.
-            IglooText(
-                text = "No tracks in this album",
-                style = IglooTheme.typography.bodyMedium,
-                color = colors.mutedForeground,
-                modifier = Modifier.padding(vertical = IglooTheme.spacing.sm),
-            )
-        }
-        album.discs.forEach { disc ->
-            if (album.hasMultipleDiscs) {
-                // Plain text a TV screen reader never reaches; the disc is folded into its
-                // first row's spoken sentence at mapping time.
-                IglooText(
-                    text = "Disc ${disc.disc}",
-                    style = IglooTheme.typography.label,
-                    color = colors.mutedForeground,
-                    modifier = Modifier
-                        .padding(top = IglooTheme.spacing.sm)
-                        .clearAndSetSemantics { },
-                )
-            }
-            disc.tracks.forEach { track ->
-                val index = rowIndex++
-                val focus = rememberPlainColumnTrackRowFocus(
-                    requesters = trackRequesters,
-                    index = index,
-                    upRequester = upRequester,
-                    downRequester = downRequester,
-                    playReturnRow = playReturnRow,
-                    playReturnRequester = playReturnRequester,
-                )
-                TrackRow(
-                    track = track,
-                    liked = likes.isLiked(track.id),
-                    likePending = track.id in likes.pendingIds,
-                    focus = focus,
-                    onPlay = { onPlayTrack(index) },
-                    onToggleLike = { onToggleLike(track.id) },
-                    canOpenAlbum = false, canOpenArtist = canOpenArtist,
-                    onOpenMore = { bounds -> onOpenMore(index, bounds) },
-                )
-            }
-        }
-    }
-}

@@ -126,15 +126,7 @@ internal fun QuickConnectContent(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
             ) {
-                if (restoreError != null) {
-                    IglooInlineError(
-                        message = restoreError.toDisplayMessage(),
-                        actionText = "Retry",
-                        actionSemanticLabel = "Retry connecting to server",
-                        onAction = onRetryRestore,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                RestoreErrorRetry(restoreError, onRetryRestore)
                 if (phase is QuickConnectPhase.Failed) {
                     IglooInlineError(
                         message = phase.message,

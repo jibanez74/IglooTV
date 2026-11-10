@@ -187,13 +187,10 @@ private fun toTrackUi(track: AlbumTrack, genres: List<String>, discSpoken: Long?
  * absent, null with no codec at all.
  */
 internal fun audioQualitySummary(tracks: List<AlbumTrack>): String? {
-    val codecCounts = LinkedHashMap<String, Int>()
-    tracks.forEach { track ->
-        if (track.codec.isNotBlank()) codecCounts.merge(track.codec, 1, Int::plus)
-    }
-    val dominantCodec = codecCounts.entries.fold(null as Map.Entry<String, Int>?) { best, entry ->
-        if (best == null || entry.value > best.value) entry else best
-    }?.key ?: return null
+    // eachCount keeps first-seen order and maxByOrNull keeps the first maximum: first past the post.
+    val dominantCodec = tracks.map { it.codec }.filter { it.isNotBlank() }
+        .groupingBy { it }.eachCount()
+        .maxByOrNull { it.value }?.key ?: return null
     val maxBitRate = tracks.maxOfOrNull { it.bitRate } ?: 0
     val uniformLayout = tracks.firstOrNull()?.channelLayout
         ?.takeIf { it.isNotBlank() }

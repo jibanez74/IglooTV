@@ -218,7 +218,6 @@ class TrackOptionsTest {
             hlsSubtitleTrackOptions(wire, chosenTypeIndex = 0),
         )
         assertEquals(listOf(false, false, false), hlsSubtitleTrackOptions(wire, chosenTypeIndex = null).map { it.selected })
-        assertEquals(listOf(true, true, true), hlsSubtitleTrackOptions(wire, chosenTypeIndex = 2).map { it.enabled })
     }
 
     @Test

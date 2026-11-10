@@ -40,11 +40,13 @@ internal sealed interface SubtitleChoice {
 /** One quality/mode radio row. */
 data class PlaybackModeOptionUi(val mode: PlaybackMode, val label: String)
 
-/** One audio or subtitle radio row; a null [id] is the "Default"/"None" row of its section. */
+/**
+ * One audio or subtitle radio row; a null [id] is the "Default"/"None" row of its section. The
+ * audio "Default" row is the inert stand-in for unknown tracks; "None" is a real choice.
+ */
 data class PlaybackTrackOptionUi(
     val id: Long?,
     val label: String,
-    val enabled: Boolean = true,
 )
 
 /**
@@ -105,7 +107,7 @@ internal fun playbackSettingsUi(
         ?: 0
     val effectiveAudio = audio.getOrNull(effectiveAudioIndex)
     val audioTracks = if (effectiveAudio == null) {
-        listOf(PlaybackTrackOptionUi(id = null, label = AUDIO_DEFAULT_LABEL, enabled = false))
+        listOf(PlaybackTrackOptionUi(id = null, label = AUDIO_DEFAULT_LABEL))
     } else {
         audio.mapIndexed { index, stream ->
             PlaybackTrackOptionUi(id = stream.id, label = audioTrackLabel(stream, index))

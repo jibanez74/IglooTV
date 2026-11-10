@@ -140,7 +140,6 @@ class PlaybackSettingsMappingTest {
             selection = PlaybackSelection(mode = PlaybackMode.Direct, subtitle = SubtitleChoice.Track(20)),
         )
         val row = ui.subtitleTracks.single { it.id == 20L }
-        assertTrue(row.enabled)
         assertFalse(row.label.contains("(image-based)"))
         assertEquals(20L, ui.selectedSubtitleId)
         assertTrue(ui.explanation.contains("Subtitles: English."))
@@ -159,7 +158,6 @@ class PlaybackSettingsMappingTest {
                 ),
                 selection = PlaybackSelection(mode = mode, subtitle = SubtitleChoice.Track(20)),
             )
-            assertTrue(mode.name, ui.subtitleTracks.all { it.enabled })
             assertFalse(mode.name, ui.subtitleTracks.any { it.label.contains("image-based") })
             assertEquals(mode.name, 20L, ui.selectedSubtitleId)
             assertTrue(mode.name, ui.explanation.contains("Subtitles: English."))
@@ -175,7 +173,7 @@ class PlaybackSettingsMappingTest {
         )
         val audioRow = ui.audioTracks.single()
         assertEquals(AUDIO_DEFAULT_LABEL, audioRow.label)
-        assertFalse(audioRow.enabled)
+        assertNull(audioRow.id)
         assertNull(ui.selectedAudioId)
         assertEquals(SUBTITLES_NONE_LABEL, ui.subtitleTracks.single().label)
         assertTrue(ui.explanation.contains("Default audio is used."))

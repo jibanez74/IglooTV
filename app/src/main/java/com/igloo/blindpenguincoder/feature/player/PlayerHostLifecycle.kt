@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.feature.player
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -15,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery
 
 /**
  * The lifecycle contract every full-screen player shares (design-system.md section 11.8), and
@@ -133,5 +135,21 @@ internal fun PlayerHostLifecycleEffect(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+}
+
+/**
+ * Runs [onRecovered] each time local-network access comes back after this player first saw
+ * it, so a player that failed for want of it rebuilds instead of waiting for a Retry.
+ */
+@Composable
+internal fun OnNetworkRecovered(onRecovered: () -> Unit) {
+    val networkRecovery = LocalNetworkRecovery.current
+    var handled by remember { mutableIntStateOf(networkRecovery) }
+    LaunchedEffect(networkRecovery) {
+        if (networkRecovery != handled) {
+            handled = networkRecovery
+            onRecovered()
+        }
     }
 }

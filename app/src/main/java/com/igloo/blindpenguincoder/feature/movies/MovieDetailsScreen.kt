@@ -371,7 +371,6 @@ private fun DetailsContent(
     onOpenMoreMenu: () -> Unit,
     onMoreAnchorPositioned: (Rect) -> Unit,
 ) {
-    val colors = IglooTheme.colors
     val layout = IglooTheme.layout
     // What the hero's action row is: the library page always has Play, while the in-theaters page
     // has Play Trailer only for as long as TMDB lists one (section 11.4.2).
@@ -396,7 +395,7 @@ private fun DetailsContent(
     val progressRetryRequester = remember { FocusRequester() }
     val hasCast = movie.cast.isNotEmpty()
     val hasExtras = movie.extraVideos.isNotEmpty()
-    val hasAbout = !movie.about.isEmpty
+    val hasAbout = movie.about.isNotEmpty()
     val stops = spokenAccessibilityEnabled
     // Under a screen reader the hero's summary stop owns the entry anchor (section 11.4.1): the
     // skeleton giving way drops focus, Android hands it to the first focusable — the summary —
@@ -411,7 +410,6 @@ private fun DetailsContent(
     // the section untouched. On a page that is only prose the anchor attaches to nothing at
     // all, which is why the entry request is made safely.
     val sectionAnchor = entryRequester.takeIf { !hasHeroActions && !stops }
-    val overviewRequester = overviewStop
     val castEntryRequester = if (sectionAnchor != null && hasCast) sectionAnchor else castEntry
     val extrasEntryRequester =
         if (sectionAnchor != null && !hasCast && hasExtras) sectionAnchor else extrasEntry
@@ -426,7 +424,7 @@ private fun DetailsContent(
         mutableStateOf(primaryRequester.takeIf { hasHeroActions })
     }
     val belowProgressError = when {
-        stops -> overviewRequester
+        stops -> overviewStop
         hasCast -> castEntryRequester
         hasExtras -> extrasEntryRequester
         hasAbout -> aboutRequester
@@ -486,7 +484,7 @@ private fun DetailsContent(
         MovieDetailsSections(
             movie = movie,
             spokenAccessibilityEnabled = spokenAccessibilityEnabled,
-            overviewRequester = overviewRequester,
+            overviewRequester = overviewStop,
             keyCrewRequester = keyCrewStop,
             castEntryRequester = castEntryRequester,
             extrasEntryRequester = extrasEntryRequester,

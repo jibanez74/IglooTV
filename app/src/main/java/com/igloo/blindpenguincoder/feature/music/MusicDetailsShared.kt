@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,12 +29,14 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooButton
@@ -41,15 +44,20 @@ import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
+import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.feature.shared.DetailChip
 import com.igloo.blindpenguincoder.feature.shared.DetailsScrollColumn
+import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
+import com.igloo.blindpenguincoder.feature.shared.TrackRow
 import com.igloo.blindpenguincoder.feature.shared.TrackRowMenu
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
+import com.igloo.blindpenguincoder.feature.shared.rememberPlainColumnTrackRowFocus
 
 /**
  * The pieces the album and musician detail overlays share (docs/design-system.md sections
@@ -215,6 +223,123 @@ internal fun MusicMetadataChips(parts: List<String>, overMedia: Boolean) {
 }
 
 /**
+ * The album and musician heroes' focus. Under a screen reader the summary stop owns the entry
+ * anchor, as on every details page (section 11.4.1); otherwise the primary action does. Up from
+ * below returns to whichever action the user left, not unconditionally to the primary — the
+ * same focus memory the movie action row keeps — and [launchSite] is the control that launched
+ * the player, so its close lands back there.
+ */
+@Stable
+internal class MusicHeroFocus(
+    val summaryFirst: Boolean,
+    val hasActions: Boolean,
+    entryRequester: FocusRequester,
+    launchSite: MutableState<PlayLaunchSite>,
+) {
+    val heroInfo = if (summaryFirst) entryRequester else FocusRequester()
+    val primary = if (summaryFirst) FocusRequester() else entryRequester
+    val shuffle = FocusRequester()
+    var lastFocusedAction by mutableStateOf(primary.takeIf { hasActions })
+    var launchSite by launchSite
+
+    /** Up from the first section below the hero: the action left, else the summary stop. */
+    val upFromBelow: FocusRequester?
+        get() = when {
+            hasActions -> lastFocusedAction
+            summaryFirst -> heroInfo
+            else -> null
+        }
+}
+
+@Composable
+internal fun rememberMusicHeroFocus(
+    entryRequester: FocusRequester,
+    summaryFirst: Boolean,
+    hasActions: Boolean,
+): MusicHeroFocus {
+    val launchSite = rememberPlayLaunchSite()
+    return remember(summaryFirst, hasActions) {
+        MusicHeroFocus(summaryFirst, hasActions, entryRequester, launchSite)
+    }
+}
+
+/**
+ * The album and musician heroes' content block (docs/design-system.md section 11.5.1): artwork
+ * left; the page's [info] — its reading stop, handed the requester and the stop's down edge —
+ * and, when the page has tracks, the Play/Shuffle row right. The player's [playReturnRequester]
+ * rides whichever of the two launched it.
+ */
+@Composable
+internal fun MusicDetailsHeader(
+    focus: MusicHeroFocus,
+    artworkUrl: String?,
+    artworkRadius: Dp,
+    fallbackIcon: ImageVector,
+    overMedia: Boolean,
+    playReturnRequester: FocusRequester,
+    downRequester: FocusRequester,
+    primaryText: String,
+    primarySemanticLabel: String,
+    primaryTag: String,
+    shuffleSemanticLabel: String,
+    shuffleTag: String,
+    onPrimary: () -> Unit,
+    onShuffle: () -> Unit,
+    modifier: Modifier = Modifier,
+    info: @Composable (requester: FocusRequester, downRequester: FocusRequester) -> Unit,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xl),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        HeroArtwork(
+            imageUrl = artworkUrl,
+            aspect = IglooTheme.layout.albumAspect,
+            radius = artworkRadius,
+            fallbackIcon = fallbackIcon,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+        ) {
+            // With no action row, down from the summary is the first section below.
+            info(focus.heroInfo, if (focus.hasActions) focus.primary else downRequester)
+            if (focus.hasActions) {
+                MusicHeroActionRow(
+                    primaryText = primaryText,
+                    primarySemanticLabel = primarySemanticLabel,
+                    primaryTag = primaryTag,
+                    shuffleSemanticLabel = shuffleSemanticLabel,
+                    shuffleTag = shuffleTag,
+                    overMedia = overMedia,
+                    primaryRequester = focus.primary,
+                    primaryReturnRequester =
+                        playReturnRequester.takeIf { focus.launchSite == PlayLaunchSite.Primary },
+                    shuffleRequester = focus.shuffle,
+                    shuffleReturnRequester =
+                        playReturnRequester.takeIf { focus.launchSite == PlayLaunchSite.Shuffle },
+                    // Up reaches the hero's reading stop only while a screen reader runs;
+                    // otherwise the row keeps its pinned top edge.
+                    upRequester = if (focus.summaryFirst) focus.heroInfo else Cancel,
+                    downRequester = downRequester,
+                    onActionFocused = { focus.lastFocusedAction = it },
+                    onPrimary = {
+                        focus.launchSite = PlayLaunchSite.Primary
+                        onPrimary()
+                    },
+                    onShuffle = {
+                        focus.launchSite = PlayLaunchSite.Shuffle
+                        onShuffle()
+                    },
+                    modifier = Modifier.padding(top = IglooTheme.spacing.sm),
+                )
+            }
+        }
+    }
+}
+
+/**
  * The hero's primary action and Shuffle. Every direction out of the row is pinned: the shell
  * is still composed under the overlay, so an unpinned edge lets a spatial search land on a
  * card the user cannot see. The primary steps back while Shuffle holds focus, so the focused
@@ -329,3 +454,64 @@ internal fun PlayLaunchSite.rowIn(rows: List<*>): Int? =
 
 /** The hero's Shuffle button's approximate footprint, for the loading skeleton. */
 internal val SHUFFLE_STUB_WIDTH = 128.dp
+
+/**
+ * The album and musician pages' track list: a heading, a plain line when there is nothing to
+ * list (the facts panel below is the section's focus stop), then [rows]. [rows] draws each
+ * track through the `row` it is handed, by its flat index into [trackRequesters] — the album
+ * interleaves disc headers between them.
+ */
+@Composable
+internal fun MusicDetailsTrackList(
+    heading: String,
+    emptyText: String,
+    isEmpty: Boolean,
+    likes: TrackLikesUiState,
+    trackRequesters: List<TrackRowRequesters>,
+    upRequester: FocusRequester?,
+    downRequester: FocusRequester,
+    playReturnRow: Int?,
+    playReturnRequester: FocusRequester,
+    canOpenAlbum: Boolean,
+    canOpenArtist: Boolean,
+    onPlayTrack: (Int) -> Unit,
+    onToggleLike: (Long) -> Unit,
+    onOpenMore: (Int, Rect) -> Unit,
+    modifier: Modifier = Modifier,
+    rows: @Composable (row: @Composable (index: Int, track: TrackRowUi) -> Unit) -> Unit,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+    ) {
+        SectionHeading(heading)
+        if (isEmpty) {
+            IglooText(
+                text = emptyText,
+                style = IglooTheme.typography.bodyMedium,
+                color = IglooTheme.colors.mutedForeground,
+                modifier = Modifier.padding(vertical = IglooTheme.spacing.sm),
+            )
+        }
+        rows { index, track ->
+            TrackRow(
+                track = track,
+                liked = likes.isLiked(track.id),
+                likePending = track.id in likes.pendingIds,
+                focus = rememberPlainColumnTrackRowFocus(
+                    requesters = trackRequesters,
+                    index = index,
+                    upRequester = upRequester,
+                    downRequester = downRequester,
+                    playReturnRow = playReturnRow,
+                    playReturnRequester = playReturnRequester,
+                ),
+                onPlay = { onPlayTrack(index) },
+                onToggleLike = { onToggleLike(track.id) },
+                onOpenMore = { bounds -> onOpenMore(index, bounds) },
+                canOpenAlbum = canOpenAlbum,
+                canOpenArtist = canOpenArtist,
+            )
+        }
+    }
+}

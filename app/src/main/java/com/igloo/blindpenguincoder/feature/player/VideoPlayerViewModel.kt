@@ -221,18 +221,14 @@ class VideoPlayerViewModel(
         refreshAfterSuccess: Boolean,
         outlivesOwner: Boolean,
     ) {
-        val snapshot = dispatch(positionSec, durationSec)
+        lastDispatchedPositionSec = positionSec
+        val snapshot = ProgressSnapshot(positionSec, durationSec)
         val attempt = beginSave(session)
         viewModelScope.launch {
             if (saveSnapshot(attempt, snapshot, refreshAfterSuccess, outlivesOwner)) {
                 onWatchedStateCommitted()
             }
         }
-    }
-
-    private fun dispatch(positionSec: Double, durationSec: Double): ProgressSnapshot {
-        lastDispatchedPositionSec = positionSec
-        return ProgressSnapshot(positionSec, durationSec)
     }
 
     private fun beginSave(session: ProgressSaveSession): ProgressSaveAttempt {

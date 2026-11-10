@@ -451,7 +451,7 @@ class MovieDetailsFocusTest {
         setShellContent(
             loadedState(
                 testMovieDetails(extraVideos = emptyList())
-                    .copy(about = AboutUi(null, null, null, null)),
+                    .copy(about = emptyList()),
             ),
         )
 
@@ -465,7 +465,7 @@ class MovieDetailsFocusTest {
         setShellContent(
             loadedState(
                 testMovieDetails(cast = emptyList(), extraVideos = emptyList())
-                    .copy(about = AboutUi(null, null, null, null)),
+                    .copy(about = emptyList()),
             ),
         )
 

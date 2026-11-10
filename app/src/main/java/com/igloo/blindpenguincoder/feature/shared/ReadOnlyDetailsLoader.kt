@@ -36,11 +36,9 @@ internal class ReadOnlyDetailsLoader<State, Response, Ui>(
         state.value = createState(null)
     }
 
+    /** A fresh open: the states hold nothing but the id and the details. */
     fun retry() {
-        val id = openId(state.value) ?: return
-        loadJob?.cancel()
-        state.update { withDetails(it, DetailsState.Loading) }
-        load(id, userInitiated = true)
+        open(openId(state.value) ?: return)
     }
 
     fun refresh() {

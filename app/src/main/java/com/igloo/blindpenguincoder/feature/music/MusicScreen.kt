@@ -493,11 +493,8 @@ private fun MusicTab.emptyIcon(): ImageVector = when (this) {
     else -> IglooIcons.Music
 }
 
-internal fun MusicTab.emptyMessage(): String = when (this) {
-    MusicTab.Musicians -> "No musicians in your library yet. Add a music folder on the server and run a scan."
-    MusicTab.Albums -> "No albums in your library yet. Add a music folder on the server and run a scan."
-    MusicTab.Tracks -> "No tracks in your library yet. Add a music folder on the server and run a scan."
-}
+internal fun MusicTab.emptyMessage(): String =
+    "No ${noun(2)} in your library yet. Add a music folder on the server and run a scan."
 
 private fun spokenCount(tab: MusicTab, total: Long?, loadedCount: Int?, append: AppendState): String =
     when {
