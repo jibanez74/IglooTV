@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
-import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.progress.COMPLETION_RATIO
@@ -63,7 +63,7 @@ private data class ProgressSaveAttempt(
  */
 class VideoPlayerViewModel(
     private val saveProgress: suspend (PlaybackMediaRef, UpdateWatchProgressRequest) ->
-    ApiResult<WatchProgressUpdateData>,
+    ApiResult<WatchedData>,
     private val onWatchedStateCommitted: () -> Unit,
 ) : ViewModel() {
 
@@ -221,18 +221,14 @@ class VideoPlayerViewModel(
         refreshAfterSuccess: Boolean,
         outlivesOwner: Boolean,
     ) {
-        val snapshot = dispatch(positionSec, durationSec)
+        lastDispatchedPositionSec = positionSec
+        val snapshot = ProgressSnapshot(positionSec, durationSec)
         val attempt = beginSave(session)
         viewModelScope.launch {
             if (saveSnapshot(attempt, snapshot, refreshAfterSuccess, outlivesOwner)) {
                 onWatchedStateCommitted()
             }
         }
-    }
-
-    private fun dispatch(positionSec: Double, durationSec: Double): ProgressSnapshot {
-        lastDispatchedPositionSec = positionSec
-        return ProgressSnapshot(positionSec, durationSec)
     }
 
     private fun beginSave(session: ProgressSaveSession): ProgressSaveAttempt {

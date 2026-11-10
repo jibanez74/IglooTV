@@ -66,12 +66,11 @@ import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.overMediaSideScrim
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooText
-import com.igloo.blindpenguincoder.core.ui.RatingBadge
 import com.igloo.blindpenguincoder.core.ui.SkeletonStub
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.insetHorizontally
 import com.igloo.blindpenguincoder.core.ui.joinedLine
-import com.igloo.blindpenguincoder.feature.shared.DetailChip
+import com.igloo.blindpenguincoder.feature.shared.HeroMetadataRow
 
 /**
  * The billboard at the top of home (docs/design-system.md section 11.3.1): the newest movie and
@@ -99,9 +98,7 @@ import com.igloo.blindpenguincoder.feature.shared.DetailChip
  * bleeding surface for the same reason a backdrop may bleed and a word may not: a 3dp ring traced
  * round the panel would sit in the overscan margin, the one place section 2.5 says a TV may crop.
  *
- * Each page opens its own details page — [onOpenMovie] the movie's, [onOpenShow] the show's. A
- * null opener keeps that page a focus target but drops the button role and the "Open …" action,
- * the same contract as an inert poster card.
+ * Each page opens its own details page — [onOpenMovie] the movie's, [onOpenShow] the show's.
  */
 @Composable
 fun HomeHero(
@@ -112,8 +109,8 @@ fun HomeHero(
     leftFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester,
     contentInset: PaddingValues,
-    onOpenMovie: ((Long) -> Unit)?,
-    onOpenShow: ((Long) -> Unit)?,
+    onOpenMovie: (Long) -> Unit,
+    onOpenShow: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // A null page is the Loading skeleton, standing where the first page will land.
@@ -126,14 +123,16 @@ fun HomeHero(
     var focused by remember { mutableStateOf(false) }
     val activeIndex = pages.indexOfFirst { it != null && it.kind == pageKind }.takeIf { it >= 0 } ?: 0
     val activePage = pages[activeIndex]
-    val arts = pages.mapIndexed { index, page -> key(index) { rememberHeroArt(page?.backdropUrl) } }
+    val arts = pages.mapIndexed { index, page ->
+        key(index) { remember(page?.backdropUrl) { HeroArt() } }
+    }
     val transition = updateTransition(targetState = activeIndex, label = "heroPage")
     val openPage = activePage?.let { page ->
         val open = when (page.kind) {
             HomeHeroKind.Movie -> onOpenMovie
             HomeHeroKind.Show -> onOpenShow
         }
-        open?.let { { it(page.id) } }
+        { open(page.id) }
     }
 
     Box(
@@ -189,7 +188,7 @@ fun HomeHero(
                 // its cursor is on, which covers a turn and a load under focus; a live region
                 // would add a re-read whenever focus came or went, since every focus change
                 // reports a content change on the node.
-                if (openPage != null && activePage != null) {
+                if (openPage != null) {
                     role = Role.Button
                     onClick(label = "Open ${activePage.title}") {
                         openPage()
@@ -297,9 +296,6 @@ private class HeroArt {
     var loaded by mutableStateOf(false)
     var failed by mutableStateOf(false)
 }
-
-@Composable
-private fun rememberHeroArt(url: String?): HeroArt = remember(url) { HeroArt() }
 
 /**
  * One page's backdrop and its two over-media scrims, which fade in together once the image
@@ -467,28 +463,7 @@ private fun HeroEyebrow(kind: HomeHeroKind, overMedia: Boolean) {
 private fun HeroMetadataRow(hero: HomeHero, overMedia: Boolean) {
     val plainLine = joinedLine(listOfNotNull(hero.year, hero.extent), " · ")
     if (hero.ratingBadge == null && hero.certification == null && plainLine == null) return
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (hero.ratingBadge != null) {
-            RatingBadge(
-                spec = hero.ratingBadge,
-                radius = IglooTheme.radius.pill,
-                verticalPadding = IglooTheme.spacing.xs,
-            )
-        }
-        if (hero.certification != null) DetailChip(text = hero.certification, overMedia = overMedia)
-        if (plainLine != null) {
-            IglooText(
-                text = plainLine,
-                style = IglooTheme.typography.label.overMedia(overMedia),
-                color = if (overMedia) OVER_MEDIA_SECONDARY else IglooTheme.colors.mutedForeground,
-                maxLines = 1,
-                modifier = Modifier.padding(start = IglooTheme.spacing.xs),
-            )
-        }
-    }
+    HeroMetadataRow(hero.ratingBadge, listOfNotNull(hero.certification), plainLine, overMedia)
 }
 
 /**

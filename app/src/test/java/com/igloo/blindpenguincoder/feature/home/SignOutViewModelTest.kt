@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
@@ -19,40 +20,21 @@ import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.yield
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SignOutViewModelTest {
-
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-    }
-
-    @After
-    fun tearDown() {
-        // SessionManager collects auth events for as long as its scope lives; leaking one
-        // leaves a collector running into the next test class.
-        scopes.forEach { it.cancel() }
-        Dispatchers.resetMain()
-    }
-
-    private val scopes = mutableListOf<CoroutineScope>()
+    @get:Rule
+    val main = MainDispatcherRule()
 
     private class Fixture(
         val viewModel: SignOutViewModel,
@@ -82,7 +64,7 @@ class SignOutViewModelTest {
                 jsonResponse(authUserJson())
             }
         }
-        val scope = CoroutineScope(UnconfinedTestDispatcher()).also { scopes += it }
+        val scope = main.newScope()
         val sessionManager = SessionManager(
             authRepository = http.authRepository,
             profiles = http.profiles,

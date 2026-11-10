@@ -230,21 +230,4 @@ internal class ExoMusicPlayerEngine(
         player.stop()
         player.clearMediaItems()
     }
-
 }
-
-fun exoMusicPlayerEngine(
-    context: Context,
-    request: MusicPlayRequest,
-    dataSourceFactory: DataSource.Factory,
-    artworkDataSourceFactory: DataSource.Factory,
-    trackStreamUrl: (Long) -> String,
-    artworkUrl: (String?) -> String?,
-): MusicPlayerEngine = ExoMusicPlayerEngine(
-    context = context,
-    request = request,
-    dataSourceFactory = dataSourceFactory,
-    artworkDataSourceFactory = artworkDataSourceFactory,
-    trackStreamUrl = trackStreamUrl,
-    artworkUrl = artworkUrl,
-)

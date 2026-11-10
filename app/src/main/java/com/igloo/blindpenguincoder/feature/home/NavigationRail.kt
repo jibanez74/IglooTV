@@ -219,12 +219,7 @@ fun NavigationRail(
         RailRow(
             icon = IglooIcons.SwitchProfile,
             label = "Switch profile",
-            actionLabel = "Switch profile",
-            labelColor = colors.foreground,
             iconTint = { focused -> if (focused) colors.ring else colors.mutedForeground },
-            fill = { focused ->
-                if (focused) colors.focusFill(colors.sidebar) else Color.Transparent
-            },
             labelFade = labelFade,
             onClick = onSwitchProfile,
             modifier = Modifier
@@ -239,12 +234,7 @@ fun NavigationRail(
         RailRow(
             icon = IglooIcons.SignOut,
             label = "Sign out",
-            actionLabel = "Sign out",
-            labelColor = colors.foreground,
             iconTint = { focused -> if (focused) colors.destructive else colors.mutedForeground },
-            fill = { focused ->
-                if (focused) colors.focusFill(colors.sidebar) else Color.Transparent
-            },
             labelFade = labelFade,
             onClick = onSignOut,
             modifier = Modifier
@@ -265,13 +255,16 @@ fun NavigationRail(
 private fun RailRow(
     icon: ImageVector,
     label: String,
-    actionLabel: String,
-    labelColor: Color,
     iconTint: (focused: Boolean) -> Color,
-    fill: (focused: Boolean) -> Color,
     labelFade: Modifier,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    actionLabel: String = label,
+    labelColor: Color = IglooTheme.colors.foreground,
+    // The account rows' fill: the sidebar's focus fill, nothing at rest.
+    fill: (focused: Boolean) -> Color = IglooTheme.colors.let { colors ->
+        { focused -> if (focused) colors.focusFill(colors.sidebar) else Color.Transparent }
+    },
     selected: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }

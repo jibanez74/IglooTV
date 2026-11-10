@@ -1,13 +1,9 @@
 package com.igloo.blindpenguincoder.feature.search
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -29,7 +25,6 @@ import com.igloo.blindpenguincoder.FakeVoiceSearch
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
@@ -40,6 +35,7 @@ import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import com.igloo.blindpenguincoder.playback.queue.toMusicPlayTrack
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testLibraryTracks
 import com.igloo.blindpenguincoder.testMovieDetails
@@ -83,7 +79,6 @@ class SearchPaneBehaviorTest {
     private var voiceSearch = FakeVoiceSearch()
     private var retries = 0
     private val playRequests = MutableSharedFlow<MusicPlayRequest>(extraBufferCapacity = 1)
-    private var hostActivity: Activity? = null
 
     private fun setContent(
         initial: SearchUiState = testSearchState(),
@@ -103,8 +98,6 @@ class SearchPaneBehaviorTest {
         clearCalls = 0
         retries = 0
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     search = searchState,
@@ -193,13 +186,6 @@ class SearchPaneBehaviorTest {
 
     private fun openSearch() {
         composeRule.onNodeWithContentDescription("Search").performClick()
-        composeRule.waitForIdle()
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
         composeRule.waitForIdle()
     }
 
@@ -394,7 +380,7 @@ class SearchPaneBehaviorTest {
         deliver(VoiceSearchEvent.Starting)
         if (ready) deliver(VoiceSearchEvent.Listening)
 
-        pressBack()
+        composeRule.pressBack()
 
         assertEquals(1, voiceSearch.cancels)
         assertSessionEndedSilently()
@@ -525,7 +511,7 @@ class SearchPaneBehaviorTest {
         assertSessionEndedSilently()
 
         // The rail's own Back: it collapses back into the pane.
-        pressBack()
+        composeRule.pressBack()
         rail.assertIsNotFocused()
         assertEquals(1, voiceSearch.cancels)
     }
@@ -796,7 +782,7 @@ class SearchPaneBehaviorTest {
         composeRule.waitForIdle()
         node("details_play").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         node("poster_card_2").assertIsFocused()
     }
@@ -810,7 +796,7 @@ class SearchPaneBehaviorTest {
         composeRule.waitForIdle()
         node("album_play").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         node("album_card_102").assertIsFocused()
     }
@@ -827,7 +813,7 @@ class SearchPaneBehaviorTest {
         node("music_player").assertExists()
         node("music_play_pause").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
         node("music_player").assertDoesNotExist()
         node("track_play_902").assertIsFocused()
     }
@@ -841,7 +827,7 @@ class SearchPaneBehaviorTest {
         composeRule.waitForIdle()
         node("music_player").assertExists()
 
-        pressBack()
+        composeRule.pressBack()
 
         node("track_play_902").assertIsFocused()
     }
@@ -860,7 +846,7 @@ class SearchPaneBehaviorTest {
         composeRule.waitForIdle()
         node("music_player").assertExists()
 
-        pressBack()
+        composeRule.pressBack()
 
         node("track_play_901").assertIsFocused()
     }

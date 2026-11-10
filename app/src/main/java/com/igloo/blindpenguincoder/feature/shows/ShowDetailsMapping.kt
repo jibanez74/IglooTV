@@ -22,7 +22,7 @@ import com.igloo.blindpenguincoder.feature.movies.resumePositionSec
 import com.igloo.blindpenguincoder.feature.shared.CastCredit
 import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import com.igloo.blindpenguincoder.feature.shared.FactUi
-import com.igloo.blindpenguincoder.feature.shared.VideoSource
+import com.igloo.blindpenguincoder.feature.shared.toVideoSources
 import com.igloo.blindpenguincoder.feature.shared.castMembers
 import com.igloo.blindpenguincoder.feature.shared.resumeProgressUi
 import com.igloo.blindpenguincoder.feature.shared.youTubeExtraVideos
@@ -105,18 +105,7 @@ internal fun ShowDetailsData.toUi(apiBaseUrl: String): ShowDetailsUi {
             },
             apiBaseUrl,
         ),
-        extraVideos = youTubeExtraVideos(
-            extraVideos.map {
-                VideoSource(
-                    id = it.id,
-                    title = it.title,
-                    type = it.type,
-                    site = it.site,
-                    key = it.key,
-                )
-            },
-            apiBaseUrl,
-        ),
+        extraVideos = youTubeExtraVideos(extraVideos.toVideoSources(), apiBaseUrl),
         about = aboutFacts(),
     )
 }

@@ -5,8 +5,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -24,6 +22,7 @@ import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
+import com.igloo.blindpenguincoder.clickActionLabelled
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
@@ -151,7 +150,7 @@ class AlbumDetailsAccessibilityTest {
         composeRule.onNodeWithText("Ticket to Ride").assertDoesNotExist()
         composeRule.onNodeWithTag("track_like_902").assertContentDescriptionEquals("Like")
         composeRule.onNodeWithTag("track_more_902")
-            .assertContentDescriptionEquals("More actions for Ticket to Ride. None available.")
+            .assertContentDescriptionEquals("More actions for Ticket to Ride")
     }
 
     @Test
@@ -289,10 +288,6 @@ class AlbumDetailsAccessibilityTest {
         setContent(spokenAccessibilityEnabled = false)
 
         composeRule.onNodeWithTag("album_hero_info").assertDoesNotExist()
-    }
-
-    private fun clickActionLabelled(label: String) = SemanticsMatcher("click action labelled $label") {
-        it.config.getOrNull(SemanticsActions.OnClick)?.label == label
     }
 
     @Test

@@ -19,6 +19,24 @@ data class MessageResponse(
 )
 
 /**
+ * Payload of every like read or toggle (`MovieLikeStatusEnvelope`, `MovieLikeToggleEnvelope`,
+ * `TrackLikeToggleEnvelope`): one shape, so one model; OpenApiContractTest checks it per route.
+ */
+@Serializable
+data class LikedData(
+    @SerialName("is_liked") val isLiked: Boolean,
+)
+
+/**
+ * Payload of every watched write (`WatchProgressUpdateEnvelope`, `MovieWatchedEnvelope`,
+ * `EpisodeWatchedEnvelope`).
+ */
+@Serializable
+data class WatchedData(
+    val watched: Boolean,
+)
+
+/**
  * Go `sql.NullString` wire format: `{ "String": "...", "Valid": bool }`.
  */
 @Serializable

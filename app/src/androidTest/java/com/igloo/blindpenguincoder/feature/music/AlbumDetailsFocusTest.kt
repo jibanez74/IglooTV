@@ -1,14 +1,9 @@
 package com.igloo.blindpenguincoder.feature.music
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTopPositionInRootIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -25,8 +20,8 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testHomeShows
@@ -55,7 +50,6 @@ class AlbumDetailsFocusTest {
     private var albumDetailsState by mutableStateOf(AlbumDetailsUiState())
     private val opened = mutableListOf<Long>()
     private val openedMusicians = mutableListOf<Long>()
-    private var hostActivity: Activity? = null
 
     private fun setShellContent(
         initialAlbumDetails: AlbumDetailsUiState = AlbumDetailsUiState(),
@@ -65,14 +59,11 @@ class AlbumDetailsFocusTest {
         openLoads: (Long) -> DetailsState<AlbumDetailsUi> = { id ->
             DetailsState.Loaded(testAlbumDetails(id = id))
         },
-        withMusicianScreen: Boolean = false,
     ) {
         albumDetailsState = initialAlbumDetails
         opened.clear()
         openedMusicians.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
@@ -95,23 +86,12 @@ class AlbumDetailsFocusTest {
                     onCloseDetails = {
                         albumDetailsState = AlbumDetailsUiState()
                     },
-                    onMusicianSelected = if (withMusicianScreen) {
-                        { musicianId ->
-                            openedMusicians += musicianId
-                            albumDetailsState = AlbumDetailsUiState()
-                        }
-                    } else {
-                        null
+                    onMusicianSelected = { musicianId ->
+                        openedMusicians += musicianId
+                        albumDetailsState = AlbumDetailsUiState()
                     },
                 )
             }
-        }
-        composeRule.waitForIdle()
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
         }
         composeRule.waitForIdle()
     }
@@ -178,7 +158,7 @@ class AlbumDetailsFocusTest {
         openAlbumCard(12)
         composeRule.onNodeWithTag("album_play").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("album_details").assertDoesNotExist()
         composeRule.onNodeWithTag("album_card_12").assertIsFocused()
@@ -192,6 +172,8 @@ class AlbumDetailsFocusTest {
         play.requestFocus()
         play.assertIsFocused()
         play.performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("album_artist_4").assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionDown) }
         composeRule.onNodeWithTag("track_play_901").assertIsFocused()
         composeRule.onNodeWithTag("track_play_901")
             .performKeyInput { pressKey(Key.DirectionDown) }
@@ -235,10 +217,10 @@ class AlbumDetailsFocusTest {
         composeRule.onNodeWithTag("track_like_902")
             .performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.onNodeWithTag("track_like_901").assertIsFocused()
-        // Up from any column of the first row returns to the hero's last-focused action.
+        // Up from any column of the first row returns to the artist chips above the list.
         composeRule.onNodeWithTag("track_like_901")
             .performKeyInput { pressKey(Key.DirectionUp) }
-        composeRule.onNodeWithTag("album_play").assertIsFocused()
+        composeRule.onNodeWithTag("album_artist_4").assertIsFocused()
     }
 
     @Test
@@ -251,9 +233,9 @@ class AlbumDetailsFocusTest {
         composeRule.onNodeWithTag("album_shuffle").assertIsFocused()
         composeRule.onNodeWithTag("album_shuffle")
             .performKeyInput { pressKey(Key.DirectionDown) }
-        composeRule.onNodeWithTag("track_play_901").assertIsFocused()
+        composeRule.onNodeWithTag("album_artist_4").assertIsFocused()
 
-        composeRule.onNodeWithTag("track_play_901")
+        composeRule.onNodeWithTag("album_artist_4")
             .performKeyInput { pressKey(Key.DirectionUp) }
 
         // The same focus memory the movie action row keeps: up lands on Shuffle, not Play.
@@ -298,8 +280,8 @@ class AlbumDetailsFocusTest {
     }
 
     @Test
-    fun withAMusicianScreenTheArtistChipsJoinTheChainAndOpenTheArtist() {
-        setShellContent(loadedState(), withMusicianScreen = true)
+    fun theArtistChipsJoinTheChainAndOpenTheArtist() {
+        setShellContent(loadedState())
 
         val play = composeRule.onNodeWithTag("album_play")
         play.requestFocus()
@@ -319,8 +301,8 @@ class AlbumDetailsFocusTest {
     }
 
     @Test
-    fun withAMusicianScreenMoreOffersGoToArtist() {
-        setShellContent(loadedState(), withMusicianScreen = true)
+    fun moreOffersGoToArtist() {
+        setShellContent(loadedState())
 
         val more = composeRule.onNodeWithTag("track_more_901")
         more.requestFocus()
@@ -332,18 +314,6 @@ class AlbumDetailsFocusTest {
         goToArtist.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
         assertEquals(listOf(4L), openedMusicians)
-    }
-
-    @Test
-    fun moreStaysAFocusTargetWithNoActionUntilItHasSomewhereToGo() {
-        setShellContent(loadedState())
-
-        // An album row can only go to its artist, and there is no musician screen yet: the
-        // control keeps its place in the column geometry but promises nothing (section 12).
-        composeRule.onNodeWithTag("track_more_901")
-            .assertHasNoClickAction()
-            .requestFocus()
-        composeRule.onNodeWithTag("track_more_901").assertIsFocused()
     }
 
     @Test

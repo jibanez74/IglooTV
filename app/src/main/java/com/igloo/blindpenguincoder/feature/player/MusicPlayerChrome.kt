@@ -18,7 +18,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -179,30 +178,15 @@ internal fun MusicPlayerChrome(
                         .transportEdges(isFirst = true)
                         .testTag("music_previous"),
                 )
-                TransportButton(
-                    icon = IglooIcons.Rewind,
-                    label = "Rewind 10 seconds",
-                    onClick = { onSeekBy(-SEEK_STEP_SEC) },
-                    modifier = Modifier
-                        .transportEdges()
-                        .testTag("music_rewind"),
-                )
-                TransportButton(
-                    icon = if (playing) IglooIcons.Pause else IglooIcons.Play,
-                    label = if (playing) "Pause" else "Play",
-                    onClick = onTogglePlayPause,
-                    modifier = Modifier
-                        .focusRequester(playPauseRequester)
-                        .transportEdges()
-                        .testTag("music_play_pause"),
-                )
-                TransportButton(
-                    icon = IglooIcons.FastForward,
-                    label = "Forward 10 seconds",
-                    onClick = { onSeekBy(SEEK_STEP_SEC) },
-                    modifier = Modifier
-                        .transportEdges()
-                        .testTag("music_forward"),
+                SeekTransportButtons(
+                    tagPrefix = "music_",
+                    playing = playing,
+                    playPauseRequester = playPauseRequester,
+                    upRequester = transportUpRequester,
+                    onTogglePlayPause = onTogglePlayPause,
+                    onSeekBy = onSeekBy,
+                    isFirst = false,
+                    isLast = false,
                 )
                 TransportButton(
                     icon = IglooIcons.SkipNext,

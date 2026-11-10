@@ -62,7 +62,6 @@ class SearchMappingTest {
         tracks: List<TrackListItem> = listOf(track(1, "Help!"), track(2, "Yesterday")),
         tracksTotal: Long = tracks.size.toLong(),
     ) = SearchAllData(
-        query = "help",
         movies = SearchSection(movies, moviesTotal),
         shows = SearchSection(listOf(show), 1),
         albums = SearchSection(listOf(album), 1),

@@ -157,7 +157,7 @@ class SearchViewModel(
         id = { it.id },
         present = { it },
         fetch = { page ->
-            search.searchMovies(searched, page, PAGE_SIZE).withApiBaseUrl(serverUrl).map { (data, apiBaseUrl) ->
+            search.searchMovies(searched, page, MAX_LIBRARY_PER_PAGE).withApiBaseUrl(serverUrl).map { (data, apiBaseUrl) ->
                 data.toLoadedPage(page) { movie -> movie.toPosterItem(apiBaseUrl) }
             }
         },
@@ -169,7 +169,7 @@ class SearchViewModel(
         id = { it.id },
         present = { it },
         fetch = { page ->
-            search.searchShows(searched, page, PAGE_SIZE).withApiBaseUrl(serverUrl).map { (data, apiBaseUrl) ->
+            search.searchShows(searched, page, MAX_LIBRARY_PER_PAGE).withApiBaseUrl(serverUrl).map { (data, apiBaseUrl) ->
                 data.toLoadedPage(page) { show -> show.toPosterItem(apiBaseUrl) }
             }
         },
@@ -181,7 +181,7 @@ class SearchViewModel(
         id = { it.id },
         present = { it },
         fetch = { page ->
-            search.searchAlbums(searched, page, PAGE_SIZE).map { it.toLoadedPage(page) { album -> album.toCardUi() } }
+            search.searchAlbums(searched, page, MAX_LIBRARY_PER_PAGE).map { it.toLoadedPage(page) { album -> album.toCardUi() } }
         },
     )
 
@@ -191,7 +191,7 @@ class SearchViewModel(
         id = { it.id },
         present = { it },
         fetch = { page ->
-            search.searchMusicians(searched, page, PAGE_SIZE).map { it.toLoadedPage(page) { musician -> musician.toCardUi() } }
+            search.searchMusicians(searched, page, MAX_LIBRARY_PER_PAGE).map { it.toLoadedPage(page) { musician -> musician.toCardUi() } }
         },
     )
 
@@ -200,7 +200,7 @@ class SearchViewModel(
         write = { state, paged -> state.copy(tracks = paged) },
         id = { it.id },
         present = { tracks -> tracks.map { it.toSearchEntry() } },
-        fetch = { page -> search.searchTracks(searched, page, PAGE_SIZE).map { it.toLoadedPage(page) { track -> track } } },
+        fetch = { page -> search.searchTracks(searched, page, MAX_LIBRARY_PER_PAGE).map { it.toLoadedPage(page) { track -> track } } },
     )
 
     private val loaders: Map<SearchTab, PagedLoader<SearchUiState, *, *>> = mapOf(
@@ -389,10 +389,6 @@ class SearchViewModel(
         tabDebounceJob?.cancel()
         val resets = loaders.values.map { it.reset() }
         _uiState.update { state -> resets.fold(withQuery(state)) { next, reset -> reset(next) } }
-    }
-
-    private companion object {
-        const val PAGE_SIZE = MAX_LIBRARY_PER_PAGE
     }
 }
 

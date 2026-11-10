@@ -193,10 +193,7 @@ class ShowDetailsViewModel(
 
     /** The full-screen error's Retry: user-initiated, so the screen returns to Loading truth. */
     fun retry() {
-        val id = _uiState.value.openShowId ?: return
-        cancelReads()
-        _uiState.value = ShowDetailsUiState(openShowId = id)
-        loadDetails(id, userInitiated = true)
+        open(_uiState.value.openShowId ?: return)
     }
 
     /**

@@ -65,8 +65,8 @@ import com.igloo.blindpenguincoder.playback.media3.VideoPlaybackServices
 import com.igloo.blindpenguincoder.playback.media3.deviceCanDecodeVideoMime
 import com.igloo.blindpenguincoder.playback.media3.deviceCanPlayAudioMime
 import com.igloo.blindpenguincoder.playback.media3.deviceHlsVideoCodecs
-import com.igloo.blindpenguincoder.playback.media3.exoVideoPlayerEngine
-import com.igloo.blindpenguincoder.playback.media3.exoMusicPlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.ExoMusicPlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.ExoVideoPlayerEngine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -407,12 +407,6 @@ fun IglooRoot(container: IglooAppContainer) {
                             MovieDetailsActions.Library(
                                 onToggleWatched = detailsViewModel::toggleWatched,
                                 onToggleLike = detailsViewModel::toggleLike,
-                                // The remaining More menu items, wired to nothing until each
-                                // feature lands; selecting one only closes the menu for now.
-                                onWatchTogether = {},
-                                onTechnicalDetails = {},
-                                onIdentifyMovie = {},
-                                onDeleteMovie = {},
                                 onSelectPlaybackMode = detailsViewModel::selectPlaybackMode,
                                 onSelectAudioTrack = detailsViewModel::selectAudioTrack,
                                 onSelectSubtitle = detailsViewModel::selectSubtitle,
@@ -423,7 +417,7 @@ fun IglooRoot(container: IglooAppContainer) {
                         playRequests = detailsViewModel.playRequests,
                         videoPlayerViewModel = videoPlayerViewModel,
                         videoPlayerEngineFactory = { context, request ->
-                            exoVideoPlayerEngine(
+                            ExoVideoPlayerEngine(
                                 context = context,
                                 request = request,
                                 services = VideoPlaybackServices(
@@ -439,7 +433,7 @@ fun IglooRoot(container: IglooAppContainer) {
                             )
                         },
                         musicPlayerEngineFactory = { context, request ->
-                            exoMusicPlayerEngine(
+                            ExoMusicPlayerEngine(
                                 context = context,
                                 request = request,
                                 // The same bearer-injecting factory the movie's direct stream

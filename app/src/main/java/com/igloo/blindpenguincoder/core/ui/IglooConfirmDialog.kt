@@ -3,35 +3,25 @@ package com.igloo.blindpenguincoder.core.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.paneTitle
-import androidx.compose.ui.semantics.semantics
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.rememberOverlayReveal
 
 /**
  * The confirmation modal — see docs/design-system.md section 9.3, which is authoritative for
@@ -54,12 +44,10 @@ fun IglooConfirmDialog(
     dismissText: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
     confirmVariant: IglooButtonVariant = IglooButtonVariant.Primary,
     pending: Boolean = false,
     pendingText: String = confirmText,
 ) {
-    val colors = IglooTheme.colors
     val dismissFocus = remember { FocusRequester() }
     val confirmFocus = remember { FocusRequester() }
     val pendingFocus = remember { FocusRequester() }
@@ -71,82 +59,56 @@ fun IglooConfirmDialog(
     BackHandler(onBack = onDismiss)
 
     // The focus requests below do not wait on the reveal.
-    val reveal by rememberOverlayReveal("dialogReveal")
+    IglooDialogCard(title = title) {
+        // cardForeground, not mutedForeground: at 5.08:1 on card the muted token is under
+        // the section 12 body target, and this is prose the user must read to decide.
+        IglooText(
+            text = body,
+            style = IglooTheme.typography.bodyMedium,
+            color = IglooTheme.colors.cardForeground,
+        )
 
-    IglooScrim(
-        modifier = modifier.graphicsLayer { alpha = reveal },
-        contentAlignment = Alignment.Center,
-    ) {
-        BoxWithConstraints {
-            val cardWidth = minOf(IglooTheme.layout.dialogWidth, maxWidth)
-            Column(
-                modifier = Modifier
-                    .width(cardWidth)
-                    .iglooSurface(radius = IglooTheme.radius.xl, fill = colors.card)
-                    .padding(IglooTheme.spacing.xl)
-                    .semantics {
-                        paneTitle = title
-                        isTraversalGroup = true
-                    },
-                verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
+        if (pending) {
+            PendingRow(text = pendingText, focusRequester = pendingFocus)
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
             ) {
-                IglooText(
-                    text = title,
-                    style = IglooTheme.typography.titleMedium,
-                    color = colors.cardForeground,
-                    modifier = Modifier.semantics { heading() },
+                // Dismiss left and focused first: the destructive action is never the
+                // default. Every direction that would leave the card is pinned to
+                // FocusRequester.Cancel, so focus search terminates here instead of
+                // falling through to whatever sits behind the scrim.
+                IglooButton(
+                    text = dismissText,
+                    onClick = onDismiss,
+                    variant = IglooButtonVariant.Ghost,
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(dismissFocus)
+                        .focusProperties {
+                            left = FocusRequester.Cancel
+                            up = FocusRequester.Cancel
+                            down = FocusRequester.Cancel
+                            right = confirmFocus
+                        },
                 )
-                // cardForeground, not mutedForeground: at 5.08:1 on card the muted token is under
-                // the section 12 body target, and this is prose the user must read to decide.
-                IglooText(
-                    text = body,
-                    style = IglooTheme.typography.bodyMedium,
-                    color = colors.cardForeground,
+                IglooButton(
+                    text = confirmText,
+                    onClick = onConfirm,
+                    variant = confirmVariant,
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(confirmFocus)
+                        .focusProperties {
+                            right = FocusRequester.Cancel
+                            up = FocusRequester.Cancel
+                            down = FocusRequester.Cancel
+                            left = dismissFocus
+                        },
                 )
-
-                if (pending) {
-                    PendingRow(text = pendingText, focusRequester = pendingFocus)
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-                    ) {
-                        // Dismiss left and focused first: the destructive action is never the
-                        // default. Every direction that would leave the card is pinned to
-                        // FocusRequester.Cancel, so focus search terminates here instead of
-                        // falling through to whatever sits behind the scrim.
-                        IglooButton(
-                            text = dismissText,
-                            onClick = onDismiss,
-                            variant = IglooButtonVariant.Ghost,
-                            modifier = Modifier
-                                .weight(1f)
-                                .focusRequester(dismissFocus)
-                                .focusProperties {
-                                    left = FocusRequester.Cancel
-                                    up = FocusRequester.Cancel
-                                    down = FocusRequester.Cancel
-                                    right = confirmFocus
-                                },
-                        )
-                        IglooButton(
-                            text = confirmText,
-                            onClick = onConfirm,
-                            variant = confirmVariant,
-                            modifier = Modifier
-                                .weight(1f)
-                                .focusRequester(confirmFocus)
-                                .focusProperties {
-                                    right = FocusRequester.Cancel
-                                    up = FocusRequester.Cancel
-                                    down = FocusRequester.Cancel
-                                    left = dismissFocus
-                                },
-                        )
-                    }
-                    LaunchedEffect(Unit) { dismissFocus.requestFocus() }
-                }
             }
+            LaunchedEffect(Unit) { dismissFocus.requestFocus() }
         }
     }
 }

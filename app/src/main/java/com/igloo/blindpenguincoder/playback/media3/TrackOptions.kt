@@ -55,21 +55,12 @@ internal fun subtitleTrackOptions(tracks: Tracks): List<TrackOption> =
 internal fun hlsAudioTrackOptions(
     tracks: List<PlayableAudioTrack>,
     selectedTypeIndex: Int?,
-): List<TrackOption> = tracks.mapIndexed { index, track ->
-    TrackOption(
-        id = "$HLS_AUDIO_OPTION_PREFIX$index",
-        label = track.label,
-        selected = index == selectedTypeIndex,
-    )
-}
+): List<TrackOption> =
+    wireTrackOptions(tracks.map { it.label }, selectedTypeIndex, HLS_AUDIO_OPTION_PREFIX)
 
 /** The `audio:<typeIndex>` ordinal, or null when [optionId] is an ExoPlayer "group:track" id. */
 internal fun parseHlsAudioOptionId(optionId: String): Int? =
-    optionId.removePrefix(HLS_AUDIO_OPTION_PREFIX)
-        .takeIf { it != optionId }
-        ?.toIntOrNull()
-
-private const val HLS_AUDIO_OPTION_PREFIX = "audio:"
+    parsePrefixedOrdinal(optionId, HLS_AUDIO_OPTION_PREFIX)
 
 /**
  * An HLS session streams only the chosen subtitle track, so ExoPlayer's [Tracks] cannot list
@@ -82,20 +73,22 @@ private const val HLS_AUDIO_OPTION_PREFIX = "audio:"
 internal fun hlsSubtitleTrackOptions(
     wireTracks: List<PlayableSubtitleTrack>,
     chosenTypeIndex: Int?,
-): List<TrackOption> = wireTracks.mapIndexed { index, track ->
-    TrackOption(
-        id = "$HLS_SUBTITLE_OPTION_PREFIX$index",
-        label = track.label,
-        selected = index == chosenTypeIndex,
-    )
-}
+): List<TrackOption> =
+    wireTrackOptions(wireTracks.map { it.label }, chosenTypeIndex, HLS_SUBTITLE_OPTION_PREFIX)
 
 /** The `sub:<typeIndex>` ordinal, or null when [optionId] is an ExoPlayer "group:track" id. */
 internal fun parseHlsSubtitleOptionId(optionId: String): Int? =
-    optionId.removePrefix(HLS_SUBTITLE_OPTION_PREFIX)
-        .takeIf { it != optionId }
-        ?.toIntOrNull()
+    parsePrefixedOrdinal(optionId, HLS_SUBTITLE_OPTION_PREFIX)
 
+private fun wireTrackOptions(labels: List<String>, selectedIndex: Int?, prefix: String) =
+    labels.mapIndexed { index, label ->
+        TrackOption("$prefix$index", label, selected = index == selectedIndex)
+    }
+
+private fun parsePrefixedOrdinal(optionId: String, prefix: String): Int? =
+    optionId.removePrefix(prefix).takeIf { it != optionId }?.toIntOrNull()
+
+private const val HLS_AUDIO_OPTION_PREFIX = "audio:"
 private const val HLS_SUBTITLE_OPTION_PREFIX = "sub:"
 
 /**

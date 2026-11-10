@@ -1,13 +1,9 @@
 package com.igloo.blindpenguincoder.feature.movies
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -27,8 +23,8 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHomeMovies
 import com.igloo.blindpenguincoder.testMovieDetails
@@ -58,7 +54,6 @@ class PlaybackSettingsDialogTest {
 
     private var detailsState by mutableStateOf(MovieDetailsUiState())
     private var selection = PlaybackSelection()
-    private var hostActivity: Activity? = null
 
     /** Selections repaint through the real mapping, exactly as the view model republishes. */
     private fun repaint() {
@@ -76,8 +71,6 @@ class PlaybackSettingsDialogTest {
         selection = PlaybackSelection()
         detailsState = loadedState()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     home = HomeUiState(
@@ -89,10 +82,6 @@ class PlaybackSettingsDialogTest {
                     detailsActions = MovieDetailsActions.Library(
                         onToggleWatched = {},
                         onToggleLike = {},
-                        onWatchTogether = {},
-                        onTechnicalDetails = {},
-                        onIdentifyMovie = {},
-                        onDeleteMovie = {},
                         onSelectPlaybackMode = {
                             selection = selection.copy(mode = it)
                             repaint()
@@ -136,13 +125,6 @@ class PlaybackSettingsDialogTest {
     private fun press(key: Key, times: Int = 1) {
         composeRule.onNodeWithTag("playback_settings_dialog")
             .performKeyInput { repeat(times) { pressKey(key) } }
-        composeRule.waitForIdle()
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
         composeRule.waitForIdle()
     }
 
@@ -246,7 +228,7 @@ class PlaybackSettingsDialogTest {
         setShellContent()
         openDialog()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("playback_settings_dialog").assertDoesNotExist()
         composeRule.onNodeWithTag("movie_details").assertExists()
@@ -274,7 +256,7 @@ class PlaybackSettingsDialogTest {
         press(Key.DirectionDown)
         press(Key.DirectionCenter)
         composeRule.onNodeWithTag("playback_mode_remux").assertIsSelected()
-        pressBack()
+        composeRule.pressBack()
 
         openDialog()
 

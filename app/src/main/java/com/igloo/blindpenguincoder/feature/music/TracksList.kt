@@ -36,7 +36,6 @@ import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.TrackRowSkeleton
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.feature.shared.asScrollPadding
-import com.igloo.blindpenguincoder.feature.shared.hasMoreActions
 
 /**
  * The Tracks tab's flat list: letter headers the eye reads, rows with three actions each, and
@@ -62,8 +61,6 @@ internal fun TracksList(
     lastFocusedTrack: TrackFocusMemory?,
     onTrackFocused: (TrackFocusMemory) -> Unit,
     focusOwnership: PaneFocusOwnership,
-    canOpenAlbum: Boolean,
-    canOpenArtist: Boolean,
     onLoadMore: () -> Unit,
     onRetryAppend: () -> Unit,
     onPlayTrack: (Long) -> Unit,
@@ -160,11 +157,7 @@ internal fun TracksList(
                         focus = focus,
                         onPlay = { onPlayTrack(track.id) },
                         onToggleLike = { onToggleLike(track.id) },
-                        onOpenMore = if (track.hasMoreActions(canOpenAlbum, canOpenArtist)) {
-                            { bounds -> onOpenMore(track, bounds) }
-                        } else {
-                            null
-                        },
+                        onOpenMore = { bounds -> onOpenMore(track, bounds) },
                         onColumnFocused = { column ->
                             focusOwnership.onItemFocusChanged(track.id, true)
                             onTrackFocused(TrackFocusMemory(track.id, column))

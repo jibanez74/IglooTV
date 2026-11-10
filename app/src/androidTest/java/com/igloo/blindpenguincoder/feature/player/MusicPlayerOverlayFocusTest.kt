@@ -1,13 +1,9 @@
 package com.igloo.blindpenguincoder.feature.player
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -24,12 +20,12 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueMovies
@@ -58,15 +54,12 @@ class MusicPlayerOverlayFocusTest {
     private var albumDetailsState by mutableStateOf(AlbumDetailsUiState())
     private val engines = mutableListOf<FakeMusicPlayerEngine>()
     private val engineRequests = mutableListOf<MusicPlayRequest>()
-    private var hostActivity: Activity? = null
 
     private fun setShellContent() {
         albumDetailsState = AlbumDetailsUiState()
         engines.clear()
         engineRequests.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     // Hero hidden so the rails own the pane's entry anchor: this suite's
@@ -92,13 +85,6 @@ class MusicPlayerOverlayFocusTest {
                     },
                 )
             }
-        }
-        composeRule.waitForIdle()
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
         }
         composeRule.waitForIdle()
     }
@@ -160,7 +146,7 @@ class MusicPlayerOverlayFocusTest {
         assertEquals(setOf(901L, 902L, 903L), request.tracks.map { it.id }.toSet())
         assertEquals(3, request.tracks.size)
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("music_player").assertDoesNotExist()
         composeRule.onNodeWithTag("album_shuffle").assertIsFocused()
@@ -182,7 +168,7 @@ class MusicPlayerOverlayFocusTest {
         assertEquals(listOf(901L, 902L, 903L), request.tracks.map { it.id })
         assertEquals(listOf("start:1:0.0:true"), engines.single().playbackCommands)
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("music_player").assertDoesNotExist()
         composeRule.onNodeWithTag("track_play_902").assertIsFocused()
@@ -204,7 +190,7 @@ class MusicPlayerOverlayFocusTest {
             SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility),
         )
 
-        pressBack()
+        composeRule.pressBack()
 
         detailsLayer.assert(
             SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility),
@@ -217,7 +203,7 @@ class MusicPlayerOverlayFocusTest {
         openAlbumCard()
         pressPlayAlbum()
 
-        pressBack()
+        composeRule.pressBack()
 
         // The host's own Back handlers stayed silent while the player was up: one press closed
         // only the player, its engine is torn down, and focus is back on Play Album.
@@ -226,7 +212,7 @@ class MusicPlayerOverlayFocusTest {
         composeRule.onNodeWithTag("album_details").assertExists()
         composeRule.onNodeWithTag("album_play").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         // The next press is the album overlay's, landing back on the card that opened it.
         composeRule.onNodeWithTag("album_details").assertDoesNotExist()

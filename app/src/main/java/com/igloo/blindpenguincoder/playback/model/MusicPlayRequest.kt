@@ -8,6 +8,7 @@ import kotlinx.serialization.Serializable
  * it. [tracks] is the queue in play order and [startIndex] the entry the press named; an
  * endless [source] grows the queue while it plays (see `MusicQueueController`).
  */
+@Serializable
 data class MusicPlayRequest(
     val source: MusicQueueSource,
     val startIndex: Int,

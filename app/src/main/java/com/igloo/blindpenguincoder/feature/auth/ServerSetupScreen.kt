@@ -12,17 +12,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooTextField
-import com.igloo.blindpenguincoder.core.ui.IglooText
-import com.igloo.blindpenguincoder.core.design.IglooTheme
 
 @Composable
 fun ServerSetupScreen(viewModel: ServerSetupViewModel) {
@@ -59,14 +54,7 @@ fun ServerSetupScreen(viewModel: ServerSetupViewModel) {
             modifier = Modifier
                 .fillMaxWidth(),
         )
-        if (state.isConnecting) {
-            IglooText(
-                text = "Checking server…",
-                style = IglooTheme.typography.bodyMedium,
-                color = IglooTheme.colors.mutedForeground,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-            )
-        }
+        if (state.isConnecting) AuthBusyText("Checking server…")
         IglooButton(
             text = if (state.isConnecting) "Connecting…" else "Connect",
             onClick = submit,

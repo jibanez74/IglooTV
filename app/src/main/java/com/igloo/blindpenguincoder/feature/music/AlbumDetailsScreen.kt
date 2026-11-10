@@ -3,16 +3,14 @@ package com.igloo.blindpenguincoder.feature.music
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.feature.shared.DetailsHero
 import com.igloo.blindpenguincoder.feature.shared.DetailsHeroSkeleton
@@ -45,7 +43,7 @@ fun AlbumDetailsScreen(
     onPlayTrack: (Int) -> Unit,
     likes: TrackLikesUiState,
     onToggleLike: (Long) -> Unit,
-    onOpenMusician: ((Long) -> Unit)?,
+    onOpenMusician: (Long) -> Unit,
     playReturnRequester: FocusRequester,
     modifier: Modifier = Modifier,
     // Parameterized so tests can force both states: the reading-stop chain below depends on it,
@@ -105,7 +103,7 @@ private fun AlbumDetailsContent(
     onShuffle: () -> Unit,
     onPlayTrack: (Int) -> Unit,
     onToggleLike: (Long) -> Unit,
-    onOpenMusician: ((Long) -> Unit)?,
+    onOpenMusician: (Long) -> Unit,
     onOpenMore: (Int, Rect) -> Unit,
 ) {
     val layout = IglooTheme.layout
@@ -118,65 +116,44 @@ private fun AlbumDetailsContent(
     // -> facts panel — and, while a screen reader runs, the hero info reading stop above the
     // actions. Nothing is left to a spatial search, because the shell composed underneath would
     // be a candidate.
-    val heroInfoStop = remember { FocusRequester() }
-    val primaryAction = remember { FocusRequester() }
-    val shuffleRequester = remember { FocusRequester() }
     val factsStop = remember { FocusRequester() }
-    // Under a screen reader the hero's summary stop owns the entry anchor, as on every details
-    // page (section 11.4.1): it is where TalkBack settles once the skeleton gives way.
-    val summaryFirst = spokenAccessibilityEnabled
-    val heroInfoRequester = if (summaryFirst) entryRequester else heroInfoStop
-    val primaryRequester = if (summaryFirst) primaryAction else entryRequester
-    // Chips are focus targets only with a musician screen to open and a real id to open it on.
-    val actionableArtists = onOpenMusician != null && album.artists.all { it.id != null }
+    val hero = rememberMusicHeroFocus(entryRequester, spokenAccessibilityEnabled, hasHeroActions)
+    // Chips are focus targets only with a real id to open the musician screen on.
+    val actionableArtists = album.artists.all { it.id != null }
     val artistRequesters = remember(album.artists.size, actionableArtists) {
         if (actionableArtists) List(album.artists.size) { FocusRequester() } else emptyList()
     }
-    var playLaunchSite by rememberPlayLaunchSite()
-    val playReturnRow = playLaunchSite.rowIn(trackRows)
+    val playReturnRow = hero.launchSite.rowIn(trackRows)
     // With no action row (and no summary stop) the facts panel owns the entry anchor: the
     // screen's requester *is* the panel's, which lands entry focus there with every edge wired
     // at the panel untouched.
-    val factsRequester = if (hasHeroActions || summaryFirst) factsStop else entryRequester
-    // Up from the rows and the panel returns to whichever action the user left, not
-    // unconditionally to Play Album — the same focus memory the movie action row keeps.
-    var lastFocusedAction by remember(hasHeroActions, summaryFirst) {
-        mutableStateOf(primaryRequester.takeIf { hasHeroActions })
-    }
+    val factsRequester = if (hasHeroActions || hero.summaryFirst) factsStop else entryRequester
     val belowActions = artistRequesters.firstOrNull() ?: trackRequesters.firstOrNull()?.play ?: factsRequester
-    val upFromBelow = when {
-        hasHeroActions -> lastFocusedAction
-        spokenAccessibilityEnabled -> heroInfoRequester
-        else -> null
-    }
 
     MusicDetailsBody(
         notice = likes.notice,
         noticeTag = "album_notice",
         hero = {
             DetailsHero(imageUrl = album.coverUrl, backdropTag = "album_backdrop") { overMedia ->
-                AlbumDetailsHeader(
-                    album = album,
+                MusicDetailsHeader(
+                    focus = hero,
+                    artworkUrl = album.coverUrl,
+                    artworkRadius = IglooTheme.radius.lg,
+                    fallbackIcon = IglooIcons.Music,
                     overMedia = overMedia,
-                    hasHeroActions = hasHeroActions,
-                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
-                    heroInfoRequester = heroInfoRequester,
-                    primaryRequester = primaryRequester,
-                    playReturnRequester = playReturnRequester.takeIf { playLaunchSite == PlayLaunchSite.Primary },
-                    shuffleRequester = shuffleRequester,
-                    shuffleReturnRequester = playReturnRequester.takeIf { playLaunchSite == PlayLaunchSite.Shuffle },
+                    playReturnRequester = playReturnRequester,
                     downRequester = belowActions,
-                    onActionFocused = { lastFocusedAction = it },
-                    onPlayAlbum = {
-                        playLaunchSite = PlayLaunchSite.Primary
-                        onPlayAlbum()
-                    },
-                    onShuffle = {
-                        playLaunchSite = PlayLaunchSite.Shuffle
-                        onShuffle()
-                    },
+                    primaryText = "Play Album",
+                    primarySemanticLabel = "Play Album",
+                    primaryTag = "album_play",
+                    shuffleSemanticLabel = "Shuffle album",
+                    shuffleTag = "album_shuffle",
+                    onPrimary = onPlayAlbum,
+                    onShuffle = onShuffle,
                     modifier = Modifier.heroHeaderModifier(this),
-                )
+                ) { requester, down ->
+                    AlbumHeroInfo(album, overMedia, hero.summaryFirst, requester, down)
+                }
             }
         },
     ) {
@@ -186,12 +163,12 @@ private fun AlbumDetailsContent(
             artistRequesters = artistRequesters,
             trackRequesters = trackRequesters,
             factsRequester = factsRequester,
-            upFromBelow = upFromBelow,
+            upFromBelow = hero.upFromBelow,
             playReturnRow = playReturnRow,
             playReturnRequester = playReturnRequester,
-            onOpenMusician = onOpenMusician?.takeIf { actionableArtists },
+            onOpenMusician = onOpenMusician.takeIf { actionableArtists },
             onPlayTrack = { index ->
-                playLaunchSite = PlayLaunchSite.Row(index)
+                hero.launchSite = PlayLaunchSite.Row(index)
                 onPlayTrack(index)
             },
             onToggleLike = onToggleLike,

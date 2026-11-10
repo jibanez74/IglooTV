@@ -17,7 +17,7 @@ fun TrackListItem.toMusicPlayTrack(): MusicPlayTrack = MusicPlayTrack(
 )
 
 /**
- * A finite queue's shuffle (docs/music-shuffle.md): Fisher-Yates over a copy of the known
+ * A finite queue's shuffle: Fisher-Yates over a copy of the known
  * membership, never the cached list itself, with duplicate ids dropped first so the queue
  * cannot hold one track twice.
  */

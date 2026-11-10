@@ -9,9 +9,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
@@ -32,9 +30,11 @@ import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.compose.ui.text.TextLayoutResult
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.clickActionLabel
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.isHeading
 import com.igloo.blindpenguincoder.testMovieDetails
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -93,10 +93,6 @@ class MovieDetailsAccessibilityTest {
                     actions = MovieDetailsActions.Library(
                         onToggleWatched = { watchedToggles += 1 },
                         onToggleLike = { likeToggles += 1 },
-                        onWatchTogether = { menuSelections += "Watch Together" },
-                        onTechnicalDetails = { menuSelections += "Technical Details" },
-                        onIdentifyMovie = { menuSelections += "Identify Movie" },
-                        onDeleteMovie = { menuSelections += "Delete Movie" },
                         onSelectPlaybackMode = {},
                         onSelectAudioTrack = {},
                         onSelectSubtitle = {},
@@ -540,16 +536,10 @@ class MovieDetailsAccessibilityTest {
         pane.assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Heat"))
     }
 
-    private fun isHeading() = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
-
     private fun overviewLayout(text: String): TextLayoutResult {
         val results = mutableListOf<TextLayoutResult>()
         composeRule.onNodeWithText(text)
             .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
         return results.first()
     }
-
-    /** What TalkBack offers as "double tap to …" — it must match what the press actually does. */
-    private fun SemanticsNodeInteraction.clickActionLabel(): String? =
-        fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label
 }

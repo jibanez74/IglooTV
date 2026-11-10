@@ -6,6 +6,7 @@ import com.igloo.blindpenguincoder.core.ui.formatRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTimeThroughSeconds
 import com.igloo.blindpenguincoder.core.ui.progressFraction
+import com.igloo.blindpenguincoder.data.model.ExtraVideo
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import com.igloo.blindpenguincoder.images.youtubeThumbnailUrl
@@ -85,6 +86,10 @@ internal data class VideoSource(
     val site: String,
     val key: String,
 )
+
+/** The library's own extras; [ExtraVideo] carries exactly [VideoSource]'s fields. */
+internal fun List<ExtraVideo>.toVideoSources(): List<VideoSource> =
+    map { VideoSource(id = it.id, title = it.title, type = it.type, site = it.site, key = it.key) }
 
 /** The top [CAST_LIMIT] of the billing, a blank character left out. */
 internal fun castMembers(cast: List<CastCredit>, apiBaseUrl: String): List<CastMemberUi> = cast

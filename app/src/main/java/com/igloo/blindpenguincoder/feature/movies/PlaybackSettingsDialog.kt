@@ -2,8 +2,6 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -76,9 +74,7 @@ internal fun PlaybackSettingsDialog(
             IglooRadioRow(
                 label = track.label,
                 selected = track.id == settings.selectedAudioId,
-                onSelect = track.id
-                    ?.takeIf { track.enabled }
-                    ?.let { id -> { onSelectAudio(id) } },
+                onSelect = track.id?.let { id -> { onSelectAudio(id) } },
                 modifier = Modifier
                     .rowFocus(row++)
                     .testTag(
@@ -92,11 +88,7 @@ internal fun PlaybackSettingsDialog(
             IglooRadioRow(
                 label = track.label,
                 selected = track.id == settings.selectedSubtitleId,
-                onSelect = if (track.enabled) {
-                    { onSelectSubtitle(track.id) }
-                } else {
-                    null
-                },
+                onSelect = { onSelectSubtitle(track.id) },
                 modifier = Modifier
                     .rowFocus(row++)
                     .testTag(track.id?.let { "subtitle_$it" } ?: "subtitle_none"),

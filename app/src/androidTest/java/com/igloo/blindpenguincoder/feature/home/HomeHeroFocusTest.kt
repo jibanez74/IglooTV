@@ -1,22 +1,17 @@
 package com.igloo.blindpenguincoder.feature.home
 
-import android.app.Activity
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
-import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -31,6 +26,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -61,7 +57,6 @@ class HomeHeroFocusTest {
     private var heroState by mutableStateOf<HomeHeroState>(HomeHeroState.Loading)
     private val opened = mutableListOf<Long>()
     private val showsOpened = mutableListOf<Long>()
-    private var hostActivity: Activity? = null
 
     private val bothPages = HomeHeroState.Loaded(listOf(testHero, testShowHero))
 
@@ -74,15 +69,11 @@ class HomeHeroFocusTest {
 
     private fun setShellContent(
         initialHero: HomeHeroState,
-        canOpenMovies: Boolean = false,
-        canOpenShows: Boolean = false,
     ) {
         heroState = initialHero
         opened.clear()
         showsOpened.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     home = HomeUiState(
@@ -91,17 +82,10 @@ class HomeHeroFocusTest {
                         latestMovies = IglooRailState.Loaded(testHomeMovies),
                         latestShows = IglooRailState.Loaded(testHomeShows),
                     ),
-                    onMovieSelected = if (canOpenMovies) { id -> opened += id } else null,
-                    onShowSelected = if (canOpenShows) { id -> showsOpened += id } else null,
+                    onMovieSelected = { id -> opened += id },
+                    onShowSelected = { id -> showsOpened += id },
                 )
             }
-        }
-        composeRule.waitForIdle()
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
         }
         composeRule.waitForIdle()
     }
@@ -305,7 +289,7 @@ class HomeHeroFocusTest {
         press(Key.DirectionRight)
 
         // Back opens the spine on Home; right comes back in through the pane's entry anchor.
-        pressBack()
+        composeRule.pressBack()
         val home = composeRule.onNodeWithContentDescription("Home").assertIsFocused()
         home.performKeyInput { pressKey(Key.DirectionRight) }
 
@@ -314,7 +298,7 @@ class HomeHeroFocusTest {
 
     @Test
     fun eachPageAnnouncesItsFeatureAndPlaceAsOneNode() {
-        setShellContent(bothPages, canOpenMovies = true, canOpenShows = true)
+        setShellContent(bothPages)
 
         hero().assertContentDescriptionEquals(moviePageDescription).assertHasClickAction()
         // The words on the plate are the target's to speak, not nodes of their own.
@@ -326,25 +310,10 @@ class HomeHeroFocusTest {
         composeRule.onAllNodesWithText("Severance").assertCountEquals(0)
     }
 
-    @Test
-    fun withNothingToOpenTheMoviePageAnnouncesNoAction() {
-        setShellContent(bothPages, canOpenMovies = false)
-
-        hero().assertHasNoClickAction()
-    }
-
-    @Test
-    fun withNothingToOpenTheShowPageAnnouncesNoAction() {
-        setShellContent(bothPages, canOpenMovies = true, canOpenShows = false)
-        press(Key.DirectionRight)
-
-        hero().assertContentDescriptionEquals(showPageDescription).assertHasNoClickAction()
-    }
-
     /** Each page opens its own details page: the movie's, then the show's. */
     @Test
     fun selectOpensWhicheverPageIsShowing() {
-        setShellContent(bothPages, canOpenMovies = true, canOpenShows = true)
+        setShellContent(bothPages)
         press(Key.DirectionRight)
 
         press(Key.DirectionCenter)

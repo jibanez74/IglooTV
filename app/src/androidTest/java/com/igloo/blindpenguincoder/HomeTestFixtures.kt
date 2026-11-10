@@ -13,7 +13,7 @@ import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
 import com.igloo.blindpenguincoder.data.model.TrackListItem
-import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.feature.home.HomeContinueItem
 import com.igloo.blindpenguincoder.feature.home.HomeHero
 import com.igloo.blindpenguincoder.feature.home.HomeHeroKind
@@ -24,7 +24,7 @@ import com.igloo.blindpenguincoder.feature.library.LibraryGenre
 import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
-import com.igloo.blindpenguincoder.feature.movies.AboutUi
+import com.igloo.blindpenguincoder.feature.movies.movieAboutFacts
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
 import com.igloo.blindpenguincoder.feature.movies.PlaybackSelection
@@ -243,10 +243,6 @@ internal val testShowHero = HomeHero(
 internal val inertDetailsActions = MovieDetailsActions.Library(
     onToggleWatched = {},
     onToggleLike = {},
-    onWatchTogether = {},
-    onTechnicalDetails = {},
-    onIdentifyMovie = {},
-    onDeleteMovie = {},
     onSelectPlaybackMode = {},
     onSelectAudioTrack = {},
     onSelectSubtitle = {},
@@ -260,7 +256,7 @@ internal val inertDetailsActions = MovieDetailsActions.Library(
 @Composable
 internal fun rememberInertVideoPlayerViewModel(): VideoPlayerViewModel = remember {
     VideoPlayerViewModel(
-        saveProgress = { _, _ -> ApiResult.Success(WatchProgressUpdateData(watched = false)) },
+        saveProgress = { _, _ -> ApiResult.Success(WatchedData(watched = false)) },
         onWatchedStateCommitted = {},
     )
 }
@@ -355,7 +351,7 @@ internal fun testMovieDetails(
     keyCrew = listOf(CrewEntry("Director", "Michael Mann")),
     cast = cast,
     extraVideos = extraVideos,
-    about = AboutUi(
+    about = movieAboutFacts(
         production = "Regency Enterprises",
         language = "English",
         budget = "$60,000,000",
@@ -389,7 +385,7 @@ internal fun testTheaterMovieDetails(
     extraVideos = extraVideos,
 ).copy(
     mediaBadges = emptyList(),
-    about = AboutUi(
+    about = movieAboutFacts(
         production = "Regency Enterprises",
         language = "English",
         budget = "$60,000,000",

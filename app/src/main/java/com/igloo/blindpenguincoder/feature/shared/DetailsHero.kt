@@ -312,32 +312,48 @@ internal fun DetailsHeroInfo(
                 maxLines = 1,
             )
         }
-        Row(
-            modifier = Modifier.clearAndSetSemantics {
-                contentDescription = metadataDescription
-            },
-            horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (ratingBadge != null) {
-                RatingBadge(
-                    spec = ratingBadge,
-                    radius = IglooTheme.radius.pill,
-                    verticalPadding = IglooTheme.spacing.xs,
-                )
-            }
-            chips.forEach { chip -> DetailChip(text = chip, overMedia = overMedia) }
-            if (plainLine != null) {
-                IglooText(
-                    text = plainLine,
-                    style = IglooTheme.typography.label.overMedia(overMedia),
-                    color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
-                    maxLines = 1,
-                    modifier = Modifier.padding(start = IglooTheme.spacing.xs),
-                )
-            }
-        }
+        HeroMetadataRow(
+            ratingBadge = ratingBadge,
+            chips = chips,
+            plainLine = plainLine,
+            overMedia = overMedia,
+            modifier = Modifier.clearAndSetSemantics { contentDescription = metadataDescription },
+        )
         if (genresLine != null) HeroGenresLine(genresLine, overMedia)
+    }
+}
+
+/** A hero's metadata row, Home's and the details pages': pill rating, chips, then plain text. */
+@Composable
+internal fun HeroMetadataRow(
+    ratingBadge: RatingBadgeSpec?,
+    chips: List<String>,
+    plainLine: String?,
+    overMedia: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (ratingBadge != null) {
+            RatingBadge(
+                spec = ratingBadge,
+                radius = IglooTheme.radius.pill,
+                verticalPadding = IglooTheme.spacing.xs,
+            )
+        }
+        chips.forEach { chip -> DetailChip(text = chip, overMedia = overMedia) }
+        if (plainLine != null) {
+            IglooText(
+                text = plainLine,
+                style = IglooTheme.typography.label.overMedia(overMedia),
+                color = if (overMedia) OVER_MEDIA_SECONDARY else IglooTheme.colors.mutedForeground,
+                maxLines = 1,
+                modifier = Modifier.padding(start = IglooTheme.spacing.xs),
+            )
+        }
     }
 }
 

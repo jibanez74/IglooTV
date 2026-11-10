@@ -65,10 +65,6 @@ sealed interface MovieDetailsActions {
     data class Library(
         val onToggleWatched: () -> Unit,
         val onToggleLike: () -> Unit,
-        val onWatchTogether: () -> Unit,
-        val onTechnicalDetails: () -> Unit,
-        val onIdentifyMovie: () -> Unit,
-        val onDeleteMovie: () -> Unit,
         /**
          * The Playback Settings dialog's selections. Opening the dialog is the host's business
          * (like `onPlayVideo` — it is a host-owned overlay), so there is no open callback here;
@@ -227,22 +223,22 @@ fun MovieDetailsScreen(
         }
 
         // Last child, over the body, like every overlay in the stack. Playback Settings opens
-        // the host-owned dialog below; the remaining items fire stubbed callbacks and close the
-        // menu, nothing more, until each feature lands.
+        // the host-owned dialog below; the remaining items only close the menu until each
+        // feature lands.
         val menuAnchor = moreAnchor
         if (moreMenuOpen && actions is MovieDetailsActions.Library && menuAnchor != null) {
             IglooMenu(
                 title = "More options",
                 items = buildList {
                     add(menuItem("Playback Settings", onOpenPlaybackSettings, onDismissMoreMenu))
-                    add(menuItem("Watch Together", actions.onWatchTogether, onDismissMoreMenu))
-                    add(menuItem("Technical Details", actions.onTechnicalDetails, onDismissMoreMenu))
+                    add(menuItem("Watch Together", {}, onDismissMoreMenu))
+                    add(menuItem("Technical Details", {}, onDismissMoreMenu))
                     if (isAdmin) {
-                        add(menuItem("Identify Movie", actions.onIdentifyMovie, onDismissMoreMenu))
+                        add(menuItem("Identify Movie", {}, onDismissMoreMenu))
                         add(
                             menuItem(
                                 "Delete Movie",
-                                actions.onDeleteMovie,
+                                {},
                                 onDismissMoreMenu,
                             ).copy(destructive = true, separatorBefore = true),
                         )
@@ -375,7 +371,6 @@ private fun DetailsContent(
     onOpenMoreMenu: () -> Unit,
     onMoreAnchorPositioned: (Rect) -> Unit,
 ) {
-    val colors = IglooTheme.colors
     val layout = IglooTheme.layout
     // What the hero's action row is: the library page always has Play, while the in-theaters page
     // has Play Trailer only for as long as TMDB lists one (section 11.4.2).
@@ -400,7 +395,7 @@ private fun DetailsContent(
     val progressRetryRequester = remember { FocusRequester() }
     val hasCast = movie.cast.isNotEmpty()
     val hasExtras = movie.extraVideos.isNotEmpty()
-    val hasAbout = !movie.about.isEmpty
+    val hasAbout = movie.about.isNotEmpty()
     val stops = spokenAccessibilityEnabled
     // Under a screen reader the hero's summary stop owns the entry anchor (section 11.4.1): the
     // skeleton giving way drops focus, Android hands it to the first focusable — the summary —
@@ -415,7 +410,6 @@ private fun DetailsContent(
     // the section untouched. On a page that is only prose the anchor attaches to nothing at
     // all, which is why the entry request is made safely.
     val sectionAnchor = entryRequester.takeIf { !hasHeroActions && !stops }
-    val overviewRequester = overviewStop
     val castEntryRequester = if (sectionAnchor != null && hasCast) sectionAnchor else castEntry
     val extrasEntryRequester =
         if (sectionAnchor != null && !hasCast && hasExtras) sectionAnchor else extrasEntry
@@ -430,7 +424,7 @@ private fun DetailsContent(
         mutableStateOf(primaryRequester.takeIf { hasHeroActions })
     }
     val belowProgressError = when {
-        stops -> overviewRequester
+        stops -> overviewStop
         hasCast -> castEntryRequester
         hasExtras -> extrasEntryRequester
         hasAbout -> aboutRequester
@@ -490,7 +484,7 @@ private fun DetailsContent(
         MovieDetailsSections(
             movie = movie,
             spokenAccessibilityEnabled = spokenAccessibilityEnabled,
-            overviewRequester = overviewRequester,
+            overviewRequester = overviewStop,
             keyCrewRequester = keyCrewStop,
             castEntryRequester = castEntryRequester,
             extrasEntryRequester = extrasEntryRequester,

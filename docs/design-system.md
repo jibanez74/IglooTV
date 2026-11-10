@@ -861,7 +861,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg` by default and `artworkRadius = radius.pill` for a musician's circle — §8.2's circle is a radius the focus ring clamps, not a second component — with `centerText` for the text under it and `semanticLabel` when "Title, Year" is not the sentence to read, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. An optional `detail` third line in the context line's tier (a show's cast card: "228 episodes") joins the spoken sentence. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose fully spoken remaining-time description joins the cleared node ("Title, Year, 2 hours and 20 minutes remaining", §12) so the bar can never render unannounced. The description is semantic only; no numeric percentage or remaining-time caption renders on the card. |
 | `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), the minimal `IglooFocusableEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). Takes the pane's `contentInset` and splits it by node per §8.3 — heading and non-scrolling states pad, the `LazyRow` carries it as `contentPadding` so cards bleed off the panel edge. Optional `upFocusRequester` / `downFocusRequester` pin the vertical edges for a rail between hand-wired neighbours (a details page's sections) on every card **and** on whichever anchor the state holds — skeleton cell, Retry or empty box — so no state leaves an edge to a spatial search; null leaves it spatial, as Home's column wants. |
 | `IglooFocusableEmpty` | §10 empty state, minimal variant only: faded icon + one line, as the pane's focusable anchor announcing the line when focused — no live region (§6.3). The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
-| `IglooRadioListDialog` | The scrimmed radio-list dialog behind Playback Settings and the player's track and chapter menus: the `IglooConfirmDialog` recipe (§9.3) around one flat, scrolling list of `IglooRadioRow`s and a pinned Done. The caller draws the rows, applying `rowFocus(n)` to row `n`, which walks up/down and onto Done and cancels every other direction; entry focus lands on `entryIndex`. |
+| `IglooRadioListDialog` | The scrimmed radio-list dialog behind Playback Settings and the player's track and chapter menus: the `IglooConfirmDialog` recipe (§9.3) — both, and the player's resume prompt, sit on the one `IglooDialogCard` frame (scrim, reveal, card, pane title, heading) — around one flat, scrolling list of `IglooRadioRow`s and a pinned Done. The caller draws the rows, applying `rowFocus(n)` to row `n`, which walks up/down and onto Done and cancels every other direction; entry focus lands on `entryIndex`. |
 | `IglooPinnedError` | A screen's full-screen error: `IglooInlineError` centred in the safe area at `dialogWidth`, its one action pinned in every direction because the host is still composed underneath. Assertive — it is the only region on screen. |
 | `ProgressTrack` | The one thin progress bar: 4dp, a ground and a fill, square where it sits flush on an edge (poster card, seek bar) and `rounded` where it stands free (the resume strip, the popularity meter). |
 | `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. A card whose text sits over the art hoists its `rememberArtworkState` so the §3.2 treatment follows the decode (the In Theaters card). |
@@ -889,9 +889,10 @@ in another section.
 The app deliberately does **not** use Material theming. `IglooTheme` is the only source of
 colors, type, and dimensions.
 
-### 9.2 `androidx.tv.material3` (1.1.0)
+### 9.2 `androidx.tv.material3`
 
-Available and appropriate to adopt where it saves hand-rolling:
+Not a dependency: nothing adopted it, so the build dropped it (2026-11-10). Add it back if one of
+these saves hand-rolling:
 
 - `Surface` with `ClickableSurfaceScale` / `Glow` / `Border` — TV-aware focus indication that
   matches §6.1 if configured with our tokens
@@ -901,7 +902,7 @@ Available and appropriate to adopt where it saves hand-rolling:
 
 Adopt these for *behavior*; always configure them with Igloo tokens, never their defaults.
 
-Nothing has been adopted yet. The Movies tab strip (§9.1 `IglooTabRow`) deliberately stayed on
+The Movies tab strip (§9.1 `IglooTabRow`) deliberately stayed on
 Foundation: every other control wears §6.1's `focusRing`, and a Material tab would have been the
 one node in the app with a focus treatment of its own.
 
@@ -2297,7 +2298,7 @@ stop's sentence and the facts panel's row.
 skeleton's geometry-matched stub) and Shuffle (Ghost, over-media resting fill per §3.2). Both
 are live: Play Album maps the loaded details into the §11.8.2 music player synchronously (the
 tracks are already on screen; no deferred-play flow), and **Shuffle** maps the same queue
-through a Fisher-Yates permutation of a copy (`docs/music-shuffle.md`'s finite-queue model),
+through a Fisher-Yates permutation of a copy (`MusicQueueMapping`'s finite-queue model),
 starting at the top. The player's return requester is **parked on whichever control launched
 it** — Play Album, Shuffle, or one row's Play — saved across recreation, so its close lands
 back there. An album with **no tracks composes no action row at all** (web parity, and the
@@ -2709,7 +2710,7 @@ the position line: "Track N of M" for a finite queue, "Track N of <library total
 source is the album.
 
 **Refill.** An endless source refills through a pure-Kotlin `MusicQueueController` the screen
-owns, on `docs/music-shuffle.md`'s rules: within ten tracks of the end one batch of fifty is
+owns: within ten tracks of the end one batch of fifty is
 fetched, deduplicated within itself and against the whole queue, and appended to the engine
 (`appendTracks`, `addMediaItems`; nothing already in the playlist moves). Exactly one fetch is
 ever in flight — the loop is sequential — and leaving the screen cancels it, which is the
@@ -3185,8 +3186,8 @@ queue-shaped player (§11.5, §11.5.1, §11.5.2, §11.8.2, §9.1, §8.2).**
 - **§11.5.2** records the musician page: thumb-as-backdrop hero, Play all / Shuffle over the
   musician queue, a discography rail, every track as a row, a facts panel.
 - **§11.8.2:** the player takes a queue with a source — Album, Musician, TrackList finite;
-  LibraryInOrder and LibraryShuffle endless, refilled by a pure-Kotlin `MusicQueueController` on
-  `docs/music-shuffle.md`'s rules — with per-track metadata, per-source session ids and position
+  LibraryInOrder and LibraryShuffle endless, refilled by a pure-Kotlin `MusicQueueController`
+  — with per-track metadata, per-source session ids and position
   lines, a polite refill notice, and **no head trimming** (a recorded deviation; a 500-track
   ceiling bounds the queue and the saved request instead).
 - **§9.1 / §8.2:** `IglooPosterCard` gains `artworkRadius`, `centerText`, `semanticLabel` — the
@@ -3479,7 +3480,7 @@ Theaters rail opens a real page instead of being a focusable that announces noth
 
 **2026-08-16 — The detail screen stops moving under the user.**
 
-The refinement pass closing `movie-detail-next-steps.md`'s backlog. The through-line is layout
+The refinement pass closing the movie-detail backlog. The through-line is layout
 and focus stability: nothing on the screen may shift while the eye — or the focus ring — is
 committed to it.
 

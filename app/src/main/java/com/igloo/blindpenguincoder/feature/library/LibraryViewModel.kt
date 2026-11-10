@@ -443,14 +443,14 @@ class LibraryViewModel(
         sort: SortOrder,
         page: Long,
     ): ApiResult<LibraryPage> = when (filter) {
-        LibraryFilter.All -> source.all(page, PAGE_SIZE, sort)
+        LibraryFilter.All -> source.all(page, MAX_LIBRARY_PER_PAGE, sort)
         LibraryFilter.Liked -> {
             // Only reachable through the Liked tab, and the strip draws that tab only for a
             // source that has a liked list.
             val liked = checkNotNull(source.liked) { "${source.kind} keeps no liked list" }
-            liked(page, PAGE_SIZE, sort)
+            liked(page, MAX_LIBRARY_PER_PAGE, sort)
         }
-        is LibraryFilter.Genre -> source.genre(filter.id, page, PAGE_SIZE, sort)
+        is LibraryFilter.Genre -> source.genre(filter.id, page, MAX_LIBRARY_PER_PAGE, sort)
     }
 
     /**
@@ -553,10 +553,6 @@ class LibraryViewModel(
 
     private fun LibraryPage.toPosterItems(apiBaseUrl: String): List<PosterItem> =
         rows.map { it.toPosterItem(apiBaseUrl) }
-
-    private companion object {
-        const val PAGE_SIZE = MAX_LIBRARY_PER_PAGE
-    }
 }
 
 /** The screen's actions bound to this view model, so the host wires each pane in one line. */

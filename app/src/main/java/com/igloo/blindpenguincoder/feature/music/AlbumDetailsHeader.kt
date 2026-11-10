@@ -5,14 +5,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.testTag
@@ -26,93 +24,16 @@ import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.ProgressTrack
-import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
 import com.igloo.blindpenguincoder.feature.shared.HeroGenresLine
 import com.igloo.blindpenguincoder.feature.shared.HeroReadingStop
 import com.igloo.blindpenguincoder.feature.shared.HeroTitle
-
-/**
- * The album hero's content block (docs/design-system.md section 11.5.1): square cover left;
- * title, artist, metadata chips, genres, the Spotify popularity meter, and the action row
- * right. The section 3.2 over-media treatment is gated on [overMedia], exactly like the movie
- * hero: with no backdrop decoded behind it everything falls back to token colors.
- */
-@Composable
-internal fun AlbumDetailsHeader(
-    album: AlbumDetailsUi,
-    overMedia: Boolean,
-    hasHeroActions: Boolean,
-    spokenAccessibilityEnabled: Boolean,
-    heroInfoRequester: FocusRequester,
-    primaryRequester: FocusRequester,
-    /** The player's return node when Play Album launched it; null when another control did. */
-    playReturnRequester: FocusRequester?,
-    shuffleRequester: FocusRequester,
-    shuffleReturnRequester: FocusRequester?,
-    downRequester: FocusRequester,
-    onActionFocused: (FocusRequester) -> Unit,
-    onPlayAlbum: () -> Unit,
-    onShuffle: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // Up from the action row reaches the hero's reading stop only while a screen reader runs;
-    // otherwise the row keeps its pinned top edge and the stop is never composed as a target.
-    val actionUpRequester = if (spokenAccessibilityEnabled) heroInfoRequester else Cancel
-
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xl),
-        verticalAlignment = Alignment.Bottom,
-    ) {
-        HeroArtwork(
-            imageUrl = album.coverUrl,
-            aspect = IglooTheme.layout.albumAspect,
-            radius = IglooTheme.radius.lg,
-            fallbackIcon = IglooIcons.Music,
-        )
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
-        ) {
-            AlbumHeroInfo(
-                album = album,
-                overMedia = overMedia,
-                readingStop = spokenAccessibilityEnabled,
-                requester = heroInfoRequester,
-                // With no action row, down from the summary is the first section below.
-                downRequester = if (hasHeroActions) primaryRequester else downRequester,
-            )
-            if (hasHeroActions) {
-                MusicHeroActionRow(
-                    primaryText = "Play Album",
-                    primarySemanticLabel = "Play Album",
-                    primaryTag = "album_play",
-                    shuffleSemanticLabel = "Shuffle album",
-                    shuffleTag = "album_shuffle",
-                    overMedia = overMedia,
-                    primaryRequester = primaryRequester,
-                    primaryReturnRequester = playReturnRequester,
-                    shuffleRequester = shuffleRequester,
-                    shuffleReturnRequester = shuffleReturnRequester,
-                    upRequester = actionUpRequester,
-                    downRequester = downRequester,
-                    onActionFocused = onActionFocused,
-                    onPrimary = onPlayAlbum,
-                    onShuffle = onShuffle,
-                    modifier = Modifier.padding(top = IglooTheme.spacing.sm),
-                )
-            }
-        }
-    }
-}
 
 /**
  * The hero's prose: title, artist, metadata chips, genres, and the popularity meter — one
  * reading stop under a screen reader ([HeroReadingStop]).
  */
 @Composable
-private fun AlbumHeroInfo(
+internal fun AlbumHeroInfo(
     album: AlbumDetailsUi,
     overMedia: Boolean,
     readingStop: Boolean,

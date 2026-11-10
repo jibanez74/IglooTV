@@ -17,7 +17,7 @@ import java.net.SocketTimeoutException
 import javax.net.ssl.SSLHandshakeException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 /**
@@ -112,6 +112,6 @@ class SafeApiCallTest {
             decode = { it.body<AuthUser>() },
         )
 
-        assertTrue(result.error() is AppError.Unexpected)
+        assertNotNull((result.error() as AppError.Unexpected).debugMessage)
     }
 }

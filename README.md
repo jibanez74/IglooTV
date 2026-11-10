@@ -18,8 +18,8 @@ Igloo server so you can browse and play your library using a TV remote.
 
 **Development is ongoing; the app is pre-production.** On the show details page the extra videos
 do not play yet. Settings is a placeholder destination. Playlists, music
-play-stat reporting, and background music playback are also unfinished. See [known issues](docs/known-issues.md) and the
-[development guide](docs/development.md#feature-status-and-reference-documents) for more context.
+play-stat reporting, and background music playback are also unfinished. See
+[known issues](docs/known-issues.md) for more context.
 
 ## Requirements
 
@@ -140,10 +140,8 @@ behavior. This permission covers API requests, artwork, direct streams, HLS, and
 
 ## Further reading
 
-- [Development guide](docs/development.md): architecture, source organization, and contributing.
-- [Testing guide](docs/testing.md): test commands, device validation, and manual troubleshooting.
 - [Design system](docs/design-system.md): visual and interaction specifications.
-- [Known issues](docs/known-issues.md) and [cleanup backlog](docs/cleanup-backlog.md).
+- [Known issues](docs/known-issues.md).
 
 ## License
 

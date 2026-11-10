@@ -19,8 +19,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -97,15 +95,5 @@ class AuthGateTest {
         composeRule.awaitScreen("Welcome to Igloo")
         composeRule.onNodeWithContentDescription("Get started").performClick()
         composeRule.awaitScreen("Connect to your Igloo server")
-    }
-
-    private fun clearStoredSetup() {
-        val app = InstrumentationRegistry.getInstrumentation()
-            .targetContext.applicationContext as IglooApplication
-        runBlocking {
-            app.container.serverSettingsStore.clear()
-            app.container.profileRepository.clearAll()
-        }
-        app.container.serverUrlProvider.set(null)
     }
 }

@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.movies
 
+import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.ui.RatingTier
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
@@ -21,6 +22,7 @@ import com.igloo.blindpenguincoder.data.repository.watchProgressJson
 import com.igloo.blindpenguincoder.data.repository.watchedUpdateJson
 import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.ProgressUi
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.toByteArray
@@ -28,41 +30,34 @@ import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MovieDetailsViewModelTest {
+    @get:Rule
+    val main = MainDispatcherRule()
 
     // A view model outlives the test body — its scope is not runTest's child — so an unfinished
     // load would still be on Dispatchers.Main when the next class calls setMain. Closing cancels
     // every load, which is also what Back does in production.
     private val viewModels = mutableListOf<MovieDetailsViewModel>()
 
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-    }
-
     @After
     fun tearDown() {
         viewModels.forEach { it.close() }
         viewModels.clear()
-        Dispatchers.resetMain()
     }
 
     private fun viewModel(
@@ -190,10 +185,10 @@ class MovieDetailsViewModelTest {
             "http://igloo.test:8080/api/tmdb/images/w185/pacino.jpg",
             movie.cast.first().photoUrl,
         )
-        assertEquals("Regency Enterprises, Forward Pass", movie.about.production)
-        assertEquals("English", movie.about.language)
-        assertEquals("$60,000,000", movie.about.budget)
-        assertEquals("$187,436,818", movie.about.revenue)
+        assertEquals("Regency Enterprises, Forward Pass", movie.about.fact("Production"))
+        assertEquals("English", movie.about.fact("Original language"))
+        assertEquals("$60,000,000", movie.about.fact("Budget"))
+        assertEquals("$187,436,818", movie.about.fact("Revenue"))
         assertEquals(0.176f, requireNotNull(movie.progress).fraction, 0.001f)
         assertEquals("2h 20m left", movie.progress.remainingTimeLabel)
         assertEquals(
@@ -573,8 +568,8 @@ class MovieDetailsViewModelTest {
 
         assertNull(movie.ratingBadge)
         assertNull(movie.runtimeText)
-        assertNull(movie.about.budget)
-        assertNull(movie.about.revenue)
+        assertNull(movie.about.fact("Budget"))
+        assertNull(movie.about.fact("Revenue"))
         assertNull(movie.tagline)
         assertNull(movie.releaseDateText)
     }
@@ -622,7 +617,7 @@ class MovieDetailsViewModelTest {
 
     @Test
     fun `about is empty only when every field is absent`() = runTest {
-        suspend fun aboutFor(language: String?): AboutUi {
+        suspend fun aboutFor(language: String?): List<FactUi> {
             val http = routedHttp(
                 details = {
                     // Companies default empty; zero budget and revenue are scraper "no data".
@@ -635,8 +630,8 @@ class MovieDetailsViewModelTest {
         }
 
         // isEmpty drives whether the About section exists at all, so both answers matter.
-        assertTrue(aboutFor(language = null).isEmpty)
-        assertFalse(aboutFor(language = "en").isEmpty)
+        assertTrue(aboutFor(language = null).isEmpty())
+        assertFalse(aboutFor(language = "en").isEmpty())
     }
 
     /** Waits past the details publish for the one carrying resolved playback audio. */
@@ -724,7 +719,7 @@ class MovieDetailsViewModelTest {
         assertEquals(PlaybackMode.P720Mbps3, pending.selectedMode)
         // Tracks unknown: the audio section holds its inert stand-in.
         assertNull(pending.selectedAudioId)
-        assertFalse(pending.audioTracks.single().enabled)
+        assertNull(pending.audioTracks.single().id)
 
         releaseTechnical.complete(Unit)
         val settings = viewModel.awaitPlaybackSettings()
@@ -760,8 +755,8 @@ class MovieDetailsViewModelTest {
         viewModel.open(1)
         val movie = viewModel.awaitLoaded()
 
-        assertEquals("$1,234,568", movie.about.budget)
-        assertEquals("$99", movie.about.revenue)
+        assertEquals("$1,234,568", movie.about.fact("Budget"))
+        assertEquals("$99", movie.about.fact("Revenue"))
     }
 
     @Test
@@ -1536,4 +1531,7 @@ class MovieDetailsViewModelTest {
             ),
         )
     }
+
+    private fun List<FactUi>.fact(label: String): String? = firstOrNull { it.label == label }?.value
+
 }

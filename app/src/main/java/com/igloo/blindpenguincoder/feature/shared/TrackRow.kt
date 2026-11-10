@@ -77,8 +77,8 @@ class TrackRowFocus(
     val requesters: TrackRowRequesters,
     val up: (TrackRowColumn) -> FocusRequester?,
     val down: (TrackRowColumn) -> FocusRequester?,
-    val left: FocusRequester?,
-    val riders: (TrackRowColumn) -> List<FocusRequester> = { emptyList() },
+    val left: FocusRequester,
+    val riders: (TrackRowColumn) -> List<FocusRequester>,
 )
 
 /**
@@ -119,8 +119,9 @@ fun rememberPlainColumnTrackRowFocus(
  * that names the track; More names the track in its label. The text nodes are cleared.
  *
  * [liked] null means the like set is unknown: Like stays a focus target but announces no
- * action, the inert-control rule. [onOpenMore] null keeps More composed and inert for the same
- * reason — dropping it would break the column geometry every row shares.
+ * action, the inert-control rule. More stays composed but inert for the same reason when it has
+ * nowhere to go — neither [canOpenAlbum] nor [canOpenArtist] reaches this track — since dropping
+ * it would break the column geometry every row shares.
  */
 @Composable
 fun TrackRow(
@@ -130,10 +131,13 @@ fun TrackRow(
     focus: TrackRowFocus,
     onPlay: () -> Unit,
     onToggleLike: () -> Unit,
-    onOpenMore: ((Rect) -> Unit)?,
+    onOpenMore: (Rect) -> Unit,
     modifier: Modifier = Modifier,
+    canOpenAlbum: Boolean = true,
+    canOpenArtist: Boolean = true,
     onColumnFocused: (TrackRowColumn) -> Unit = {},
 ) {
+    val openMore = onOpenMore.takeIf { track.hasMoreActions(canOpenAlbum, canOpenArtist) }
     val colors = IglooTheme.colors
     var rowHasFocus by remember { mutableStateOf(false) }
     var moreBounds by remember { mutableStateOf(Rect.Zero) }
@@ -235,12 +239,12 @@ fun TrackRow(
         )
         IglooIconButton(
             icon = IglooIcons.MoreVertical,
-            semanticLabel = if (onOpenMore != null) {
+            semanticLabel = if (openMore != null) {
                 "More actions for ${track.title}"
             } else {
                 "More actions for ${track.title}. None available."
             },
-            onClick = onOpenMore?.let { open -> { open(moreBounds) } },
+            onClick = openMore?.let { open -> { open(moreBounds) } },
             actionLabel = "More actions for ${track.title}",
             modifier = Modifier
                 .testTag("track_more_${track.id}")
@@ -259,7 +263,7 @@ fun TrackRow(
 private fun Modifier.trackColumn(
     column: TrackRowColumn,
     focus: TrackRowFocus,
-    left: FocusRequester?,
+    left: FocusRequester,
     right: FocusRequester,
     onColumnFocused: (TrackRowColumn) -> Unit,
 ): Modifier {
@@ -268,7 +272,7 @@ private fun Modifier.trackColumn(
     return chain
         .focusProperties {
             this.right = right
-            if (left != null) this.left = left
+            this.left = left
             focus.up(column)?.let { this.up = it }
             focus.down(column)?.let { this.down = it }
         }
@@ -337,7 +341,7 @@ fun TrackRowSkeleton(
  * The row's More menu — "Go to album", "Go to artist" — anchored to the More control's bounds
  * and hosted as the last child of the screen that owns the row (the [IglooMenu] contract). An
  * item first hands the destination to the host, then dismisses; a row offers More at all only
- * when [hasMoreActions] says one of the two can be opened from where it sits. The host's own
+ * when one of the two can be opened from where it sits. The host's own
  * Back handlers are not gated on this menu: it is composed after them, so its handler is the
  * one the dispatcher reaches first for exactly as long as it is up.
  */
@@ -368,7 +372,7 @@ fun TrackRowMenu(
 }
 
 /** Whether More has anywhere to go from this row, given what the host can open. */
-fun TrackRowUi.hasMoreActions(canOpenAlbum: Boolean, canOpenArtist: Boolean): Boolean =
+private fun TrackRowUi.hasMoreActions(canOpenAlbum: Boolean, canOpenArtist: Boolean): Boolean =
     (albumId != null && canOpenAlbum) || (musicianId != null && canOpenArtist)
 
 /** Wide enough for a two-digit index without the titles ragged-lefting between rows. */

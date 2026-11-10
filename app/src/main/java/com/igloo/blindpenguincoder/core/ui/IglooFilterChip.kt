@@ -44,7 +44,6 @@ fun IglooFilterChip(
         radius = IglooTheme.radius.lg,
         minHeight = IglooTheme.sizes.controlHeight,
         // A chip's label is body-weight whether or not it is focused; only selection recolors it.
-        focusedForeground = colors.foreground,
         restForeground = colors.foreground,
         modifier = modifier,
     ) {

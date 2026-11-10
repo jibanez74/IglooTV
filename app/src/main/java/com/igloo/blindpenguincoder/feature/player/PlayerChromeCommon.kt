@@ -14,7 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -58,6 +61,7 @@ import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.core.ui.progressFraction
+import kotlinx.coroutines.delay
 
 /**
  * The pieces every full-screen player shares (section 11.8): the over-media transport button,
@@ -240,6 +244,51 @@ internal fun Modifier.playerBottomScrim(): Modifier = background(
 )
 
 /**
+ * Rewind, Play/Pause and Forward, the run of transport every player shares, tagged
+ * `<tagPrefix>rewind`, `<tagPrefix>play_pause` and `<tagPrefix>forward`. Each wears
+ * [transportFocus] toward [upRequester]; [isFirst] and [isLast] say whether the run's outer
+ * edges are the row's.
+ */
+@Composable
+internal fun SeekTransportButtons(
+    tagPrefix: String,
+    playing: Boolean,
+    playPauseRequester: FocusRequester,
+    upRequester: FocusRequester,
+    onTogglePlayPause: () -> Unit,
+    onSeekBy: (Double) -> Unit,
+    isFirst: Boolean = true,
+    isLast: Boolean = true,
+    onFocused: () -> Unit = {},
+) {
+    TransportButton(
+        icon = IglooIcons.Rewind,
+        label = "Rewind 10 seconds",
+        onClick = { onSeekBy(-SEEK_STEP_SEC) },
+        modifier = Modifier
+            .transportFocus(upRequester, isFirst = isFirst, onFocused = onFocused)
+            .testTag("${tagPrefix}rewind"),
+    )
+    TransportButton(
+        icon = if (playing) IglooIcons.Pause else IglooIcons.Play,
+        label = if (playing) "Pause" else "Play",
+        onClick = onTogglePlayPause,
+        modifier = Modifier
+            .focusRequester(playPauseRequester)
+            .transportFocus(upRequester, onFocused = onFocused)
+            .testTag("${tagPrefix}play_pause"),
+    )
+    TransportButton(
+        icon = IglooIcons.FastForward,
+        label = "Forward 10 seconds",
+        onClick = { onSeekBy(SEEK_STEP_SEC) },
+        modifier = Modifier
+            .transportFocus(upRequester, isLast = isLast, onFocused = onFocused)
+            .testTag("${tagPrefix}forward"),
+    )
+}
+
+/**
  * One transport control's focus edges. Every control pins down to Cancel and up to [up]; only
  * the row's outer edges cancel sideways, so a control further along the row stays one press
  * away.
@@ -298,94 +347,41 @@ internal fun handlePlayerKey(
     upNextFocused: Boolean = false,
 ): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
-    if (controlsDisabled) {
-        // Swallowed without acting: a transport key that fell through here would reach the
-        // active MediaSession and drive playback underneath the modal or error surface.
-        // D-pad and Enter still fall through to the modal's focused control.
-        return when (event.key) {
-            Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause,
-            Key.MediaRewind, Key.MediaSkipBackward,
-            Key.MediaFastForward, Key.MediaSkipForward,
-            -> true
-
-            else -> false
+    val mediaAction: (() -> Unit)? = when (event.key) {
+        Key.MediaPlayPause -> togglePlayPause
+        Key.MediaPlay -> play
+        Key.MediaPause -> pause
+        Key.MediaRewind, Key.MediaSkipBackward -> { { seekBy(-SEEK_STEP_SEC) } }
+        Key.MediaFastForward, Key.MediaSkipForward -> { { seekBy(SEEK_STEP_SEC) } }
+        else -> null
+    }
+    // Swallowed without acting: a transport key that fell through here would reach the active
+    // MediaSession and drive playback underneath the modal or error surface. D-pad and Enter
+    // still fall through to the modal's focused control.
+    if (controlsDisabled) return mediaAction != null
+    val action = mediaAction ?: if (chromeVisible) {
+        null
+    } else if (upNextFocused) {
+        when (event.key) {
+            Key.DirectionLeft, Key.DirectionRight -> return true
+            Key.DirectionUp, Key.DirectionDown -> focusPlayPause
+            else -> return false
+        }
+    } else {
+        when (event.key) {
+            Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> togglePlayPause
+            Key.DirectionLeft -> { { seekBy(-SEEK_STEP_SEC) } }
+            Key.DirectionRight -> { { seekBy(SEEK_STEP_SEC) } }
+            Key.DirectionUp, Key.DirectionDown -> focusPlayPause
+            else -> return false
         }
     }
-
-    when (event.key) {
-        Key.MediaPlayPause -> {
-            togglePlayPause()
-            showChrome()
-            return true
-        }
-
-        Key.MediaPlay -> {
-            play()
-            showChrome()
-            return true
-        }
-
-        Key.MediaPause -> {
-            pause()
-            showChrome()
-            return true
-        }
-
-        Key.MediaRewind, Key.MediaSkipBackward -> {
-            seekBy(-SEEK_STEP_SEC)
-            showChrome()
-            return true
-        }
-
-        Key.MediaFastForward, Key.MediaSkipForward -> {
-            seekBy(SEEK_STEP_SEC)
-            showChrome()
-            return true
-        }
-
-        else -> Unit
-    }
-
-    if (!chromeVisible) {
-        if (upNextFocused) {
-            return when (event.key) {
-                Key.DirectionLeft, Key.DirectionRight -> true
-                Key.DirectionUp, Key.DirectionDown -> {
-                    showChrome()
-                    focusPlayPause()
-                    true
-                }
-
-                else -> false
-            }
-        }
-        return when (event.key) {
-            Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                togglePlayPause()
-                showChrome()
-                true
-            }
-
-            Key.DirectionLeft -> {
-                seekBy(-SEEK_STEP_SEC)
-                showChrome()
-                true
-            }
-
-            Key.DirectionRight -> {
-                seekBy(SEEK_STEP_SEC)
-                showChrome()
-                true
-            }
-
-            Key.DirectionUp, Key.DirectionDown -> {
-                showChrome()
-                focusPlayPause()
-                true
-            }
-
-            else -> false
-        }
+    if (action != null) {
+        // Revealed first so Up and Down focus into chrome that is showing; for the rest the
+        // order is the same frame either way.
+        showChrome()
+        action()
+        return true
     }
 
     // Chrome visible: the key falls through to the focused control, but still counts as
@@ -422,6 +418,42 @@ internal tailrec fun Context.findHostActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findHostActivity()
     else -> null
+}
+
+/**
+ * The chrome's visibility and its auto-hide clock (section 11.8): the chrome may rest hidden
+ * only over a moving picture, so it hides after [CHROME_HIDE_MS] without an interaction while
+ * the screen says it can, and surfaces whenever the screen says it must.
+ */
+@Stable
+internal class ChromeAutoHide {
+    var visible by mutableStateOf(true)
+
+    /** Bumped by any key press or chrome focus move; each bump restarts the clock. */
+    var interactions by mutableIntStateOf(0)
+        private set
+
+    fun interact() {
+        interactions++
+    }
+
+    fun show() {
+        visible = true
+        interact()
+    }
+}
+
+@Composable
+internal fun rememberChromeAutoHide(canHide: Boolean, mustShow: Boolean): ChromeAutoHide {
+    val chrome = remember { ChromeAutoHide() }
+    LaunchedEffect(mustShow) { if (mustShow) chrome.visible = true }
+    LaunchedEffect(chrome.visible, chrome.interactions, canHide) {
+        if (chrome.visible && canHide) {
+            delay(CHROME_HIDE_MS)
+            chrome.visible = false
+        }
+    }
+    return chrome
 }
 
 internal const val SEEK_STEP_SEC = 10.0

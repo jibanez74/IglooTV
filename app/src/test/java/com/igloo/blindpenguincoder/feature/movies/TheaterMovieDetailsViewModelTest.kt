@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.movies
 
+import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.ui.RatingTier
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
@@ -12,43 +13,37 @@ import com.igloo.blindpenguincoder.feature.shared.CastMemberUi
 import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
+import com.igloo.blindpenguincoder.feature.shared.FactUi
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TheaterMovieDetailsViewModelTest {
+    @get:Rule
+    val main = MainDispatcherRule()
 
     // A view model outlives the test body — its scope is not runTest's child — so an unfinished
     // load would still be on Dispatchers.Main when the next class calls setMain. Closing cancels
     // it, which is also what Back does in production.
     private val viewModels = mutableListOf<TheaterMovieDetailsViewModel>()
 
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-    }
-
     @After
     fun tearDown() {
         viewModels.forEach { it.close() }
         viewModels.clear()
-        Dispatchers.resetMain()
     }
 
     private fun viewModel(http: TestHttp) =
@@ -139,11 +134,16 @@ class TheaterMovieDetailsViewModelTest {
             movie.cast.first().photoUrl,
         )
         assertNull(movie.cast[1].photoUrl)
-        assertEquals("Regency Enterprises", movie.about.production)
-        assertEquals("Released", movie.about.status)
-        assertEquals("English", movie.about.language)
-        assertEquals("$60,000,000", movie.about.budget)
-        assertEquals("$187,436,818", movie.about.revenue)
+        assertEquals(
+            listOf(
+                FactUi("Production", "Regency Enterprises"),
+                FactUi("Status", "Released"),
+                FactUi("Original language", "English"),
+                FactUi("Budget", "$60,000,000"),
+                FactUi("Revenue", "$187,436,818"),
+            ),
+            movie.about,
+        )
         assertEquals(
             "Rated 7.9 out of 10, R, 2 hours and 50 minutes, released August 1, 2026",
             movie.metadataDescription,
@@ -325,7 +325,7 @@ class TheaterMovieDetailsViewModelTest {
         assertEquals(emptyList<CrewEntry>(), movie.keyCrew)
         assertEquals(emptyList<CastMemberUi>(), movie.cast)
         assertEquals(emptyList<ExtraVideoUi>(), movie.extraVideos)
-        assertTrue(movie.about.isEmpty)
+        assertTrue(movie.about.isEmpty())
         assertEquals("", movie.metadataDescription)
     }
 

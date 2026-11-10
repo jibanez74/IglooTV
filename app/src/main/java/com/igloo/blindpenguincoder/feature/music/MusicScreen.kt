@@ -25,7 +25,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooButton
@@ -119,8 +118,8 @@ fun MusicScreen(
     onAlbumFocused: (Long) -> Unit,
     lastFocusedTrack: TrackFocusMemory?,
     onTrackFocused: (TrackFocusMemory) -> Unit,
-    onMusicianSelected: ((Long) -> Unit)?,
-    onAlbumSelected: ((Long) -> Unit)?,
+    onMusicianSelected: (Long) -> Unit,
+    onAlbumSelected: (Long) -> Unit,
     spokenAccessibilityEnabled: Boolean,
 ) {
     val columns = IglooTheme.layout.gridColumns
@@ -308,7 +307,7 @@ fun MusicScreen(
                     ) { musician, modifier ->
                         MusicianCard(
                             musician = musician,
-                            onClick = onMusicianSelected?.let { open -> { open(musician.id) } },
+                            onClick = { onMusicianSelected(musician.id) },
                             width = Dp.Unspecified,
                             modifier = modifier,
                         )
@@ -340,7 +339,7 @@ fun MusicScreen(
                     ) { album, modifier ->
                         AlbumCard(
                             album = album,
-                            onClick = onAlbumSelected?.let { open -> { open(album.id) } },
+                            onClick = { onAlbumSelected(album.id) },
                             width = Dp.Unspecified,
                             modifier = modifier,
                         )
@@ -363,8 +362,6 @@ fun MusicScreen(
                         lastFocusedTrack = lastFocusedTrack,
                         onTrackFocused = onTrackFocused,
                         focusOwnership = focusOwnership,
-                        canOpenAlbum = onAlbumSelected != null,
-                        canOpenArtist = onMusicianSelected != null,
                         onLoadMore = actions.onLoadMore,
                         onRetryAppend = actions.onRetryAppend,
                         onPlayTrack = actions.onPlayTrack,
@@ -496,11 +493,8 @@ private fun MusicTab.emptyIcon(): ImageVector = when (this) {
     else -> IglooIcons.Music
 }
 
-internal fun MusicTab.emptyMessage(): String = when (this) {
-    MusicTab.Musicians -> "No musicians in your library yet. Add a music folder on the server and run a scan."
-    MusicTab.Albums -> "No albums in your library yet. Add a music folder on the server and run a scan."
-    MusicTab.Tracks -> "No tracks in your library yet. Add a music folder on the server and run a scan."
-}
+internal fun MusicTab.emptyMessage(): String =
+    "No ${noun(2)} in your library yet. Add a music folder on the server and run a scan."
 
 private fun spokenCount(tab: MusicTab, total: Long?, loadedCount: Int?, append: AppendState): String =
     when {

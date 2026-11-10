@@ -69,9 +69,7 @@ data class LibraryActions(
  * renders in every grid state, and the picker in every grid state while the Genres tab has a
  * list — an empty Liked view or a failed first page must still let the user switch sections.
  *
- * [returnRequester] rides the entry cell so an overlay's Back lands on the card that opened it;
- * null for a pane nothing opens from yet. A null [onItemSelected] renders inert cards — focus
- * targets with no action and no "Open" announcement — for the same reason.
+ * [returnRequester] rides the entry cell so an overlay's Back lands on the card that opened it.
  */
 @Composable
 fun LibraryScreen(
@@ -81,10 +79,10 @@ fun LibraryScreen(
     gridState: LazyGridState,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
-    returnRequester: FocusRequester?,
+    returnRequester: FocusRequester,
     lastFocusedId: Long?,
     onItemFocused: (Long) -> Unit,
-    onItemSelected: ((Long) -> Unit)?,
+    onItemSelected: (Long) -> Unit,
     spokenAccessibilityEnabled: Boolean,
 ) {
     val kind = state.kind
@@ -243,7 +241,7 @@ fun LibraryScreen(
             ) { item, modifier ->
                 PosterItemCard(
                     item = item,
-                    onClick = onItemSelected?.let { open -> { open(item.id) } },
+                    onClick = { onItemSelected(item.id) },
                     // Unspecified so the card fills its grid cell rather than taking the rail's
                     // fixed card width and leaving ragged gutters.
                     width = Dp.Unspecified,
@@ -289,9 +287,8 @@ private fun LibraryHeader(
             labelVariants = listOf(SORT_ASCENDING_LABEL, SORT_DESCENDING_LABEL),
             onClick = onToggleSort,
             variant = IglooButtonVariant.Ghost,
-            // Never disabled, for the same focus-tree reason as Refresh; the view model guards a
-            // toggle that lands mid-reload by cancelling the in-flight page.
-            enabled = true,
+            // Never disabled (the default), for the same focus-tree reason as Refresh; the view
+            // model guards a toggle that lands mid-reload by cancelling the in-flight page.
             semanticLabel = "Sort order",
             stateDescription = if (sort == SortOrder.Ascending) "A to Z" else "Z to A",
             actionLabel = if (sort == SortOrder.Ascending) "Sort Z to A" else "Sort A to Z",

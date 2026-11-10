@@ -135,7 +135,7 @@ class ExoVideoPlayerEngineTest {
     ): VideoPlayerEngine {
         lateinit var built: VideoPlayerEngine
         instrumentation.runOnMainSync {
-            built = exoVideoPlayerEngine(
+            built = ExoVideoPlayerEngine(
                 context = context,
                 request = request,
                 services = VideoPlaybackServices(
@@ -152,19 +152,6 @@ class ExoVideoPlayerEngineTest {
         }
         return built
     }
-
-    /** Pumps the main looper until [condition] holds; the engine's work is all posted there. */
-    private fun waitFor(what: String, timeoutMs: Long = 5_000, condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + timeoutMs
-        while (SystemClock.uptimeMillis() < deadline) {
-            instrumentation.waitForIdleSync()
-            if (condition()) return
-            SystemClock.sleep(20)
-        }
-        throw AssertionError("timed out waiting for $what")
-    }
-
-    private fun onMain(block: () -> Unit) = instrumentation.runOnMainSync(block)
 
     private fun VideoPlayerEngine.errors(): List<VideoPlayerEvent.Error> =
         events.replayCache.filterIsInstance<VideoPlayerEvent.Error>()

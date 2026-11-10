@@ -24,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.key
@@ -32,7 +31,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.isTraversalGroup
-import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.viewinterop.AndroidView
@@ -44,8 +42,6 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
-import com.igloo.blindpenguincoder.core.ui.IglooIcons
-import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPhase
@@ -77,9 +73,8 @@ fun TrailerPlayerScreen(
     var reloadKey by remember { mutableIntStateOf(0) }
     val engine = remember(reloadKey) { engineFactory(context, videoKey) }
     var state by remember(engine) { mutableStateOf(TrailerPlayerState()) }
-    var chromeVisible by remember { mutableStateOf(true) }
-    // Bumped by any key press or chrome focus move; each bump restarts the auto-hide clock.
-    var interactionTick by remember { mutableIntStateOf(0) }
+    val playing = state.phase == TrailerPhase.Playing
+    val chrome = rememberChromeAutoHide(canHide = playing, mustShow = !playing)
 
     val playPauseRequester = remember { FocusRequester() }
     val backRequester = remember { FocusRequester() }
@@ -102,25 +97,9 @@ fun TrailerPlayerScreen(
     }
 
     LaunchedEffect(state.phase) {
-        when (state.phase) {
-            TrailerPhase.Ended -> onClose()
-            // Chrome may only rest hidden over a moving picture; any other phase surfaces it.
-            TrailerPhase.Playing -> Unit
-            else -> chromeVisible = true
-        }
+        if (state.phase == TrailerPhase.Ended) onClose()
     }
 
-    LaunchedEffect(chromeVisible, state.phase, interactionTick) {
-        if (chromeVisible && state.phase == TrailerPhase.Playing) {
-            delay(CHROME_HIDE_MS)
-            chromeVisible = false
-        }
-    }
-
-    val showChrome: () -> Unit = {
-        chromeVisible = true
-        interactionTick++
-    }
     val play = {
         state = state.onPlayRequested()
         engine.play()
@@ -149,7 +128,7 @@ fun TrailerPlayerScreen(
     }
 
     BackHandler {
-        if (chromeVisible && state.phase == TrailerPhase.Playing) chromeVisible = false else onClose()
+        if (chrome.visible && playing) chrome.visible = false else onClose()
     }
 
     // Standby must silence playback; on return the user resumes deliberately, so only the
@@ -174,9 +153,9 @@ fun TrailerPlayerScreen(
             .onPreviewKeyEvent { event ->
                 handlePlayerKey(
                     event = event,
-                    chromeVisible = chromeVisible,
+                    chromeVisible = chrome.visible,
                     controlsDisabled = state.phase == TrailerPhase.Error,
-                    showChrome = showChrome,
+                    showChrome = chrome::show,
                     play = play,
                     pause = pause,
                     togglePlayPause = togglePlayPause,
@@ -203,22 +182,23 @@ fun TrailerPlayerScreen(
         }
 
         when (state.phase) {
-            TrailerPhase.Error -> IglooPinnedError(
-                message = state.errorMessage ?: "The trailer could not be played.",
-                actionText = "Retry",
-                actionSemanticLabel = "Retry playing trailer",
+            TrailerPhase.Error -> PlayerFailureSurface(
+                message = state.errorMessage,
+                unauthorized = false,
+                mediaNoun = "trailer",
                 actionRequester = retryRequester,
-                onAction = { reloadKey++ },
+                onRetry = { reloadKey++ },
+                onClose = onClose,
             )
 
             else -> PlayerChrome(
                 title = title,
                 typeLabel = typeLabel,
                 state = state,
-                visible = chromeVisible,
+                visible = chrome.visible,
                 playPauseRequester = playPauseRequester,
                 backRequester = backRequester,
-                onAnyControlFocused = { interactionTick++ },
+                onAnyControlFocused = chrome::interact,
                 onBack = onClose,
                 onTogglePlayPause = togglePlayPause,
                 onSeekBy = seekBy,
@@ -304,30 +284,14 @@ private fun PlayerChrome(
                 horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TransportButton(
-                    icon = IglooIcons.Rewind,
-                    label = "Rewind 10 seconds",
-                    onClick = { onSeekBy(-SEEK_STEP_SEC) },
-                    modifier = Modifier
-                        .transportFocus(backRequester, isFirst = true, onFocused = onAnyControlFocused)
-                        .testTag("trailer_rewind"),
-                )
-                TransportButton(
-                    icon = if (playing) IglooIcons.Pause else IglooIcons.Play,
-                    label = if (playing) "Pause" else "Play",
-                    onClick = onTogglePlayPause,
-                    modifier = Modifier
-                        .focusRequester(playPauseRequester)
-                        .transportFocus(backRequester, onFocused = onAnyControlFocused)
-                        .testTag("trailer_play_pause"),
-                )
-                TransportButton(
-                    icon = IglooIcons.FastForward,
-                    label = "Forward 10 seconds",
-                    onClick = { onSeekBy(SEEK_STEP_SEC) },
-                    modifier = Modifier
-                        .transportFocus(backRequester, isLast = true, onFocused = onAnyControlFocused)
-                        .testTag("trailer_forward"),
+                SeekTransportButtons(
+                    tagPrefix = "trailer_",
+                    playing = playing,
+                    playPauseRequester = playPauseRequester,
+                    upRequester = backRequester,
+                    onTogglePlayPause = onTogglePlayPause,
+                    onSeekBy = onSeekBy,
+                    onFocused = onAnyControlFocused,
                 )
             }
             PlayerSeekBar(

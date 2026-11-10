@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.auth
 
+import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
@@ -10,41 +11,19 @@ import com.igloo.blindpenguincoder.data.repository.authUserJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.testStoredProfile
 import io.ktor.client.engine.mock.MockRequestHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfilePickerViewModelTest {
-
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-    }
-
-    @After
-    fun tearDown() {
-        // SessionManager collects auth events for as long as its scope lives; leaking one
-        // leaves a collector running into the next test class.
-        scopes.forEach { it.cancel() }
-        Dispatchers.resetMain()
-    }
-
-    private val scopes = mutableListOf<CoroutineScope>()
-
-    private fun newScope() = CoroutineScope(UnconfinedTestDispatcher()).also { scopes += it }
+    @get:Rule
+    val main = MainDispatcherRule()
 
     private class Fixture(
         val viewModel: ProfilePickerViewModel,
@@ -74,7 +53,7 @@ class ProfilePickerViewModelTest {
             serverUrl = http.serverUrl,
             authEvents = http.authEvents,
             imageCache = NoOpImageCache,
-            scope = newScope(),
+            scope = main.newScope(),
             elapsed = { 0L },
         )
         fixture = Fixture(ProfilePickerViewModel(sessionManager), sessionManager, http)

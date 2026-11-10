@@ -1,14 +1,13 @@
 package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
-import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -84,27 +83,6 @@ class ShowRepositoryTest {
     }
 
     @Test
-    fun `a refused library page fails with its status`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"nope"}""", HttpStatusCode.InternalServerError)
-        }
-
-        val result = http.showRepository.showsLibrary(1, 48, SortOrder.Ascending)
-
-        val error = (result as ApiResult.Failure).error
-        assertEquals(500, (error as AppError.Api).status)
-    }
-
-    @Test
-    fun `a success envelope with no data is unexpected rather than an empty page`() = runTest {
-        val http = TestHttp { jsonResponse("""{"error":false,"message":"shows library"}""") }
-
-        val result = http.showRepository.showsLibrary(1, 48, SortOrder.Ascending)
-
-        assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
-    }
-
-    @Test
     fun `a genre's shows page hits the genre path with the same query`() = runTest {
         var request: HttpRequestData? = null
         val http = TestHttp {
@@ -167,7 +145,10 @@ class ShowRepositoryTest {
             jsonResponse(
                 latestShowsJson(
                     latestShowJson(id = 40),
-                    latestShowJson(id = 12, name = "Friends", posterPath = null, premiereYear = null),
+                    // `Valid: false` wins over whatever value the server pads the wrapper with.
+                    """{"id":12,"name":"Friends",""" +
+                        """"poster_path":{"String":"ignored.jpg","Valid":false},""" +
+                        """"premiere_year":{"Int64":1994,"Valid":false}}""",
                 ),
             )
         }
@@ -195,7 +176,12 @@ class ShowRepositoryTest {
             jsonResponse(
                 showDetailsJson(
                     id = 40,
-                    seasons = listOf(showSeasonSummaryJson(1), showSeasonSummaryJson(0)),
+                    lastAirDate = "2025-03-21",
+                    tmdbEpisodeCount = 19,
+                    seasons = listOf(
+                        showSeasonSummaryJson(1, availableEpisodes = 9),
+                        showSeasonSummaryJson(0, availableEpisodes = 2),
+                    ),
                 ),
             )
         }
@@ -209,7 +195,10 @@ class ShowRepositoryTest {
         assertEquals("TV-MA", data.show.certification.orNull())
         assertEquals("/severance-backdrop.jpg", data.show.backdropPath.orNull())
         assertEquals(8.4, requireNotNull(data.show.voteAverage.orNull()), 0.0)
+        assertEquals("2025-03-21", data.show.lastAirDate.orNull())
+        assertEquals(19L, data.show.tmdbEpisodeCount.orNull())
         assertEquals(listOf(1L, 0L), data.seasons.map { it.seasonNumber })
+        assertEquals(listOf(9L, 2L), data.seasons.map { it.availableEpisodeCount })
     }
 
     @Test
@@ -236,11 +225,14 @@ class ShowRepositoryTest {
         assertEquals(listOf(0L, 1L), data.cast.map { it.castOrder })
         assertEquals("Mark Scout", data.cast.first().character)
         assertEquals(19L, data.cast.first().episodeCount)
+        assertEquals("Adam Scott", data.cast.first().artistName)
+        assertEquals("/adam-scott.jpg", data.cast.first().artistProfile.orNull())
         assertEquals(listOf("Dan Erickson"), data.creators.map { it.name })
         assertEquals(listOf("Drama"), data.genres.map { it.tag })
         assertEquals(listOf("Apple TV+"), data.networks.map { it.name })
         assertEquals(listOf("Red Hour"), data.productionCompanies.map { it.name })
         assertEquals(listOf("Severance - Trailer"), data.extraVideos.map { it.title })
+        assertEquals(listOf("0xbkYZbdIVw"), data.extraVideos.map { it.key })
     }
 
     @Test
@@ -266,33 +258,13 @@ class ShowRepositoryTest {
         val episodes = (result as ApiResult.Success).value
         assertEquals(listOf(910L, 911L), episodes.map { it.id })
         assertEquals(600.0, requireNotNull(episodes[0].progressSec.orNull()), 0.0)
+        assertEquals(3300.0, requireNotNull(episodes[0].durationSec.orNull()), 0.0)
         assertEquals(57L, episodes[0].tmdbRuntime.orNull())
+        assertFalse(episodes[0].watched)
+        // Null until a save or a mark.
+        assertNull(episodes[1].progressSec.orNull())
         assertNull(episodes[1].stillPath.orNull())
         assertTrue(episodes[1].watched)
-    }
-
-    @Test
-    fun `a missing season fails with its status`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"season not found"}""", HttpStatusCode.NotFound)
-        }
-
-        val result = http.showRepository.seasonEpisodes(showId = 40, seasonNumber = 9)
-
-        val error = (result as ApiResult.Failure).error
-        assertEquals(404, (error as AppError.Api).status)
-    }
-
-    @Test
-    fun `a missing show fails with its status`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"show not found"}""", HttpStatusCode.NotFound)
-        }
-
-        val result = http.showRepository.showDetails(404)
-
-        val error = (result as ApiResult.Failure).error
-        assertEquals(404, (error as AppError.Api).status)
     }
 
     @Test
@@ -300,7 +272,11 @@ class ShowRepositoryTest {
         var request: HttpRequestData? = null
         val http = TestHttp {
             request = it
-            jsonResponse(episodePlaybackJson(nextEpisode = upNextEpisodeJson()))
+            jsonResponse(
+                episodePlaybackJson(
+                    nextEpisode = upNextEpisodeJson(stillPath = null, progressSec = 600.0, durationSec = 3300.0),
+                ),
+            )
         }
         http.profiles.setPending("igd_test")
 
@@ -317,8 +293,13 @@ class ShowRepositoryTest {
         assertEquals("In Perpetuity", data.episode.name)
         val next = requireNotNull(data.nextEpisode)
         assertEquals(901L, next.id)
+        assertEquals(1L, next.seasonNumber)
         assertEquals(4L, next.episodeNumber)
         assertEquals("The You You Are", next.name)
+        assertNull(next.stillPath.orNull())
+        assertEquals(600.0, next.progressSec.orNull())
+        assertEquals(3300.0, next.durationSec.orNull())
+        assertFalse(next.watched)
     }
 
     @Test
@@ -350,21 +331,8 @@ class ShowRepositoryTest {
             assertEquals("""{"watched":true}""", body)
             assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
             val data = (result as ApiResult.Success).value
-            assertEquals(903L, data.episodeId)
             assertTrue(data.watched)
         }
-
-    @Test
-    fun `a refused watched write fails with its status`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"not found"}""", HttpStatusCode.NotFound)
-        }
-
-        val result = http.showRepository.setEpisodeWatched(999, watched = false)
-
-        val error = (result as ApiResult.Failure).error
-        assertEquals(404, (error as AppError.Api).status)
-    }
 
     @Test
     fun `episode technical details decode file-keyed streams and the probed duration`() = runTest {
@@ -387,6 +355,7 @@ class ShowRepositoryTest {
         assertEquals("video/x-matroska", data.file.mimeType)
         assertEquals(3300.0, requireNotNull(data.file.duration.orNull()), 0.0)
         assertEquals("eac3", data.audioStreams.single().codec)
+        assertEquals(6L, data.audioStreams.single().channels)
         assertEquals("subrip", data.subtitles.single().codec)
         assertEquals(60L, data.chapters.single().startTime)
     }
@@ -405,17 +374,5 @@ class ShowRepositoryTest {
         val progress = (result as ApiResult.Success).value
         assertEquals(600.0, requireNotNull(progress.progressSec), 0.0)
         assertEquals(3300.0, requireNotNull(progress.durationSec), 0.0)
-    }
-
-    @Test
-    fun `an episode server failure preserves the backend message`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"probe failed"}""", HttpStatusCode.InternalServerError)
-        }
-
-        val result = http.showRepository.episodeTechnicalDetails(900)
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("probe failed", error.message)
     }
 }

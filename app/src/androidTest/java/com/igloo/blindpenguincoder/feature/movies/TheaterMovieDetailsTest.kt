@@ -1,13 +1,9 @@
 package com.igloo.blindpenguincoder.feature.movies
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTopPositionInRootIsEqualTo
@@ -26,9 +22,9 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testTheaterMovieDetails
@@ -56,7 +52,6 @@ class TheaterMovieDetailsTest {
 
     private var detailsState by mutableStateOf(MovieDetailsUiState())
     private val engines = mutableListOf<FakeTrailerPlayerEngine>()
-    private var hostActivity: Activity? = null
 
     /** The shell with the theaters rail loaded; opening a card publishes [movie] as the page. */
     private fun setShellContent(
@@ -67,8 +62,6 @@ class TheaterMovieDetailsTest {
         detailsState = MovieDetailsUiState()
         engines.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
@@ -103,13 +96,6 @@ class TheaterMovieDetailsTest {
         composeRule.waitForIdle()
     }
 
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
-        composeRule.waitForIdle()
-    }
-
     /** The second card, so a restore that regressed to the rail's anchor would not pass. */
     private fun openFromTheatersRail() {
         composeRule.onNodeWithTag("theater_card_22").requestFocus()
@@ -139,7 +125,7 @@ class TheaterMovieDetailsTest {
         setShellContent()
         openFromTheatersRail()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_details").assertDoesNotExist()
         composeRule.onNodeWithTag("theater_card_22").assertIsFocused()
@@ -157,7 +143,7 @@ class TheaterMovieDetailsTest {
         composeRule.onNodeWithTag("trailer_player").assertExists()
         assertEquals(1, engines.size)
 
-        pressBack()
+        composeRule.pressBack()
 
         // Focus comes back to the hero's button, not to the extras rail's card: the same video
         // is on both, and the restore has to name the control that actually led away.

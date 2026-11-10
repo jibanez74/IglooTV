@@ -2,8 +2,11 @@ package com.igloo.blindpenguincoder.core.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -105,3 +108,16 @@ internal fun rememberRefocusAfterSwap(
     }
     return remember { { focused -> ownsFocus.value = focused } }
 }
+
+/** Saves an enum-keyed focus-memory map (key to item id) as name/id pairs; a key a newer build renamed loses its memory. */
+internal fun <K : Enum<K>> enumKeyedSaver(entries: List<K>) =
+    listSaver<SnapshotStateMap<K, Long>, Any>(
+        save = { map -> map.flatMap { (key, id) -> listOf(key.name, id) } },
+        restore = { saved ->
+            mutableStateMapOf<K, Long>().apply {
+                saved.chunked(2).forEach { (name, id) ->
+                    entries.firstOrNull { it.name == name }?.let { put(it, id as Long) }
+                }
+            }
+        },
+    )

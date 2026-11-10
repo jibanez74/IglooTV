@@ -1,52 +1,30 @@
 package com.igloo.blindpenguincoder.feature.auth
 
+import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
-import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
-import com.igloo.blindpenguincoder.data.repository.testDeviceIdentity
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import java.io.IOException
 import java.net.SocketTimeoutException
 import javax.net.ssl.SSLException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class QuickConnectViewModelTest {
-
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-    }
-
-    @After
-    fun tearDown() {
-        // SessionManager collects auth events for as long as its scope lives; leaking one
-        // leaves a collector running into the next test class.
-        scopes.forEach { it.cancel() }
-        Dispatchers.resetMain()
-    }
-
-    private val scopes = mutableListOf<CoroutineScope>()
-
-    private fun newScope() = CoroutineScope(Dispatchers.Unconfined).also { scopes += it }
+    @get:Rule
+    val main = MainDispatcherRule()
 
     private fun initiateJson(
         code: String,
@@ -101,7 +79,7 @@ class QuickConnectViewModelTest {
             authEvents = http.authEvents,
             imageCache = NoOpImageCache,
             elapsed = { 0L },
-            scope = newScope(),
+            scope = main.newScope(Dispatchers.Unconfined),
         )
         return Fixture(
             QuickConnectViewModel(repository, http.profiles, sessionManager),

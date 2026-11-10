@@ -17,8 +17,6 @@ import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.spoken
 import com.igloo.blindpenguincoder.data.model.ContinueWatchingItem
-import com.igloo.blindpenguincoder.data.model.LatestMovie
-import com.igloo.blindpenguincoder.data.model.LatestShow
 import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.ShowDetailsData
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
@@ -177,11 +175,7 @@ class HomeViewModel(
         // must not post one, or open a player, behind the cleared state — nor may one already
         // built but not yet delivered, which a recreated host would otherwise pick up.
         episodeLauncher.reset()
-        loadContinueWatching(userInitiated = false)
-        loadLatestMovies(userInitiated = false)
-        loadLatestShows(userInitiated = false)
-        loadLatestAlbums(userInitiated = false)
-        loadInTheaters(userInitiated = false)
+        HomeRail.entries.forEach { load(it, userInitiated = false) }
     }
 
     /** Refreshes only the rail a watched mutation can change, retaining loaded cards in place. */
@@ -190,14 +184,14 @@ class HomeViewModel(
     }
 
     /** The Retry the error state offers. Unlike [refresh] there is no content to protect. */
-    fun retry(rail: HomeRail) {
-        when (rail) {
-            HomeRail.ContinueWatching -> loadContinueWatching(userInitiated = true)
-            HomeRail.LatestMovies -> loadLatestMovies(userInitiated = true)
-            HomeRail.LatestShows -> loadLatestShows(userInitiated = true)
-            HomeRail.LatestAlbums -> loadLatestAlbums(userInitiated = true)
-            HomeRail.InTheaters -> loadInTheaters(userInitiated = true)
-        }
+    fun retry(rail: HomeRail) = load(rail, userInitiated = true)
+
+    private fun load(rail: HomeRail, userInitiated: Boolean) = when (rail) {
+        HomeRail.ContinueWatching -> loadContinueWatching(userInitiated)
+        HomeRail.LatestMovies -> loadLatestMovies(userInitiated)
+        HomeRail.LatestShows -> loadLatestShows(userInitiated)
+        HomeRail.LatestAlbums -> loadLatestAlbums(userInitiated)
+        HomeRail.InTheaters -> loadInTheaters(userInitiated)
     }
 
     private fun loadContinueWatching(userInitiated: Boolean) {
@@ -283,7 +277,10 @@ class HomeViewModel(
             _uiState.update {
                 it.copy(latestMovies = next.orKeepContent(it.latestMovies, keep = !userInitiated))
             }
-            loadMovieFeature(result, userInitiated)
+            loadFeature(HomeHeroKind.Movie, result, userInitiated) { newest ->
+                movies.movieDetails(newest.id).withApiBaseUrl(serverUrl)
+                    .map { (details, apiBaseUrl) -> toMovieHero(details.movie, apiBaseUrl) }
+            }
         }
     }
 
@@ -310,7 +307,10 @@ class HomeViewModel(
             _uiState.update {
                 it.copy(latestShows = next.orKeepContent(it.latestShows, keep = !userInitiated))
             }
-            loadShowFeature(result, userInitiated)
+            loadFeature(HomeHeroKind.Show, result, userInitiated) { newest ->
+                shows.showDetails(newest.id).withApiBaseUrl(serverUrl)
+                    .map { (details, apiBaseUrl) -> toShowHero(details, apiBaseUrl) }
+            }
         }
     }
 
@@ -362,57 +362,31 @@ class HomeViewModel(
     }
 
     /**
-     * The movie page features the newest addition (section 11.3.1), so its subject comes out of
-     * the rail's own response — one source, and the rail's Retry re-runs the page for free. Only
-     * the backdrop, overview, and metadata need the second, per-movie request.
+     * A hero page features the newest addition of its kind (section 11.3.1), so its subject comes
+     * out of the rail's own response — one source, and the rail's Retry re-runs the page for free.
+     * Only the backdrop, overview, and metadata need the second request, [hero], made within the
+     * same cancellable job.
      */
-    private suspend fun loadMovieFeature(
-        latest: ApiResult<List<LatestMovie>>,
+    private suspend fun <T> loadFeature(
+        kind: HomeHeroKind,
+        latest: ApiResult<List<T>>,
         userInitiated: Boolean,
+        hero: suspend (newest: T) -> ApiResult<HomeHero>,
     ) {
         val newest = when (latest) {
             is ApiResult.Failure -> {
-                hideFeatureOrKeep(HomeHeroKind.Movie, userInitiated)
+                hideFeatureOrKeep(kind, userInitiated)
                 return
             }
             is ApiResult.Success -> latest.value.firstOrNull() ?: run {
                 // An empty library has no page to protect: hide unconditionally.
-                setFeature(HomeHeroKind.Movie, Feature.Hidden)
+                setFeature(kind, Feature.Hidden)
                 return
             }
         }
-        val hero = movies.movieDetails(newest.id).withApiBaseUrl(serverUrl).map {
-            (details, apiBaseUrl) ->
-            toMovieHero(details.movie, apiBaseUrl)
-        }
-        when (hero) {
-            is ApiResult.Success -> setFeature(HomeHeroKind.Movie, Feature.Loaded(hero.value))
-            is ApiResult.Failure -> hideFeatureOrKeep(HomeHeroKind.Movie, userInitiated)
-        }
-    }
-
-    /** The newest show's details enrich the rail's response within the same cancellable job. */
-    private suspend fun loadShowFeature(
-        latest: ApiResult<List<LatestShow>>,
-        userInitiated: Boolean,
-    ) {
-        val newest = when (latest) {
-            is ApiResult.Failure -> {
-                hideFeatureOrKeep(HomeHeroKind.Show, userInitiated)
-                return
-            }
-            is ApiResult.Success -> latest.value.firstOrNull() ?: run {
-                setFeature(HomeHeroKind.Show, Feature.Hidden)
-                return
-            }
-        }
-        val hero = shows.showDetails(newest.id).withApiBaseUrl(serverUrl).map {
-            (details, apiBaseUrl) ->
-            toShowHero(details, apiBaseUrl)
-        }
-        when (hero) {
-            is ApiResult.Success -> setFeature(HomeHeroKind.Show, Feature.Loaded(hero.value))
-            is ApiResult.Failure -> hideFeatureOrKeep(HomeHeroKind.Show, userInitiated)
+        when (val page = hero(newest)) {
+            is ApiResult.Success -> setFeature(kind, Feature.Loaded(page.value))
+            is ApiResult.Failure -> hideFeatureOrKeep(kind, userInitiated)
         }
     }
 

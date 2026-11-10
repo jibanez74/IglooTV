@@ -13,15 +13,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.iglooSafeArea
 import com.igloo.blindpenguincoder.core.design.rememberAmbientProgress
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.ui.IglooBrandMark
+import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
 
@@ -182,4 +186,31 @@ private fun AuthFormColumn(
     ) {
         content()
     }
+}
+
+/** The saved session could not be restored: why, with a Retry. Nothing when [error] is null. */
+@Composable
+internal fun RestoreErrorRetry(error: AppError?, onRetry: () -> Unit) {
+    if (error == null) return
+    IglooInlineError(
+        message = error.toDisplayMessage(),
+        actionText = "Retry",
+        actionSemanticLabel = "Retry connecting to server",
+        onAction = onRetry,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * A request's progress line, spoken politely: the button carries the only other signal, and it
+ * is disabled and unfocused for the whole request, so without this TalkBack says nothing.
+ */
+@Composable
+internal fun AuthBusyText(text: String) {
+    IglooText(
+        text = text,
+        style = IglooTheme.typography.bodyMedium,
+        color = IglooTheme.colors.mutedForeground,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    )
 }

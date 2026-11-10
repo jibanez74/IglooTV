@@ -119,7 +119,7 @@ class MusicViewModel(
         present = { it },
         firstCursor = FIRST_PAGE,
         fetch = { page ->
-            music.musicians(page, PAGE_SIZE).map { data ->
+            music.musicians(page, MAX_LIBRARY_PER_PAGE).map { data ->
                 val rows = data.musicians.map { it.toCardUi() }
                 LoadedPage(rows, data.total, page + 1, pageAppendState(page, data.totalPages, rows.isEmpty()))
             }
@@ -133,7 +133,7 @@ class MusicViewModel(
         present = { it },
         firstCursor = FIRST_PAGE,
         fetch = { page ->
-            music.albums(page, PAGE_SIZE).map { data ->
+            music.albums(page, MAX_LIBRARY_PER_PAGE).map { data ->
                 val rows = data.albums.map { it.toCardUi() }
                 LoadedPage(rows, data.total, page + 1, pageAppendState(page, data.totalPages, rows.isEmpty()))
             }
@@ -287,7 +287,6 @@ class MusicViewModel(
     }
 
     private companion object {
-        const val PAGE_SIZE = MAX_LIBRARY_PER_PAGE
         const val TRACKS_PAGE_SIZE = 50L
     }
 }

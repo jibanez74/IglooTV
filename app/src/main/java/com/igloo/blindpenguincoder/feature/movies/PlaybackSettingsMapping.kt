@@ -5,7 +5,6 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.Subtitle
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.audioCodecDisplayName
-import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
 import com.igloo.blindpenguincoder.playback.model.describeChannelLayout
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.isUnreliableHlsAudio
@@ -41,11 +40,13 @@ internal sealed interface SubtitleChoice {
 /** One quality/mode radio row. */
 data class PlaybackModeOptionUi(val mode: PlaybackMode, val label: String)
 
-/** One audio or subtitle radio row; a null [id] is the "Default"/"None" row of its section. */
+/**
+ * One audio or subtitle radio row; a null [id] is the "Default"/"None" row of its section. The
+ * audio "Default" row is the inert stand-in for unknown tracks; "None" is a real choice.
+ */
 data class PlaybackTrackOptionUi(
     val id: Long?,
     val label: String,
-    val enabled: Boolean = true,
 )
 
 /**
@@ -69,7 +70,7 @@ data class PlaybackSettingsUi(
  * inert stand-ins ("Default", "None") so the focus chain and announcements stay meaningful.
  *
  * Resolution rules:
- * - Modes: [availablePlaybackModes] returns the normative seven-mode ladder in order. Direct
+ * - Modes: [PlaybackMode.entries] is the normative seven-mode ladder in order. Direct
  *   stays listed and selectable even when the file's video or the selected audio track can't
  *   play on this device — offers may be filtered, but a user's choice is never overridden; the
  *   explanation (and the Play gate, in the same words) says why Direct would refuse.
@@ -92,7 +93,7 @@ internal fun playbackSettingsUi(
     canPlayVideoMime: (mimeType: String) -> Boolean = { true },
     canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean = { _, _ -> true },
 ): PlaybackSettingsUi {
-    val modes = availablePlaybackModes()
+    val modes = PlaybackMode.entries
         .map { PlaybackModeOptionUi(it, playbackModeLabel(it)) }
 
     // `stream_index` order, for the same reason the play request uses it: the type ordinal is
@@ -106,7 +107,7 @@ internal fun playbackSettingsUi(
         ?: 0
     val effectiveAudio = audio.getOrNull(effectiveAudioIndex)
     val audioTracks = if (effectiveAudio == null) {
-        listOf(PlaybackTrackOptionUi(id = null, label = AUDIO_DEFAULT_LABEL, enabled = false))
+        listOf(PlaybackTrackOptionUi(id = null, label = AUDIO_DEFAULT_LABEL))
     } else {
         audio.mapIndexed { index, stream ->
             PlaybackTrackOptionUi(id = stream.id, label = audioTrackLabel(stream, index))

@@ -51,11 +51,9 @@ import com.igloo.blindpenguincoder.core.network.causeChain
 import com.igloo.blindpenguincoder.playback.model.HlsAudioProfile
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
-import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.SUBTITLES_UNAVAILABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.TrackOption
-import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.hlsAudioConversionFor
 import com.igloo.blindpenguincoder.playback.model.noun
@@ -389,7 +387,8 @@ internal class ExoVideoPlayerEngine(
             // Resolve the ordinal before committing anything: an id that maps to no wire
             // ordinal must not half-apply, or the remembered choice gets corrupted to null
             // while a track still renders.
-            val typeIndex = subtitleTypeIndexForOption(player.currentTracks, optionId) ?: return
+            val typeIndex =
+                typeIndexForOptionId(player.currentTracks, C.TRACK_TYPE_TEXT, optionId) ?: return
             val override = overrideFor(optionId) ?: return
             currentSubtitleTypeIndex = typeIndex
             builder.setOverrideForType(override)
@@ -564,29 +563,15 @@ internal class ExoVideoPlayerEngine(
                 controller.startKeepalive(::onKeepaliveSessionLost)
                 emitQualityOptions()
             } catch (failure: HlsStartException) {
-                if (isRestartCurrent(generation)) {
-                    rollbackPendingMode()
-                    transitionToTerminal(
-                        VideoPlayerEvent.Error(
-                            failure.message ?: "Playback failed.",
-                            failure.unauthorized,
-                        ),
-                    )
-                }
+                failRestart(generation, failure.message ?: "Playback failed.", failure.unauthorized)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (failure: Exception) {
                 // The repository deliberately rethrows programming errors rather than dressing
                 // them as transport failures. They still belong on the error surface: this scope
                 // has no exception handler, so an escape would kill the app mid-movie.
-                if (isRestartCurrent(generation)) {
-                    rollbackPendingMode()
-                    transitionToTerminal(
-                        VideoPlayerEvent.Error(
-                            failure.message?.let { "Playback failed ($it)." } ?: "Playback failed.",
-                        ),
-                    )
-                }
+                val detail = failure.message?.let { " ($it)" }.orEmpty()
+                failRestart(generation, "Playback failed$detail.")
             } finally {
                 if (restartGeneration == generation) {
                     pendingMode = null
@@ -656,6 +641,12 @@ internal class ExoVideoPlayerEngine(
     private fun isRestartCurrent(generation: Long): Boolean =
         playbackIntent.acceptsCommands && restartGeneration == generation
 
+    private fun failRestart(generation: Long, message: String, unauthorized: Boolean = false) {
+        if (!isRestartCurrent(generation)) return
+        rollbackPendingMode()
+        transitionToTerminal(VideoPlayerEvent.Error(message, unauthorized))
+    }
+
     private fun directMediaSource(): MediaSource =
         ProgressiveMediaSource.Factory(services.progressiveDataSourceFactory)
             .createMediaSource(
@@ -719,11 +710,7 @@ internal class ExoVideoPlayerEngine(
         subtitleStreamFailure?.let { droppedSubtitleStreamFailure = it }
         currentSubtitleTypeIndex = null
         emit(VideoPlayerEvent.StatusMessage(SUBTITLES_UNAVAILABLE_MESSAGE))
-        val start = preparedHlsStart ?: return
-        val pending = pendingRestart != null || heldRebaseTargetSec != null || pendingMode != null
-        if (pending) return
-        initialSelectionApplied = false
-        prepareSource(hlsMediaSource(start), player.currentPosition)
+        rebuildHlsSourceInPlace()
     }
 
     /**
@@ -734,8 +721,7 @@ internal class ExoVideoPlayerEngine(
      */
     private fun isSubtitleStreamFailure(error: PlaybackException): Boolean {
         if (streamedSubtitleTypeIndex == null) return false
-        val reported = subtitleStreamFailure
-        if (reported != null && error.causeChain().any { it === reported }) return true
+        if (isReportedSubtitleFailure(error, subtitleStreamFailure)) return true
         val requestPath = error.causeChain()
             .filterIsInstance<HttpDataSource.HttpDataSourceException>()
             .firstOrNull()
@@ -774,20 +760,17 @@ internal class ExoVideoPlayerEngine(
         else -> trackOptionId(tracks, C.TRACK_TYPE_TEXT, typeIndex)
     }
 
-    private fun subtitleTypeIndexForOption(tracks: Tracks, optionId: String): Int? =
-        typeIndexForOptionId(tracks, C.TRACK_TYPE_TEXT, optionId)
-
     /** The concrete audio ordinal an HLS session would use right now. */
     private fun effectiveAudioOrdinal(): Int? =
         currentAudioTypeIndex ?: request.effectiveAudioTypeIndex
 
-    /** The track an HLS session with this ordinal would use; null = video-only movie. */
-    private fun trackFor(audioTypeIndex: Int?): PlayableAudioTrack? =
-        (audioTypeIndex ?: request.effectiveAudioTypeIndex)?.let(request.audioTracks::getOrNull)
-
-    /** The server-side conversion this track needs, or null for legacy audio handling. */
-    private fun conversionFor(audioTypeIndex: Int?): HlsAudioProfile? =
-        hlsAudioConversionFor(trackFor(audioTypeIndex))
+    /**
+     * The server-side conversion the track with this ordinal needs, or null for legacy audio
+     * handling or a video-only movie.
+     */
+    private fun conversionFor(audioTypeIndex: Int?): HlsAudioProfile? = hlsAudioConversionFor(
+        (audioTypeIndex ?: request.effectiveAudioTypeIndex)?.let(request.audioTracks::getOrNull),
+    )
 
     /**
      * Direct with a track that needs conversion becomes Remux — the video plays as-is while
@@ -802,7 +785,7 @@ internal class ExoVideoPlayerEngine(
 
     /** The in-player menu exposes the same normative seven-mode contract as pre-play settings. */
     private fun emitQualityOptions() {
-        val options = availablePlaybackModes()
+        val options = PlaybackMode.entries
             .map { TrackOption(id = it.name, label = playbackModeLabel(it), selected = it == effectiveMode) }
         emit(
             VideoPlayerEvent.QualityOptionsChanged(
@@ -984,10 +967,4 @@ internal class ExoVideoPlayerEngine(
     /** A session being established from [startSec] whose source will be prepared at [targetSec]. */
     private data class PendingRestart(val startSec: Int, val targetSec: Double)
 }
-
-fun exoVideoPlayerEngine(
-    context: Context,
-    request: VideoPlayRequest,
-    services: VideoPlaybackServices,
-): VideoPlayerEngine = ExoVideoPlayerEngine(context, request, services)
 

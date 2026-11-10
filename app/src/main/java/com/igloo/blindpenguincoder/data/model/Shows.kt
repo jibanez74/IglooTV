@@ -238,10 +238,3 @@ data class ShowEpisode(
     @SerialName("duration_sec") val durationSec: SqlNullFloat64,
     val watched: Boolean,
 )
-
-/** Payload of `EpisodeWatchedEnvelope.data`: the server's answer to a watched write. */
-@Serializable
-data class EpisodeWatchedData(
-    @SerialName("episode_id") val episodeId: Long,
-    val watched: Boolean,
-)

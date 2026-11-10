@@ -4,7 +4,6 @@ import android.app.Activity
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -13,9 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -43,14 +40,15 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.clickActionLabelled
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
-import com.igloo.blindpenguincoder.feature.home.findActivity
+import com.igloo.blindpenguincoder.findActivity
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.EpisodeContext
 import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
@@ -61,6 +59,7 @@ import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.TrackOption
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.pressBack
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -185,7 +184,7 @@ class VideoPlayerScreenTest {
                 if (failProgressSaves) {
                     ApiResult.Failure(AppError.Network)
                 } else {
-                    ApiResult.Success(WatchProgressUpdateData(watched = false))
+                    ApiResult.Success(WatchedData(watched = false))
                 }
             },
             onWatchedStateCommitted = {},
@@ -255,7 +254,7 @@ class VideoPlayerScreenTest {
         viewModel = VideoPlayerViewModel(
             saveProgress = { _, body ->
                 savedRequests += body
-                ApiResult.Success(WatchProgressUpdateData(watched = false))
+                ApiResult.Success(WatchedData(watched = false))
             },
             onWatchedStateCommitted = {},
         )
@@ -386,13 +385,6 @@ class VideoPlayerScreenTest {
         },
         requestedMode,
     )
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
-        composeRule.waitForIdle()
-    }
 
     private fun letChromeHide() {
         composeRule.mainClock.autoAdvance = false
@@ -555,7 +547,7 @@ class VideoPlayerScreenTest {
     fun backDuringTheResumePromptLeavesThePlayer() {
         setContent(playRequest(resumeAtSec = 900.0))
 
-        pressBack()
+        composeRule.pressBack()
 
         assertEquals(1, closes)
         assertEquals(emptyList<String>(), engine.playbackCommands)
@@ -657,10 +649,10 @@ class VideoPlayerScreenTest {
         setContent()
         startPlaying()
 
-        pressBack()
+        composeRule.pressBack()
         assertEquals(0, closes)
 
-        pressBack()
+        composeRule.pressBack()
         assertEquals(1, closes)
         assertTrue(engine.released)
     }
@@ -698,7 +690,7 @@ class VideoPlayerScreenTest {
         assertTrue("audio:2:0" in engine.playbackCommands)
         composeRule.onNodeWithTag("movie_track_menu").assertExists()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_track_menu").assertDoesNotExist()
         composeRule.onNodeWithTag("movie_audio").assertIsFocused()
@@ -724,7 +716,7 @@ class VideoPlayerScreenTest {
         composeRule.onNodeWithTag("movie_play_pause").assertDoesNotExist()
         composeRule.onNodeWithTag("movie_track_none").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_track_menu").assertDoesNotExist()
         composeRule.onNodeWithTag("movie_subtitles").assertIsFocused()
@@ -862,7 +854,7 @@ class VideoPlayerScreenTest {
         assertEquals(listOf(PlaybackMode.Remux, PlaybackMode.Direct), requestedModes)
         assertEquals(PlaybackMode.Direct, requireNotNull(currentRequest).mode)
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_track_menu").assertDoesNotExist()
         composeRule.onNodeWithTag("movie_quality").assertIsFocused()
@@ -1086,7 +1078,7 @@ class VideoPlayerScreenTest {
         startPlaying()
 
         openPlayerMenu("movie_chapters")
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_chapter_menu").assertDoesNotExist()
         assertTrue(engine.playbackCommands.none { it.startsWith("seek:") })
@@ -1152,7 +1144,7 @@ class VideoPlayerScreenTest {
         composeRule.waitForIdle()
 
         // Paused, so chrome may not hide: one Back closes.
-        pressBack()
+        composeRule.pressBack()
 
         assertEquals(1, closes)
         assertTrue(engine.released)
@@ -1390,14 +1382,14 @@ class VideoPlayerScreenTest {
             .performKeyInput { pressKey(Key.DirectionDown) }
         composeRule.onNodeWithTag("movie_track_2:0")
             .performKeyInput { pressKey(Key.DirectionCenter) }
-        pressBack()
+        composeRule.pressBack()
 
         openPlayerMenu("movie_subtitles")
         composeRule.onNodeWithTag("movie_track_none")
             .performKeyInput { pressKey(Key.DirectionDown) }
         composeRule.onNodeWithTag("movie_track_3:0")
             .performKeyInput { pressKey(Key.DirectionCenter) }
-        pressBack()
+        composeRule.pressBack()
 
         assertEquals(1, requireNotNull(currentRequest).audioTypeIndex)
         assertEquals(0, requireNotNull(currentRequest).subtitleTypeIndex)
@@ -1413,7 +1405,7 @@ class VideoPlayerScreenTest {
             .performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.onNodeWithTag("movie_track_none")
             .performKeyInput { pressKey(Key.DirectionCenter) }
-        pressBack()
+        composeRule.pressBack()
 
         restorationTester.emulateSavedInstanceStateRestore()
         composeRule.waitForIdle()
@@ -1497,7 +1489,7 @@ class VideoPlayerScreenTest {
         assertEquals(emptyList<PlaybackMode>(), requestedModes)
         assertEquals(PlaybackMode.Remux, requireNotNull(currentRequest).mode)
 
-        pressBack()
+        composeRule.pressBack()
         openPlayerMenu("movie_quality")
 
         // A refusal belongs to the visit that earned it.
@@ -1673,10 +1665,6 @@ class VideoPlayerScreenTest {
     /** The card is one cleared node; its status line is read from the unmerged tree. */
     private fun upNextStatus() = composeRule.onNodeWithTag("movie_up_next_status", useUnmergedTree = true)
 
-    private fun clickActionLabelled(label: String) = SemanticsMatcher("click action labelled $label") {
-        it.config.getOrNull(SemanticsActions.OnClick)?.label == label
-    }
-
     /** Plays an episode with a next one up to [toSec], the card's lead being the last 15 s of 7200. */
     private fun playEpisodeTo(toSec: Int, resumable: Boolean = false) {
         setContent(episodeRequest(resumable = resumable))
@@ -1795,7 +1783,7 @@ class VideoPlayerScreenTest {
     fun backDismissesTheCardAndTheEpisodePlaysOutToAClose() {
         playEpisodeTo(7185)
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onAllNodesWithTag("movie_up_next").assertCountEquals(0)
         composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
@@ -1812,7 +1800,7 @@ class VideoPlayerScreenTest {
     @Test
     fun seekingBackPastTheLeadRetractsTheCardAndClearsTheDismissal() {
         playEpisodeTo(7186)
-        pressBack()
+        composeRule.pressBack()
         composeRule.onAllNodesWithTag("movie_up_next").assertCountEquals(0)
 
         // Rewind 10s from 7186 lands at 7176: outside the lead, so the dismissal lapses.
@@ -1908,7 +1896,7 @@ class VideoPlayerScreenTest {
         upNextCard().assertExists()
         upNextCard().assert(SemanticsMatcher.expectValue(SemanticsProperties.Focused, false))
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_track_menu").assertDoesNotExist()
         upNextCard().assertIsFocused()

@@ -281,12 +281,8 @@ class SessionManager(
             expectedProfileId = current.user.id,
             enforcePin = false,
         )
-        when (result) {
-            SignInResult.Authenticated, SignInResult.PinRequired -> Unit
-            SignInResult.Revoked -> gateLocked(notice = revokedNotice(current.user.name))
-            // An offline TV keeps watching; only an outright rejection ends the session.
-            is SignInResult.Failed -> Unit
-        }
+        // An offline TV keeps watching; only an outright rejection ends the session.
+        if (result == SignInResult.Revoked) gateLocked(notice = revokedNotice(current.user.name))
     }
 
     /** Pair or log in an additional user without disturbing the profiles already here. */
@@ -358,7 +354,7 @@ class SessionManager(
         // down, and it happens before a network request that may take the full timeout. The image
         // cache goes with it: this profile's avatar is the only trace of it Coil keeps on disk.
         val credential = withContext(NonCancellable) {
-            val removed = profiles.removeForSignOut(expectedProfileId)
+            val removed = profiles.remove(expectedProfileId)
             imageCache.clear()
             removed
         }

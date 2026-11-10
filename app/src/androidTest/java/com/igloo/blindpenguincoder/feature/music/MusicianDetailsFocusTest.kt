@@ -1,13 +1,9 @@
 package com.igloo.blindpenguincoder.feature.music
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -20,11 +16,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testMusicState
 import com.igloo.blindpenguincoder.testMusicianDetails
@@ -54,7 +50,6 @@ class MusicianDetailsFocusTest {
     private val openedMusicians = mutableListOf<Long>()
     private val openedAlbums = mutableListOf<Long>()
     private val engineRequests = mutableListOf<MusicPlayRequest>()
-    private var hostActivity: Activity? = null
 
     private fun setShellContent(
         initial: MusicianDetailsUiState = MusicianDetailsUiState(),
@@ -69,8 +64,6 @@ class MusicianDetailsFocusTest {
         openedAlbums.clear()
         engineRequests.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
@@ -103,13 +96,6 @@ class MusicianDetailsFocusTest {
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("Music").performClick()
-        composeRule.waitForIdle()
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
         composeRule.waitForIdle()
     }
 
@@ -169,7 +155,7 @@ class MusicianDetailsFocusTest {
         openMusicianCard(3)
         composeRule.onNodeWithTag("musician_play_all").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("musician_details").assertDoesNotExist()
         composeRule.onNodeWithTag("musician_card_3").assertIsFocused()
@@ -245,7 +231,7 @@ class MusicianDetailsFocusTest {
         assertEquals(MusicQueueSource.Musician(musicianId = 2, title = "The Beatles"), request.source)
         assertEquals(listOf(951L, 952L, 953L), request.tracks.map { it.id })
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("music_player").assertDoesNotExist()
         composeRule.onNodeWithTag("musician_play_all").assertIsFocused()
@@ -266,7 +252,7 @@ class MusicianDetailsFocusTest {
         composeRule.onNodeWithTag("album_play").assertIsFocused()
 
         // The origin was never rewritten: Back lands where the musician was opened from.
-        pressBack()
+        composeRule.pressBack()
         composeRule.onNodeWithTag("album_details").assertDoesNotExist()
         composeRule.onNodeWithTag("musician_card_2").assertIsFocused()
     }

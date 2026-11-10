@@ -32,7 +32,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The refill rules of docs/music-shuffle.md, driven through a scripted fetcher: when a refill
+ * The endless queue's refill rules, driven through a scripted fetcher: when a refill
  * fires, what it excludes, how a batch is deduplicated, and the two latches — the library
  * running out and the queue's own ceiling — plus the guarantee that a cancelled loop never
  * appends a batch that lands late.

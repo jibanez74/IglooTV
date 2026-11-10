@@ -52,14 +52,13 @@ class TracksListAccessibilityTest {
 
     private fun setContent(
         initial: MusicUiState = testMusicState(tab = MusicTab.Tracks),
-        canOpenAlbum: Boolean = true,
     ) {
         musicState = initial
         composeRule.setContent {
             IglooTheme {
                 TestIglooApp(
                     music = musicState,
-                    onAlbumSelected = if (canOpenAlbum) { _ -> } else null,
+                    onAlbumSelected = {},
                 )
             }
         }
@@ -125,15 +124,6 @@ class TracksListAccessibilityTest {
     }
 
     @Test
-    fun withNoAlbumScreenEveryMoreIsInert() {
-        setContent(canOpenAlbum = false)
-
-        composeRule.onNodeWithTag("track_more_902")
-            .assertContentDescriptionEquals("More actions for Abbey Road. None available.")
-            .assertHasNoClickAction()
-    }
-
-    @Test
     fun theMenuTakesTheBodyOutOfTheTreeWhileItIsOpen() {
         setContent()
 
@@ -146,7 +136,7 @@ class TracksListAccessibilityTest {
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
         composeRule.onNodeWithTag("track_play_902").assertDoesNotExist()
         composeRule.onNodeWithContentDescription("Go to album").assertExists()
-        composeRule.onNodeWithContentDescription("Go to artist").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Go to artist").assertExists()
     }
 
     @Test

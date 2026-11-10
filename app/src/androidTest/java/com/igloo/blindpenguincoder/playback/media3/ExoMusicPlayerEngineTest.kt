@@ -3,7 +3,6 @@
 package com.igloo.blindpenguincoder.playback.media3
 
 import android.net.Uri
-import android.os.SystemClock
 import androidx.media3.common.C
 import androidx.media3.datasource.BaseDataSource
 import androidx.media3.datasource.DataSource
@@ -57,7 +56,7 @@ class ExoMusicPlayerEngineTest {
         )
 
         instrumentation.runOnMainSync {
-            engine = exoMusicPlayerEngine(
+            engine = ExoMusicPlayerEngine(
                 context = context,
                 request = request,
                 dataSourceFactory = DataSource.Factory { MissingTrackDataSource() },
@@ -129,7 +128,7 @@ class ExoMusicPlayerEngineTest {
             )
 
             instrumentation.runOnMainSync {
-                engine = exoMusicPlayerEngine(
+                engine = ExoMusicPlayerEngine(
                     context = context,
                     request = request,
                     dataSourceFactory = streams,
@@ -168,16 +167,6 @@ class ExoMusicPlayerEngineTest {
                 }
             }
         }
-    }
-
-    private fun waitFor(what: String, condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 5_000
-        while (SystemClock.uptimeMillis() < deadline) {
-            instrumentation.waitForIdleSync()
-            if (condition()) return
-            SystemClock.sleep(20)
-        }
-        throw AssertionError("timed out waiting for $what")
     }
 
     private class MissingTrackDataSource : BaseDataSource(/* isNetwork= */ false) {

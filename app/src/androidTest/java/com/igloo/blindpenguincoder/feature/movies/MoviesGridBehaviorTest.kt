@@ -1,13 +1,9 @@
 package com.igloo.blindpenguincoder.feature.movies
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
@@ -29,13 +25,13 @@ import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_LINE_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.SortOrder
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.library.LibraryActions
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testMovieDetails
 import com.igloo.blindpenguincoder.testMovieGridItems
@@ -71,7 +67,6 @@ class MoviesGridBehaviorTest {
     private val pressedTabs = mutableListOf<LibraryTab>()
     private val selectedGenres = mutableListOf<LibraryFilter.Genre>()
     private val opened = mutableListOf<Long>()
-    private var hostActivity: Activity? = null
     private var columns = 0
 
     /** When true, selecting a card opens a real details overlay, as the app does. */
@@ -93,8 +88,6 @@ class MoviesGridBehaviorTest {
         opened.clear()
         detailsState = MovieDetailsUiState()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 columns = IglooTheme.layout.gridColumns
                 TestIglooApp(
@@ -176,13 +169,6 @@ class MoviesGridBehaviorTest {
         genre = genre,
         contentGeneration = contentGeneration,
     )
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
-        composeRule.waitForIdle()
-    }
 
     // --- the anchor in every state ------------------------------------------------------------
 
@@ -1280,7 +1266,7 @@ class MoviesGridBehaviorTest {
         )
         card(1).performClick()
         composeRule.onNodeWithTag("details_play").assertIsFocused()
-        pressBack()
+        composeRule.pressBack()
         card(1).assertIsFocused()
 
         moviesState = testLibraryState(
@@ -1343,7 +1329,7 @@ class MoviesGridBehaviorTest {
             silentReconcileGeneration = 1,
         )
         composeRule.waitForIdle()
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithContentDescription(
             "No liked movies yet. Like a movie from its details page and it will appear here.",
@@ -1357,7 +1343,7 @@ class MoviesGridBehaviorTest {
         card(1).performKeyInput { pressKey(Key.DirectionRight) }
         card(2).assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
         composeRule.onNodeWithContentDescription("Movies").assertIsFocused()
         composeRule.onNodeWithContentDescription("Movies")
             .performKeyInput { pressKey(Key.DirectionRight) }

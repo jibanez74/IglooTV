@@ -389,4 +389,3 @@ Recorded so a later session does not re-investigate these:
 - Album covers arriving as absolute URLs and not being "resolved".
 - Settings destination, playlists, music play-stat reporting, background music playback, and the
   show page's extra videos being unfinished.
-- Subtitle behaviour documented in [`subtitles-bug.md`](subtitles-bug.md).

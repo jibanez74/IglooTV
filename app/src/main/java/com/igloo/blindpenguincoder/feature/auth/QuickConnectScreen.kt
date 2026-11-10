@@ -26,7 +26,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -127,15 +126,7 @@ internal fun QuickConnectContent(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
             ) {
-                if (restoreError != null) {
-                    IglooInlineError(
-                        message = restoreError.toDisplayMessage(),
-                        actionText = "Retry",
-                        actionSemanticLabel = "Retry connecting to server",
-                        onAction = onRetryRestore,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                RestoreErrorRetry(restoreError, onRetryRestore)
                 if (phase is QuickConnectPhase.Failed) {
                     IglooInlineError(
                         message = phase.message,

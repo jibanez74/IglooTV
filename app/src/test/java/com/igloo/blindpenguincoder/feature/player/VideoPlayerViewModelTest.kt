@@ -4,7 +4,7 @@ import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
-import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -31,9 +31,9 @@ class VideoPlayerViewModelTest {
     private var refreshes = 0
 
     private var save: suspend (PlaybackMediaRef, UpdateWatchProgressRequest) ->
-    ApiResult<WatchProgressUpdateData> = { _, request ->
+    ApiResult<WatchedData> = { _, request ->
         requests += request
-        ApiResult.Success(WatchProgressUpdateData(watched = watchedResponse))
+        ApiResult.Success(WatchedData(watched = watchedResponse))
     }
 
     /** The view model's scope rides Dispatchers.Main; share runTest's scheduler so virtual time moves both. */
@@ -282,7 +282,7 @@ class VideoPlayerViewModelTest {
             if (request.saveSequence == 1L) {
                 ApiResult.Failure(AppError.Network)
             } else {
-                ApiResult.Success(WatchProgressUpdateData(watched = false))
+                ApiResult.Success(WatchedData(watched = false))
             }
         }
         viewModel.play(0.0, 5.0)
@@ -378,7 +378,7 @@ class VideoPlayerViewModelTest {
 
             save = { _, request ->
                 requests += request
-                ApiResult.Success(WatchProgressUpdateData(watched = false))
+                ApiResult.Success(WatchedData(watched = false))
             }
             viewModel.retryFailedSave()
             advanceUntilIdle()
@@ -397,7 +397,7 @@ class VideoPlayerViewModelTest {
             if (fail) {
                 ApiResult.Failure(AppError.Timeout)
             } else {
-                ApiResult.Success(WatchProgressUpdateData(watched = false))
+                ApiResult.Success(WatchedData(watched = false))
             }
         }
         viewModel.play(30.0, 46.0)
@@ -425,7 +425,7 @@ class VideoPlayerViewModelTest {
         assertTrue(viewModel.progressSyncUiState.value is ProgressSyncUiState.Failed)
         save = { _, request ->
             requests += request
-            ApiResult.Success(WatchProgressUpdateData(watched = false))
+            ApiResult.Success(WatchedData(watched = false))
         }
         viewModel.retryFailedSave()
         advanceUntilIdle()
@@ -446,7 +446,7 @@ class VideoPlayerViewModelTest {
                 if (movieId == 7L && failMovieA) {
                     ApiResult.Failure(AppError.Network)
                 } else {
-                    ApiResult.Success(WatchProgressUpdateData(watched = false))
+                    ApiResult.Success(WatchedData(watched = false))
                 }
             }
 
@@ -482,7 +482,7 @@ class VideoPlayerViewModelTest {
                 if (failing) {
                     ApiResult.Failure(AppError.Network)
                 } else {
-                    ApiResult.Success(WatchProgressUpdateData(watched = false))
+                    ApiResult.Success(WatchedData(watched = false))
                 }
             }
 
@@ -518,7 +518,7 @@ class VideoPlayerViewModelTest {
                 when {
                     phase == 0 -> ApiResult.Failure(AppError.Network)
                     phase == 1 && movieId == 7L -> ApiResult.Failure(AppError.Timeout)
-                    else -> ApiResult.Success(WatchProgressUpdateData(watched = false))
+                    else -> ApiResult.Success(WatchedData(watched = false))
                 }
             }
 
@@ -548,18 +548,18 @@ class VideoPlayerViewModelTest {
         test { viewModel ->
             val calls = mutableListOf<Pair<Long, UpdateWatchProgressRequest>>()
             val olderMovieAResult =
-                CompletableDeferred<ApiResult<WatchProgressUpdateData>>()
+                CompletableDeferred<ApiResult<WatchedData>>()
             var retrying = false
             save = { media, request ->
                 val movieId = media.id
                 calls += movieId to request
                 when {
                     retrying -> ApiResult.Success(
-                        WatchProgressUpdateData(watched = false),
+                        WatchedData(watched = false),
                     )
                     movieId == 8L -> ApiResult.Failure(AppError.Timeout)
                     request.saveSequence == 1L -> olderMovieAResult.await()
-                    else -> ApiResult.Success(WatchProgressUpdateData(watched = false))
+                    else -> ApiResult.Success(WatchedData(watched = false))
                 }
             }
 

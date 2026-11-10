@@ -2,8 +2,6 @@
 
 package com.igloo.blindpenguincoder.playback.media3
 
-import android.media.session.MediaController as PlatformMediaController
-import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -20,15 +18,14 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
  * The session's contract with the system, on a real player: media-button events must carry the
  * chrome's intent semantics (dedicated play/pause never toggle, pause cancels pending
- * autoplay), and two sessions must be able to coexist — on error-Retry the replacement engine
- * is constructed before the old one's disposal releases it, which throws unless ids differ.
+ * autoplay). The per-instance session id both builders share is covered by
+ * [MusicMediaSessionTest.twoLiveSessionsCoexistAcrossAnErrorRetry].
  */
 @RunWith(AndroidJUnit4::class)
 class VideoMediaSessionTest {
@@ -89,27 +86,6 @@ class VideoMediaSessionTest {
         return built
     }
 
-    private fun pressMediaKey(session: MediaSession, keyCode: Int) {
-        val controller = PlatformMediaController(context, session.platformToken)
-        controller.dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
-        controller.dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
-    }
-
-    private fun playWhenReady(player: ExoPlayer): Boolean {
-        var value = false
-        instrumentation.runOnMainSync { value = player.playWhenReady }
-        return value
-    }
-
-    private fun awaitPlayWhenReady(player: ExoPlayer, expected: Boolean) {
-        val deadline = SystemClock.elapsedRealtime() + 5_000
-        while (SystemClock.elapsedRealtime() < deadline) {
-            if (playWhenReady(player) == expected) return
-            Thread.sleep(50)
-        }
-        fail("playWhenReady never became $expected")
-    }
-
     /** The button pipeline is a one-way binder call; a no-op leaves nothing to wait on. */
     private fun letDispatchSettle() = Thread.sleep(500)
 
@@ -143,17 +119,17 @@ class VideoMediaSessionTest {
     fun dedicatedPlayAndPauseButtonsNeverToggle() {
         val (session, player) = buildSession()
 
-        pressMediaKey(session, KeyEvent.KEYCODE_MEDIA_PLAY)
-        awaitPlayWhenReady(player, true)
-        pressMediaKey(session, KeyEvent.KEYCODE_MEDIA_PLAY)
+        pressMediaKey(context, session, KeyEvent.KEYCODE_MEDIA_PLAY)
+        awaitOnMain(true, "playWhenReady never became true") { player.playWhenReady }
+        pressMediaKey(context, session, KeyEvent.KEYCODE_MEDIA_PLAY)
         letDispatchSettle()
-        assertTrue("a second dedicated Play must not toggle", playWhenReady(player))
+        assertTrue("a second dedicated Play must not toggle", readOnMain { player.playWhenReady })
 
-        pressMediaKey(session, KeyEvent.KEYCODE_MEDIA_PAUSE)
-        awaitPlayWhenReady(player, false)
-        pressMediaKey(session, KeyEvent.KEYCODE_MEDIA_PAUSE)
+        pressMediaKey(context, session, KeyEvent.KEYCODE_MEDIA_PAUSE)
+        awaitOnMain(false, "playWhenReady never became false") { player.playWhenReady }
+        pressMediaKey(context, session, KeyEvent.KEYCODE_MEDIA_PAUSE)
         letDispatchSettle()
-        assertFalse("a second dedicated Pause must not toggle", playWhenReady(player))
+        assertFalse("a second dedicated Pause must not toggle", readOnMain { player.playWhenReady })
     }
 
     /**
@@ -167,16 +143,16 @@ class VideoMediaSessionTest {
     fun playPauseButtonActsAsPlayWhilePlaybackIsNotActive() {
         val (session, player) = buildSession()
 
-        pressMediaKey(session, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-        awaitPlayWhenReady(player, true)
+        pressMediaKey(context, session, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+        awaitOnMain(true, "playWhenReady never became true") { player.playWhenReady }
 
         // Outside the double-tap window, which media3 treats as a skip gesture.
         letDispatchSettle()
-        pressMediaKey(session, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+        pressMediaKey(context, session, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
         letDispatchSettle()
         assertTrue(
             "PLAY_PAUSE while buffering must resolve to play, not toggle",
-            playWhenReady(player),
+            readOnMain { player.playWhenReady },
         )
     }
 
@@ -189,21 +165,7 @@ class VideoMediaSessionTest {
             player.prepare()
         }
 
-        pressMediaKey(session, KeyEvent.KEYCODE_MEDIA_PAUSE)
-        awaitPlayWhenReady(player, false)
-    }
-
-    @Test
-    fun twoLiveSessionsCoexistAcrossAnErrorRetry() {
-        // Construction order mirrors the Retry path: the replacement exists before the
-        // original is released. Duplicate session ids would throw right here.
-        val (first, firstPlayer) = buildSession()
-        buildSession()
-
-        instrumentation.runOnMainSync {
-            first.release()
-            firstPlayer.release()
-        }
-        toRelease.removeAt(0)
+        pressMediaKey(context, session, KeyEvent.KEYCODE_MEDIA_PAUSE)
+        awaitOnMain(false, "playWhenReady never became false") { player.playWhenReady }
     }
 }

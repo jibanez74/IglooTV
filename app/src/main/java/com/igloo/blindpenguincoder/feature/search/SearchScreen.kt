@@ -69,7 +69,6 @@ import com.igloo.blindpenguincoder.feature.shared.TrackRowFocus
 import com.igloo.blindpenguincoder.feature.shared.TrackRowMenu
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
-import com.igloo.blindpenguincoder.feature.shared.hasMoreActions
 import com.igloo.blindpenguincoder.feature.shared.loadedItems
 import com.igloo.blindpenguincoder.feature.shared.paneCardlessAnchor
 import com.igloo.blindpenguincoder.feature.shared.paneCountLine
@@ -107,10 +106,10 @@ fun SearchScreen(
     returnRequester: FocusRequester,
     /** A details page, a player, the sign-out dialog or the expanded navigation rail sits over the pane. */
     covered: Boolean,
-    onMovieSelected: ((Long) -> Unit)?,
-    onShowSelected: ((Long) -> Unit)?,
-    onAlbumSelected: ((Long) -> Unit)?,
-    onMusicianSelected: ((Long) -> Unit)?,
+    onMovieSelected: (Long) -> Unit,
+    onShowSelected: (Long) -> Unit,
+    onAlbumSelected: (Long) -> Unit,
+    onMusicianSelected: (Long) -> Unit,
     spokenAccessibilityEnabled: Boolean,
 ) {
     val tab = state.tab
@@ -449,7 +448,7 @@ fun SearchScreen(
                         ) { album, modifier ->
                             AlbumCard(
                                 album = album,
-                                onClick = onAlbumSelected?.let { open -> { open(album.id) } },
+                                onClick = { onAlbumSelected(album.id) },
                                 width = Dp.Unspecified,
                                 modifier = modifier,
                             )
@@ -464,7 +463,7 @@ fun SearchScreen(
                         ) { musician, modifier ->
                             MusicianCard(
                                 musician = musician,
-                                onClick = onMusicianSelected?.let { open -> { open(musician.id) } },
+                                onClick = { onMusicianSelected(musician.id) },
                                 width = Dp.Unspecified,
                                 modifier = modifier,
                             )
@@ -487,8 +486,6 @@ fun SearchScreen(
                             lastFocusedTrack = memory.lastFocusedTrack,
                             onTrackFocused = { memory.lastFocusedTrack = it },
                             focusOwnership = focusOwnership,
-                            canOpenAlbum = onAlbumSelected != null,
-                            canOpenArtist = onMusicianSelected != null,
                             onLoadMore = actions.onLoadMore,
                             onRetryAppend = actions.onRetryAppend,
                             onPlayTrack = actions.onPlayTrack,
@@ -538,13 +535,13 @@ private fun SearchPosterGrid(
     paged: PagedState<PosterItem>,
     memory: SearchPaneMemory,
     wiring: SearchGridWiring,
-    onItemSelected: ((Long) -> Unit)?,
+    onItemSelected: (Long) -> Unit,
 ) {
     val kind = requireNotNull(tab.kind)
     SearchGrid(tab = tab, paged = paged, memory = memory, wiring = wiring, itemId = { it.id }) { item, modifier ->
         PosterItemCard(
             item = item,
-            onClick = onItemSelected?.let { open -> { open(item.id) } },
+            onClick = { onItemSelected(item.id) },
             width = Dp.Unspecified,
             fallbackIcon = kind.icon,
             modifier = modifier,
@@ -611,10 +608,10 @@ private fun SearchAllResults(
     menuOpenFor: Long?,
     tabRowRequester: FocusRequester,
     screenReader: Boolean,
-    onMovieSelected: ((Long) -> Unit)?,
-    onShowSelected: ((Long) -> Unit)?,
-    onAlbumSelected: ((Long) -> Unit)?,
-    onMusicianSelected: ((Long) -> Unit)?,
+    onMovieSelected: (Long) -> Unit,
+    onShowSelected: (Long) -> Unit,
+    onAlbumSelected: (Long) -> Unit,
+    onMusicianSelected: (Long) -> Unit,
     onSeeAll: (SearchKind) -> Unit,
     onPlayTrack: (Long) -> Unit,
     onToggleLike: (Long) -> Unit,
@@ -677,7 +674,7 @@ private fun SearchAllResults(
                 is SearchSectionUi.Movies -> SearchRail(rail, section.items, { it.id }) { movie, itemModifier, aspect ->
                     PosterItemCard(
                         item = movie,
-                        onClick = onMovieSelected?.let { open -> { open(movie.id) } },
+                        onClick = { onMovieSelected(movie.id) },
                         aspect = aspect,
                         modifier = itemModifier.testTag(cardTag(kind, movie.id)),
                     )
@@ -686,7 +683,7 @@ private fun SearchAllResults(
                 is SearchSectionUi.Shows -> SearchRail(rail, section.items, { it.id }) { show, itemModifier, aspect ->
                     PosterItemCard(
                         item = show,
-                        onClick = onShowSelected?.let { open -> { open(show.id) } },
+                        onClick = { onShowSelected(show.id) },
                         aspect = aspect,
                         fallbackIcon = IglooIcons.TvShows,
                         modifier = itemModifier.testTag(cardTag(kind, show.id)),
@@ -696,7 +693,7 @@ private fun SearchAllResults(
                 is SearchSectionUi.Albums -> SearchRail(rail, section.items, { it.id }) { album, itemModifier, aspect ->
                     AlbumCard(
                         album = album,
-                        onClick = onAlbumSelected?.let { open -> { open(album.id) } },
+                        onClick = { onAlbumSelected(album.id) },
                         aspect = aspect,
                         modifier = itemModifier.testTag(cardTag(kind, album.id)),
                     )
@@ -705,7 +702,7 @@ private fun SearchAllResults(
                 is SearchSectionUi.Musicians -> SearchRail(rail, section.items, { it.id }) { musician, itemModifier, _ ->
                     MusicianCard(
                         musician = musician,
-                        onClick = onMusicianSelected?.let { open -> { open(musician.id) } },
+                        onClick = { onMusicianSelected(musician.id) },
                         modifier = itemModifier.testTag(cardTag(kind, musician.id)),
                     )
                 }
@@ -722,8 +719,6 @@ private fun SearchAllResults(
                     menuOpenFor = menuOpenFor,
                     upRequester = railUp,
                     pinDown = isLast,
-                    canOpenAlbum = onAlbumSelected != null,
-                    canOpenArtist = onMusicianSelected != null,
                     onSeeAll = { onSeeAll(SearchKind.Tracks) },
                     onPlayTrack = onPlayTrack,
                     onToggleLike = onToggleLike,
@@ -854,8 +849,6 @@ private fun SearchTracksSection(
     menuOpenFor: Long?,
     upRequester: FocusRequester?,
     pinDown: Boolean,
-    canOpenAlbum: Boolean,
-    canOpenArtist: Boolean,
     onSeeAll: () -> Unit,
     onPlayTrack: (Long) -> Unit,
     onToggleLike: (Long) -> Unit,
@@ -912,11 +905,7 @@ private fun SearchTracksSection(
                 focus = focus,
                 onPlay = { onPlayTrack(track.id) },
                 onToggleLike = { onToggleLike(track.id) },
-                onOpenMore = if (track.hasMoreActions(canOpenAlbum, canOpenArtist)) {
-                    { bounds -> onOpenMore(track, bounds) }
-                } else {
-                    null
-                },
+                onOpenMore = { bounds -> onOpenMore(track, bounds) },
                 onColumnFocused = { column ->
                     memory.lastFocusedAllTrack = TrackFocusMemory(track.id, column)
                     memory.lastFocusedSection = SearchKind.Tracks
