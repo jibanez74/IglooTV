@@ -15,7 +15,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 @Composable
 fun MusicianCard(
     musician: MusicianCardUi,
-    onClick: (() -> Unit)?,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
     width: Dp = IglooTheme.layout.posterWidth,
 ) {

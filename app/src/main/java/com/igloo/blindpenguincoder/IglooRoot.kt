@@ -407,8 +407,6 @@ fun IglooRoot(container: IglooAppContainer) {
                             MovieDetailsActions.Library(
                                 onToggleWatched = detailsViewModel::toggleWatched,
                                 onToggleLike = detailsViewModel::toggleLike,
-                                // The remaining More menu items, wired to nothing until each
-                                // feature lands; selecting one only closes the menu for now.
                                 onSelectPlaybackMode = detailsViewModel::selectPlaybackMode,
                                 onSelectAudioTrack = detailsViewModel::selectAudioTrack,
                                 onSelectSubtitle = detailsViewModel::selectSubtitle,

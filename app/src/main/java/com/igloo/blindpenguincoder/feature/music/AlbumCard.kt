@@ -15,7 +15,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 @Composable
 fun AlbumCard(
     album: AlbumCardUi,
-    onClick: (() -> Unit)?,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
     aspect: Float = IglooTheme.layout.albumAspect,
     width: Dp = IglooTheme.layout.posterWidth,

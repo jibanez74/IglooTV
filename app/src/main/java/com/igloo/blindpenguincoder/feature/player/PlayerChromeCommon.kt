@@ -244,11 +244,6 @@ internal fun Modifier.playerBottomScrim(): Modifier = background(
 )
 
 /**
- * One transport control's focus edges. Every control pins down to Cancel and up to [up]; only
- * the row's outer edges cancel sideways, so a control further along the row stays one press
- * away.
- */
-/**
  * Rewind, Play/Pause and Forward, the run of transport every player shares, tagged
  * `<tagPrefix>rewind`, `<tagPrefix>play_pause` and `<tagPrefix>forward`. Each wears
  * [transportFocus] toward [upRequester]; [isFirst] and [isLast] say whether the run's outer
@@ -293,6 +288,11 @@ internal fun SeekTransportButtons(
     )
 }
 
+/**
+ * One transport control's focus edges. Every control pins down to Cancel and up to [up]; only
+ * the row's outer edges cancel sideways, so a control further along the row stays one press
+ * away.
+ */
 internal fun Modifier.transportFocus(
     up: FocusRequester,
     isFirst: Boolean = false,

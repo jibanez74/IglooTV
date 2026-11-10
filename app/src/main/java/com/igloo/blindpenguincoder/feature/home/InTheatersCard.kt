@@ -41,14 +41,13 @@ import com.igloo.blindpenguincoder.core.ui.spoken
  * both themes (section 3.1), so nothing shifts with the theme. With no poster to load — or one
  * that failed — the card drops the scrim and paints its text in theme tokens instead.
  *
- * Focus, press and announcement are the poster card's (`mediaCardInteraction`), so a null
- * [onClick] renders the same inert landing site.
+ * Focus, press and announcement are the poster card's (`mediaCardInteraction`).
  */
 @Composable
 fun InTheatersCard(
     movie: HomeTheaterMovie,
     aspect: Float,
-    onClick: (() -> Unit)?,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors

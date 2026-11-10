@@ -258,7 +258,7 @@ internal fun rememberMusicHeroFocus(
     hasActions: Boolean,
 ): MusicHeroFocus {
     val launchSite = rememberPlayLaunchSite()
-    return remember(summaryFirst, hasActions) {
+    return remember(entryRequester, summaryFirst, hasActions) {
         MusicHeroFocus(summaryFirst, hasActions, entryRequester, launchSite)
     }
 }

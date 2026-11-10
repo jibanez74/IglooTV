@@ -18,7 +18,7 @@ import com.igloo.blindpenguincoder.core.ui.PosterCardProgress
 @Composable
 fun PosterItemCard(
     item: PosterItem,
-    onClick: (() -> Unit)?,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
     aspect: Float = IglooTheme.layout.posterAspect,
     width: Dp = IglooTheme.layout.posterWidth,
