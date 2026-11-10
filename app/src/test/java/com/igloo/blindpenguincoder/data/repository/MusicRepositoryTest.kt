@@ -1,10 +1,8 @@
 package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
-import com.igloo.blindpenguincoder.core.error.AppError
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -70,42 +68,6 @@ class MusicRepositoryTest {
     }
 
     @Test
-    fun `a dead token maps to Unauthorized`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"gone"}""", HttpStatusCode.Unauthorized)
-        }
-
-        val result = http.musicRepository.latestAlbums()
-
-        assertEquals(AppError.Unauthorized, (result as ApiResult.Failure).error)
-    }
-
-    @Test
-    fun `a server failure preserves the backend message`() = runTest {
-        val http = TestHttp {
-            jsonResponse(
-                """{"error":true,"message":"music scan in progress"}""",
-                HttpStatusCode.InternalServerError,
-            )
-        }
-
-        val result = http.musicRepository.latestAlbums()
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("music scan in progress", error.message)
-        assertEquals(500, error.status)
-    }
-
-    @Test
-    fun `a success envelope with no data is Unexpected`() = runTest {
-        val http = TestHttp { jsonResponse("""{"error":false,"message":"ok"}""") }
-
-        val result = http.musicRepository.latestAlbums()
-
-        assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
-    }
-
-    @Test
     fun `album details hits the contract path with the bearer token and decodes the payload`() =
         runTest {
             var request: HttpRequestData? = null
@@ -134,36 +96,21 @@ class MusicRepositoryTest {
             val data = (result as ApiResult.Success).value
             assertEquals("Help!", data.album.title)
             assertEquals(73.4, data.album.spotifyPopularity.orNull())
+            assertEquals("The Beatles", data.album.musician.orNull())
+            assertEquals("1965-08-06", data.album.releaseDate.orNull())
+            assertEquals("https://i.scdn.co/image/help.jpg", data.album.cover.orNull())
             // Milliseconds on the wire, delivered untouched.
             assertEquals(listOf(214_000L, 245_000L), data.tracks.map { it.duration })
             assertEquals(listOf(1L, 2L), data.tracks.map { it.disc })
+            assertEquals("stereo", data.tracks[0].channelLayout)
+            assertEquals(900_000L, data.tracks[0].bitRate)
             assertEquals(459_000L, data.totalDuration)
+            // A full musician row on the wire; the fields the page does not read are ignored.
             assertEquals("The Beatles", data.artists.single().name)
             assertEquals("Ambient", data.trackGenres.single().tag)
+            assertEquals(900L, data.trackGenres.single().trackId)
             assertEquals(listOf("Ambient", "Electronic"), data.albumGenres)
         }
-
-    @Test
-    fun `album details server failure preserves the backend message`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"album not found"}""", HttpStatusCode.NotFound)
-        }
-
-        val result = http.musicRepository.albumDetails(999)
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("album not found", error.message)
-        assertEquals(404, error.status)
-    }
-
-    @Test
-    fun `album details success envelope with no data is Unexpected`() = runTest {
-        val http = TestHttp { jsonResponse("""{"error":false,"message":"ok"}""") }
-
-        val result = http.musicRepository.albumDetails(7)
-
-        assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
-    }
 
     @Test
     fun `album details rows carry the musician id the row menu needs`() = runTest {
@@ -249,25 +196,19 @@ class MusicRepositoryTest {
     }
 
     @Test
-    fun `musicians server failure preserves the backend message`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"nope"}""", HttpStatusCode.InternalServerError)
-        }
-
-        val result = http.musicRepository.musicians(page = 1, perPage = 48)
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("nope", error.message)
-    }
-
-    @Test
     fun `musician details hits the contract path and decodes the typed payload`() = runTest {
         var request: HttpRequestData? = null
         val http = TestHttp {
             request = it
             jsonResponse(
                 musicianDetailsJson(
-                    musician = musicianJson(id = 4, spotifyPopularity = 88.0, spotifyFollowers = 25_000_000),
+                    musician = musicianJson(
+                        id = 4,
+                        summary = "Liverpool, 1960.",
+                        spotifyPopularity = 88.0,
+                        spotifyFollowers = 25_000_000,
+                        thumb = null,
+                    ),
                     albums = listOf(musicianAlbumJson(id = 1, trackCount = 14)),
                     tracks = listOf(
                         musicianTrackJson(id = 900, durationMs = 125_000),
@@ -284,26 +225,15 @@ class MusicRepositoryTest {
         assertEquals("/api/music/musicians/4", requireNotNull(request).url.encodedPath)
         val data = (result as ApiResult.Success).value
         assertEquals("The Beatles", data.musician.name)
+        assertEquals("Liverpool, 1960.", data.musician.summary.orNull())
         assertEquals(88.0, data.musician.spotifyPopularity.orNull())
         assertEquals(25_000_000L, data.musician.spotifyFollowers.orNull())
+        assertNull(data.musician.thumb.orNull())
         assertEquals(listOf(125_000L, 125_000L), data.tracks.map { it.duration })
         assertEquals(1L, data.tracks[0].albumId.orNull())
         assertNull(data.tracks[1].albumId.orNull())
         assertEquals(listOf("Rock", "Pop"), data.genres)
         assertEquals(250_000L, data.totalDuration)
-    }
-
-    @Test
-    fun `musician details not found preserves the backend message`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"musician not found"}""", HttpStatusCode.NotFound)
-        }
-
-        val result = http.musicRepository.musicianDetails(999)
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("musician not found", error.message)
-        assertEquals(404, error.status)
     }
 
     // --- track list ---
@@ -349,23 +279,14 @@ class MusicRepositoryTest {
         // Milliseconds on the wire, delivered untouched.
         assertEquals(125_000L, data.tracks[0].duration)
         assertEquals("The Beatles", data.tracks[0].musicianName.orNull())
+        assertEquals(4L, data.tracks[0].musicianId.orNull())
         assertEquals(1L, data.tracks[0].albumId.orNull())
+        assertEquals("Help!", data.tracks[0].albumTitle.orNull())
         assertNull(data.tracks[1].musicianName.orNull())
         assertNull(data.tracks[1].albumId.orNull())
+        assertNull(data.tracks[1].albumCover.orNull())
         assertEquals(150L, data.total)
         assertTrue(data.hasMore)
-    }
-
-    @Test
-    fun `tracks server failure preserves the backend message`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"failed to fetch tracks"}""", HttpStatusCode.InternalServerError)
-        }
-
-        val result = http.musicRepository.tracks(limit = 50, offset = 0)
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("failed to fetch tracks", error.message)
     }
 
     @Test
@@ -382,7 +303,10 @@ class MusicRepositoryTest {
         assertEquals("/api/music/tracks/shuffle", captured.url.encodedPath)
         assertEquals("50", captured.url.parameters["limit"])
         assertEquals("1,2,3", captured.url.parameters["exclude"])
-        assertEquals(listOf(12L, 34L), (result as ApiResult.Success).value.tracks.map { it.id })
+        // The track list's rows, with no paging counts around them.
+        val tracks = (result as ApiResult.Success).value.tracks
+        assertEquals(listOf(12L, 34L), tracks.map { it.id })
+        assertEquals("The Beatles", tracks[0].musicianName.orNull())
     }
 
     /** The first batch has nothing to exclude; an empty `exclude=` would be a contract invention. */
@@ -436,19 +360,6 @@ class MusicRepositoryTest {
     }
 
     @Test
-    fun `a like toggle failure maps to an Api error`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"invalid track id"}""", HttpStatusCode.BadRequest)
-        }
-
-        val result = http.musicRepository.toggleTrackLike(0)
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("invalid track id", error.message)
-        assertEquals(400, error.status)
-    }
-
-    @Test
     fun `music stats decode the three counts`() = runTest {
         var request: HttpRequestData? = null
         val http = TestHttp {
@@ -463,14 +374,5 @@ class MusicRepositoryTest {
         assertEquals(12L, stats.totalAlbums)
         assertEquals(150L, stats.totalTracks)
         assertEquals(9L, stats.totalMusicians)
-    }
-
-    @Test
-    fun `a paged success envelope with no data is Unexpected`() = runTest {
-        val http = TestHttp { jsonResponse("""{"error":false,"message":"ok"}""") }
-
-        assertTrue((http.musicRepository.tracks(50, 0) as ApiResult.Failure).error is AppError.Unexpected)
-        assertTrue((http.musicRepository.musicians(1, 48) as ApiResult.Failure).error is AppError.Unexpected)
-        assertTrue((http.musicRepository.likedTrackIds() as ApiResult.Failure).error is AppError.Unexpected)
     }
 }

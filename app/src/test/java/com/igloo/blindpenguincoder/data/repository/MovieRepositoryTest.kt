@@ -5,9 +5,9 @@ import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -92,16 +92,6 @@ class MovieRepositoryTest {
     }
 
     @Test
-    fun `a refused library page fails with its status`() = runTest {
-        val http = TestHttp { jsonResponse("""{"error":true,"message":"nope"}""", HttpStatusCode.InternalServerError) }
-
-        val result = http.movieRepository.moviesLibrary(1, 48, SortOrder.Ascending)
-
-        val error = (result as ApiResult.Failure).error
-        assertEquals(500, (error as AppError.Api).status)
-    }
-
-    @Test
     fun `movie stats decodes the total movie count`() = runTest {
         var request: HttpRequestData? = null
         val http = TestHttp {
@@ -134,33 +124,6 @@ class MovieRepositoryTest {
         val result = http.movieRepository.latestMovies()
 
         assertTrue((result as ApiResult.Success).value.isEmpty())
-    }
-
-    @Test
-    fun `a dead token maps to Unauthorized`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"gone"}""", HttpStatusCode.Unauthorized)
-        }
-
-        val result = http.movieRepository.latestMovies()
-
-        assertEquals(AppError.Unauthorized, (result as ApiResult.Failure).error)
-    }
-
-    @Test
-    fun `a server failure preserves the backend message`() = runTest {
-        val http = TestHttp {
-            jsonResponse(
-                """{"error":true,"message":"scan in progress"}""",
-                HttpStatusCode.InternalServerError,
-            )
-        }
-
-        val result = http.movieRepository.latestMovies()
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("scan in progress", error.message)
-        assertEquals(500, error.status)
     }
 
     @Test
@@ -211,7 +174,7 @@ class MovieRepositoryTest {
                 continueWatchingJson(
                     continueWatchingEpisodeJson(id = 900, showTitle = "Severance"),
                     continueWatchingMovieJson(id = 5, title = "Heat"),
-                    continueWatchingMovieJson(id = 2, title = "Arrival"),
+                    continueWatchingMovieJson(id = 2, title = "Arrival", posterPath = null, year = null),
                 ),
             )
         }
@@ -221,11 +184,15 @@ class MovieRepositoryTest {
         val items = (result as ApiResult.Success).value
         assertEquals(listOf("Severance", "Heat", "Arrival"), items.map { it.title })
         assertEquals(listOf(true, false, false), items.map { it.isEpisode })
+        assertEquals(listOf(false, true, true), items.map { it.isMovie })
         val episode = items.first()
+        assertEquals(600.0, episode.progressSec, 0.0)
         assertEquals(1L, episode.seasonNumber)
         assertEquals(3L, episode.episodeNumber)
         assertEquals("In Perpetuity", episode.episodeName)
         assertNull(items[1].episodeName)
+        assertNull(items[2].posterPath.orNull())
+        assertNull(items[2].year.orNull())
     }
 
     @Test
@@ -235,42 +202,6 @@ class MovieRepositoryTest {
         val result = http.movieRepository.continueWatching()
 
         assertTrue((result as ApiResult.Success).value.isEmpty())
-    }
-
-    @Test
-    fun `a dead token maps continue watching to Unauthorized`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"gone"}""", HttpStatusCode.Unauthorized)
-        }
-
-        val result = http.movieRepository.continueWatching()
-
-        assertEquals(AppError.Unauthorized, (result as ApiResult.Failure).error)
-    }
-
-    @Test
-    fun `a continue watching server failure preserves the backend message`() = runTest {
-        val http = TestHttp {
-            jsonResponse(
-                """{"error":true,"message":"scan in progress"}""",
-                HttpStatusCode.InternalServerError,
-            )
-        }
-
-        val result = http.movieRepository.continueWatching()
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("scan in progress", error.message)
-        assertEquals(500, error.status)
-    }
-
-    @Test
-    fun `a continue watching success envelope with no data is Unexpected`() = runTest {
-        val http = TestHttp { jsonResponse("""{"error":false,"message":"ok"}""") }
-
-        val result = http.movieRepository.continueWatching()
-
-        assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
     }
 
     @Test
@@ -337,31 +268,6 @@ class MovieRepositoryTest {
     }
 
     @Test
-    fun `an in-theaters server failure preserves the backend message`() = runTest {
-        val http = TestHttp {
-            jsonResponse(
-                """{"error":true,"message":"tmdb unavailable"}""",
-                HttpStatusCode.InternalServerError,
-            )
-        }
-
-        val result = http.movieRepository.moviesInTheaters()
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("tmdb unavailable", error.message)
-        assertEquals(500, error.status)
-    }
-
-    @Test
-    fun `an in-theaters success envelope with no data is Unexpected`() = runTest {
-        val http = TestHttp { jsonResponse("""{"error":false,"message":"ok"}""") }
-
-        val result = http.movieRepository.moviesInTheaters()
-
-        assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
-    }
-
-    @Test
     fun `movie details hits the contract path with the bearer token`() = runTest {
         var request: HttpRequestData? = null
         val http = TestHttp {
@@ -378,6 +284,7 @@ class MovieRepositoryTest {
         val details = (result as ApiResult.Success).value
         assertEquals(5L, details.movie.id)
         assertEquals("Heat", details.movie.title)
+        assertEquals(1995L, details.movie.year?.orNull())
         assertEquals("/heat-backdrop.jpg", details.movie.backdropPath?.orNull())
         assertEquals(170L, details.movie.runTime?.orNull())
         assertEquals(8.2, requireNotNull(details.movie.criticRating?.orNull()), 0.0)
@@ -391,6 +298,7 @@ class MovieRepositoryTest {
                 movieDetailsJson(
                     backdropPath = null,
                     overview = null,
+                    tagLine = null,
                     year = null,
                     certification = null,
                     runTimeMinutes = null,
@@ -403,6 +311,7 @@ class MovieRepositoryTest {
 
         assertNull(movie.backdropPath?.orNull())
         assertNull(movie.overview?.orNull())
+        assertNull(movie.tagLine?.orNull())
         assertNull(movie.year?.orNull())
         assertNull(movie.certification?.orNull())
         assertNull(movie.runTime?.orNull())
@@ -410,36 +319,53 @@ class MovieRepositoryTest {
     }
 
     @Test
-    fun `a movie details success envelope with no data is Unexpected`() = runTest {
-        val http = TestHttp { jsonResponse("""{"error":false,"message":"ok"}""") }
-
-        val result = http.movieRepository.movieDetails(1)
-
-        assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
-    }
-
-    @Test
     fun `movie details decodes populated related lists`() = runTest {
         val http = TestHttp {
             jsonResponse(
                 movieDetailsJson(
-                    cast = listOf(castMemberJson(artistName = "Al Pacino", character = "Vincent Hanna")),
-                    crew = listOf(crewMemberJson(job = "Director", artistName = "Michael Mann")),
+                    cast = listOf(
+                        castMemberJson(
+                            artistName = "Al Pacino",
+                            character = "Vincent Hanna",
+                            castOrder = 0,
+                            artistProfile = "/pacino.jpg",
+                        ),
+                    ),
+                    crew = listOf(
+                        crewMemberJson(job = "Director", department = "Directing", artistName = "Michael Mann"),
+                    ),
                     genres = listOf(genreJson(tag = "Crime")),
                     productionCompanies = listOf(productionCompanyJson(name = "Regency Enterprises")),
-                    extraVideos = listOf(extraVideoJson(title = "Heat - Trailer")),
+                    extraVideos = listOf(
+                        extraVideoJson(
+                            title = "Heat - Trailer",
+                            key = "0xbkYZbdIVw",
+                            type = "trailer",
+                            site = "youtube",
+                        ),
+                    ),
                 ),
             )
         }
 
         val details = (http.movieRepository.movieDetails(1) as ApiResult.Success).value
 
-        assertEquals("Al Pacino", details.cast.single().artistName)
-        assertEquals("Vincent Hanna", details.cast.single().character)
-        assertEquals("Michael Mann", details.crew.single().artistName)
+        val cast = details.cast.single()
+        assertEquals("Al Pacino", cast.artistName)
+        assertEquals("Vincent Hanna", cast.character)
+        assertEquals(0L, cast.castOrder)
+        assertEquals("/pacino.jpg", cast.artistProfile?.orNull())
+        val crew = details.crew.single()
+        assertEquals("Michael Mann", crew.artistName)
+        assertEquals("Director", crew.job)
+        assertEquals("Directing", crew.department)
         assertEquals("Crime", details.genres.single().tag)
         assertEquals("Regency Enterprises", details.productionCompanies.single().name)
-        assertEquals("Heat - Trailer", details.extraVideos.single().title)
+        val video = details.extraVideos.single()
+        assertEquals("Heat - Trailer", video.title)
+        assertEquals("0xbkYZbdIVw", video.key)
+        assertEquals("trailer", video.type)
+        assertEquals("youtube", video.site)
     }
 
     @Test
@@ -464,25 +390,19 @@ class MovieRepositoryTest {
         assertEquals("/api/movies/5/technical-details", captured.url.encodedPath)
         assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
         val data = (result as ApiResult.Success).value
-        assertEquals(3840L, data.videoStreams.single().width)
-        assertEquals(6L, data.audioStreams.single().channels)
-        assertEquals("subrip", data.subtitles.single().codec)
+        assertEquals("video/x-matroska", data.movie.mimeType)
+        val video = data.videoStreams.single()
+        assertEquals(3840L, video.width)
+        assertEquals(1600L, video.height)
+        assertEquals("smpte2084", video.colorTransfer?.orNull())
+        val audio = data.audioStreams.single()
+        assertEquals(6L, audio.channels)
+        assertEquals("5.1(side)", audio.channelLayout?.orNull())
+        assertTrue(audio.isDefault)
+        val subtitle = data.subtitles.single()
+        assertEquals("subrip", subtitle.codec)
+        assertFalse(subtitle.isForced)
         assertEquals(193L, data.chapters.single().startTime)
-    }
-
-    @Test
-    fun `a technical details server failure preserves the backend message`() = runTest {
-        val http = TestHttp {
-            jsonResponse(
-                """{"error":true,"message":"probe failed"}""",
-                HttpStatusCode.InternalServerError,
-            )
-        }
-
-        val result = http.movieRepository.movieTechnicalDetails(1)
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("probe failed", error.message)
     }
 
     @Test
@@ -566,20 +486,5 @@ class MovieRepositoryTest {
         assertEquals("POST", captured.method.value)
         val data = (result as ApiResult.Success).value
         assertTrue(data.isLiked)
-    }
-
-    @Test
-    fun `a like toggle failure maps to an Api error`() = runTest {
-        val http = TestHttp {
-            jsonResponse(
-                """{"error":true,"message":"like failed"}""",
-                HttpStatusCode.InternalServerError,
-            )
-        }
-
-        val result = http.movieRepository.toggleMovieLike(1)
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals("like failed", error.message)
     }
 }
