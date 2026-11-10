@@ -889,9 +889,10 @@ in another section.
 The app deliberately does **not** use Material theming. `IglooTheme` is the only source of
 colors, type, and dimensions.
 
-### 9.2 `androidx.tv.material3` (1.1.0)
+### 9.2 `androidx.tv.material3`
 
-Available and appropriate to adopt where it saves hand-rolling:
+Not a dependency: nothing adopted it, so the build dropped it (2026-11-10). Add it back if one of
+these saves hand-rolling:
 
 - `Surface` with `ClickableSurfaceScale` / `Glow` / `Border` — TV-aware focus indication that
   matches §6.1 if configured with our tokens
@@ -901,7 +902,7 @@ Available and appropriate to adopt where it saves hand-rolling:
 
 Adopt these for *behavior*; always configure them with Igloo tokens, never their defaults.
 
-Nothing has been adopted yet. The Movies tab strip (§9.1 `IglooTabRow`) deliberately stayed on
+The Movies tab strip (§9.1 `IglooTabRow`) deliberately stayed on
 Foundation: every other control wears §6.1's `focusRing`, and a Material tab would have been the
 one node in the app with a focus treatment of its own.
 
