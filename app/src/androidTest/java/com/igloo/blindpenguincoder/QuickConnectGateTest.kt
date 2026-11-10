@@ -2,7 +2,6 @@ package com.igloo.blindpenguincoder
 
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
@@ -248,8 +247,7 @@ class QuickConnectGateTest {
         apiBaseUrl: String,
         also: suspend (ProfileRepository) -> Unit = {},
     ) {
-        val app = InstrumentationRegistry.getInstrumentation()
-            .targetContext.applicationContext as IglooApplication
+        val app = iglooApp()
         runBlocking {
             app.container.serverSettingsStore.save(apiBaseUrl)
             app.container.profileRepository.clearAll()

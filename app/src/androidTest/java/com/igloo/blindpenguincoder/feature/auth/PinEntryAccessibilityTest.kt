@@ -18,13 +18,10 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.printToString
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
-import com.igloo.blindpenguincoder.IglooApplication
 import com.igloo.blindpenguincoder.LocalApiServer
 import com.igloo.blindpenguincoder.MainActivity
 import com.igloo.blindpenguincoder.awaitScreen
-import com.igloo.blindpenguincoder.data.model.AuthUser
-import kotlinx.coroutines.runBlocking
+import com.igloo.blindpenguincoder.seedPinProtectedProfile
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Rule
@@ -49,7 +46,7 @@ class PinEntryAccessibilityTest {
 
     @Test
     fun theGateOpensOnTheKeypadWithAnEmptyIndicator() {
-        seedPinProtectedProfile()
+        seedPinProtectedProfile(server.apiBaseUrl)
 
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.awaitScreen("Enter Jose's PIN")
@@ -63,7 +60,7 @@ class PinEntryAccessibilityTest {
 
     @Test
     fun theIndicatorAnnouncesProgressPolitelyWithoutTheDigits() {
-        seedPinProtectedProfile()
+        seedPinProtectedProfile(server.apiBaseUrl)
 
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.awaitScreen("Enter Jose's PIN")
@@ -83,7 +80,7 @@ class PinEntryAccessibilityTest {
 
     @Test
     fun noEnteredDigitEverReachesTheAccessibilityTree() {
-        seedPinProtectedProfile()
+        seedPinProtectedProfile(server.apiBaseUrl)
 
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.awaitScreen("Enter Jose's PIN")
@@ -114,7 +111,7 @@ class PinEntryAccessibilityTest {
 
     @Test
     fun deleteRemovesTheLastDigitOnly() {
-        seedPinProtectedProfile()
+        seedPinProtectedProfile(server.apiBaseUrl)
 
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.awaitScreen("Enter Jose's PIN")
@@ -131,7 +128,7 @@ class PinEntryAccessibilityTest {
 
     @Test
     fun theKeypadIsTraversedRowMajorAndExitsToTheFooter() {
-        seedPinProtectedProfile()
+        seedPinProtectedProfile(server.apiBaseUrl)
 
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.awaitScreen("Enter Jose's PIN")
@@ -147,7 +144,7 @@ class PinEntryAccessibilityTest {
 
     @Test
     fun theLastRowLeadsToBackToProfiles() {
-        seedPinProtectedProfile()
+        seedPinProtectedProfile(server.apiBaseUrl)
 
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.awaitScreen("Enter Jose's PIN")
@@ -172,7 +169,7 @@ class PinEntryAccessibilityTest {
      */
     @Test
     fun leavingTheKeypadAndReturningLandsOnTheKeyTheUserLeft() {
-        seedPinProtectedProfile()
+        seedPinProtectedProfile(server.apiBaseUrl)
 
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.awaitScreen("Enter Jose's PIN")
@@ -206,7 +203,7 @@ class PinEntryAccessibilityTest {
      */
     @Test
     fun aRejectedPinHandsFocusBackToTheKeypad() {
-        seedPinProtectedProfile()
+        seedPinProtectedProfile(server.apiBaseUrl)
 
         ActivityScenario.launch(MainActivity::class.java).use {
             composeRule.awaitScreen("Enter Jose's PIN")
@@ -223,26 +220,6 @@ class PinEntryAccessibilityTest {
         }
     }
 
-    private fun seedPinProtectedProfile() {
-        val app = InstrumentationRegistry.getInstrumentation()
-            .targetContext.applicationContext as IglooApplication
-        runBlocking {
-            app.container.serverSettingsStore.save(server.apiBaseUrl)
-            app.container.profileRepository.clearAll()
-            app.container.profileRepository.setPending("igd_jose")
-            app.container.profileRepository.commitSignIn(
-                AuthUser(
-                    id = 1,
-                    name = "Jose",
-                    isAdmin = false,
-                    avatar = null,
-                    hasPin = true,
-                ),
-            )
-            app.container.profileRepository.deactivate()
-        }
-        app.container.serverUrlProvider.set(null)
-    }
 }
 
 private const val VERIFY_TIMEOUT_MILLIS = 5_000L

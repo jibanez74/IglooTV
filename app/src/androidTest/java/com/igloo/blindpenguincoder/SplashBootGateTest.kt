@@ -7,9 +7,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.feature.boot.SPLASH_LABEL
-import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,16 +56,6 @@ class SplashBootGateTest {
         .onAllNodesWithContentDescription(SPLASH_LABEL)
         .fetchSemanticsNodes()
         .size
-
-    private fun clearStoredSetup() {
-        val app = InstrumentationRegistry.getInstrumentation()
-            .targetContext.applicationContext as IglooApplication
-        runBlocking {
-            app.container.serverSettingsStore.clear()
-            app.container.profileRepository.clearAll()
-        }
-        app.container.serverUrlProvider.set(null)
-    }
 
     private companion object {
         const val WAIT_MILLIS = 5_000L

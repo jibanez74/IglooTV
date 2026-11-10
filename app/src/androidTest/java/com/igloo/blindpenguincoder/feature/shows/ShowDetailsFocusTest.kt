@@ -1,15 +1,11 @@
 package com.igloo.blindpenguincoder.feature.shows
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -35,9 +31,10 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.inertShowDetailsActions
+import com.igloo.blindpenguincoder.isHeading
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testEpisode
 import com.igloo.blindpenguincoder.testEpisodes
 import com.igloo.blindpenguincoder.testHomeShows
@@ -75,7 +72,6 @@ class ShowDetailsFocusTest {
     private val watchedSets = mutableListOf<Pair<Long, Boolean>>()
     private val played = mutableListOf<Long>()
     private val selectedSeasons = mutableListOf<Long>()
-    private var hostActivity: Activity? = null
 
     /** What a chip press loads into the rail, by season; Loading holds the skeleton. */
     private var seasonOnSelect: (Long) -> IglooRailState<EpisodeUi> = { number ->
@@ -99,8 +95,6 @@ class ShowDetailsFocusTest {
         played.clear()
         selectedSeasons.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
@@ -146,13 +140,6 @@ class ShowDetailsFocusTest {
         composeRule.waitForIdle()
     }
 
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
-        composeRule.waitForIdle()
-    }
-
     private fun node(tag: String) = composeRule.onNodeWithTag(tag)
     private fun play() = node("details_play")
     private fun chip(number: Long) = node("show_season_$number")
@@ -178,7 +165,7 @@ class ShowDetailsFocusTest {
         assertEquals(listOf(12L), opened)
         play().assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         node("show_details").assertDoesNotExist()
         card.assertIsFocused()
@@ -195,7 +182,7 @@ class ShowDetailsFocusTest {
         assertEquals(listOf(testShowHero.id), opened)
         play().assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         hero.assertIsFocused()
     }
@@ -601,8 +588,6 @@ class ShowDetailsFocusTest {
         composeRule.waitForIdle()
     }
 
-    private fun isHeading() = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
-
     // --- the episode menu ---
 
     /**
@@ -661,7 +646,7 @@ class ShowDetailsFocusTest {
         episode(903).requestFocus()
         episode(903).hold()
 
-        pressBack()
+        composeRule.pressBack()
 
         node("more_menu").assertDoesNotExist()
         node("show_details").assertExists()

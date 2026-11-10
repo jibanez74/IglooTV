@@ -2,14 +2,12 @@ package com.igloo.blindpenguincoder.feature.auth
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -22,10 +20,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.igloo.blindpenguincoder.AssertReferenceViewport
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
 import com.igloo.blindpenguincoder.core.design.UiScale
-import com.igloo.blindpenguincoder.core.design.viewportFactor
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -115,15 +113,6 @@ class WelcomeScreenLayoutTest {
      * device reporting 1200dp or wider would double every dimension and fail this suite for the
      * wrong reason.
      */
-    @Composable
-    private fun AssertReferenceViewport() {
-        val widthDp = LocalWindowInfo.current.containerSize.width / LocalDensity.current.density
-        assertTrue(
-            "test device reports ${widthDp}dp wide; the layout budget assumes the 960dp " +
-                "reference viewport",
-            viewportFactor(widthDp) == 1f,
-        )
-    }
 
     /**
      * Measured against the 960×540 box, not `onRoot()`. The root is the whole test-activity

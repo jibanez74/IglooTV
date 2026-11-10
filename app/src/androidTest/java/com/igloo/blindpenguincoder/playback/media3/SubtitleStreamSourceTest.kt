@@ -96,18 +96,6 @@ class SubtitleStreamSourceTest {
         }
     }
 
-    private fun waitFor(what: String, timeoutMs: Long = 15_000, condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + timeoutMs
-        while (SystemClock.uptimeMillis() < deadline) {
-            instrumentation.waitForIdleSync()
-            if (condition()) return
-            SystemClock.sleep(20)
-        }
-        throw AssertionError("timed out waiting for $what; ${diagnostics()}")
-    }
-
-    private fun onMain(block: () -> Unit) = instrumentation.runOnMainSync(block)
-
     private fun position(): Long {
         var positionMs = 0L
         onMain { positionMs = player.currentPosition }
@@ -126,6 +114,9 @@ class SubtitleStreamSourceTest {
     private fun assertWithin(what: String, positionMs: Long, fromMs: Long, toMs: Long) {
         assertTrue("$what at $positionMs ms, expected $fromMs..$toMs ms; ${diagnostics()}", positionMs in fromMs..toMs)
     }
+
+    private fun waitFor(what: String, condition: () -> Boolean) =
+        com.igloo.blindpenguincoder.playback.media3.waitFor(what, 15_000, { "; ${diagnostics()}" }, condition)
 
     private fun diagnostics(): String {
         var tracks = ""

@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.movies
 
+import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.ui.RatingTier
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
@@ -29,41 +30,34 @@ import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MovieDetailsViewModelTest {
+    @get:Rule
+    val main = MainDispatcherRule()
 
     // A view model outlives the test body — its scope is not runTest's child — so an unfinished
     // load would still be on Dispatchers.Main when the next class calls setMain. Closing cancels
     // every load, which is also what Back does in production.
     private val viewModels = mutableListOf<MovieDetailsViewModel>()
 
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-    }
-
     @After
     fun tearDown() {
         viewModels.forEach { it.close() }
         viewModels.clear()
-        Dispatchers.resetMain()
     }
 
     private fun viewModel(

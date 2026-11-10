@@ -1,14 +1,10 @@
 package com.igloo.blindpenguincoder.feature.player
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -35,7 +31,6 @@ import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
@@ -48,6 +43,7 @@ import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testContinueItems
 import com.igloo.blindpenguincoder.testMovieDetails
 import com.igloo.blindpenguincoder.testShowDetailsState
@@ -121,7 +117,6 @@ class VideoPlayerOverlayFocusTest {
     private lateinit var homePlayRequests: MutableSharedFlow<VideoPlayRequest>
     private lateinit var showPlayRequests: MutableSharedFlow<VideoPlayRequest>
     private var failProgressSaves = false
-    private var hostActivity: Activity? = null
 
     /**
      * Null mimics the gate refusing: the message lands on the page and nothing opens. With
@@ -152,8 +147,6 @@ class VideoPlayerOverlayFocusTest {
         homePlayRequests = MutableSharedFlow(extraBufferCapacity = 1)
         showPlayRequests = MutableSharedFlow(extraBufferCapacity = 1)
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 val progressViewModel = remember {
                     VideoPlayerViewModel(
@@ -217,13 +210,6 @@ class VideoPlayerOverlayFocusTest {
                     },
                 )
             }
-        }
-        composeRule.waitForIdle()
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
         }
         composeRule.waitForIdle()
     }
@@ -292,7 +278,7 @@ class VideoPlayerOverlayFocusTest {
                 ),
             )
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
         composeRule.onNodeWithTag("details_progress_error").assertExists()
@@ -328,7 +314,7 @@ class VideoPlayerOverlayFocusTest {
         composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
         assertEquals(listOf("start:null:true"), engines.single().playbackCommands)
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
         assertEquals(true, engines.single().released)
@@ -355,7 +341,7 @@ class VideoPlayerOverlayFocusTest {
         emitHomePlayRequest()
         failACadenceSave(engines.single(), durationSec = 3300.0)
 
-        pressBack()
+        composeRule.pressBack()
 
         // No details page sits under a Home launch, so Home carries the Retry itself, directly
         // above the rail: Up from the card the player closed onto reaches it.
@@ -380,7 +366,7 @@ class VideoPlayerOverlayFocusTest {
         setShellContent(detailsOpen = false)
         emitHomePlayRequest()
         failACadenceSave(engines.single(), durationSec = 3300.0)
-        pressBack()
+        composeRule.pressBack()
         composeRule.onNodeWithTag("home_progress_error").assertExists()
 
         composeRule.runOnIdle {
@@ -412,7 +398,7 @@ class VideoPlayerOverlayFocusTest {
         assertEquals(PlaybackMediaRef.Episode(902), launched.single().media)
         assertEquals(listOf("start:null:true"), engines.single().playbackCommands)
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
         assertEquals(true, engines.single().released)
@@ -429,7 +415,7 @@ class VideoPlayerOverlayFocusTest {
         composeRule.onNodeWithTag("movie_player").assertExists()
         assertEquals(PlaybackMediaRef.Episode(903), launched.single().media)
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
         composeRule.onNodeWithTag("episode_card_903").assertIsFocused()
@@ -441,7 +427,7 @@ class VideoPlayerOverlayFocusTest {
         pressPlay()
         failACadenceSave(engines.single(), durationSec = 3300.0)
 
-        pressBack()
+        composeRule.pressBack()
 
         // The show page carries the Retry under its hero action, one press down from Play.
         composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
@@ -466,10 +452,10 @@ class VideoPlayerOverlayFocusTest {
         setShellContent(detailsOpen = false, showOpen = true)
         pressPlay()
         failACadenceSave(engines.single(), durationSec = 3300.0)
-        pressBack()
+        composeRule.pressBack()
         composeRule.onNodeWithTag("details_progress_error").assertExists()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("details_layer").assertDoesNotExist()
         composeRule.onNodeWithTag("home_progress_error").assertDoesNotExist()
@@ -514,7 +500,7 @@ class VideoPlayerOverlayFocusTest {
             .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility))
         assertTrue(landed.isEmpty())
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
         assertEquals(true, engines[1].released)
@@ -589,7 +575,7 @@ class VideoPlayerOverlayFocusTest {
         setShellContent { playRequest }
         pressPlay()
 
-        pressBack()
+        composeRule.pressBack()
 
         // The player is gone and its engine torn down, the details overlay survived the Back,
         // and focus is back on the button that launched playback.
@@ -631,7 +617,7 @@ class VideoPlayerOverlayFocusTest {
 
         composeRule.onNodeWithTag("playback_settings_dialog").assertExists()
         composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
-        pressBack()
+        composeRule.pressBack()
         composeRule.onNodeWithTag("playback_settings_dialog").assertDoesNotExist()
         composeRule.onNodeWithTag("details_more").assertIsFocused()
     }
@@ -652,7 +638,7 @@ class VideoPlayerOverlayFocusTest {
         composeRule.onNodeWithTag("trailer_player").assertExists()
         composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
 
-        pressBack()
+        composeRule.pressBack()
         composeRule.onNodeWithTag("trailer_player").assertDoesNotExist()
         secondExtra.assertIsFocused()
 
@@ -663,7 +649,7 @@ class VideoPlayerOverlayFocusTest {
         composeRule.onNodeWithTag("details_play").requestFocus()
         pressPlay()
         composeRule.onNodeWithTag("movie_player").assertExists()
-        pressBack()
+        composeRule.pressBack()
         composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
         composeRule.onNodeWithTag("details_play").assertIsFocused()
     }

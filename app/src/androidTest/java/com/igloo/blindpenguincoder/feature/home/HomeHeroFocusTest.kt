@@ -1,15 +1,11 @@
 package com.igloo.blindpenguincoder.feature.home
 
-import android.app.Activity
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -30,6 +26,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -60,7 +57,6 @@ class HomeHeroFocusTest {
     private var heroState by mutableStateOf<HomeHeroState>(HomeHeroState.Loading)
     private val opened = mutableListOf<Long>()
     private val showsOpened = mutableListOf<Long>()
-    private var hostActivity: Activity? = null
 
     private val bothPages = HomeHeroState.Loaded(listOf(testHero, testShowHero))
 
@@ -78,8 +74,6 @@ class HomeHeroFocusTest {
         opened.clear()
         showsOpened.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     home = HomeUiState(
@@ -92,13 +86,6 @@ class HomeHeroFocusTest {
                     onShowSelected = { id -> showsOpened += id },
                 )
             }
-        }
-        composeRule.waitForIdle()
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
         }
         composeRule.waitForIdle()
     }
@@ -302,7 +289,7 @@ class HomeHeroFocusTest {
         press(Key.DirectionRight)
 
         // Back opens the spine on Home; right comes back in through the pane's entry anchor.
-        pressBack()
+        composeRule.pressBack()
         val home = composeRule.onNodeWithContentDescription("Home").assertIsFocused()
         home.performKeyInput { pressKey(Key.DirectionRight) }
 

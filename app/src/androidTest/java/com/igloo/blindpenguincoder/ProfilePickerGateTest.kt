@@ -15,7 +15,6 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -105,8 +104,7 @@ class ProfilePickerGateTest {
      * a server. Ana is committed last and is therefore the most recently used.
      */
     private fun seedTwoProfiles() {
-        val app = InstrumentationRegistry.getInstrumentation()
-            .targetContext.applicationContext as IglooApplication
+        val app = iglooApp()
         runBlocking {
             app.container.serverSettingsStore.save("http://192.0.2.1:8080/api")
             app.container.profileRepository.clearAll()

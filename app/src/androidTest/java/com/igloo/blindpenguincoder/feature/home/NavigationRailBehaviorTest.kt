@@ -1,9 +1,6 @@
 package com.igloo.blindpenguincoder.feature.home
 
 import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +35,8 @@ import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.findActivity
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -134,12 +133,6 @@ class NavigationRailBehaviorTest {
 
     // Back goes through the dispatcher BackHandler listens to; its fallback, when no handler
     // is enabled, is what finishes the activity.
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
-        composeRule.waitForIdle()
-    }
 
     @Test
     fun railRestsCollapsedAndExpandsWhileDpadFocusIsInside() {
@@ -165,7 +158,7 @@ class NavigationRailBehaviorTest {
         openSettings()
         placeholderStartCard().assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithContentDescription("Settings").assertIsFocused()
         rail().assertWidthIsEqualTo(expandedWidth)
@@ -178,7 +171,7 @@ class NavigationRailBehaviorTest {
         contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         contentStartCard().assertIsFocused()
         rail().assertWidthIsEqualTo(collapsedWidth)
@@ -188,11 +181,11 @@ class NavigationRailBehaviorTest {
     fun backFromRailEnteredByBackExitsTheApp() {
         setShellContent()
 
-        pressBack()
+        composeRule.pressBack()
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
 
         // No BackHandler is enabled in this state, so Back falls through to the activity.
-        pressBack()
+        composeRule.pressBack()
 
         val activity = checkNotNull(hostActivity)
         assertTrue(
@@ -403,7 +396,7 @@ class NavigationRailBehaviorTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Sign out of Igloo?").assertIsDisplayed()
 
-        pressBack()
+        composeRule.pressBack()
 
         // Back reaches the dialog's own handler rather than falling through to the rail's
         // three-state model — and the shell's handlers are gated while it is open.
@@ -424,7 +417,7 @@ class NavigationRailBehaviorTest {
         )
         composeRule.onNodeWithContentDescription("Signing out…").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onAllNodesWithText("Sign out of Igloo?").assertCountEquals(0)
         composeRule.onNodeWithContentDescription("Sign out").assertIsFocused()
@@ -434,9 +427,3 @@ class NavigationRailBehaviorTest {
 
 /** Longer than the helper's wait, so the deferred request has certainly run. */
 private const val ANNOUNCE_WAIT_MS = ANNOUNCED_FOCUS_WAIT_MS + 100L
-
-internal tailrec fun Context.findActivity(): Activity = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> error("The compose test host context is not an Activity")
-}

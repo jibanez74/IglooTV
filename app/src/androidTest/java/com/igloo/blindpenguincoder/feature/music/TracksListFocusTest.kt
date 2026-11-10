@@ -1,13 +1,9 @@
 package com.igloo.blindpenguincoder.feature.music
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -23,13 +19,13 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testMusicState
 import com.igloo.blindpenguincoder.testTrackEntries
@@ -63,7 +59,6 @@ class TracksListFocusTest {
     private var loadMoreCalls = 0
     private var playAllCalls = 0
     private val playRequests = MutableSharedFlow<MusicPlayRequest>(extraBufferCapacity = 1)
-    private var hostActivity: Activity? = null
 
     private fun setContent(initial: MusicUiState = testMusicState(tab = MusicTab.Tracks)) {
         musicState = initial
@@ -73,8 +68,6 @@ class TracksListFocusTest {
         loadMoreCalls = 0
         playAllCalls = 0
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     music = musicState,
@@ -111,13 +104,6 @@ class TracksListFocusTest {
     /** The fixture's last rows sit below a 540dp viewport; the lazy list composes them on demand. */
     private fun scrollTracksTo(tag: String) {
         composeRule.onNodeWithTag("tracks_list").performScrollToNode(hasTestTag(tag))
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
-        composeRule.waitForIdle()
     }
 
     @Test
@@ -211,7 +197,7 @@ class TracksListFocusTest {
         composeRule.onNodeWithTag("music_player").assertExists()
         composeRule.onNodeWithTag("music_play_pause").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("music_player").assertDoesNotExist()
         composeRule.onNodeWithTag("track_play_903").assertIsFocused()
@@ -235,7 +221,7 @@ class TracksListFocusTest {
         composeRule.onNodeWithTag("album_details").assertExists()
         composeRule.onNodeWithTag("album_play").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("album_details").assertDoesNotExist()
         composeRule.onNodeWithTag("track_more_902").assertIsFocused()
@@ -251,7 +237,7 @@ class TracksListFocusTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("more_menu").assertExists()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("more_menu").assertDoesNotExist()
         composeRule.onNodeWithTag("tracks_list").assertExists()

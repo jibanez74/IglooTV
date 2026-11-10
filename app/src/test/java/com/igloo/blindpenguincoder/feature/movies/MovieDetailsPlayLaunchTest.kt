@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.movies
 
+import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.audioStreamJson
@@ -11,7 +12,6 @@ import com.igloo.blindpenguincoder.data.repository.videoStreamJson
 import com.igloo.blindpenguincoder.data.repository.watchProgressJson
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -20,15 +20,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import io.ktor.http.HttpStatusCode
 
@@ -39,19 +37,15 @@ import io.ktor.http.HttpStatusCode
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MovieDetailsPlayLaunchTest {
+    @get:Rule
+    val main = MainDispatcherRule()
 
     private val viewModels = mutableListOf<MovieDetailsViewModel>()
-
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-    }
 
     @After
     fun tearDown() {
         viewModels.forEach { it.close() }
         viewModels.clear()
-        Dispatchers.resetMain()
     }
 
     private fun TestScope.http(

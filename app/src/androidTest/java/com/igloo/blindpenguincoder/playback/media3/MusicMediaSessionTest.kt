@@ -3,9 +3,7 @@
 package com.igloo.blindpenguincoder.playback.media3
 
 import android.graphics.Bitmap
-import android.media.session.MediaController as PlatformMediaController
 import android.net.Uri
-import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -26,7 +24,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.ByteArrayOutputStream
@@ -99,27 +96,6 @@ class MusicMediaSessionTest {
         return built
     }
 
-    private fun pressMediaKey(session: MediaSession, keyCode: Int) {
-        val controller = PlatformMediaController(context, session.platformToken)
-        controller.dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
-        controller.dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
-    }
-
-    private fun currentIndex(player: ExoPlayer): Int {
-        var value = -1
-        instrumentation.runOnMainSync { value = player.currentMediaItemIndex }
-        return value
-    }
-
-    private fun awaitIndex(player: ExoPlayer, expected: Int) {
-        val deadline = SystemClock.elapsedRealtime() + 5_000
-        while (SystemClock.elapsedRealtime() < deadline) {
-            if (currentIndex(player) == expected) return
-            Thread.sleep(50)
-        }
-        fail("the queue never reached item $expected")
-    }
-
     @Test
     fun metadataCarriesTheTrackTheAlbumAndTheMusicType() {
         val request = album()
@@ -152,13 +128,13 @@ class MusicMediaSessionTest {
     @Test
     fun theSystemSkipButtonsMoveTheQueueRatherThanSeek() {
         val (session, player) = buildSession()
-        assertEquals(0, currentIndex(player))
+        assertEquals(0, readOnMain { player.currentMediaItemIndex })
 
-        pressMediaKey(session, KeyEvent.KEYCODE_MEDIA_NEXT)
-        awaitIndex(player, 1)
+        pressMediaKey(context, session, KeyEvent.KEYCODE_MEDIA_NEXT)
+        awaitOnMain(1, "the queue never reached item 1") { player.currentMediaItemIndex }
 
-        pressMediaKey(session, KeyEvent.KEYCODE_MEDIA_PREVIOUS)
-        awaitIndex(player, 0)
+        pressMediaKey(context, session, KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+        awaitOnMain(0, "the queue never reached item 0") { player.currentMediaItemIndex }
     }
 
     @Test

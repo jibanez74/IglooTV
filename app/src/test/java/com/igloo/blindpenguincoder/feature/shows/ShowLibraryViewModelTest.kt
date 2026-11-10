@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.shows
 
+import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
@@ -25,18 +26,13 @@ import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 
 /**
@@ -46,16 +42,8 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ShowLibraryViewModelTest {
-
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
-    }
-
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
+    @get:Rule
+    val main = MainDispatcherRule()
 
     @Test
     fun `the first load pages the show library and reads the show count`() = runTest {

@@ -1,13 +1,9 @@
 package com.igloo.blindpenguincoder.feature.music
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTopPositionInRootIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -24,8 +20,8 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testHomeShows
@@ -54,7 +50,6 @@ class AlbumDetailsFocusTest {
     private var albumDetailsState by mutableStateOf(AlbumDetailsUiState())
     private val opened = mutableListOf<Long>()
     private val openedMusicians = mutableListOf<Long>()
-    private var hostActivity: Activity? = null
 
     private fun setShellContent(
         initialAlbumDetails: AlbumDetailsUiState = AlbumDetailsUiState(),
@@ -69,8 +64,6 @@ class AlbumDetailsFocusTest {
         opened.clear()
         openedMusicians.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
@@ -99,13 +92,6 @@ class AlbumDetailsFocusTest {
                     },
                 )
             }
-        }
-        composeRule.waitForIdle()
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
         }
         composeRule.waitForIdle()
     }
@@ -172,7 +158,7 @@ class AlbumDetailsFocusTest {
         openAlbumCard(12)
         composeRule.onNodeWithTag("album_play").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("album_details").assertDoesNotExist()
         composeRule.onNodeWithTag("album_card_12").assertIsFocused()

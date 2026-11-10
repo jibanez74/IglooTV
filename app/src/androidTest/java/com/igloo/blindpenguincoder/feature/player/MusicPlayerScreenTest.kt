@@ -2,7 +2,6 @@ package com.igloo.blindpenguincoder.feature.player
 
 import android.app.Activity
 import android.view.View
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -33,7 +32,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.feature.home.findActivity
+import com.igloo.blindpenguincoder.findActivity
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
@@ -48,6 +47,7 @@ import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.TrackListItem
 import com.igloo.blindpenguincoder.data.model.TracksData
+import com.igloo.blindpenguincoder.pressBack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -199,12 +199,6 @@ class MusicPlayerScreenTest {
         composeRule.waitForIdle()
     }
 
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
-        composeRule.waitForIdle()
-    }
 
     /** Home and back: the trip that releases the engine and rebuilds a paused replacement. */
     private fun backgroundAndReturn() {
@@ -458,7 +452,7 @@ class MusicPlayerScreenTest {
         startPlaying()
 
         // No chrome-dismissal step: the chrome never hides, so Back always means leave.
-        pressBack()
+        composeRule.pressBack()
 
         assertEquals(1, closes)
         assertTrue(engine.released)

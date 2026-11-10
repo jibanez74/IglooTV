@@ -11,7 +11,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.auth.WelcomeSteps
 import kotlinx.coroutines.runBlocking
@@ -100,18 +99,9 @@ class WelcomeGateTest {
         }
     }
 
-    private fun clearStoredSetup() {
-        val app = application()
-        runBlocking {
-            app.container.serverSettingsStore.clear()
-            app.container.profileRepository.clearAll()
-        }
-        app.container.serverUrlProvider.set(null)
-    }
-
     /** Two profiles, so the picker appears and offers "Change server address". */
     private fun seedProfile() {
-        val app = application()
+        val app = iglooApp()
         runBlocking {
             app.container.serverSettingsStore.save("http://192.0.2.1:8080/api")
             app.container.profileRepository.clearAll()
@@ -124,8 +114,6 @@ class WelcomeGateTest {
         app.container.serverUrlProvider.set(null)
     }
 
-    private fun application() = InstrumentationRegistry.getInstrumentation()
-        .targetContext.applicationContext as IglooApplication
 
     private fun testUser(id: Long, name: String) = AuthUser(
         id = id,

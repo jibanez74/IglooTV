@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,7 +13,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -22,9 +20,9 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.igloo.blindpenguincoder.AssertReferenceViewport
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.UiScale
-import com.igloo.blindpenguincoder.core.design.viewportFactor
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.testAlbumDetails
 import kotlin.math.abs
@@ -134,15 +132,6 @@ class AlbumDetailsLayoutTest {
 
     private fun viewportBounds() = composeRule.onNodeWithTag(VIEWPORT_TAG)
         .fetchSemanticsNode().boundsInRoot
-
-    @Composable
-    private fun AssertReferenceViewport() {
-        val widthDp = LocalWindowInfo.current.containerSize.width / LocalDensity.current.density
-        assertTrue(
-            "test device reports ${widthDp}dp wide; this suite assumes the 960dp reference viewport",
-            viewportFactor(widthDp) == 1f,
-        )
-    }
 
     private companion object {
         const val VIEWPORT_TAG = "album-layout-viewport"

@@ -37,9 +37,11 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.clickActionLabel
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.isHeading
 import com.igloo.blindpenguincoder.testSeason
 import com.igloo.blindpenguincoder.testShowDetails
 import com.igloo.blindpenguincoder.testShowDetailsState
@@ -405,12 +407,6 @@ class ShowDetailsAccessibilityTest {
         composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
             .assertCountEquals(0)
     }
-
-    private fun isHeading() = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
-
-    /** What TalkBack offers as "double tap to …" — it must match what the press actually does. */
-    private fun SemanticsNodeInteraction.clickActionLabel(): String? =
-        fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label
 
     /** Entry focus on Play/Resume must not scroll the hero away (section 11.4.1, Focus). */
     @Test

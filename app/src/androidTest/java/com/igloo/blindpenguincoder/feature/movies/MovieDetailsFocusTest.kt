@@ -1,13 +1,9 @@
 package com.igloo.blindpenguincoder.feature.movies
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -35,9 +31,9 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ProgressUi
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAuthUser
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -73,7 +69,6 @@ class MovieDetailsFocusTest {
 
     private var detailsState by mutableStateOf(MovieDetailsUiState())
     private val opened = mutableListOf<Long>()
-    private var hostActivity: Activity? = null
 
     private fun setShellContent(
         initialDetails: MovieDetailsUiState = MovieDetailsUiState(),
@@ -86,8 +81,6 @@ class MovieDetailsFocusTest {
         detailsState = initialDetails
         opened.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
@@ -121,12 +114,6 @@ class MovieDetailsFocusTest {
 
     // Back goes through the dispatcher BackHandler listens to; its fallback, when no handler
     // is enabled, is what finishes the activity.
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
-        composeRule.waitForIdle()
-    }
 
     private fun loadedState(movie: MovieDetailsUi = testMovieDetails()) = MovieDetailsUiState(
         openMovieId = movie.id,
@@ -157,7 +144,7 @@ class MovieDetailsFocusTest {
             .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.onNodeWithTag("details_play").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_details").assertDoesNotExist()
         composeRule.onNodeWithTag("continue_card_2").assertIsFocused()
@@ -183,7 +170,7 @@ class MovieDetailsFocusTest {
             ),
         )
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_details").assertDoesNotExist()
         composeRule.onNodeWithTag("shell_mutation_notice")
@@ -214,7 +201,7 @@ class MovieDetailsFocusTest {
         assertEquals(listOf(testHero.id), opened)
         composeRule.onNodeWithTag("details_play").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_details").assertDoesNotExist()
         hero.assertIsFocused()
@@ -610,7 +597,7 @@ class MovieDetailsFocusTest {
         first.performKeyInput { pressKey(Key.DirectionDown) }
         composeRule.onNodeWithTag("more_menu_item_1").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("more_menu").assertDoesNotExist()
         composeRule.onNodeWithTag("details_more").assertIsFocused()
@@ -652,7 +639,7 @@ class MovieDetailsFocusTest {
         composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.onNodeWithTag("more_menu_item_0").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("more_menu").assertDoesNotExist()
         composeRule.onNodeWithTag("details_more").assertIsFocused()
@@ -667,12 +654,12 @@ class MovieDetailsFocusTest {
         // still find the host's details handler enabled.
         composeRule.onNodeWithTag("more_menu_item_0").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         // One Back spends itself on the menu; the overlay under it is untouched.
         composeRule.onNodeWithTag("movie_details").assertExists()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("movie_details").assertDoesNotExist()
     }

@@ -1,11 +1,7 @@
 package com.igloo.blindpenguincoder.feature.player
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -19,9 +15,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEvent
+import com.igloo.blindpenguincoder.pressBack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -45,7 +41,6 @@ class TrailerPlayerScreenTest {
 
     private lateinit var engine: FakeTrailerPlayerEngine
     private var closes = 0
-    private var hostActivity: Activity? = null
 
     /**
      * A lifecycle the test drives directly. The screen observes [LocalLifecycleOwner] to silence
@@ -60,8 +55,6 @@ class TrailerPlayerScreenTest {
         lifecycleOwner = TestLifecycleOwner()
         lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
                     TrailerPlayerScreen(
@@ -89,13 +82,6 @@ class TrailerPlayerScreenTest {
     private fun startPlaying(durationSec: Double = 143.0) {
         engine.emit(TrailerPlayerEvent.Ready(durationSec))
         engine.emit(TrailerPlayerEvent.StateChange(1))
-        composeRule.waitForIdle()
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
         composeRule.waitForIdle()
     }
 
@@ -245,10 +231,10 @@ class TrailerPlayerScreenTest {
         setContent()
         startPlaying()
 
-        pressBack()
+        composeRule.pressBack()
         assertEquals(0, closes)
 
-        pressBack()
+        composeRule.pressBack()
         assertEquals(1, closes)
     }
 
@@ -259,7 +245,7 @@ class TrailerPlayerScreenTest {
         engine.emit(TrailerPlayerEvent.StateChange(2))
         composeRule.waitForIdle()
 
-        pressBack()
+        composeRule.pressBack()
         assertEquals(1, closes)
     }
 
@@ -291,7 +277,7 @@ class TrailerPlayerScreenTest {
                 retry.assertIsFocused()
             }
 
-        pressBack()
+        composeRule.pressBack()
         assertEquals(1, closes)
     }
 

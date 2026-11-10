@@ -1,13 +1,9 @@
 package com.igloo.blindpenguincoder.feature.player
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -24,10 +20,10 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testMovieDetails
 import org.junit.Assert.assertEquals
@@ -52,7 +48,6 @@ class TrailerOverlayFocusTest {
 
     private var detailsState by mutableStateOf(MovieDetailsUiState())
     private val engines = mutableListOf<FakeTrailerPlayerEngine>()
-    private var hostActivity: Activity? = null
 
     private fun setShellContent() {
         detailsState = MovieDetailsUiState(
@@ -61,8 +56,6 @@ class TrailerOverlayFocusTest {
         )
         engines.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     home = HomeUiState(
@@ -83,13 +76,6 @@ class TrailerOverlayFocusTest {
                     },
                 )
             }
-        }
-        composeRule.waitForIdle()
-    }
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
         }
         composeRule.waitForIdle()
     }
@@ -136,7 +122,7 @@ class TrailerOverlayFocusTest {
         setShellContent()
         openPlayerFromSecondExtraCard()
 
-        pressBack()
+        composeRule.pressBack()
 
         // The player is gone and its engine torn down, the details overlay survived the Back,
         // and focus is back on the exact card that launched playback.

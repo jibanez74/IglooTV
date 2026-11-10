@@ -2,11 +2,8 @@ package com.igloo.blindpenguincoder.feature.auth
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -22,10 +19,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.igloo.blindpenguincoder.AssertReferenceViewport
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
 import com.igloo.blindpenguincoder.core.design.UiScale
-import com.igloo.blindpenguincoder.core.design.viewportFactor
 import com.igloo.blindpenguincoder.core.error.AppError
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -159,14 +156,6 @@ class QuickConnectLayoutTest {
     }
 
     /** IglooTheme derives its viewport factor from the window, not from the box above. */
-    @Composable
-    private fun AssertReferenceViewport() {
-        val widthDp = LocalWindowInfo.current.containerSize.width / LocalDensity.current.density
-        assertTrue(
-            "test device reports ${widthDp}dp wide; the budget assumes the 960dp reference viewport",
-            viewportFactor(widthDp) == 1f,
-        )
-    }
 
     /**
      * Measured against the 960×540 box, not `onRoot()`. The root is the whole test-activity

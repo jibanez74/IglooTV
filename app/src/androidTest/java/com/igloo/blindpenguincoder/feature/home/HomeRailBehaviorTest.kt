@@ -1,15 +1,11 @@
 package com.igloo.blindpenguincoder.feature.home
 
-import android.app.Activity
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -47,6 +43,7 @@ import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_LINE_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueEpisode
 import com.igloo.blindpenguincoder.testContinueItems
@@ -98,7 +95,6 @@ class HomeRailBehaviorTest {
     private val albumsOpened = mutableListOf<Long>()
     private val showsOpened = mutableListOf<Long>()
     private var expandedWidth: Dp = Dp.Unspecified
-    private var hostActivity: Activity? = null
 
     private fun setShellContent(
         initialContinue: IglooRailState<HomeContinueItem>,
@@ -128,8 +124,6 @@ class HomeRailBehaviorTest {
         showsOpened.clear()
         resumedEpisodes.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 expandedWidth = IglooTheme.layout.navRailExpandedWidth
                 TestIglooApp(
@@ -184,13 +178,6 @@ class HomeRailBehaviorTest {
 
     private fun theaterCard(id: Long) = composeRule.onNodeWithTag("theater_card_$id")
 
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
-        composeRule.waitForIdle()
-    }
-
     @Test
     fun initialFocusLandsOnTheLoadingSkeleton() {
         setShellContent(IglooRailState.Loading)
@@ -239,7 +226,7 @@ class HomeRailBehaviorTest {
         continueCard(3).assertIsFocused()
 
         // Back opens the spine without walking focus through the earlier cards.
-        pressBack()
+        composeRule.pressBack()
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
 
         composeRule.onNodeWithContentDescription("Home")
@@ -286,7 +273,7 @@ class HomeRailBehaviorTest {
 
         // Spine re-entry lands on the Continue Watching rail's remembered card, untouched by
         // the excursion through the latest rail — the two rails keep separate memories.
-        pressBack()
+        composeRule.pressBack()
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
         composeRule.onNodeWithContentDescription("Home")
             .performKeyInput { pressKey(Key.DirectionRight) }
@@ -845,7 +832,7 @@ class HomeRailBehaviorTest {
         continueCard(2).assertIsFocused()
             .assertContentDescriptionEquals("Arrival, 2016, 58 minutes remaining")
 
-        pressBack()
+        composeRule.pressBack()
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
         settleLeftCard()
         composeRule.onNodeWithContentDescription("Home")

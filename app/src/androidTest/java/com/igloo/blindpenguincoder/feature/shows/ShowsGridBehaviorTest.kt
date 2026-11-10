@@ -1,13 +1,9 @@
 package com.igloo.blindpenguincoder.feature.shows
 
-import android.app.Activity
-import androidx.activity.ComponentActivity
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -20,7 +16,6 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.feature.home.findActivity
 import com.igloo.blindpenguincoder.feature.library.LibraryActions
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
 import com.igloo.blindpenguincoder.feature.library.LibraryKind
@@ -28,6 +23,7 @@ import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
+import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testShowDetails
 import com.igloo.blindpenguincoder.testShowDetailsState
@@ -56,7 +52,6 @@ class ShowsGridBehaviorTest {
     private val openedShows = mutableListOf<Long>()
     private val selectedTabs = mutableListOf<LibraryTab>()
     private val selectedGenres = mutableListOf<LibraryFilter.Genre>()
-    private var hostActivity: Activity? = null
 
     private fun setContent(initial: LibraryUiState = testLibraryState(LibraryKind.Shows)) {
         showsState = initial
@@ -65,8 +60,6 @@ class ShowsGridBehaviorTest {
         selectedTabs.clear()
         selectedGenres.clear()
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 TestIglooApp(
                     shows = showsState,
@@ -107,13 +100,6 @@ class ShowsGridBehaviorTest {
         tab = LibraryTab.Genres,
         genre = LibraryFilter.Genre(id = 9, tag = "Drama"),
     )
-
-    private fun pressBack() {
-        composeRule.runOnUiThread {
-            (checkNotNull(hostActivity) as ComponentActivity).onBackPressedDispatcher.onBackPressed()
-        }
-        composeRule.waitForIdle()
-    }
 
     // --- the anchor in every state ------------------------------------------------------------
 
@@ -241,7 +227,7 @@ class ShowsGridBehaviorTest {
         composeRule.onNodeWithTag("show_details").assertExists()
         composeRule.onNodeWithTag("details_play").assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithTag("show_details").assertDoesNotExist()
         card(2).assertIsFocused()
@@ -267,7 +253,7 @@ class ShowsGridBehaviorTest {
         setContent()
         card(1).assertIsFocused()
 
-        pressBack()
+        composeRule.pressBack()
 
         composeRule.onNodeWithContentDescription("TV Shows").assertIsFocused()
     }
