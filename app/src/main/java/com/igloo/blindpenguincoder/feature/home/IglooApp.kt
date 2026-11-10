@@ -434,7 +434,7 @@ fun IglooApp(
             showPlayArmedSite = null
             if (site != null && showCanPlay) {
                 videoPlayRequest = request
-                videoPlayOrigin = VideoPlayOrigin.entries.first { it.episodeSite == site }
+                videoPlayOrigin = site.origin
             }
         }
     }
@@ -1269,17 +1269,22 @@ private fun paneBranchOf(destination: IglooDestination): PaneBranch = when (dest
 /** Which surface launched the music player; see `musicPlayOrigin` in [IglooApp]. */
 private enum class MusicPlayOrigin { AlbumDetails, MusicianDetails, MusicPane, SearchPane }
 
+/** Which surface launched the video player; see `videoPlayOrigin` in [IglooApp]. */
+private enum class VideoPlayOrigin { MovieDetails, ContinueWatchingRail, ShowDetailsHero, ShowDetailsEpisode }
+
 /**
- * Which surface launched the video player; see `videoPlayOrigin` in [IglooApp]. The show page has
- * one per launching control, [episodeSite], because the close restores focus to the one that
- * pressed.
+ * The origin a show-page launch takes: one per launching control, because the close restores
+ * focus to the one that pressed.
  */
-private enum class VideoPlayOrigin(val episodeSite: EpisodeLaunchSite? = null) {
-    MovieDetails,
-    ContinueWatchingRail,
-    ShowDetailsHero(EpisodeLaunchSite.Hero),
-    ShowDetailsEpisode(EpisodeLaunchSite.EpisodesRail),
-}
+private val EpisodeLaunchSite.origin: VideoPlayOrigin
+    get() = when (this) {
+        EpisodeLaunchSite.Hero -> VideoPlayOrigin.ShowDetailsHero
+        EpisodeLaunchSite.EpisodesRail -> VideoPlayOrigin.ShowDetailsEpisode
+    }
+
+/** The show-page control this origin stands for; null for every other surface. */
+private val VideoPlayOrigin.episodeSite: EpisodeLaunchSite?
+    get() = EpisodeLaunchSite.entries.firstOrNull { it.origin == this }
 
 /** Either of the show page's origins: its launches share one kill-on-close and Retry routing. */
 private val VideoPlayOrigin?.isShowDetails: Boolean
