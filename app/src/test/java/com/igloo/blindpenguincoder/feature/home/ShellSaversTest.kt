@@ -36,21 +36,23 @@ class ShellSaversTest {
     }
 
     @Test
-    fun `a trailer request round-trips through its slots`() {
-        val request = TrailerRequest(
-            key = "dQw4w9WgXcQ",
-            title = "Heat",
-            typeLabel = "Trailer",
-            origin = VideoLaunchSite.ExtrasRail,
-        )
-        val saved = with(TrailerRequest.Saver) { scope.save(request) }
-        assertEquals(request, TrailerRequest.Saver.restore(checkNotNull(saved)))
-        assertNull(TrailerRequest.Saver.restore(emptyList()))
+    fun `a trailer request round-trips`() {
+        val saved = with(TrailerRequestSaver) { scope.save(trailer) }
+        assertEquals(trailer, TrailerRequestSaver.restore(checkNotNull(saved)))
+        assertNull(TrailerRequestSaver.restore(""))
     }
 
     @Test
-    fun `a trailer request with an unknown launch site or a short bundle restores as no overlay`() {
-        assertNull(TrailerRequest.Saver.restore(listOf("key", "Heat", "Trailer", "Billboard")))
-        assertNull(TrailerRequest.Saver.restore(listOf("key", "Heat", "Trailer")))
+    fun `a trailer request with an unknown launch site or an old slot list restores as no overlay`() {
+        val saved = with(TrailerRequestSaver) { scope.save(trailer) } as String
+        assertNull(TrailerRequestSaver.restore(saved.replace("ExtrasRail", "Billboard")))
+        assertNull(TrailerRequestSaver.restore(listOf("key", "Heat", "Trailer", "ExtrasRail")))
     }
+
+    private val trailer = TrailerRequest(
+        key = "dQw4w9WgXcQ",
+        title = "Heat",
+        typeLabel = "Trailer",
+        origin = VideoLaunchSite.ExtrasRail,
+    )
 }

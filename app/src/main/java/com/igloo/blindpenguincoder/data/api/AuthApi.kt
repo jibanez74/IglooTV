@@ -7,28 +7,25 @@ import com.igloo.blindpenguincoder.core.network.withoutDeviceAuth
 import com.igloo.blindpenguincoder.data.model.DeviceLoginRequest
 import com.igloo.blindpenguincoder.data.model.QuickConnectInitiateRequest
 import com.igloo.blindpenguincoder.data.model.QuickConnectRedeemRequest
+import com.igloo.blindpenguincoder.data.model.VerifyUserPinRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
 
 class AuthApi(
     private val client: HttpClient,
     private val serverUrl: ServerUrlProvider,
 ) {
     suspend fun deviceLogin(request: DeviceLoginRequest): HttpResponse =
-        client.post("${serverUrl.require().apiBaseUrl}/auth/device-login") {
+        client.post(serverUrl.api("/auth/device-login")) {
             withoutDeviceAuth()
-            contentType(ContentType.Application.Json)
-            setBody(request)
+            jsonBody(request)
         }
 
     suspend fun currentUser(): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/auth/user")
+        client.get(serverUrl.api("/auth/user"))
 
     /**
      * Revokes the device token this request carries — the active one, or [bearerOverride] for a
@@ -38,22 +35,26 @@ class AuthApi(
      * being told that token is already gone is success, not a session to react to.
      */
     suspend fun logout(bearerOverride: String? = null): HttpResponse =
-        client.delete("${serverUrl.require().apiBaseUrl}/auth/logout") {
+        client.delete(serverUrl.api("/auth/logout")) {
             expectingUnauthorized()
             bearerOverride?.let { withBearerOverride(it) }
         }
 
     suspend fun initiateQuickConnect(request: QuickConnectInitiateRequest): HttpResponse =
-        client.post("${serverUrl.require().apiBaseUrl}/quick-connect/initiate") {
+        client.post(serverUrl.api("/quick-connect/initiate")) {
             withoutDeviceAuth()
-            contentType(ContentType.Application.Json)
-            setBody(request)
+            jsonBody(request)
         }
 
     suspend fun redeemQuickConnect(request: QuickConnectRedeemRequest): HttpResponse =
-        client.post("${serverUrl.require().apiBaseUrl}/quick-connect/redeem") {
+        client.post(serverUrl.api("/quick-connect/redeem")) {
             withoutDeviceAuth()
-            contentType(ContentType.Application.Json)
-            setBody(request)
+            jsonBody(request)
+        }
+
+    /** Verifies the active profile's own PIN; the device token authenticates the call. */
+    suspend fun verifyPin(request: VerifyUserPinRequest): HttpResponse =
+        client.post(serverUrl.api("/user/pin/verify")) {
+            jsonBody(request)
         }
 }

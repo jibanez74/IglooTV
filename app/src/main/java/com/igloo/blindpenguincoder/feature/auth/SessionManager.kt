@@ -196,7 +196,7 @@ class SessionManager(
                 val address = serverUrl.current.value
                 if (address == null) {
                     gateLocked()
-                    SignInResult.Failed(AppError.Unexpected("no server address"))
+                    SignInResult.Failed(AppError.Unexpected)
                 } else if (enforcePin && user.hasPin) {
                     // Nothing is committed yet: the vault's active user must not advance until
                     // the sign-in completes, so a kill at the keypad returns to the gate.
@@ -358,7 +358,7 @@ class SessionManager(
         // down, and it happens before a network request that may take the full timeout. The image
         // cache goes with it: this profile's avatar is the only trace of it Coil keeps on disk.
         val credential = withContext(NonCancellable) {
-            val removed = profiles.removeForSignOut(expectedProfileId)
+            val removed = profiles.remove(expectedProfileId)
             imageCache.clear()
             removed
         }

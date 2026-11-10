@@ -350,7 +350,6 @@ class ShowRepositoryTest {
             assertEquals("""{"watched":true}""", body)
             assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
             val data = (result as ApiResult.Success).value
-            assertEquals(903L, data.episodeId)
             assertTrue(data.watched)
         }
 

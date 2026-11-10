@@ -3,7 +3,7 @@ package com.igloo.blindpenguincoder.playback.progress
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
-import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -41,8 +41,8 @@ class ProgressReporterTest {
     // --- ProgressReporter ---
 
     private class RecordingSave(
-        var result: (PlaybackMediaRef) -> ApiResult<WatchProgressUpdateData> = {
-            ApiResult.Success(WatchProgressUpdateData(watched = false))
+        var result: (PlaybackMediaRef) -> ApiResult<WatchedData> = {
+            ApiResult.Success(WatchedData(watched = false))
         },
     ) {
         val requests = mutableListOf<UpdateWatchProgressRequest>()
@@ -52,7 +52,7 @@ class ProgressReporterTest {
         suspend fun save(
             media: PlaybackMediaRef,
             request: UpdateWatchProgressRequest,
-        ): ApiResult<WatchProgressUpdateData> {
+        ): ApiResult<WatchedData> {
             this.media += media
             requests += request
             return result(media)
@@ -79,7 +79,7 @@ class ProgressReporterTest {
         val reporter = ProgressReporter(media = PlaybackMediaRef.Movie(7), save = recorder::save)
 
         assertTrue(reporter.saveNow(45.0, 600.0) is ApiResult.Failure)
-        recorder.result = { ApiResult.Success(WatchProgressUpdateData(watched = false)) }
+        recorder.result = { ApiResult.Success(WatchedData(watched = false)) }
         assertEquals(
             false,
             (reporter.saveNow(45.0, 600.0) as ApiResult.Success).value.watched,
@@ -99,7 +99,7 @@ class ProgressReporterTest {
     @Test
     fun `the server's watched verdict is surfaced`() = runTest {
         val recorder = RecordingSave(result = {
-            ApiResult.Success(WatchProgressUpdateData(watched = true))
+            ApiResult.Success(WatchedData(watched = true))
         })
         val reporter = ProgressReporter(media = PlaybackMediaRef.Movie(7), save = recorder::save)
         assertEquals(

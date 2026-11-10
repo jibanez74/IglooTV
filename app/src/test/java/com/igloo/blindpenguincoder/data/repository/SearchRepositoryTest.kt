@@ -36,7 +36,6 @@ class SearchRepositoryTest {
         assertEquals(listOf("q"), captured.url.parameters.names().toList())
         assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
         val data = (result as ApiResult.Success).value
-        assertEquals("help", data.query)
         assertEquals(12L, data.movies.total)
         assertEquals(3L, data.movies.results.single().id)
         assertEquals(0L, data.shows.total)
@@ -92,10 +91,7 @@ class SearchRepositoryTest {
 
         val page = (http.searchRepository.searchMusicians("beat", 2, 24) as ApiResult.Success).value
 
-        assertEquals("beat", page.query)
         assertEquals(70L, page.total)
-        assertEquals(2L, page.page)
-        assertEquals(48L, page.perPage)
         assertEquals(3L, page.totalPages)
         val musician = page.results.single()
         assertEquals("The Beatles", musician.name)

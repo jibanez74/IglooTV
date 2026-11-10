@@ -17,7 +17,6 @@ data class SearchSection<T>(
 /** Payload of `SearchAllEnvelope.data`: every category at once, each with its own count. */
 @Serializable
 data class SearchAllData(
-    val query: String,
     val movies: SearchSection<MovieLibraryItem>,
     val shows: SearchSection<ShowLibraryItem>,
     val albums: SearchSection<SimpleAlbum>,
@@ -27,14 +26,11 @@ data class SearchAllData(
 
 /**
  * One page of a category's search (`GET /search/{movies,shows,albums,musicians,tracks}`); the
- * same paging contract as the library lists, with the query echoed back.
+ * same paging contract as the library lists.
  */
 @Serializable
 data class SearchPageData<T>(
-    val query: String,
     val results: List<T>,
     val total: Long,
-    val page: Long,
-    @SerialName("per_page") val perPage: Long,
     @SerialName("total_pages") val totalPages: Long,
 )

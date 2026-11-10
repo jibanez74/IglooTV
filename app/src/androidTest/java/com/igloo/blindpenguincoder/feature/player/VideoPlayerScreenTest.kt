@@ -46,7 +46,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
-import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
@@ -185,7 +185,7 @@ class VideoPlayerScreenTest {
                 if (failProgressSaves) {
                     ApiResult.Failure(AppError.Network)
                 } else {
-                    ApiResult.Success(WatchProgressUpdateData(watched = false))
+                    ApiResult.Success(WatchedData(watched = false))
                 }
             },
             onWatchedStateCommitted = {},
@@ -255,7 +255,7 @@ class VideoPlayerScreenTest {
         viewModel = VideoPlayerViewModel(
             saveProgress = { _, body ->
                 savedRequests += body
-                ApiResult.Success(WatchProgressUpdateData(watched = false))
+                ApiResult.Success(WatchedData(watched = false))
             },
             onWatchedStateCommitted = {},
         )

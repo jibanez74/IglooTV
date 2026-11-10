@@ -674,7 +674,7 @@ class ApiModelsSerializationTest {
             }
         """.trimIndent()
 
-        val envelope = json.decodeFromString<ApiEnvelope<MovieLikeStatusData>>(body)
+        val envelope = json.decodeFromString<ApiEnvelope<LikedData>>(body)
 
         assertTrue(envelope.data!!.isLiked)
     }
@@ -1125,7 +1125,7 @@ class ApiModelsSerializationTest {
         val liked = json.decodeFromString<ApiEnvelope<LikedTrackIdsData>>(
             """{"error":false,"data":{"liked_track_ids":[3,5,900]}}""",
         ).data!!
-        val toggle = json.decodeFromString<ApiEnvelope<TrackLikeToggleData>>(
+        val toggle = json.decodeFromString<ApiEnvelope<LikedData>>(
             """{"error":false,"data":{"track_id":900,"is_liked":false}}""",
         ).data!!
         val stats = json.decodeFromString<ApiEnvelope<MusicStats>>(
@@ -1325,7 +1325,6 @@ class ApiModelsSerializationTest {
 
         val data = json.decodeFromString<ApiEnvelope<SearchAllData>>(body).data!!
 
-        assertEquals("help", data.query)
         assertEquals(12L, data.movies.total)
         assertEquals(1965L, data.movies.results.single().year.orNull())
         assertTrue(data.shows.results.isEmpty())
@@ -1345,8 +1344,6 @@ class ApiModelsSerializationTest {
         val page = json.decodeFromString<ApiEnvelope<SearchPageData<SimpleMusician>>>(body).data!!
 
         assertEquals(70L, page.total)
-        assertEquals(2L, page.page)
-        assertEquals(48L, page.perPage)
         assertEquals(3L, page.totalPages)
         assertEquals("The Beatles", page.results.single().name)
     }

@@ -18,7 +18,6 @@ import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.api.MusicApi
 import com.igloo.blindpenguincoder.data.api.SearchApi
 import com.igloo.blindpenguincoder.data.api.ShowApi
-import com.igloo.blindpenguincoder.data.api.UserApi
 import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -64,8 +63,7 @@ class TestHttp(
         ),
     )
     val api = AuthApi(client, serverUrl)
-    val userApi = UserApi(client, serverUrl)
-    val authRepository = AuthRepository(api, userApi, profiles, testDeviceIdentity)
+    val authRepository = AuthRepository(api, profiles, testDeviceIdentity)
     val movieApi = MovieApi(client, serverUrl)
     val movieRepository = MovieRepository(movieApi)
     val musicApi = MusicApi(client, serverUrl)

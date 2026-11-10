@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.core.network
 
 import io.ktor.client.HttpClient
+import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -81,10 +82,7 @@ fun createIglooHttpClient(
     networkAccess: NetworkAccess = UnrestrictedNetworkAccess,
 ): HttpClient = HttpClient(engine) {
     expectSuccess = false
-    install(createClientPlugin("LocalNetworkAccess") {
-        onRequest { request, _ -> networkAccess.awaitAccess(request.url.toString()) }
-        on(SendingRequest) { request, _ -> networkAccess.awaitAccess(request.url.toString()) }
-    })
+    gateLocalNetwork(networkAccess)
     install(ContentNegotiation) {
         json(IglooJson)
     }
@@ -106,10 +104,7 @@ fun createServerProbeHttpClient(
     networkAccess: NetworkAccess = UnrestrictedNetworkAccess,
 ): HttpClient = HttpClient(engine) {
     expectSuccess = false
-    install(createClientPlugin("LocalNetworkAccess") {
-        onRequest { request, _ -> networkAccess.awaitAccess(request.url.toString()) }
-        on(SendingRequest) { request, _ -> networkAccess.awaitAccess(request.url.toString()) }
-    })
+    gateLocalNetwork(networkAccess)
     followRedirects = false
     install(HttpTimeout) {
         connectTimeoutMillis = SERVER_PROBE_TIMEOUT_MILLIS
@@ -119,3 +114,10 @@ fun createServerProbeHttpClient(
 }
 
 const val SERVER_PROBE_TIMEOUT_MILLIS = 10_000L
+
+/** Holds every request, redirects included, until [networkAccess] lets it reach its host. */
+private fun HttpClientConfig<*>.gateLocalNetwork(networkAccess: NetworkAccess) =
+    install(createClientPlugin("LocalNetworkAccess") {
+        onRequest { request, _ -> networkAccess.awaitAccess(request.url.toString()) }
+        on(SendingRequest) { request, _ -> networkAccess.awaitAccess(request.url.toString()) }
+    })

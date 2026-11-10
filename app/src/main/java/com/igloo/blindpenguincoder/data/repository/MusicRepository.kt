@@ -12,7 +12,7 @@ import com.igloo.blindpenguincoder.data.model.MusicianDetailsData
 import com.igloo.blindpenguincoder.data.model.MusiciansData
 import com.igloo.blindpenguincoder.data.model.ShuffleTracksData
 import com.igloo.blindpenguincoder.data.model.SimpleAlbum
-import com.igloo.blindpenguincoder.data.model.TrackLikeToggleData
+import com.igloo.blindpenguincoder.data.model.LikedData
 import com.igloo.blindpenguincoder.data.model.TracksData
 
 class MusicRepository(
@@ -45,7 +45,7 @@ class MusicRepository(
         envelopeData<LikedTrackIdsData>("liked track ids") { api.likedTrackIds() }
             .map { it.likedTrackIds.toSet() }
 
-    suspend fun toggleTrackLike(id: Long): ApiResult<TrackLikeToggleData> =
+    suspend fun toggleTrackLike(id: Long): ApiResult<LikedData> =
         envelopeData("track like toggle") { api.toggleTrackLike(id) }
 
     suspend fun musicStats(): ApiResult<MusicStats> =

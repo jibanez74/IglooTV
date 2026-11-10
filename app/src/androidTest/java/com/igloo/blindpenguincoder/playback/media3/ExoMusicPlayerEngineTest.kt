@@ -57,7 +57,7 @@ class ExoMusicPlayerEngineTest {
         )
 
         instrumentation.runOnMainSync {
-            engine = exoMusicPlayerEngine(
+            engine = ExoMusicPlayerEngine(
                 context = context,
                 request = request,
                 dataSourceFactory = DataSource.Factory { MissingTrackDataSource() },
@@ -129,7 +129,7 @@ class ExoMusicPlayerEngineTest {
             )
 
             instrumentation.runOnMainSync {
-                engine = exoMusicPlayerEngine(
+                engine = ExoMusicPlayerEngine(
                     context = context,
                     request = request,
                     dataSourceFactory = streams,

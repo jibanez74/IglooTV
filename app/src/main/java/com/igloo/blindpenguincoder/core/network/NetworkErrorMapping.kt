@@ -19,7 +19,7 @@ internal fun Throwable.toTransportError(): AppError {
         causes.any { it.isTimeout() } -> AppError.Timeout
         causes.any { it is SSLException || it is CertificateException } -> AppError.TlsVerification
         causes.any { it is IOException } -> AppError.Network
-        else -> AppError.Unexpected(message)
+        else -> AppError.Unexpected
     }
 }
 

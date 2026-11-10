@@ -7,7 +7,7 @@ import com.igloo.blindpenguincoder.core.network.safeApiCall
 import com.igloo.blindpenguincoder.core.network.toTransportError
 import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
-import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.playback.hls.HlsManifestResult
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionApi
 import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
@@ -75,6 +75,6 @@ class VideoPlaybackRepository(
     suspend fun updateWatchProgress(
         media: PlaybackMediaRef,
         body: UpdateWatchProgressRequest,
-    ): ApiResult<WatchProgressUpdateData> =
+    ): ApiResult<WatchedData> =
         envelopeData("watch progress update") { api.updateWatchProgress(media, body) }
 }

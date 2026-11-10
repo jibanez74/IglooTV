@@ -12,8 +12,8 @@ import com.igloo.blindpenguincoder.data.model.TracksData
  */
 object InertMusicQueueFetcher : MusicQueueFetcher {
     override suspend fun tracks(limit: Long, offset: Long): ApiResult<TracksData> =
-        ApiResult.Failure(AppError.Unexpected("inert fetcher"))
+        ApiResult.Failure(AppError.Unexpected)
 
     override suspend fun shuffleTracks(limit: Long, exclude: List<Long>): ApiResult<ShuffleTracksData> =
-        ApiResult.Failure(AppError.Unexpected("inert fetcher"))
+        ApiResult.Failure(AppError.Unexpected)
 }

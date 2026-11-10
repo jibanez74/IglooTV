@@ -5,7 +5,6 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.core.network.safeApiCall
 import com.igloo.blindpenguincoder.data.api.AuthApi
-import com.igloo.blindpenguincoder.data.api.UserApi
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.data.model.AuthUserData
 import com.igloo.blindpenguincoder.data.model.DeviceLoginRequest
@@ -20,7 +19,6 @@ import com.igloo.blindpenguincoder.data.model.VerifyUserPinRequest
 
 class AuthRepository(
     private val api: AuthApi,
-    private val userApi: UserApi,
     private val profiles: ProfileRepository,
     private val deviceIdentity: DeviceIdentity,
 ) {
@@ -74,6 +72,6 @@ class AuthRepository(
     /** A wrong PIN is a successful call returning false; only a dead token fails. */
     suspend fun verifyPin(pin: String): ApiResult<Boolean> =
         envelopeData<UserPinVerifyData>("PIN verification") {
-            userApi.verifyPin(VerifyUserPinRequest(pin))
+            api.verifyPin(VerifyUserPinRequest(pin))
         }.map { it.valid }
 }

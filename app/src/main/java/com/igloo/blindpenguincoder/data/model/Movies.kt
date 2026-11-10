@@ -82,18 +82,6 @@ data class MoviesStatsData(
     @SerialName("total_movies") val totalMovies: Long,
 )
 
-/** Payload of `MovieLikeStatusEnvelope.data`. */
-@Serializable
-data class MovieLikeStatusData(
-    @SerialName("is_liked") val isLiked: Boolean,
-)
-
-/** Payload of `MovieLikeToggleEnvelope.data`. */
-@Serializable
-data class MovieLikeToggleData(
-    @SerialName("is_liked") val isLiked: Boolean,
-)
-
 @Serializable
 data class MovieGenreWithCount(
     @SerialName("genre_id") val genreId: Long,
@@ -240,15 +228,4 @@ data class WatchProgress(
     val watched: Boolean,
 )
 
-/** Payload of `WatchProgressUpdateEnvelope.data`. */
-@Serializable
-data class WatchProgressUpdateData(
-    val watched: Boolean,
-)
-
-/** Payload of `MovieWatchedEnvelope.data`. */
-@Serializable
-data class MovieWatchedData(
-    val watched: Boolean,
-)
 

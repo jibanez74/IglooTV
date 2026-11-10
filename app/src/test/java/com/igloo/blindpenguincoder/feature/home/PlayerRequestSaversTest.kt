@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.home
 
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.SaverScope
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.playback.model.EpisodeContext
@@ -18,7 +19,7 @@ import org.junit.Test
 
 /**
  * The two overlay savers. Restore runs inside saved-state restoration, over a bundle a possibly
- * older build wrote, so a round trip is not the only contract that matters: a slot it cannot
+ * older build wrote, so a round trip is not the only contract that matters: a bundle it cannot
  * parse must come back as "no overlay", never as a throw that crashes the relaunch.
  */
 class PlayerRequestSaversTest {
@@ -51,8 +52,10 @@ class PlayerRequestSaversTest {
         chapters = listOf(PlaybackChapter(title = "Opening", startTimeSec = 0.0)),
     )
 
-    private fun <T> roundTrip(saver: androidx.compose.runtime.saveable.Saver<T?, List<String>>, value: T?): T? =
-        with(saver) { scope.save(value) }.let { saved -> saver.restore(saved ?: emptyList()) }
+    private fun <T> roundTrip(saver: Saver<T?, Any>, value: T?): T? =
+        with(saver) { scope.save(value) }?.let(saver::restore)
+
+    private fun savedMovie(): String = with(VideoPlayRequestSaver) { scope.save(movie) } as String
 
     @Test
     fun `an album survives a round trip whole`() {
@@ -97,9 +100,8 @@ class PlayerRequestSaversTest {
 
     @Test
     fun `an unknown queue source restores as no overlay instead of throwing`() {
-        val saved = with(MusicPlayRequestSaver) { scope.save(album) }!!.toMutableList()
-        saved[0] = """{"type":"fromANewerBuild"}"""
-        assertNull(MusicPlayRequestSaver.restore(saved))
+        val saved = with(MusicPlayRequestSaver) { scope.save(album) } as String
+        assertNull(MusicPlayRequestSaver.restore(saved.replace("\"album\"", "\"fromANewerBuild\"")))
     }
 
     @Test
@@ -148,25 +150,17 @@ class PlayerRequestSaversTest {
         assertEquals(true, restored?.promptForResume)
     }
 
-    /** A bundle written before the episode slots existed must come back as no overlay. */
+    /** Builds before the JSON form saved a list of slots; one of those must not crash either. */
     @Test
-    fun `a bundle from before the episode slots restores as no overlay instead of throwing`() {
-        val saved = with(VideoPlayRequestSaver) { scope.save(movie) }!!.take(13)
-        assertNull(VideoPlayRequestSaver.restore(saved))
+    fun `a slot list from an older build restores as no overlay instead of throwing`() {
+        assertNull(VideoPlayRequestSaver.restore(listOf("7", "Arrival")))
+        assertNull(MusicPlayRequestSaver.restore(listOf("""{"type":"tracks"}""", "0")))
     }
 
     @Test
     fun `an unknown video codec restores as null, not as empty text`() {
         val unknown = movie.copy(videoCodec = null)
         assertEquals(unknown, roundTrip(VideoPlayRequestSaver, unknown))
-    }
-
-    /** An older build wrote the movie id as a bare number; it must not crash the relaunch. */
-    @Test
-    fun `a bare movie id from an older build restores as no overlay instead of throwing`() {
-        val saved = with(VideoPlayRequestSaver) { scope.save(movie) }!!.toMutableList()
-        saved[0] = "7"
-        assertNull(VideoPlayRequestSaver.restore(saved))
     }
 
     @Test
@@ -176,20 +170,17 @@ class PlayerRequestSaversTest {
 
     @Test
     fun `an unparseable queue restores as no overlay instead of throwing`() {
-        val corrupt = listOf("""{"type":"tracks"}""", "0", "{not json")
-        assertNull(MusicPlayRequestSaver.restore(corrupt))
+        assertNull(MusicPlayRequestSaver.restore("{not json"))
     }
 
     @Test
     fun `an unknown playback mode restores as no overlay instead of throwing`() {
-        val saved = with(VideoPlayRequestSaver) { scope.save(movie) }!!.toMutableList()
-        saved[4] = "SomeModeFromANewerBuild"
+        val saved = savedMovie().replace("\"Direct\"", "\"SomeModeFromANewerBuild\"")
         assertNull(VideoPlayRequestSaver.restore(saved))
     }
 
     @Test
     fun `a truncated bundle restores as no overlay instead of throwing`() {
-        assertNull(MusicPlayRequestSaver.restore(listOf("""{"type":"tracks"}""", "0")))
-        assertNull(VideoPlayRequestSaver.restore(listOf("7", "Arrival")))
+        assertNull(VideoPlayRequestSaver.restore(savedMovie().dropLast(10)))
     }
 }

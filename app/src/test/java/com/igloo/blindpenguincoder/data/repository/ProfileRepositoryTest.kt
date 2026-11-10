@@ -179,7 +179,7 @@ class ProfileRepositoryTest {
             repository.setPending("igd_two")
             repository.commitSignIn(user(id = 2, name = "Ana"))
 
-            val removed = repository.removeForSignOut(1)
+            val removed = repository.remove(1)
 
             assertEquals(ActiveCredential(1, "igd_one"), removed)
             assertEquals(listOf("Ana"), store.vault.profiles.map { it.name })
@@ -195,7 +195,7 @@ class ProfileRepositoryTest {
         repository.setPending("igd_two")
         repository.commitSignIn(user(id = 2, name = "Ana"))
 
-        val removed = repository.removeForSignOut(2)
+        val removed = repository.remove(2)
 
         assertEquals(ActiveCredential(2, "igd_two"), removed)
         assertEquals(listOf("Jose"), store.vault.profiles.map { it.name })

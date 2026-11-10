@@ -129,6 +129,7 @@ import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.youTubeIFrameEngine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.serialization.Serializable
 
 /** Which surface opened the details overlay, so Back can put focus back where it came from. */
 internal sealed interface DetailsOrigin {
@@ -184,39 +185,19 @@ internal sealed interface DetailsOrigin {
     }
 }
 
-/** What the trailer player overlay is playing: only what its screen renders, plus where it was
+/**
+ * What the trailer player overlay is playing: only what its screen renders, plus where it was
  * launched from, saveable so the overlay survives activity recreation (the trailer itself
  * restarts — a WebView cannot be parceled, and a trailer losing its position is an accepted
- * trade). */
+ * trade).
+ */
+@Serializable
 internal data class TrailerRequest(
     val key: String,
     val title: String,
     val typeLabel: String,
     val origin: VideoLaunchSite,
-) {
-    companion object {
-        val Saver: Saver<TrailerRequest?, List<String>> = Saver(
-            save = { request ->
-                if (request == null) {
-                    emptyList()
-                } else {
-                    listOf(request.key, request.title, request.typeLabel, request.origin.name)
-                }
-            },
-            restore = { saved ->
-                // Four slots or nothing; an unknown launch site means no overlay, not a crash.
-                val origin = saved.getOrNull(3)?.let { name ->
-                    VideoLaunchSite.entries.firstOrNull { it.name == name }
-                }
-                if (saved.size < 4 || origin == null) {
-                    null
-                } else {
-                    TrailerRequest(key = saved[0], title = saved[1], typeLabel = saved[2], origin = origin)
-                }
-            },
-        )
-    }
-}
+)
 
 /** One current snapshot read by the long-lived play-request collector. */
 private data class DeferredPlayContext(
@@ -344,7 +325,7 @@ fun IglooApp(
     val anyDetailsOpen = detailsOpen || showOpen || albumOpen || musicianOpen
     // The trailer player is the third overlay layer (shell -> details -> player); the host owns
     // its existence and its focus restore, the same contract the details overlay lives under.
-    var trailerRequest by rememberSaveable(stateSaver = TrailerRequest.Saver) {
+    var trailerRequest by rememberSaveable(stateSaver = TrailerRequestSaver) {
         mutableStateOf<TrailerRequest?>(null)
     }
     val trailerOpen = trailerRequest != null

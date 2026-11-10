@@ -31,7 +31,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
@@ -161,7 +161,7 @@ class VideoPlayerOverlayFocusTest {
                             if (failProgressSaves) {
                                 ApiResult.Failure(AppError.Network)
                             } else {
-                                ApiResult.Success(WatchProgressUpdateData(watched = false))
+                                ApiResult.Success(WatchedData(watched = false))
                             }
                         },
                         onWatchedStateCommitted = {},

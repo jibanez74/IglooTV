@@ -24,7 +24,6 @@ import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.api.MusicApi
 import com.igloo.blindpenguincoder.data.api.SearchApi
 import com.igloo.blindpenguincoder.data.api.ShowApi
-import com.igloo.blindpenguincoder.data.api.UserApi
 import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
@@ -99,7 +98,6 @@ class IglooAppContainer(
     private val serverProbeHttpClient by lazy { createServerProbeHttpClient(networkAccess = localNetworkPermission) }
     private val serverHealthProbe by lazy { ServerHealthProbe(serverProbeHttpClient) }
     private val authApi by lazy { AuthApi(httpClient, serverUrlProvider) }
-    private val userApi by lazy { UserApi(httpClient, serverUrlProvider) }
     private val movieApi by lazy { MovieApi(httpClient, serverUrlProvider) }
     val movieRepository by lazy { MovieRepository(movieApi) }
     private val showApi by lazy { ShowApi(httpClient, serverUrlProvider) }
@@ -112,7 +110,7 @@ class IglooAppContainer(
     val searchRepository by lazy { SearchRepository(searchApi) }
     val voiceSearch: VoiceSearch by lazy { AndroidVoiceSearch(appContext) }
     val authRepository by lazy {
-        AuthRepository(authApi, userApi, profileRepository, identity)
+        AuthRepository(authApi, profileRepository, identity)
     }
     val serverRepository by lazy {
         ServerRepository(serverHealthProbe, serverSettingsStore, serverUrlProvider, profileRepository, localNetworkPermission)

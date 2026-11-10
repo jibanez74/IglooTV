@@ -3,7 +3,7 @@ package com.igloo.blindpenguincoder.data.repository
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.data.api.ShowApi
-import com.igloo.blindpenguincoder.data.model.EpisodeWatchedData
+import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.data.model.LatestShow
 import com.igloo.blindpenguincoder.data.model.LatestShowsData
 import com.igloo.blindpenguincoder.data.model.SetWatchedRequest
@@ -65,6 +65,6 @@ class ShowRepository(
     suspend fun episodeWatchProgress(id: Long): ApiResult<WatchProgress> =
         envelopeData("watch progress") { api.episodeWatchProgress(id) }
 
-    suspend fun setEpisodeWatched(id: Long, watched: Boolean): ApiResult<EpisodeWatchedData> =
+    suspend fun setEpisodeWatched(id: Long, watched: Boolean): ApiResult<WatchedData> =
         envelopeData("set watched") { api.setEpisodeWatched(id, SetWatchedRequest(watched)) }
 }

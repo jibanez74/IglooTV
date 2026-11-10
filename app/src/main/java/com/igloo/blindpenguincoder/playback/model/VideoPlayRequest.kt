@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
  * the demuxed container's track-group order under direct play, and the backend's
  * `audio_track`/`trackIndex` ordinal for HLS sessions and sideloaded subtitles.
  */
+@Serializable
 data class VideoPlayRequest(
     val media: PlaybackMediaRef,
     val title: String,

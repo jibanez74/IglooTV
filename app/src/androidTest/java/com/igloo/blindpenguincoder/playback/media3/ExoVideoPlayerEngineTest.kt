@@ -135,7 +135,7 @@ class ExoVideoPlayerEngineTest {
     ): VideoPlayerEngine {
         lateinit var built: VideoPlayerEngine
         instrumentation.runOnMainSync {
-            built = exoVideoPlayerEngine(
+            built = ExoVideoPlayerEngine(
                 context = context,
                 request = request,
                 services = VideoPlaybackServices(

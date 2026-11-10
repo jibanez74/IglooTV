@@ -13,7 +13,7 @@ import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.Subtitle
 import com.igloo.blindpenguincoder.data.model.TrackListItem
-import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.feature.home.HomeContinueItem
 import com.igloo.blindpenguincoder.feature.home.HomeHero
 import com.igloo.blindpenguincoder.feature.home.HomeHeroKind
@@ -260,7 +260,7 @@ internal val inertDetailsActions = MovieDetailsActions.Library(
 @Composable
 internal fun rememberInertVideoPlayerViewModel(): VideoPlayerViewModel = remember {
     VideoPlayerViewModel(
-        saveProgress = { _, _ -> ApiResult.Success(WatchProgressUpdateData(watched = false)) },
+        saveProgress = { _, _ -> ApiResult.Success(WatchedData(watched = false)) },
         onWatchedStateCommitted = {},
     )
 }

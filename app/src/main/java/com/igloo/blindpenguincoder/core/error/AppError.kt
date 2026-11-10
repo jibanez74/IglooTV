@@ -8,7 +8,7 @@ sealed interface AppError {
     data object TlsVerification : AppError
     data class UnsafeRedirect(val message: String) : AppError
     data class Validation(val message: String) : AppError
-    data class Unexpected(val debugMessage: String?) : AppError
+    data object Unexpected : AppError
 }
 
 sealed interface ApiResult<out T> {

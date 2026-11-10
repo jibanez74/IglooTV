@@ -182,12 +182,6 @@ data class ShuffleTracksData(
     val tracks: List<TrackListItem>,
 )
 
-/** Payload of `TrackLikeToggleEnvelope.data`. */
-@Serializable
-data class TrackLikeToggleData(
-    @SerialName("is_liked") val isLiked: Boolean,
-)
-
 /** Payload of `LikedTrackIDsEnvelope.data`. */
 @Serializable
 data class LikedTrackIdsData(

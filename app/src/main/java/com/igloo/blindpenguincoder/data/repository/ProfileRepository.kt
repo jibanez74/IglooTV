@@ -101,15 +101,11 @@ class ProfileRepository(
         if (activeProfileId == null) setCredential(null)
     }
 
-    suspend fun remove(userId: Long): Unit = mutex.withLock {
-        removeLocked(userId)
-    }
-
     /**
-     * Removes the profile that initiated sign-out and returns the credential that belonged to it.
-     * The returned token is used only as an explicit bearer for the best-effort server revoke.
+     * Removes the profile and returns the credential that belonged to it. Sign-out uses the
+     * returned token only as an explicit bearer for the best-effort server revoke.
      */
-    internal suspend fun removeForSignOut(profileId: Long): ActiveCredential? = mutex.withLock {
+    suspend fun remove(profileId: Long): ActiveCredential? = mutex.withLock {
         removeLocked(profileId)
     }
 

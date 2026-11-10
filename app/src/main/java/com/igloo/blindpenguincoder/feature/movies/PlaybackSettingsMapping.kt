@@ -5,7 +5,6 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.Subtitle
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.audioCodecDisplayName
-import com.igloo.blindpenguincoder.playback.model.availablePlaybackModes
 import com.igloo.blindpenguincoder.playback.model.describeChannelLayout
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.isUnreliableHlsAudio
@@ -69,7 +68,7 @@ data class PlaybackSettingsUi(
  * inert stand-ins ("Default", "None") so the focus chain and announcements stay meaningful.
  *
  * Resolution rules:
- * - Modes: [availablePlaybackModes] returns the normative seven-mode ladder in order. Direct
+ * - Modes: [PlaybackMode.entries] is the normative seven-mode ladder in order. Direct
  *   stays listed and selectable even when the file's video or the selected audio track can't
  *   play on this device — offers may be filtered, but a user's choice is never overridden; the
  *   explanation (and the Play gate, in the same words) says why Direct would refuse.
@@ -92,7 +91,7 @@ internal fun playbackSettingsUi(
     canPlayVideoMime: (mimeType: String) -> Boolean = { true },
     canPlayAudioMime: (mimeType: String, channels: Int?) -> Boolean = { _, _ -> true },
 ): PlaybackSettingsUi {
-    val modes = availablePlaybackModes()
+    val modes = PlaybackMode.entries
         .map { PlaybackModeOptionUi(it, playbackModeLabel(it)) }
 
     // `stream_index` order, for the same reason the play request uses it: the type ordinal is

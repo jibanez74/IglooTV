@@ -39,5 +39,5 @@ internal fun isIglooServerUrl(url: String?, origin: String?): Boolean =
 fun <T> ApiResult<T>.withApiBaseUrl(serverUrl: ServerUrlProvider): ApiResult<Pair<T, String>> =
     flatMap { value ->
         serverUrl.current.value?.let { ApiResult.Success(value to it.apiBaseUrl) }
-            ?: ApiResult.Failure(AppError.Unexpected("Server address cleared mid-load"))
+            ?: ApiResult.Failure(AppError.Unexpected)
     }

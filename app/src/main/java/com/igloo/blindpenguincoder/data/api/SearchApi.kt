@@ -24,14 +24,14 @@ class SearchApi(
      * The server tokenises [query] itself; a blank one answers with empty sections, not an error.
      */
     suspend fun searchAll(query: String): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/search") {
+        client.get(serverUrl.api("/search")) {
             parameter("q", query)
         }
 
     /** One page of one category; `per_page` is clamped to [MAX_LIBRARY_PER_PAGE] server-side. */
     suspend fun search(route: SearchRoute, query: String, page: Long, perPage: Long): HttpResponse =
         client.pagedList(
-            "${serverUrl.require().apiBaseUrl}/search/${route.segment}",
+            serverUrl.api("/search/${route.segment}"),
             page,
             perPage,
             query = query,

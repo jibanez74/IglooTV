@@ -17,28 +17,28 @@ class MusicApi(
      * owns both the order and the cap of 12, so there is nothing to page or sort from here.
      */
     suspend fun latestAlbums(): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/music/albums/latest")
+        client.get(serverUrl.api("/music/albums/latest"))
 
     /** One page of every album, alphabetical; `per_page` is clamped to [MAX_LIBRARY_PER_PAGE]. */
     suspend fun albums(page: Long, perPage: Long): HttpResponse =
-        client.pagedList("${serverUrl.require().apiBaseUrl}/music/albums", page, perPage)
+        client.pagedList(serverUrl.api("/music/albums"), page, perPage)
 
     suspend fun albumDetails(id: Long): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/music/albums/details/$id")
+        client.get(serverUrl.api("/music/albums/details/$id"))
 
     /** One page of every musician, alphabetical by the server's sort name. */
     suspend fun musicians(page: Long, perPage: Long): HttpResponse =
-        client.pagedList("${serverUrl.require().apiBaseUrl}/music/musicians", page, perPage)
+        client.pagedList(serverUrl.api("/music/musicians"), page, perPage)
 
     suspend fun musicianDetails(id: Long): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/music/musicians/$id")
+        client.get(serverUrl.api("/music/musicians/$id"))
 
     /**
      * The library track list, ordered by letter bucket then title. Unlike the album and musician
      * lists this route pages by `limit`/`offset`; `limit` is clamped to 100 server-side.
      */
     suspend fun tracks(limit: Long, offset: Long): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/music/tracks") {
+        client.get(serverUrl.api("/music/tracks")) {
             parameter("limit", limit)
             parameter("offset", offset)
         }
@@ -48,29 +48,29 @@ class MusicApi(
      * first [SHUFFLE_MAX_EXCLUDE] ids, so the caller decides which ids are worth the slots.
      */
     suspend fun shuffleTracks(limit: Long, exclude: List<Long>): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/music/tracks/shuffle") {
+        client.get(serverUrl.api("/music/tracks/shuffle")) {
             parameter("limit", limit)
             if (exclude.isNotEmpty()) parameter("exclude", exclude.joinToString(","))
         }
 
     /** Every track id the current user has liked; the bulk seed for like state. */
     suspend fun likedTrackIds(): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/music/tracks/liked-ids")
+        client.get(serverUrl.api("/music/tracks/liked-ids"))
 
     /** Server-side toggle — no request body; the response carries the new state. */
     suspend fun toggleTrackLike(id: Long): HttpResponse =
-        client.post("${serverUrl.require().apiBaseUrl}/music/tracks/$id/like")
+        client.post(serverUrl.api("/music/tracks/$id/like"))
 
     /** Library-wide counts of albums, tracks and musicians. */
     suspend fun musicStats(): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/music/stats")
+        client.get(serverUrl.api("/music/stats"))
 
     /**
      * Absolute URL of a track's direct stream. Media3 fetches it on its own HTTP stack
      * (Range/206), not through Ktor, so this is a string rather than a request.
      */
     fun trackStreamUrl(id: Long): String =
-        "${serverUrl.require().apiBaseUrl}/music/tracks/$id/stream"
+        serverUrl.api("/music/tracks/$id/stream")
 
     /**
      * Absolute URL of a cover or photo as the API returns it: a Spotify or Apple URL as is, or

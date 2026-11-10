@@ -3,7 +3,7 @@ package com.igloo.blindpenguincoder.playback.progress
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
-import com.igloo.blindpenguincoder.data.model.WatchProgressUpdateData
+import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.clampSecondsToDuration
 import java.util.UUID
@@ -50,7 +50,7 @@ internal fun shouldPersistProgress(
 internal class ProgressReporter(
     val media: PlaybackMediaRef,
     private val save: suspend (PlaybackMediaRef, UpdateWatchProgressRequest) ->
-    ApiResult<WatchProgressUpdateData>,
+    ApiResult<WatchedData>,
     val sessionId: String = UUID.randomUUID().toString(),
 ) {
     private var sequence = 0L
@@ -59,7 +59,7 @@ internal class ProgressReporter(
     suspend fun saveNow(
         positionSec: Double,
         durationSec: Double,
-    ): ApiResult<WatchProgressUpdateData> {
+    ): ApiResult<WatchedData> {
         if (durationSec <= 0.0) {
             return ApiResult.Failure(AppError.Validation("Playback duration is not available."))
         }

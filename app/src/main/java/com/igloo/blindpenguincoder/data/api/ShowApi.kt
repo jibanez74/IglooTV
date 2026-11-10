@@ -6,10 +6,7 @@ import com.igloo.blindpenguincoder.data.model.SortOrder
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.put
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
 
 class ShowApi(
     private val client: HttpClient,
@@ -21,11 +18,11 @@ class ShowApi(
      * only a direction.
      */
     suspend fun showsLibrary(page: Long, perPage: Long, sort: SortOrder): HttpResponse =
-        client.pagedList("${serverUrl.require().apiBaseUrl}/shows/library", page, perPage, sort)
+        client.pagedList(serverUrl.api("/shows/library"), page, perPage, sort)
 
     /** All show genres with per-genre counts, tag-ordered server-side. */
     suspend fun showGenres(): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/shows/genres")
+        client.get(serverUrl.api("/shows/genres"))
 
     /** One page of one genre's shows; same paging contract as [showsLibrary]. */
     suspend fun genreShows(
@@ -35,7 +32,7 @@ class ShowApi(
         sort: SortOrder,
     ): HttpResponse =
         client.pagedList(
-            "${serverUrl.require().apiBaseUrl}/shows/genres/$genreId/shows",
+            serverUrl.api("/shows/genres/$genreId/shows"),
             page,
             perPage,
             sort,
@@ -43,36 +40,35 @@ class ShowApi(
 
     /** Newest additions to the library, newest first; the backend caps the list at 12. */
     suspend fun latestShows(): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/shows/latest")
+        client.get(serverUrl.api("/shows/latest"))
 
     /** One show with its seasons and credits; backs the show details page and the Home hero. */
     suspend fun showDetails(id: Long): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/shows/details/$id")
+        client.get(serverUrl.api("/shows/details/$id"))
 
     /** One season's episodes in episode order, each with the caller's progress. */
     suspend fun seasonEpisodes(showId: Long, seasonNumber: Long): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/shows/$showId/seasons/$seasonNumber/episodes")
+        client.get(serverUrl.api("/shows/$showId/seasons/$seasonNumber/episodes"))
 
     /** Library-wide counts; today just the total number of shows. */
     suspend fun showStats(): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/shows/stats")
+        client.get(serverUrl.api("/shows/stats"))
 
     /** The episode player's header: the episode, its season and show, and what follows it. */
     suspend fun episodePlayback(id: Long): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/shows/episodes/$id")
+        client.get(serverUrl.api("/shows/episodes/$id"))
 
     /** Probed streams, subtitles, and chapters for one episode file. */
     suspend fun episodeTechnicalDetails(id: Long): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/shows/episodes/$id/technical-details")
+        client.get(serverUrl.api("/shows/episodes/$id/technical-details"))
 
     /** Current user's saved position and watched flag for one episode. */
     suspend fun episodeWatchProgress(id: Long): HttpResponse =
-        client.get("${serverUrl.require().apiBaseUrl}/shows/episodes/$id/watch-progress")
+        client.get(serverUrl.api("/shows/episodes/$id/watch-progress"))
 
     /** Marks one episode watched or unwatched for the current user; watched clears the position. */
     suspend fun setEpisodeWatched(id: Long, body: SetWatchedRequest): HttpResponse =
-        client.put("${serverUrl.require().apiBaseUrl}/shows/episodes/$id/watch-progress/watched") {
-            contentType(ContentType.Application.Json)
-            setBody(body)
+        client.put(serverUrl.api("/shows/episodes/$id/watch-progress/watched")) {
+            jsonBody(body)
         }
 }
