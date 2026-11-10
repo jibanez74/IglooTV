@@ -29,24 +29,9 @@ class AlbumDetailsViewModel(
     )
     val uiState: StateFlow<AlbumDetailsUiState> = loader.uiState
 
-    /** Opens the overlay on album [id] and starts its one load. */
     fun open(id: Long) = loader.open(id)
-
-    /**
-     * Back from the overlay. Cancels the in-flight read so a late response cannot reopen state.
-     * Idempotent, because the host closes every detail view model on Back without asking which
-     * one was up.
-     */
     fun close() = loader.close()
-
-    /** The full-screen error's Retry: user-initiated, so the screen returns to Loading truth. */
     fun retry() = loader.retry()
-
-    /**
-     * Background re-read while the overlay is open (the host's start effect): a failure keeps
-     * what is on screen — a TV waking from standby must not swap a readable page for an error
-     * card the user never asked for.
-     */
     fun refresh() = loader.refresh()
 }
 

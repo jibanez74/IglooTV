@@ -350,8 +350,7 @@ fun IglooApp(
     var musicPlayRequest by rememberSaveable(stateSaver = MusicPlayRequestSaver) {
         mutableStateOf<MusicPlayRequest?>(null)
     }
-    // Which surface launched the music player: it decides whose closing takes the player
-    // with it and which requester its own close returns focus to (section 6.3).
+    // Which surface launched the music player, like videoPlayOrigin.
     var musicPlayOrigin by rememberSaveable { mutableStateOf<MusicPlayOrigin?>(null) }
     val musicPlayerOpen = musicPlayRequest != null
     // Anything drawn over the shell: a details page or either player.
@@ -504,9 +503,11 @@ fun IglooApp(
     }
     val loadedAlbum = (albumDetails.details as? DetailsState.Loaded)?.value
     val loadedMusician = (musicianDetails.details as? DetailsState.Loaded)?.value
-    // The last-resort fallback every overlay's close shares: landing on the pane's anchor is a
-    // worse restore than the control that led away, and a far better outcome than dropping focus
-    // or crashing on a detached requester.
+    // Every overlay's close restores focus through this, in the close callback rather than an
+    // effect, for the detach-race reason the details close documents. The launching control is
+    // still composed in every reachable case; the pane's anchor is the last-resort fallback — a
+    // worse restore than the control that led away, and a far better outcome than dropping
+    // focus or crashing on a detached requester.
     val restoreFocus: (FocusRequester?) -> Unit = { requester ->
         if (requester == null || !requester.requestFocusSafely()) {
             contentStartRequester.requestFocusSafely()
@@ -516,9 +517,6 @@ fun IglooApp(
         val origin = musicPlayOrigin
         musicPlayRequest = null
         musicPlayOrigin = null
-        // In the callback, not an effect, for the detach-race reason the details close
-        // documents. The launching control is still composed in every reachable case; the
-        // pane's anchor is the same last-resort fallback the other overlays use.
         val returnRequester = when (origin) {
             MusicPlayOrigin.AlbumDetails -> albumPlayReturnRequester
             MusicPlayOrigin.MusicianDetails -> musicianPlayReturnRequester
@@ -543,11 +541,8 @@ fun IglooApp(
                 landedSite,
             )
         }
-        // In the callback, not an effect, for the detach-race reason the details close
-        // documents. The launching control is still composed in every reachable case — a details
-        // page's Play button, the show page's episode card, or the Continue Watching rail's
-        // anchor while Home is the pane; the pane's anchor is the same last-resort fallback the
-        // other overlays use.
+        // The launching control: a details page's Play button, the show page's episode card,
+        // or the Continue Watching rail's anchor while Home is the pane.
         val returnRequester = when (videoPlayOrigin) {
             VideoPlayOrigin.MovieDetails -> playReturnRequester
             VideoPlayOrigin.ShowDetailsHero -> showPlayReturnRequester
@@ -562,10 +557,6 @@ fun IglooApp(
     val closeTrailer = {
         val origin = trailerRequest?.origin
         trailerRequest = null
-        // In the callback, not an effect, for the detach-race reason the details close documents.
-        // The launching control is still composed in every reachable case — nothing that runs
-        // under the player removes it — but if the anchor is gone anyway, the pane's anchor is a
-        // worse restore than the card and far better than a crash.
         restoreFocus(
             when (origin) {
                 VideoLaunchSite.Hero -> heroTrailerReturnRequester
@@ -1048,7 +1039,6 @@ private fun ContentPane(
     musicActions: MusicActions,
     search: SearchUiState,
     searchActions: SearchActions,
-    /** The platform's speech recogniser, or a fake under instrumentation. */
     voiceSearch: VoiceSearch,
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,

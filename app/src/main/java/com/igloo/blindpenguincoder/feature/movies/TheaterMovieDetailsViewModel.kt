@@ -48,24 +48,9 @@ class TheaterMovieDetailsViewModel(
     )
     val uiState: StateFlow<MovieDetailsUiState> = loader.uiState
 
-    /** Opens the overlay on the TMDB movie [tmdbId] and starts its one load. */
     fun open(tmdbId: Long) = loader.open(tmdbId)
-
-    /**
-     * Back from the overlay. Cancels the in-flight read so a late response cannot reopen state.
-     * Idempotent, because the host closes both detail view models on Back without asking which
-     * one was up.
-     */
     fun close() = loader.close()
-
-    /** The full-screen error's Retry: user-initiated, so the screen returns to Loading truth. */
     fun retry() = loader.retry()
-
-    /**
-     * Background re-read while the overlay is open (the host's start effect): a failure keeps
-     * what is on screen — a TV waking from standby must not swap a readable page for an error
-     * card the user never asked for.
-     */
     fun refresh() = loader.refresh()
 
     private fun toUi(movie: TmdbMovie): MovieDetailsUi {

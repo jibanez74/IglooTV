@@ -29,13 +29,8 @@ class MusicianDetailsViewModel(
     val uiState: StateFlow<MusicianDetailsUiState> = loader.uiState
 
     fun open(id: Long) = loader.open(id)
-
-    /** Back from the overlay; idempotent, because the host closes every detail view model. */
     fun close() = loader.close()
-
     fun retry() = loader.retry()
-
-    /** Background re-read while open (the host's start effect); a failure keeps the page. */
     fun refresh() = loader.refresh()
 }
 
