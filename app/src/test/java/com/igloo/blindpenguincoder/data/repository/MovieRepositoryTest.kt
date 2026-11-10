@@ -132,7 +132,10 @@ class MovieRepositoryTest {
 
         val result = http.movieRepository.latestMovies()
 
-        assertTrue((result as ApiResult.Failure).error is AppError.Unexpected)
+        assertEquals(
+            AppError.Unexpected("Missing data in latest movies response"),
+            (result as ApiResult.Failure).error,
+        )
     }
 
     @Test

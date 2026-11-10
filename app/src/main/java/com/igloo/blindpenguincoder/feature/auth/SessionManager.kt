@@ -196,7 +196,7 @@ class SessionManager(
                 val address = serverUrl.current.value
                 if (address == null) {
                     gateLocked()
-                    SignInResult.Failed(AppError.Unexpected)
+                    SignInResult.Failed(AppError.Unexpected("no server address"))
                 } else if (enforcePin && user.hasPin) {
                     // Nothing is committed yet: the vault's active user must not advance until
                     // the sign-in completes, so a kill at the keypad returns to the gate.

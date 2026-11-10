@@ -720,6 +720,6 @@ class MusicPlayerScreenTest {
         }
 
         override suspend fun shuffleTracks(limit: Long, exclude: List<Long>): ApiResult<ShuffleTracksData> =
-            ApiResult.Failure(AppError.Unexpected)
+            ApiResult.Failure(AppError.Unexpected("not scripted"))
     }
 }

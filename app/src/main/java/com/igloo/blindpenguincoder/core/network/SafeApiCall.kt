@@ -40,7 +40,7 @@ suspend fun <T> safeApiCall(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        ApiResult.Failure(AppError.Unexpected)
+        ApiResult.Failure(AppError.Unexpected(e.message))
     }
 }
 
