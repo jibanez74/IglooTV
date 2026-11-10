@@ -26,7 +26,7 @@ data class MusicQueueState(
 )
 
 /**
- * The refill rules of docs/music-shuffle.md for an endless queue, pure Kotlin so they run on
+ * The refill rules for an endless queue, pure Kotlin so they run on
  * the JVM: when the playhead is within [REFILL_WHEN_REMAINING_BELOW] tracks of the end, one
  * batch of [BATCH_SIZE] is fetched, deduplicated against the batch and the whole queue, and
  * appended. Exactly one fetch is ever in flight — [keepFilled] is sequential by construction —
@@ -61,7 +61,7 @@ class MusicQueueController(
         val current = _state.value
         val tracks = current.request.tracks
         // The current track counts as runway, and a negative index is an invalid runway, not
-        // an invitation to fetch (docs/music-shuffle.md).
+        // an invitation to fetch.
         val remaining = tracks.size - index
         return current.request.source.isEndless &&
             !current.exhausted &&

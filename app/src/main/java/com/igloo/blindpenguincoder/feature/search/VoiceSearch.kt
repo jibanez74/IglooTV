@@ -86,7 +86,7 @@ fun voiceSearchResult(results: List<String>?): VoiceSearchOutcome =
 
 /**
  * A `SpeechRecognizer.ERROR_*` code as an outcome. Pure, with the platform's constants spelled
- * out, because the JVM tests must not load `android.*` (docs/testing.md).
+ * out, because the JVM tests must not load `android.*`.
  */
 fun voiceSearchError(code: Int): VoiceSearchOutcome = when (code) {
     ERROR_SPEECH_TIMEOUT, ERROR_NO_MATCH -> VoiceSearchOutcome.NoMatch
