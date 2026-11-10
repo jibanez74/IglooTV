@@ -132,9 +132,9 @@ fun TrackRow(
     onPlay: () -> Unit,
     onToggleLike: () -> Unit,
     onOpenMore: (Rect) -> Unit,
+    modifier: Modifier = Modifier,
     canOpenAlbum: Boolean = true,
     canOpenArtist: Boolean = true,
-    modifier: Modifier = Modifier,
     onColumnFocused: (TrackRowColumn) -> Unit = {},
 ) {
     val openMore = onOpenMore.takeIf { track.hasMoreActions(canOpenAlbum, canOpenArtist) }
