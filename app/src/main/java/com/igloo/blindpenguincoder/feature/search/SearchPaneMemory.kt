@@ -14,9 +14,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateMap
+import com.igloo.blindpenguincoder.core.ui.enumKeyedSaver
 import com.igloo.blindpenguincoder.feature.music.TrackFocusMemory
 
 /**
@@ -113,16 +113,3 @@ internal fun rememberSearchPaneMemory(): SearchPaneMemory {
 }
 
 private val GRID_TABS = listOf(SearchTab.Movies, SearchTab.Shows, SearchTab.Albums, SearchTab.Musicians)
-
-/** Saves an enum-keyed id map as name/id pairs; a key a newer build renamed loses its memory. */
-private fun <K : Enum<K>> enumKeyedSaver(entries: List<K>) =
-    listSaver<SnapshotStateMap<K, Long>, Any>(
-        save = { map -> map.flatMap { (key, id) -> listOf(key.name, id) } },
-        restore = { saved ->
-            mutableStateMapOf<K, Long>().apply {
-                saved.chunked(2).forEach { (name, id) ->
-                    entries.firstOrNull { it.name == name }?.let { put(it, id as Long) }
-                }
-            }
-        },
-    )

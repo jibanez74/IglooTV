@@ -6,7 +6,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.FocusRequester
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.awaitAccessibilitySnapshot
-import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 
 /**
@@ -114,7 +113,7 @@ fun <C : PaneContent> PaneFocusHandoffCoordinator(
     focusOwnership: PaneFocusOwnership,
     silentReconcileGeneration: Int = 0,
     containsItem: (C, Long) -> Boolean = { _, _ -> true },
-    screenReader: Boolean = rememberSpokenAccessibilityEnabled(),
+    screenReader: Boolean,
 ) {
     val memory = remember(resetKey) {
         PaneFocusHandoffMemory(content, contentGeneration, silentReconcileGeneration)
@@ -145,11 +144,10 @@ fun <C : PaneContent> PaneFocusHandoffCoordinator(
                     if (!tabFocused) handOff(firstItemRequester)
                 }
 
-                content.isCardless -> if (!tabFocused) handOff(cardlessHandoffRequester)
-
                 // Rows giving way to a skeleton (a new search): the focused row is disposing,
                 // so the skeleton's anchor takes over until the page lands.
-                content.isSkeleton -> if (!tabFocused) handOff(cardlessHandoffRequester)
+                content.isCardless || content.isSkeleton ->
+                    if (!tabFocused) handOff(cardlessHandoffRequester)
 
                 else -> Unit
             }

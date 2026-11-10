@@ -56,7 +56,6 @@ internal fun SelectableChipRow(
     contentInset: PaddingValues,
     rowTag: String,
     onPress: (Long) -> Unit,
-    modifier: Modifier = Modifier,
     onChipFocusChanged: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     val direction = LocalLayoutDirection.current
@@ -66,7 +65,7 @@ internal fun SelectableChipRow(
 
     val insetStart = contentInset.calculateStartPadding(direction)
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             // Painted on the surface, not the scrolled content, so a chip scrolled past the
             // gutter dissolves under the spine the way a rail's card does, instead of being cut

@@ -40,7 +40,6 @@ internal fun SelectablePill(
     onPress: () -> Unit,
     radius: Dp,
     minHeight: Dp,
-    focusedForeground: Color,
     restForeground: Color,
     modifier: Modifier = Modifier,
     scaleOnFocus: Boolean = true,
@@ -56,7 +55,7 @@ internal fun SelectablePill(
     }
     val foreground = when {
         selected -> colors.primaryForeground
-        focused -> focusedForeground
+        focused -> colors.foreground
         else -> restForeground
     }
 

@@ -29,10 +29,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
-import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -79,6 +77,7 @@ import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusAnnounced
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
+import com.igloo.blindpenguincoder.core.ui.enumKeyedSaver
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.feature.library.LibraryActions
@@ -1166,19 +1165,8 @@ private fun ContentPane(
     // the card to restore (section 6.3), and saveable so process death does not forget it.
     // One map keyed by rail: each rail keeps its own focus memory, and a new rail is one entry
     // instead of another var/callback pair threaded through every signature.
-    val lastFocusedByRail = rememberSaveable(
-        saver = listSaver<SnapshotStateMap<HomeRail, Long>, Any>(
-            save = { map -> map.flatMap { (rail, id) -> listOf(rail.name, id) } },
-            restore = { saved ->
-                mutableStateMapOf<HomeRail, Long>().apply {
-                    saved.chunked(2).forEach { (name, id) ->
-                        // A rail a newer build renamed simply loses its memory.
-                        HomeRail.entries.firstOrNull { it.name == name }?.let { put(it, id as Long) }
-                    }
-                }
-            },
-        ),
-    ) { mutableStateMapOf() }
+    val lastFocusedByRail =
+        rememberSaveable(saver = enumKeyedSaver(HomeRail.entries)) { mutableStateMapOf() }
     // The hero's page memory, hoisted with the rails' for the same round trip: Home comes back
     // on the page the user left, movie or show (section 11.3.1).
     var heroPageKind by rememberSaveable { mutableStateOf<HomeHeroKind?>(null) }

@@ -3,10 +3,8 @@ package com.igloo.blindpenguincoder.feature.auth
 import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
-import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
-import com.igloo.blindpenguincoder.data.repository.testDeviceIdentity
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import java.io.IOException

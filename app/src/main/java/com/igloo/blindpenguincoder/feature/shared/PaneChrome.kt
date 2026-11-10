@@ -166,7 +166,6 @@ internal fun PaneRefreshButton(
         labelVariants = listOf(REFRESH_LABEL, REFRESHING_LABEL),
         onClick = onRefresh,
         variant = IglooButtonVariant.Ghost,
-        enabled = true,
         semanticLabel = semanticLabel,
         stateDescription = "Refreshing".takeIf { refreshing },
         modifier = modifier,
@@ -233,7 +232,7 @@ internal fun <T> PaneTabRow(
  */
 internal fun Modifier.paneCardlessAnchor(
     contentStartRequester: FocusRequester,
-    returnRequester: FocusRequester?,
+    returnRequester: FocusRequester,
     cardlessHandoffRequester: FocusRequester,
     navigationRequester: FocusRequester,
     upRequester: FocusRequester,

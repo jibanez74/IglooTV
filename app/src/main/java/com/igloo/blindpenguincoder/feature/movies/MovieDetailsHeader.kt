@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.feature.movies
 
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize

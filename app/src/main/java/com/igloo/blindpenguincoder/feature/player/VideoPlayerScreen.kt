@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -42,7 +41,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -52,7 +50,6 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
-import com.igloo.blindpenguincoder.core.design.rememberOverlayReveal
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
@@ -60,11 +57,10 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooRadioListDialog
 import com.igloo.blindpenguincoder.core.ui.IglooRadioRow
-import com.igloo.blindpenguincoder.core.ui.IglooScrim
+import com.igloo.blindpenguincoder.core.ui.IglooDialogCard
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
-import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
@@ -882,66 +878,46 @@ private fun ResumePrompt(
 ) {
     BackHandler(onBack = onClose)
 
-    val reveal by rememberOverlayReveal("resumePromptReveal")
-
     val resumeRequester = remember { FocusRequester() }
     val startOverRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { resumeRequester.requestFocus() }
 
-    IglooScrim(
-        modifier = Modifier.graphicsLayer { alpha = reveal },
-        contentAlignment = Alignment.Center,
+    IglooDialogCard(
+        title = "Resume from ${formatTimecode(resumeAtSec)}?",
+        paneTitle = "Resume playback",
+        modifier = Modifier.testTag("movie_resume_prompt"),
     ) {
-        Column(
+        IglooButton(
+            text = "Resume",
+            onClick = onResume,
+            semanticLabel = "Resume from ${formatSpokenTime(resumeAtSec)}",
             modifier = Modifier
-                .width(IglooTheme.layout.dialogWidth)
-                .iglooSurface(radius = IglooTheme.radius.xl, fill = IglooTheme.colors.card)
-                .padding(IglooTheme.spacing.xl)
-                .semantics {
-                    paneTitle = "Resume playback"
-                    isTraversalGroup = true
+                .fillMaxWidth()
+                .focusRequester(resumeRequester)
+                .focusProperties {
+                    left = FocusRequester.Cancel
+                    right = FocusRequester.Cancel
+                    up = FocusRequester.Cancel
+                    down = startOverRequester
                 }
-                .testTag("movie_resume_prompt"),
-            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-        ) {
-            IglooText(
-                text = "Resume from ${formatTimecode(resumeAtSec)}?",
-                style = IglooTheme.typography.titleMedium,
-                color = IglooTheme.colors.cardForeground,
-                modifier = Modifier.semantics { heading() },
-            )
-            IglooButton(
-                text = "Resume",
-                onClick = onResume,
-                semanticLabel = "Resume from ${formatSpokenTime(resumeAtSec)}",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(resumeRequester)
-                    .focusProperties {
-                        left = FocusRequester.Cancel
-                        right = FocusRequester.Cancel
-                        up = FocusRequester.Cancel
-                        down = startOverRequester
-                    }
-                    .testTag("movie_resume"),
-            )
-            IglooButton(
-                text = "Start over",
-                onClick = onStartOver,
-                variant = IglooButtonVariant.Ghost,
-                semanticLabel = "Start over from the beginning",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(startOverRequester)
-                    .focusProperties {
-                        left = FocusRequester.Cancel
-                        right = FocusRequester.Cancel
-                        up = resumeRequester
-                        down = FocusRequester.Cancel
-                    }
-                    .testTag("movie_start_over"),
-            )
-        }
+                .testTag("movie_resume"),
+        )
+        IglooButton(
+            text = "Start over",
+            onClick = onStartOver,
+            variant = IglooButtonVariant.Ghost,
+            semanticLabel = "Start over from the beginning",
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(startOverRequester)
+                .focusProperties {
+                    left = FocusRequester.Cancel
+                    right = FocusRequester.Cancel
+                    up = resumeRequester
+                    down = FocusRequester.Cancel
+                }
+                .testTag("movie_start_over"),
+        )
     }
 }
 

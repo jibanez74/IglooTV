@@ -82,7 +82,6 @@ fun IglooTab(
         radius = IglooTheme.radius.sm,
         // The row's padding on each side brings the strip to controlHeight.
         minHeight = IglooTheme.sizes.controlHeight - IglooTheme.spacing.xs * 2,
-        focusedForeground = colors.foreground,
         restForeground = colors.mutedForeground,
         modifier = modifier,
         scaleOnFocus = false,

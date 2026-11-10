@@ -30,7 +30,6 @@ import com.igloo.blindpenguincoder.feature.shared.DetailChip
 import com.igloo.blindpenguincoder.feature.shared.FactsSection
 import com.igloo.blindpenguincoder.feature.shared.TrackRow
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
-import com.igloo.blindpenguincoder.feature.shared.hasMoreActions
 import com.igloo.blindpenguincoder.feature.shared.rememberPlainColumnTrackRowFocus
 
 /**
@@ -229,11 +228,8 @@ private fun TrackListSection(
                     focus = focus,
                     onPlay = { onPlayTrack(index) },
                     onToggleLike = { onToggleLike(track.id) },
-                    onOpenMore = if (track.hasMoreActions(canOpenAlbum = false, canOpenArtist = canOpenArtist)) {
-                        { bounds -> onOpenMore(index, bounds) }
-                    } else {
-                        null
-                    },
+                    canOpenAlbum = false, canOpenArtist = canOpenArtist,
+                    onOpenMore = { bounds -> onOpenMore(index, bounds) },
                 )
             }
         }

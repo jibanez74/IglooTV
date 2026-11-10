@@ -61,7 +61,7 @@ internal fun <T> PaneGrid(
     contentInset: PaddingValues,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
-    returnRequester: FocusRequester?,
+    returnRequester: FocusRequester,
     firstItemRequester: FocusRequester,
     upRequester: FocusRequester,
     lastFocusedId: Long?,
@@ -78,13 +78,13 @@ internal fun <T> PaneGrid(
 ) {
     // The card focus memory restores to, falling back to the first so the pane always has an
     // anchor — the same contract the rails' entry key follows.
-    val entryId = remember(items, lastFocusedId) {
-        lastFocusedId?.takeIf { id -> items.any { itemId(it) == id } } ?: itemId(items.first())
+    val appendRetryReturnId = remember(items, lastFocusedId) {
+        lastFocusedId?.takeIf { id -> items.any { itemId(it) == id } }
     }
+    val entryId = appendRetryReturnId ?: itemId(items.first())
     val appendRetryReturnRequester = remember { FocusRequester() }
     var appendRetryFocused by remember { mutableStateOf(false) }
     var appendRetryHandoffPending by remember { mutableStateOf(false) }
-    val appendRetryReturnId = lastFocusedId?.takeIf { id -> items.any { itemId(it) == id } }
     val append = paged.append
     val itemRequesters = remember(items) { items.associate { itemId(it) to FocusRequester() } }
 
@@ -240,7 +240,7 @@ internal fun <T> PaneGrid(
                     .focusRequester(itemRequesters.getValue(id))
                     .withRequester(firstItemRequester.takeIf { index == 0 })
                     .withRequester(contentStartRequester.takeIf { id == entryId })
-                    .withRequester(returnRequester?.takeIf { id == entryId })
+                    .withRequester(returnRequester.takeIf { id == entryId })
                     .withRequester(appendRetryReturnRequester.takeIf { id == appendRetryReturnId })
                     .focusProperties {
                         if (index % columns == 0) left = navigationRequester

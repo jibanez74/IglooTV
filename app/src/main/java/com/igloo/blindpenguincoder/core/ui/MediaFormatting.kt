@@ -96,28 +96,14 @@ fun progressFraction(progressSec: Double, durationSec: Double): Float =
 fun formatRemainingTime(progressSec: Double, durationSec: Double): String {
     val secondsLeft = remainingSeconds(progressSec, durationSec) ?: return "In progress"
     if (secondsLeft < 60.0) return "Less than 1m left"
-    val minutesLeft = ceil(secondsLeft / 60.0).toLong()
-    val hours = minutesLeft / 60
-    val minutes = minutesLeft % 60
-    return when {
-        hours == 0L -> "${minutes}m left"
-        minutes == 0L -> "${hours}h left"
-        else -> "${hours}h ${minutes}m left"
-    }
+    return "${formatRuntime(ceil(secondsLeft / 60.0).toLong())} left"
 }
 
 /** Unabbreviated remaining time for TalkBack; partial minutes round up. */
 fun formatSpokenRemainingTime(progressSec: Double, durationSec: Double): String {
     val secondsLeft = remainingSeconds(progressSec, durationSec) ?: return "In progress"
     if (secondsLeft < 60.0) return "Less than 1 minute remaining"
-    val minutesLeft = ceil(secondsLeft / 60.0).toLong()
-    val hours = minutesLeft / 60
-    val minutes = minutesLeft % 60
-    val parts = buildList {
-        if (hours > 0) add("$hours ${countNoun(hours, "hour")}")
-        if (minutes > 0) add("$minutes ${countNoun(minutes, "minute")}")
-    }
-    return "${parts.joinToString(" and ")} remaining"
+    return "${formatSpokenTime(ceil(secondsLeft / 60.0) * 60.0)} remaining"
 }
 
 /** The contract sends a positive duration; null is the defensive invalid-data fallback. */

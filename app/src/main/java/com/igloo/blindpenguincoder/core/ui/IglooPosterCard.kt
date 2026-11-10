@@ -135,17 +135,9 @@ fun IglooPosterCard(
             color = colors.foreground,
             maxLines = 2,
         )
-        if (subtitle != null) {
+        for (line in listOfNotNull(subtitle, detail)) {
             IglooText(
-                text = subtitle,
-                style = IglooTheme.typography.label.copy(textAlign = textAlign),
-                color = colors.mutedForeground,
-                maxLines = 1,
-            )
-        }
-        if (detail != null) {
-            IglooText(
-                text = detail,
+                text = line,
                 style = IglooTheme.typography.label.copy(textAlign = textAlign),
                 color = colors.mutedForeground,
                 maxLines = 1,

@@ -223,17 +223,15 @@ internal class AnnouncedSectionColumn(
 
 /**
  * The column for the current composition. [order] is the sections present, top to bottom, and
- * [requesterFor] names the node a move lands on (by default the section's own [entry]); both are
- * read live, so one column outlives recompositions.
+ * [requesterFor] names the node a move lands on; both are read live, so one column outlives
+ * recompositions.
  */
 @Composable
 internal fun rememberAnnouncedSectionColumn(
     scrollState: ScrollState,
     screenReader: Boolean,
     order: List<Any>,
-    requesterFor: (AnnouncedSectionColumn, Any) -> FocusRequester? = { column, key ->
-        column.section(key).entry
-    },
+    requesterFor: (AnnouncedSectionColumn, Any) -> FocusRequester?,
 ): AnnouncedSectionColumn {
     val scope = rememberCoroutineScope()
     val currentOrder by rememberUpdatedState(order)

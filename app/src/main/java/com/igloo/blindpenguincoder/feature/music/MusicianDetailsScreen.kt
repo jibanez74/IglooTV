@@ -40,7 +40,6 @@ import com.igloo.blindpenguincoder.feature.shared.HeroReadingStop
 import com.igloo.blindpenguincoder.feature.shared.HeroTitle
 import com.igloo.blindpenguincoder.feature.shared.TrackRow
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
-import com.igloo.blindpenguincoder.feature.shared.hasMoreActions
 import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 import com.igloo.blindpenguincoder.feature.shared.rememberPlainColumnTrackRowFocus
 
@@ -375,11 +374,8 @@ private fun MusicianTrackList(
                 focus = focus,
                 onPlay = { onPlayTrack(index) },
                 onToggleLike = { onToggleLike(track.id) },
-                onOpenMore = if (track.hasMoreActions(canOpenAlbum = true, canOpenArtist = false)) {
-                    { bounds -> onOpenMore(index, bounds) }
-                } else {
-                    null
-                },
+                canOpenAlbum = true, canOpenArtist = false,
+                onOpenMore = { bounds -> onOpenMore(index, bounds) },
             )
         }
     }

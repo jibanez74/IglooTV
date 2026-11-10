@@ -69,7 +69,6 @@ import com.igloo.blindpenguincoder.feature.shared.TrackRowFocus
 import com.igloo.blindpenguincoder.feature.shared.TrackRowMenu
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
-import com.igloo.blindpenguincoder.feature.shared.hasMoreActions
 import com.igloo.blindpenguincoder.feature.shared.loadedItems
 import com.igloo.blindpenguincoder.feature.shared.paneCardlessAnchor
 import com.igloo.blindpenguincoder.feature.shared.paneCountLine
@@ -912,11 +911,8 @@ private fun SearchTracksSection(
                 focus = focus,
                 onPlay = { onPlayTrack(track.id) },
                 onToggleLike = { onToggleLike(track.id) },
-                onOpenMore = if (track.hasMoreActions(canOpenAlbum, canOpenArtist)) {
-                    { bounds -> onOpenMore(track, bounds) }
-                } else {
-                    null
-                },
+                canOpenAlbum = canOpenAlbum, canOpenArtist = canOpenArtist,
+                onOpenMore = { bounds -> onOpenMore(track, bounds) },
                 onColumnFocused = { column ->
                     memory.lastFocusedAllTrack = TrackFocusMemory(track.id, column)
                     memory.lastFocusedSection = SearchKind.Tracks
