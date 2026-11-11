@@ -14,10 +14,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,7 +77,9 @@ import kotlin.math.roundToInt
  * hand-wired `left` never runs; Left from a card low on the screen landed on the row level with
  * it, usually Sign out. The collapsed rail therefore shows TalkBack only the current
  * destination's row — the one target left of the content — and the rest reappear as the rail
- * expands, which it does the moment focus is inside (section 6.3).
+ * expands, which it does the moment focus is inside (section 6.3). Collapsing scrolls that row
+ * back into view: at Large the destinations overflow their column, and a walk down to Settings
+ * would otherwise leave Home scrolled off with nothing on screen for TalkBack to reach.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -170,6 +175,11 @@ fun NavigationRail(
             ) {
                 PrimaryIglooDestinations.forEach { destination ->
                     val selected = destination == currentDestination
+                    val bringIntoView = remember { BringIntoViewRequester() }
+                    // Through `destinationScroll`, so the row lands in the slot the d-pad gives it.
+                    LaunchedEffect(expanded, selected) {
+                        if (!expanded && selected) bringIntoView.bringIntoView()
+                    }
                     RailRow(
                         icon = destination.icon,
                         label = destination.label,
@@ -192,6 +202,7 @@ fun NavigationRail(
                         labelFade = labelFade,
                         onClick = { onDestinationSelected(destination) },
                         modifier = Modifier
+                            .bringIntoViewRequester(bringIntoView)
                             .focusRequester(navigationRequesters.getValue(destination))
                             .focusProperties {
                                 right = contentStartRequester

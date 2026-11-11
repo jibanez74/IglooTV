@@ -13,6 +13,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertWidthIsEqualTo
@@ -34,6 +35,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
@@ -80,12 +82,13 @@ class NavigationRailBehaviorTest {
         initialSignOut: SignOutUiState = SignOutUiState(),
         spokenAccessibilityEnabled: Boolean = false,
         settleEntryFocus: Boolean = true,
+        uiScale: UiScale = UiScale.Standard,
     ) {
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
             var signOut by remember { mutableStateOf(initialSignOut) }
-            IglooTheme {
+            IglooTheme(uiScale = uiScale) {
                 collapsedWidth = IglooTheme.layout.navRailCollapsedWidth
                 expandedWidth = IglooTheme.layout.navRailExpandedWidth
                 TestIglooApp(
@@ -399,6 +402,47 @@ class NavigationRailBehaviorTest {
         contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
 
         (others + "Home").forEach { railRow(it).assert(heard) }
+    }
+
+    /**
+     * At Large the six destinations overflow their column, so a walk to Settings scrolls Home
+     * off the top. Collapsing must scroll it back: it is the only row TalkBack can reach.
+     */
+    @Test
+    fun theCollapsedRailScrollsTheCurrentDestinationBackOnScreen() {
+        setShellContent(uiScale = UiScale.Large)
+
+        contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+        // Home -> Movies -> TV Shows -> Music -> Settings
+        repeat(4) { rail().performKeyInput { pressKey(Key.DirectionDown) } }
+        composeRule.onNodeWithContentDescription("Settings").assertIsFocused()
+        railRow("Home").assertIsNotDisplayed()
+
+        rail().performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.waitForIdle()
+        contentStartCard().assertIsFocused()
+
+        railRow("Home").assertIsDisplayed().assert(heard)
+    }
+
+    @Test
+    fun theCollapsedRailScrollsALowCurrentDestinationBackOnScreen() {
+        setShellContent(uiScale = UiScale.Large)
+        openSettings()
+        placeholderStartCard().assertIsFocused()
+
+        placeholderStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.onNodeWithContentDescription("Settings").assertIsFocused()
+        // Settings -> Music -> TV Shows -> Movies -> Home -> Search
+        repeat(5) { rail().performKeyInput { pressKey(Key.DirectionUp) } }
+        composeRule.onNodeWithContentDescription("Search").assertIsFocused()
+        railRow("Settings").assertIsNotDisplayed()
+
+        rail().performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.waitForIdle()
+        placeholderStartCard().assertIsFocused()
+
+        railRow("Settings").assertIsDisplayed().assert(heard)
     }
 
     @Test
