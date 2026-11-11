@@ -8,8 +8,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertWidthIsEqualTo
@@ -31,6 +35,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
@@ -39,6 +44,7 @@ import com.igloo.blindpenguincoder.findActivity
 import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
+import com.igloo.blindpenguincoder.testAuthUser
 import com.igloo.blindpenguincoder.testHero
 import com.igloo.blindpenguincoder.testHomeMovies
 import org.junit.Assert.assertEquals
@@ -76,12 +82,13 @@ class NavigationRailBehaviorTest {
         initialSignOut: SignOutUiState = SignOutUiState(),
         spokenAccessibilityEnabled: Boolean = false,
         settleEntryFocus: Boolean = true,
+        uiScale: UiScale = UiScale.Standard,
     ) {
         composeRule.setContent {
             val context = LocalContext.current
             SideEffect { hostActivity = context.findActivity() }
             var signOut by remember { mutableStateOf(initialSignOut) }
-            IglooTheme {
+            IglooTheme(uiScale = uiScale) {
                 collapsedWidth = IglooTheme.layout.navRailCollapsedWidth
                 expandedWidth = IglooTheme.layout.navRailExpandedWidth
                 TestIglooApp(
@@ -130,6 +137,12 @@ class NavigationRailBehaviorTest {
     }
 
     private fun rail() = composeRule.onNodeWithTag("navigation_rail")
+
+    private fun railRow(label: String) = composeRule.onNodeWithContentDescription(label)
+
+    private val accountRows = listOf("Signed in as ${testAuthUser.name}", "Switch profile", "Sign out")
+    private val hidden = SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility)
+    private val heard = SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility)
 
     // Back goes through the dispatcher BackHandler listens to; its fallback, when no handler
     // is enabled, is what finishes the activity.
@@ -370,6 +383,77 @@ class NavigationRailBehaviorTest {
             rail().performKeyInput { pressKey(key) }
         }
         composeRule.onNodeWithContentDescription(destinations.first().label).assertIsFocused()
+    }
+
+    /**
+     * With a physical remote, TalkBack for TV moves the arrows itself, to whatever node lies
+     * geometrically next to its cursor; from a card low on Home that was the row level with it,
+     * usually Sign out. So the collapsed rail lets TalkBack hear only the current destination's
+     * row, and the rest return the moment focus is inside.
+     */
+    @Test
+    fun theCollapsedRailLetsTalkBackHearOnlyTheCurrentDestination() {
+        setShellContent()
+        val others = PrimaryIglooDestinations.map { it.label } - "Home" + accountRows
+
+        railRow("Home").assert(heard)
+        others.forEach { railRow(it).assert(hidden) }
+
+        contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+
+        (others + "Home").forEach { railRow(it).assert(heard) }
+    }
+
+    /**
+     * At Large the six destinations overflow their column, so a walk to Settings scrolls Home
+     * off the top. Collapsing must scroll it back: it is the only row TalkBack can reach.
+     */
+    @Test
+    fun theCollapsedRailScrollsTheCurrentDestinationBackOnScreen() {
+        setShellContent(uiScale = UiScale.Large)
+
+        contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+        // Home -> Movies -> TV Shows -> Music -> Settings
+        repeat(4) { rail().performKeyInput { pressKey(Key.DirectionDown) } }
+        composeRule.onNodeWithContentDescription("Settings").assertIsFocused()
+        railRow("Home").assertIsNotDisplayed()
+
+        rail().performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.waitForIdle()
+        contentStartCard().assertIsFocused()
+
+        railRow("Home").assertIsDisplayed().assert(heard)
+    }
+
+    @Test
+    fun theCollapsedRailScrollsALowCurrentDestinationBackOnScreen() {
+        setShellContent(uiScale = UiScale.Large)
+        openSettings()
+        placeholderStartCard().assertIsFocused()
+
+        placeholderStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.onNodeWithContentDescription("Settings").assertIsFocused()
+        // Settings -> Music -> TV Shows -> Movies -> Home -> Search
+        repeat(5) { rail().performKeyInput { pressKey(Key.DirectionUp) } }
+        composeRule.onNodeWithContentDescription("Search").assertIsFocused()
+        railRow("Settings").assertIsNotDisplayed()
+
+        rail().performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.waitForIdle()
+        placeholderStartCard().assertIsFocused()
+
+        railRow("Settings").assertIsDisplayed().assert(heard)
+    }
+
+    @Test
+    fun theRowTalkBackHearsFollowsTheDestination() {
+        setShellContent()
+
+        openSettings()
+        placeholderStartCard().assertIsFocused()
+
+        railRow("Settings").assert(heard)
+        railRow("Home").assert(hidden)
     }
 
     @Test
