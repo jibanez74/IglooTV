@@ -8,6 +8,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -39,6 +42,7 @@ import com.igloo.blindpenguincoder.findActivity
 import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
+import com.igloo.blindpenguincoder.testAuthUser
 import com.igloo.blindpenguincoder.testHero
 import com.igloo.blindpenguincoder.testHomeMovies
 import org.junit.Assert.assertEquals
@@ -130,6 +134,12 @@ class NavigationRailBehaviorTest {
     }
 
     private fun rail() = composeRule.onNodeWithTag("navigation_rail")
+
+    private fun railRow(label: String) = composeRule.onNodeWithContentDescription(label)
+
+    private val accountRows = listOf("Signed in as ${testAuthUser.name}", "Switch profile", "Sign out")
+    private val hidden = SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility)
+    private val heard = SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility)
 
     // Back goes through the dispatcher BackHandler listens to; its fallback, when no handler
     // is enabled, is what finishes the activity.
@@ -370,6 +380,36 @@ class NavigationRailBehaviorTest {
             rail().performKeyInput { pressKey(key) }
         }
         composeRule.onNodeWithContentDescription(destinations.first().label).assertIsFocused()
+    }
+
+    /**
+     * With a physical remote, TalkBack for TV moves the arrows itself, to whatever node lies
+     * geometrically next to its cursor; from a card low on Home that was the row level with it,
+     * usually Sign out. So the collapsed rail lets TalkBack hear only the current destination's
+     * row, and the rest return the moment focus is inside.
+     */
+    @Test
+    fun theCollapsedRailLetsTalkBackHearOnlyTheCurrentDestination() {
+        setShellContent()
+        val others = PrimaryIglooDestinations.map { it.label } - "Home" + accountRows
+
+        railRow("Home").assert(heard)
+        others.forEach { railRow(it).assert(hidden) }
+
+        contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
+
+        (others + "Home").forEach { railRow(it).assert(heard) }
+    }
+
+    @Test
+    fun theRowTalkBackHearsFollowsTheDestination() {
+        setShellContent()
+
+        openSettings()
+        placeholderStartCard().assertIsFocused()
+
+        railRow("Settings").assert(heard)
+        railRow("Home").assert(hidden)
     }
 
     @Test

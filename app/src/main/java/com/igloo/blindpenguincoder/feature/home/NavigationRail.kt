@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
@@ -65,8 +66,15 @@ import kotlin.math.roundToInt
  * The collapsible navigation rail. The caller owns the expansion state (it is a pure
  * function of d-pad focus being inside the rail) and animates the container width; this
  * composable only fades its labels between the two states. Every row is composed and
- * focusable in both states — collapse hides text, never targets — so TalkBack and the
- * d-pad see the same tree whether the rail is open or shut.
+ * focusable in both states — collapse hides text, never targets — so the d-pad sees the same
+ * rail open or shut.
+ *
+ * TalkBack does not, on purpose. With a physical remote, TalkBack for TV takes the arrow keys
+ * itself and moves to whichever node lies geometrically next to its cursor, so the panes'
+ * hand-wired `left` never runs; Left from a card low on the screen landed on the row level with
+ * it, usually Sign out. The collapsed rail therefore shows TalkBack only the current
+ * destination's row — the one target left of the content — and the rest reappear as the rail
+ * expands, which it does the moment focus is inside (section 6.3).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -166,6 +174,7 @@ fun NavigationRail(
                         icon = destination.icon,
                         label = destination.label,
                         selected = selected,
+                        hiddenFromAccessibility = !expanded && !selected,
                         actionLabel = "Open ${destination.label}",
                         labelColor = if (selected) colors.sidebarPrimary else colors.foreground,
                         iconTint = { _ -> if (selected) colors.sidebarPrimary else colors.foreground },
@@ -198,7 +207,10 @@ fun NavigationRail(
         Row(
             modifier = Modifier
                 .padding(horizontal = IglooTheme.spacing.md)
-                .clearAndSetSemantics { contentDescription = "Signed in as ${user.name}" },
+                .clearAndSetSemantics {
+                    contentDescription = "Signed in as ${user.name}"
+                    if (!expanded) hideFromAccessibility()
+                },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
@@ -221,6 +233,7 @@ fun NavigationRail(
             label = "Switch profile",
             iconTint = { focused -> if (focused) colors.ring else colors.mutedForeground },
             labelFade = labelFade,
+            hiddenFromAccessibility = !expanded,
             onClick = onSwitchProfile,
             modifier = Modifier
                 .focusRequester(switchProfileFocus)
@@ -236,6 +249,7 @@ fun NavigationRail(
             label = "Sign out",
             iconTint = { focused -> if (focused) colors.destructive else colors.mutedForeground },
             labelFade = labelFade,
+            hiddenFromAccessibility = !expanded,
             onClick = onSignOut,
             modifier = Modifier
                 .focusRequester(signOutRequester)
@@ -266,6 +280,8 @@ private fun RailRow(
         { focused -> if (focused) colors.focusFill(colors.sidebar) else Color.Transparent }
     },
     selected: Boolean = false,
+    /** Out of TalkBack's reach while the rail is collapsed; still a d-pad target. */
+    hiddenFromAccessibility: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
 
@@ -290,6 +306,7 @@ private fun RailRow(
                 // Only ever set, never cleared: selected = false would make TalkBack append
                 // "not selected" to every other row.
                 if (selected) this.selected = true
+                if (hiddenFromAccessibility) hideFromAccessibility()
                 role = Role.Button
                 onClick(label = actionLabel) {
                     onClick()
