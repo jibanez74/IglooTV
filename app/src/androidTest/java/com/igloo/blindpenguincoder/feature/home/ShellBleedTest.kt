@@ -100,11 +100,28 @@ class ShellBleedTest {
         setShellContent()
 
         val panel = viewport()
-        val hero = composeRule.onNodeWithTag("home_hero").fetchSemanticsNode().boundsInRoot
+        val hero = composeRule.onNodeWithTag("home_hero_bleed").fetchSemanticsNode().boundsInRoot
 
         assertTrue("hero left ${hero.left} should sit on the panel edge ${panel.left}", hero.left == panel.left)
         assertTrue("hero top ${hero.top} should sit on the panel edge ${panel.top}", hero.top == panel.top)
         assertTrue("hero right ${hero.right} should sit on the panel edge ${panel.right}", hero.right == panel.right)
+    }
+
+    /**
+     * The art bleeds; the node TalkBack sees does not. With a physical remote, TalkBack for TV
+     * moves the arrows itself, by geometry: a hero node starting at the panel edge left nothing to
+     * its left, so Left never reached the nav rail.
+     */
+    @Test
+    fun theHerosOneNodeStartsAtTheContentInsetPastTheRail() {
+        setShellContent()
+
+        val hero = composeRule.onNodeWithTag("home_hero").fetchSemanticsNode().boundsInRoot
+        val expected = with(composeRule.density) { (railWidth + gutter).toPx() }
+        assertTrue(
+            "hero node left ${hero.left} should sit at the content inset $expected",
+            kotlin.math.abs(hero.left - expected) < 2f,
+        )
     }
 
     @Test

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -98,6 +99,14 @@ import com.igloo.blindpenguincoder.feature.shared.HeroMetadataRow
  * bleeding surface for the same reason a backdrop may bleed and a word may not: a 3dp ring traced
  * round the panel would sit in the overscan margin, the one place section 2.5 says a TV may crop.
  *
+ * **The focus target is the text column, not the bleed.** The art is paint only; the one node
+ * sits over the column the plates use — inside [contentInset], full height — so the box TalkBack
+ * draws is where the focus ring is. With a physical remote, TalkBack for TV moves the arrows
+ * itself, by geometry: a node spanning the panel began at x = 0 and had nothing to its left, so
+ * Left never reached the nav rail and Right from the rail skipped the hero; and Down picks what
+ * lies nearest below the node's middle — the rail's heading under the column, not a card under
+ * the middle of the panel.
+ *
  * Each page opens its own details page — [onOpenMovie] the movie's, [onOpenShow] the show's.
  */
 @Composable
@@ -135,138 +144,154 @@ fun HomeHero(
         { open(page.id) }
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = HERO_MIN_HEIGHT.scaled())
-            // Shows while an image fetches, and under a page with no backdrop at all.
-            .background(if (state is HomeHeroState.Loaded) colors.card else colors.muted)
-            .focusRequester(entryRequester)
-            .focusProperties {
-                left = leftFocusRequester
-                right = FocusRequester.Cancel
-                // Hand-wired: spatial resolution from a pane-wide surface picks whichever card
-                // happens to win its beam heuristic. Down goes to the first rail's entry card,
-                // so the rail's focus memory applies, same as spine re-entry.
-                down = downFocusRequester
-            }
-            // Focus observation outside the focusable, per section 6.3's ordering rule.
-            .onFocusChanged { focused = it.isFocused }
-            .onKeyEvent { event ->
-                val turnTo = when (event.key) {
-                    // Right past the last page and left from the first fall through: right is
-                    // cancelled, and left leaves for the spine.
-                    Key.DirectionRight -> activeIndex + 1
-                    Key.DirectionLeft -> activeIndex - 1
-                    else -> null
-                }
-                val target = turnTo?.let { pages.getOrNull(it) }
-                when {
-                    target != null -> {
-                        if (event.type == KeyEventType.KeyDown) onPageChange(target.kind)
-                        true
+    Box(modifier = modifier.fillMaxWidth()) {
+        // The bleed: art, fade, plates and dots, out to every physical edge. Paint only — what
+        // the hero says is the one node laid over it below.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = HERO_MIN_HEIGHT.scaled())
+                // Shows while an image fetches, and under a page with no backdrop at all.
+                .background(if (state is HomeHeroState.Loaded) colors.card else colors.muted)
+                .testTag("home_hero_bleed")
+                .clearAndSetSemantics { },
+        ) {
+            pages.forEachIndexed { index, page ->
+                if (page != null) {
+                    key(index) {
+                        HeroArtLayer(
+                            url = page.backdropUrl,
+                            art = arts[index],
+                            pageAlpha = transition.artAlpha(index),
+                            modifier = Modifier
+                                .matchParentSize()
+                                // The incoming page fades in over the outgoing one, which holds
+                                // still underneath until it is covered: a dissolve, not a dip.
+                                .zIndex(if (index == activeIndex) 1f else 0f),
+                        )
                     }
-                    openPage != null && event.key in CONFIRM_KEYS -> {
-                        if (event.type == KeyEventType.KeyUp) openPage()
-                        true
-                    }
-                    else -> false
                 }
             }
-            // Always focusable, never clickable, with the press handled above: the two are
-            // different modifier nodes, and the skeleton turning into a page under focus
-            // would otherwise swap one for the other and drop focus on the floor. Select, Enter
-            // and keypad Enter open on release, as clickable does; TalkBack's click goes through
-            // the semantics action.
-            .focusable()
-            // Outside the clear, like the focusable: semantics inside it are wiped.
-            .testTag("home_hero")
-            .clearAndSetSemantics {
-                contentDescription = activePage?.let { heroPageDescription(it, activeIndex, pages.size) }
-                    ?: LOADING_DESCRIPTION
-                // No live region, on purpose. TalkBack speaks a description change on the node
-                // its cursor is on, which covers a turn and a load under focus; a live region
-                // would add a re-read whenever focus came or went, since every focus change
-                // reports a content change on the node.
-                if (openPage != null) {
-                    role = Role.Button
-                    onClick(label = "Open ${activePage.title}") {
-                        openPage()
-                        true
-                    }
-                }
-            },
-    ) {
-        pages.forEachIndexed { index, page ->
-            if (page != null) {
+            // The fade into the page canvas the rails sit on, over whichever art is showing.
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .zIndex(2f)
+                    .background(
+                        Brush.verticalGradient(
+                            BOTTOM_FADE_START to colors.background.copy(alpha = 0f),
+                            1f to colors.background,
+                        ),
+                    ),
+            )
+
+            // Every plate is composed, so the hero measures to the taller one and a turn never
+            // moves the rails; only the active one is opaque.
+            pages.forEachIndexed { index, page ->
                 key(index) {
-                    HeroArtLayer(
-                        url = page.backdropUrl,
-                        art = arts[index],
-                        pageAlpha = transition.artAlpha(index),
-                        modifier = Modifier
-                            .matchParentSize()
-                            // The incoming page fades in over the outgoing one, which holds
-                            // still underneath until it is covered: a dissolve, not a dip.
-                            .zIndex(if (index == activeIndex) 1f else 0f),
-                    )
+                    val textAlpha = transition.textAlpha(index)
+                    val plateModifier = Modifier
+                        .zIndex(3f)
+                        .align(Alignment.BottomStart)
+                        .graphicsLayer { alpha = textAlpha() }
+                    if (page == null) {
+                        HeroSkeletonPlate(
+                            focused = focused,
+                            contentInset = contentInset,
+                            modifier = plateModifier,
+                        )
+                    } else {
+                        HeroPlate(
+                            hero = page,
+                            overMedia = arts[index].loaded,
+                            focused = focused && index == activeIndex,
+                            contentInset = contentInset,
+                            modifier = plateModifier,
+                        )
+                    }
                 }
+            }
+
+            if (pages.size > 1) {
+                HeroPageIndicator(
+                    count = pages.size,
+                    activeIndex = activeIndex,
+                    overMedia = arts[activeIndex].loaded,
+                    modifier = Modifier
+                        .zIndex(3f)
+                        .align(Alignment.BottomEnd)
+                        .padding(
+                            end = contentInset.calculateEndPadding(LocalLayoutDirection.current),
+                            bottom = IglooTheme.layout.safeAreaVertical + IglooTheme.spacing.lg,
+                        ),
+                )
             }
         }
-        // The fade into the page canvas the rails sit on, over whichever art is showing.
+
+        // The one focus target: the text column the plates sit in, full height (see above).
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .zIndex(2f)
-                .background(
-                    Brush.verticalGradient(
-                        BOTTOM_FADE_START to colors.background.copy(alpha = 0f),
-                        1f to colors.background,
-                    ),
-                ),
-        )
-
-        // Every plate is composed, so the hero measures to the taller one and a turn never moves
-        // the rails; only the active one is opaque.
-        pages.forEachIndexed { index, page ->
-            key(index) {
-                val textAlpha = transition.textAlpha(index)
-                val plateModifier = Modifier
-                    .zIndex(3f)
-                    .align(Alignment.BottomStart)
-                    .graphicsLayer { alpha = textAlpha() }
-                if (page == null) {
-                    HeroSkeletonPlate(
-                        focused = focused,
-                        contentInset = contentInset,
-                        modifier = plateModifier,
-                    )
-                } else {
-                    HeroPlate(
-                        hero = page,
-                        overMedia = arts[index].loaded,
-                        focused = focused && index == activeIndex,
-                        contentInset = contentInset,
-                        modifier = plateModifier,
-                    )
+                .insetHorizontally(contentInset)
+                .wrapContentWidth(Alignment.Start)
+                .width(HERO_TEXT_MAX_WIDTH.scaled())
+                .focusRequester(entryRequester)
+                .focusProperties {
+                    left = leftFocusRequester
+                    right = FocusRequester.Cancel
+                    // Hand-wired: spatial resolution from a pane-wide surface picks whichever card
+                    // happens to win its beam heuristic. Down goes to the first rail's entry card,
+                    // so the rail's focus memory applies, same as spine re-entry.
+                    down = downFocusRequester
                 }
-            }
-        }
-
-        if (pages.size > 1) {
-            HeroPageIndicator(
-                count = pages.size,
-                activeIndex = activeIndex,
-                overMedia = arts[activeIndex].loaded,
-                modifier = Modifier
-                    .zIndex(3f)
-                    .align(Alignment.BottomEnd)
-                    .padding(
-                        end = contentInset.calculateEndPadding(LocalLayoutDirection.current),
-                        bottom = IglooTheme.layout.safeAreaVertical + IglooTheme.spacing.lg,
-                    ),
-            )
-        }
+                // Focus observation outside the focusable, per section 6.3's ordering rule.
+                .onFocusChanged { focused = it.isFocused }
+                .onKeyEvent { event ->
+                    val turnTo = when (event.key) {
+                        // Right past the last page and left from the first fall through: right is
+                        // cancelled, and left leaves for the spine.
+                        Key.DirectionRight -> activeIndex + 1
+                        Key.DirectionLeft -> activeIndex - 1
+                        else -> null
+                    }
+                    val target = turnTo?.let { pages.getOrNull(it) }
+                    when {
+                        target != null -> {
+                            if (event.type == KeyEventType.KeyDown) onPageChange(target.kind)
+                            true
+                        }
+                        openPage != null && event.key in CONFIRM_KEYS -> {
+                            if (event.type == KeyEventType.KeyUp) openPage()
+                            true
+                        }
+                        else -> false
+                    }
+                }
+                // Always focusable, never clickable, with the press handled above: the two are
+                // different modifier nodes, and the skeleton turning into a page under focus
+                // would otherwise swap one for the other and drop focus on the floor. Select,
+                // Enter and keypad Enter open on release, as clickable does; TalkBack's click goes
+                // through the semantics action.
+                .focusable()
+                // Outside the clear, like the focusable: semantics inside it are wiped.
+                .testTag("home_hero")
+                .clearAndSetSemantics {
+                    contentDescription =
+                        activePage?.let { heroPageDescription(it, activeIndex, pages.size) }
+                            ?: LOADING_DESCRIPTION
+                    // No live region, on purpose. TalkBack speaks a description change on the node
+                    // its cursor is on, which covers a turn and a load under focus; a live region
+                    // would add a re-read whenever focus came or went, since every focus change
+                    // reports a content change on the node.
+                    if (openPage != null) {
+                        role = Role.Button
+                        onClick(label = "Open ${activePage.title}") {
+                            openPage()
+                            true
+                        }
+                    }
+                },
+        )
     }
 }
 
