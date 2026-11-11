@@ -571,6 +571,15 @@ it for a ≤1.5:1 effect.
 - **Spine ↔ content**: d-pad **right** from the spine enters content; **left** from the first
   content column returns to the spine. This boundary is hand-wired
   (`FocusRequester` in `feature/home/IglooApp.kt`) and must be preserved.
+- **TalkBack with a physical remote does not run the hand-wiring.** TalkBack for TV takes the
+  four arrows itself and moves to whichever node lies geometrically next to its cursor; only Back
+  and Select reach the app. `adb shell input keyevent` is injected past TalkBack, so a pass
+  driven by adb tests the app's path, not a TalkBack user's. Drive TalkBack checks with a virtual
+  remote (`/system/bin/hid`, a uhid consumer-control device). So the spine rule above holds for
+  TalkBack by geometry: the collapsed rail lets TalkBack hear only the current destination's row
+  (§11.2), so it is the one target left of the content, and the hero's node starts at the pane's
+  gutter (§11.3.1), so the rail is to its left at all. Everything else hand-wired is still
+  bypassed; see `docs/known-issues.md`.
 - **No traps.** Every focusable region has a reachable exit in every direction that looks like
   it should work.
 - **Skeletons are grid-matched** (§10) so focus does not jump when content arrives.
@@ -714,8 +723,9 @@ The spine is the primary vertical d-pad target and is always visible, resting as
 icon strip. It expands to `navRailExpandedWidth` exactly while d-pad focus is inside it,
 overlaying the pane behind a `background @ 0.60` scrim (§3.1); the pane is padded by the
 collapsed width only and never reflows. Labels fade in paint only (§7.2) — every row is composed
-and focusable in both states, so the d-pad and TalkBack see the same tree open or shut. There is
-no drawer, no hamburger, and no fully-hidden mode.
+and focusable in both states, so the d-pad sees the same rail open or shut. TalkBack deliberately
+does not: collapsed, it hears only the current destination's row (§11.2). There is no drawer, no
+hamburger, and no fully-hidden mode.
 
 ### 8.2 Media geometry
 
@@ -1370,6 +1380,16 @@ decorative and silent; the footer's avatar and name read as one node, "Signed in
 active destination announces through the `selected` semantics property, not a label suffix —
 never announce text the collapsed rail has faded out.
 
+**Collapsed, TalkBack hears one row: the current destination's.** Every other row, the "Signed
+in as" node and both account rows are `hideFromAccessibility` until the rail expands, which it does
+the moment focus is inside. They stay d-pad targets throughout. TalkBack for TV moves a physical
+remote's arrows by geometry (§6.3), so with the whole rail exposed, Left from a card landed on the
+row level with it — Sign out, from anywhere low on Home. With one row exposed, Left from the
+content says "Selected. Home. Button" wherever it starts; Down through the expanded rail still
+reads every row to Sign out. Back from content and the sign-out dialog's restore never meet a
+hidden row: the first lands on the current row, the second on a rail kept expanded behind the
+dialog.
+
 The footer must remain visible at every `UiScale` — at 540dp tall this is the tightest
 constraint in the app and the first thing to break. It now carries two rows rather than one,
 so re-verify it at `UiScale.Large` after any spine change.
@@ -1482,7 +1502,17 @@ now reads the platform tree through `UiAutomation`, not only Compose's.
 D-pad right turns to the next page and is cancelled on the last; left turns back, and from the
 first page exits to the spine; down is hand-wired to the first rail's entry anchor on every page
 — spatial resolution from a pane-wide surface is heuristic, and the wire means the rail's focus
-memory applies, the same as spine re-entry. `focusRing` rides the active plate with
+memory applies, the same as spine re-entry.
+
+**The art bleeds; the node does not.** The backdrop, fade, plates and dots are one paint-only
+surface out to the physical edges. The focus target and its single node lie over the text column
+the plates use: inside the pane's gutter, `HERO_TEXT_MAX_WIDTH` wide, full height. TalkBack for TV
+moves a physical remote's arrows by geometry (§6.3), and a pane-wide node began at x = 0. Left
+found nothing to its left, so it never reached the spine, and Right from the spine skipped the
+hero for the heading below it. Down picks what lies nearest below the node's middle: the Continue
+Watching heading under the column, where a pane-wide node's middle sat over the third card. The
+column is also where the focus ring is drawn, so TalkBack's box and the ring outline the same
+thing. `focusRing` rides the active plate with
 `scaleOnFocus = false` (1.05× on a pane-width plate overflows the pane; ring, separator,
 fill-contract, and glow still carry the signal).
 
@@ -2908,6 +2938,20 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-11-11 — TalkBack's Left from Home reaches the current destination (§6.3, §8.1, §11.2, §11.3.1).**
+
+- **Found**: with TalkBack on, Left from Home "always" reached Sign out. Traced on a Shield with
+  its own remote, TalkBack for TV takes the arrows and moves by geometry, so Left landed on the
+  rail row level with its cursor. Every earlier TalkBack pass drove the d-pad with
+  `adb shell input keyevent`, which TalkBack never sees, so none of them caught it.
+- **§11.2**: the collapsed rail lets TalkBack hear only the current destination's row; the rest
+  return when the rail expands. The d-pad still reaches every row in both states.
+- **§11.3.1**: the hero's node covers the text column, not the bleed. Left from it reaches the
+  spine, Right from the spine reaches it, and Down still reads the Continue Watching heading
+  first.
+- **§6.3**: records the real-remote rule and the virtual-remote method (`/system/bin/hid`). What
+  the rule still bypasses is in `docs/known-issues.md`.
 
 **2026-10-30 — Subtitles under HLS stream the original track (§11.4.1).**
 
