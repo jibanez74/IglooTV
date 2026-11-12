@@ -155,7 +155,7 @@ fun NavigationRail(
             }
         }
 
-        // Six destinations overflow this column at 540dp, and the TV default bring-into-view
+        // The destinations overflow this column at 540dp, and the TV default bring-into-view
         // parks the focused row 30% down it, which scrolled the resting rail on every
         // destination below Home and cut the rows above in half. LocalBringIntoViewSpec is still
         // experimental, and nothing stable reaches a verticalScroll's bring-into-view behaviour.
@@ -389,6 +389,7 @@ private val IglooDestination.icon: ImageVector
     get() = when (this) {
         IglooDestination.Search -> IglooIcons.Search
         IglooDestination.Home -> IglooIcons.Home
+        IglooDestination.WatchRooms -> IglooIcons.WatchRooms
         IglooDestination.Movies -> IglooIcons.Movies
         IglooDestination.TvShows -> IglooIcons.TvShows
         IglooDestination.Music -> IglooIcons.Music

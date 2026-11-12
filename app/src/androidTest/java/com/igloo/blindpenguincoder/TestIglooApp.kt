@@ -27,6 +27,8 @@ import com.igloo.blindpenguincoder.feature.search.VoiceSearch
 import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsActions
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsUiState
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
@@ -73,6 +75,8 @@ internal fun TestIglooApp(
     musicActions: MusicActions = inertMusicActions,
     search: SearchUiState = SearchUiState(),
     searchActions: SearchActions = inertSearchActions,
+    watchRooms: WatchRoomsUiState = testWatchRoomsState(),
+    watchRoomsActions: WatchRoomsActions = inertWatchRoomsActions,
     // Available by default — the Shield and the TV emulator configuration; a suite that asserts
     // the Fire TV layout passes one that is not.
     voiceSearch: VoiceSearch = remember { FakeVoiceSearch() },
@@ -129,6 +133,8 @@ internal fun TestIglooApp(
         musicActions = musicActions,
         search = search,
         searchActions = searchActions,
+        watchRooms = watchRooms,
+        watchRoomsActions = watchRoomsActions,
         voiceSearch = voiceSearch,
         searchPlayRequests = searchPlayRequests,
         details = details,

@@ -1,9 +1,12 @@
 package com.igloo.blindpenguincoder.core.navigation
 
 /**
+ * The navigation rail's rows, in the order it draws them.
+ *
  * [supportingText] is the line the placeholder pane shows for a destination that has no screen
- * yet. Search, Home, Movies, TV Shows and Music render real content and never surface theirs;
- * the entries stay so the enum has one shape, and are worded as if they would be shown.
+ * yet. Search, Home, Watch Rooms, Movies, TV Shows and Music render real content and never
+ * surface theirs; the entries stay so the enum has one shape, and are worded as if they would
+ * be shown.
  */
 enum class IglooDestination(
     val label: String,
@@ -16,6 +19,10 @@ enum class IglooDestination(
     Home(
         label = "Home",
         supportingText = "Your media center starts here.",
+    ),
+    WatchRooms(
+        label = "Watch Rooms",
+        supportingText = "Rooms you host or were invited to, for watching a movie together.",
     ),
     Movies(
         label = "Movies",
