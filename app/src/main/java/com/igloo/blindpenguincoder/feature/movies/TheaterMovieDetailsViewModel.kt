@@ -6,7 +6,7 @@ import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
 import com.igloo.blindpenguincoder.core.ui.joinedLine
-import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
+import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpecOrNull
 import com.igloo.blindpenguincoder.data.model.TmdbMovie
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.shared.CastCredit
@@ -56,7 +56,7 @@ class TheaterMovieDetailsViewModel(
     private fun toUi(movie: TmdbMovie): MovieDetailsUi {
         val apiBaseUrl = serverUrl.require().apiBaseUrl
         // TMDB sends 0 for an unrated movie, exactly as the theaters rail's card guards against.
-        val ratingBadge = movie.voteAverage.takeIf { it > 0 }?.let(::ratingBadgeSpec)
+        val ratingBadge = ratingBadgeSpecOrNull(movie.voteAverage)
         val certification = certification(movie)
         val runtimeMinutes = movie.runtime.takeIf { it > 0 }
         val releaseDateText = movie.releaseDate.takeIf { it.isNotBlank() }?.let(::formatReleaseDate)

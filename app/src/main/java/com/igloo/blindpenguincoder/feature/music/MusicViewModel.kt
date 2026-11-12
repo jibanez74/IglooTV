@@ -16,7 +16,7 @@ import com.igloo.blindpenguincoder.feature.shared.PagedLoader
 import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import com.igloo.blindpenguincoder.feature.shared.loadedItems
-import com.igloo.blindpenguincoder.feature.shared.pageAppendState
+import com.igloo.blindpenguincoder.feature.shared.pageNumberedPage
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.queue.MusicQueueController
 import kotlinx.coroutines.Job
@@ -120,8 +120,7 @@ class MusicViewModel(
         firstCursor = FIRST_PAGE,
         fetch = { page ->
             music.musicians(page, MAX_LIBRARY_PER_PAGE).map { data ->
-                val rows = data.musicians.map { it.toCardUi() }
-                LoadedPage(rows, data.total, page + 1, pageAppendState(page, data.totalPages, rows.isEmpty()))
+                pageNumberedPage(data.musicians.map { it.toCardUi() }, page, data.total, data.totalPages)
             }
         },
     )
@@ -134,8 +133,7 @@ class MusicViewModel(
         firstCursor = FIRST_PAGE,
         fetch = { page ->
             music.albums(page, MAX_LIBRARY_PER_PAGE).map { data ->
-                val rows = data.albums.map { it.toCardUi() }
-                LoadedPage(rows, data.total, page + 1, pageAppendState(page, data.totalPages, rows.isEmpty()))
+                pageNumberedPage(data.albums.map { it.toCardUi() }, page, data.total, data.totalPages)
             }
         },
     )

@@ -11,6 +11,7 @@ import com.igloo.blindpenguincoder.data.api.MAX_LIBRARY_PER_PAGE
 import com.igloo.blindpenguincoder.data.model.SearchPageData
 import com.igloo.blindpenguincoder.data.model.TrackListItem
 import com.igloo.blindpenguincoder.data.repository.SearchRepository
+import com.igloo.blindpenguincoder.feature.movies.toPosterItem
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.music.MusicianCardUi
 import com.igloo.blindpenguincoder.feature.music.TracksEntry
@@ -24,7 +25,8 @@ import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import com.igloo.blindpenguincoder.feature.shared.loadedItems
-import com.igloo.blindpenguincoder.feature.shared.pageAppendState
+import com.igloo.blindpenguincoder.feature.shared.pageNumberedPage
+import com.igloo.blindpenguincoder.feature.shows.toPosterItem
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -134,9 +136,9 @@ class SearchViewModel(
         fetch = fetch,
     )
 
-    /** A category's page as the loader wants it, rows drawn by [present]; `page + 1` is the next cursor. */
+    /** A category's page as the loader wants it, rows drawn by [present]. */
     private fun <T, R> SearchPageData<T>.toLoadedPage(page: Long, present: (T) -> R): LoadedPage<R> =
-        LoadedPage(results.map(present), total, page + 1, pageAppendState(page, totalPages, results.isEmpty()))
+        pageNumberedPage(results.map(present), page, total, totalPages)
 
     private val allLoader = loader<SearchSectionUi, SearchSectionUi>(
         read = { it.all },

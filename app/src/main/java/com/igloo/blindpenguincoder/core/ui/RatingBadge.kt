@@ -26,6 +26,10 @@ data class RatingBadgeSpec(val label: String, val tier: RatingTier)
 /** The badge's one spoken form, wherever it joins a sentence: "Rated 7.9 out of 10". */
 fun RatingBadgeSpec.spoken(): String = "Rated $label out of 10"
 
+/** The badge for a score the server may not have: null and zero both mean "unrated", so no badge. */
+fun ratingBadgeSpecOrNull(rating: Double?): RatingBadgeSpec? =
+    rating?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
+
 /**
  * Scores carry more decimals than the badge shows one of, so the tier is read off the rounded
  * value: taking it off the raw score would paint 6.951 in the middle tier under a "7.0" label.

@@ -3,8 +3,8 @@ package com.igloo.blindpenguincoder.data.repository
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.data.api.ShowApi
+import com.igloo.blindpenguincoder.data.model.ShowLibraryItem
 import com.igloo.blindpenguincoder.data.model.WatchedData
-import com.igloo.blindpenguincoder.data.model.LatestShow
 import com.igloo.blindpenguincoder.data.model.LatestShowsData
 import com.igloo.blindpenguincoder.data.model.SetWatchedRequest
 import com.igloo.blindpenguincoder.data.model.ShowDetailsData
@@ -42,7 +42,7 @@ class ShowRepository(
     ): ApiResult<ShowsLibraryData> =
         envelopeData("shows list") { api.genreShows(genreId, page, perPage, sort) }
 
-    suspend fun latestShows(): ApiResult<List<LatestShow>> =
+    suspend fun latestShows(): ApiResult<List<ShowLibraryItem>> =
         envelopeData<LatestShowsData>("latest shows") { api.latestShows() }.map { it.shows }
 
     suspend fun showDetails(id: Long): ApiResult<ShowDetailsData> =

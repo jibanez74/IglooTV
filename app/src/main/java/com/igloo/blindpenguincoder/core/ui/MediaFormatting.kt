@@ -92,10 +92,13 @@ fun progressFraction(progressSec: Double, durationSec: Double): Float =
         0f
     }
 
+/** The longest caption [formatRemainingTime] writes, so a layout can reserve its width. */
+internal const val LESS_THAN_A_MINUTE_LEFT = "Less than 1m left"
+
 /** Compact remaining time for TV display; partial minutes round up. */
 fun formatRemainingTime(progressSec: Double, durationSec: Double): String {
     val secondsLeft = remainingSeconds(progressSec, durationSec) ?: return "In progress"
-    if (secondsLeft < 60.0) return "Less than 1m left"
+    if (secondsLeft < 60.0) return LESS_THAN_A_MINUTE_LEFT
     return "${formatRuntime(ceil(secondsLeft / 60.0).toLong())} left"
 }
 

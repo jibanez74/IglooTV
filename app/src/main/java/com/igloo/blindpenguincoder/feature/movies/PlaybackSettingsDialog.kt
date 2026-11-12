@@ -65,7 +65,8 @@ internal fun PlaybackSettingsDialog(
                 onSelect = { onSelectMode(option.mode) },
                 modifier = Modifier
                     .rowFocus(row++)
-                    .testTag("playback_mode_${modeTag(option.mode)}"),
+                    // The wire id ("1080p_8mbps") is the stable tag suffix; direct play has none.
+                    .testTag("playback_mode_${option.mode.hlsProfileId ?: "direct"}"),
             )
         }
 
@@ -112,15 +113,3 @@ private fun DialogGroupLabel(text: String) {
             .semantics { heading() },
     )
 }
-
-/** The wire id ("direct", "1080p_8mbps") as a stable test tag suffix. */
-private fun modeTag(mode: PlaybackMode): String =
-    when (mode) {
-        PlaybackMode.Direct -> "direct"
-        PlaybackMode.Remux -> "remux"
-        PlaybackMode.P2160Mbps16 -> "2160p_16mbps"
-        PlaybackMode.P1080Mbps8 -> "1080p_8mbps"
-        PlaybackMode.P1080Mbps6 -> "1080p_6mbps"
-        PlaybackMode.P1080Mbps4 -> "1080p_4mbps"
-        PlaybackMode.P720Mbps3 -> "720p_3mbps"
-    }

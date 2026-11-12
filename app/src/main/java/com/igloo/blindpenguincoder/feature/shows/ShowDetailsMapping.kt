@@ -11,7 +11,7 @@ import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.core.ui.progressFraction
-import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
+import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpecOrNull
 import com.igloo.blindpenguincoder.core.ui.spoken
 import com.igloo.blindpenguincoder.core.ui.spokenSeason
 import com.igloo.blindpenguincoder.data.model.ShowDetailsData
@@ -41,7 +41,7 @@ import com.igloo.blindpenguincoder.playback.model.languageDisplayName
 /** The page, render-ready; the selected season's episodes and play target ride the UI state. */
 internal fun ShowDetailsData.toUi(apiBaseUrl: String): ShowDetailsUi {
     // Zero-guarded: the scraper writes TMDB's "no data" as a valid 0.
-    val ratingBadge = show.voteAverage.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
+    val ratingBadge = ratingBadgeSpecOrNull(show.voteAverage.orNull())
     val certification = show.certification.orNullIfBlank()
     val status = show.status.orNullIfBlank()
     val numbered = seasons.numberedSeasons()

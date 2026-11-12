@@ -5,10 +5,11 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.Subtitle
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.audioCodecDisplayName
+import com.igloo.blindpenguincoder.playback.model.describeAudioTrack
 import com.igloo.blindpenguincoder.playback.model.describeChannelLayout
+import com.igloo.blindpenguincoder.playback.model.describeSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.isUnreliableHlsAudio
-import com.igloo.blindpenguincoder.playback.model.languageDisplayName
 import com.igloo.blindpenguincoder.playback.model.normalizedLanguageCode
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 
@@ -214,24 +215,20 @@ internal fun playbackExplanation(
 }
 
 /** "English · 5.1 surround", or "Track 2 · Stereo" when ffprobe reported no language. */
-internal fun audioTrackLabel(stream: AudioStream, index: Int): String {
-    val language = languageDisplayName(stream.language?.orNull())
-    val channels = describeChannelLayout(stream.channelLayout?.orNull(), stream.channels)
-    return "${language ?: "Track ${index + 1}"} · $channels"
-}
+internal fun audioTrackLabel(stream: AudioStream, index: Int): String = describeAudioTrack(
+    languageCode = stream.language?.orNull(),
+    channels = describeChannelLayout(stream.channelLayout?.orNull(), stream.channels),
+    ordinal = index,
+)
 
 /** "English · SDH · Forced · Default" from whatever parts exist, or "Track N" from none. */
-internal fun subtitleTrackLabel(subtitle: Subtitle, index: Int): String {
-    val language = languageDisplayName(subtitle.language?.orNull())
-    val title = subtitle.title?.orNullIfBlank()
-    val parts = buildList {
-        language?.let { add(it) }
-        title?.takeIf { it != language }?.let { add(it) }
-        if (subtitle.isForced) add("Forced")
-        if (subtitle.isDefault) add("Default")
-    }
-    return if (parts.isNotEmpty()) parts.joinToString(" · ") else "Track ${index + 1}"
-}
+internal fun subtitleTrackLabel(subtitle: Subtitle, index: Int): String = describeSubtitleTrack(
+    languageCode = subtitle.language?.orNull(),
+    title = subtitle.title?.orNull(),
+    forced = subtitle.isForced,
+    isDefault = subtitle.isDefault,
+    ordinal = index,
+)
 
 internal const val AUDIO_DEFAULT_LABEL = "Default"
 internal const val SUBTITLES_NONE_LABEL = "None"

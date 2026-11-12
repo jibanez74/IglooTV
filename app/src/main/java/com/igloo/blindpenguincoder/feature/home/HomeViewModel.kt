@@ -14,7 +14,7 @@ import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.orKeepContent
 import com.igloo.blindpenguincoder.core.ui.progressFraction
-import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
+import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpecOrNull
 import com.igloo.blindpenguincoder.core.ui.spoken
 import com.igloo.blindpenguincoder.data.model.ContinueWatchingItem
 import com.igloo.blindpenguincoder.data.model.Movie
@@ -23,6 +23,7 @@ import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
 import com.igloo.blindpenguincoder.data.repository.ShowRepository
 import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
+import com.igloo.blindpenguincoder.feature.movies.toPosterItem
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.music.toCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
@@ -32,6 +33,7 @@ import com.igloo.blindpenguincoder.feature.shows.EpisodePlayPreparer
 import com.igloo.blindpenguincoder.feature.shows.formatSeasonCount
 import com.igloo.blindpenguincoder.feature.shows.formatSpokenSeasonCount
 import com.igloo.blindpenguincoder.feature.shows.numberedSeasons
+import com.igloo.blindpenguincoder.feature.shows.toPosterItem
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
@@ -263,15 +265,7 @@ class HomeViewModel(
         launchLoad(HomeRail.LatestMovies) {
             val result = movies.latestMovies()
             val next = result.withApiBaseUrl(serverUrl).toRailState { (latest, apiBaseUrl) ->
-                latest.map { movie ->
-                    posterItem(
-                        id = movie.id,
-                        title = movie.title,
-                        posterPath = movie.posterPath,
-                        year = movie.year,
-                        apiBaseUrl = apiBaseUrl,
-                    )
-                }
+                latest.map { it.toPosterItem(apiBaseUrl) }
             }
             // Rail first, so the list is on screen while the hero's details request runs.
             _uiState.update {
@@ -293,15 +287,7 @@ class HomeViewModel(
             val result = shows.latestShows()
             val next = result.withApiBaseUrl(serverUrl).toRailState { (latest, apiBaseUrl) ->
                 // Preserve the server's newest-first order and cap of 12.
-                latest.map { show ->
-                    posterItem(
-                        id = show.id,
-                        title = show.name,
-                        posterPath = show.posterPath,
-                        year = show.premiereYear,
-                        apiBaseUrl = apiBaseUrl,
-                    )
-                }
+                latest.map { it.toPosterItem(apiBaseUrl) }
             }
             // Publish the rail before enriching its first show for the hero.
             _uiState.update {
@@ -424,7 +410,7 @@ class HomeViewModel(
         }
 
     private fun toMovieHero(movie: Movie, apiBaseUrl: String): HomeHero {
-        val ratingBadge = movie.criticRating?.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
+        val ratingBadge = ratingBadgeSpecOrNull(movie.criticRating?.orNull())
         val certification = movie.certification?.orNullIfBlank()
         val year = movie.year?.orNull()?.takeIf { it > 0 }?.toString()
         val runtime = movie.runTime?.orNull()?.takeIf { it > 0 }
@@ -449,7 +435,7 @@ class HomeViewModel(
 
     private fun toShowHero(details: ShowDetailsData, apiBaseUrl: String): HomeHero {
         val show = details.show
-        val ratingBadge = show.voteAverage.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
+        val ratingBadge = ratingBadgeSpecOrNull(show.voteAverage.orNull())
         val certification = show.certification.orNullIfBlank()
         val year = show.premiereYear.orNull()?.takeIf { it > 0 }?.toString()
         val seasons = details.seasons.numberedSeasons().size.toLong().takeIf { it > 0 }

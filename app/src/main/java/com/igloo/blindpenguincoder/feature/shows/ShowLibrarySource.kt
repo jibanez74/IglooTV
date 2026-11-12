@@ -9,6 +9,8 @@ import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryPage
 import com.igloo.blindpenguincoder.feature.library.LibraryRow
 import com.igloo.blindpenguincoder.feature.library.LibrarySource
+import com.igloo.blindpenguincoder.feature.library.toPosterItem
+import com.igloo.blindpenguincoder.feature.shared.PosterItem
 
 /**
  * The show library's routes as a [LibrarySource]: library and genre pages, the count, the
@@ -41,3 +43,7 @@ private fun ShowsLibraryData.toLibraryPage(): LibraryPage = LibraryPage(
 /** A show as the library grid's row; search results map through here too. */
 fun ShowLibraryItem.toLibraryRow(): LibraryRow =
     LibraryRow(id = id, title = name, posterPath = posterPath, year = premiereYear)
+
+/** A show as a poster card, wherever it is listed: a search result or a Home rail. */
+internal fun ShowLibraryItem.toPosterItem(apiBaseUrl: String): PosterItem =
+    toLibraryRow().toPosterItem(apiBaseUrl)

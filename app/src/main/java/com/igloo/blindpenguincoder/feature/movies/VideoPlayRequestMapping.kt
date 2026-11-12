@@ -10,6 +10,8 @@ import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
+import com.igloo.blindpenguincoder.playback.progress.COMPLETION_RATIO
+import com.igloo.blindpenguincoder.playback.progress.MIN_POSITION_SEC
 
 /**
  * Assembles the player's start request from a launching screen's fragments — a movie's from the
@@ -90,8 +92,8 @@ internal fun primaryVideoStream(videoStreams: List<VideoStream>): VideoStream? =
     videoStreams.maxByOrNull { it.width }
 
 /**
- * The saved position, when it is worth resuming from: at least [RESUME_MIN_SEC] in and short of
- * [RESUME_MAX_RATIO] of the runtime (the server itself flips to watched at 95%). Null means
+ * The saved position, when it is worth resuming from: at least [MIN_POSITION_SEC] in and short of
+ * [COMPLETION_RATIO] of the runtime, the two bounds the progress writer itself saves by. Null means
  * "start from the beginning without asking". One definition serves both the details screen's
  * progress strip and the player's resume prompt.
  */
@@ -102,10 +104,7 @@ internal fun resumePositionSec(progress: WatchProgress?): Double? =
 internal fun resumePositionSec(progressSec: Double?, durationSec: Double?): Double? {
     if (progressSec == null || durationSec == null) return null
     if (!progressSec.isFinite() || !durationSec.isFinite()) return null
-    if (progressSec < RESUME_MIN_SEC || durationSec <= 0) return null
-    if (progressSec / durationSec >= RESUME_MAX_RATIO) return null
+    if (progressSec < MIN_POSITION_SEC || durationSec <= 0) return null
+    if (progressSec / durationSec >= COMPLETION_RATIO) return null
     return progressSec
 }
-
-private const val RESUME_MIN_SEC = 30.0
-private const val RESUME_MAX_RATIO = 0.95

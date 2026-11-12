@@ -3,17 +3,10 @@ package com.igloo.blindpenguincoder.data.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-@Serializable
-data class LatestMovie(
-    val id: Long,
-    val title: String,
-    @SerialName("poster_path") val posterPath: SqlNullString,
-    val year: SqlNullInt64,
-)
-
 /**
- * One entry of a paged library listing. The route also sends `certification`, left to
- * `ignoreUnknownKeys` — the grid card renders title and year only.
+ * One entry of a movie listing: a page of the library, or `GET /movies/latest` for Home's rail
+ * and newest-movie hero. The library route also sends `certification`, left to
+ * `ignoreUnknownKeys` — the card renders title and year only.
  */
 @Serializable
 data class MovieLibraryItem(
@@ -37,7 +30,7 @@ data class MoviesLibraryData(
 /** Payload of `LatestMoviesEnvelope.data`. */
 @Serializable
 data class LatestMoviesData(
-    val movies: List<LatestMovie>,
+    val movies: List<MovieLibraryItem>,
 )
 
 /**

@@ -22,6 +22,30 @@ internal fun describeChannelLayout(channelLayout: String?, channels: Long): Stri
     }
 }
 
+/** "English · 5.1 surround", or "Track 2 · Stereo" with no language; [channels] is left off when unknown. */
+internal fun describeAudioTrack(languageCode: String?, channels: String?, ordinal: Int): String {
+    val language = languageDisplayName(languageCode) ?: "Track ${ordinal + 1}"
+    return if (channels != null) "$language · $channels" else language
+}
+
+/** "English · SDH · Forced · Default" from whatever parts exist, or "Track N" from none. */
+internal fun describeSubtitleTrack(
+    languageCode: String?,
+    title: String?,
+    forced: Boolean,
+    isDefault: Boolean,
+    ordinal: Int,
+): String {
+    val language = languageDisplayName(languageCode)
+    val parts = buildList {
+        language?.let { add(it) }
+        title?.takeIf { it.isNotBlank() && it != language }?.let { add(it) }
+        if (forced) add("Forced")
+        if (isDefault) add("Default")
+    }
+    return if (parts.isNotEmpty()) parts.joinToString(" · ") else "Track ${ordinal + 1}"
+}
+
 /**
  * A language tag as a display name. Unlike the web's `formatLanguageName`, which slices
  * three-letter codes to two and so misses every 639-2 code whose prefix isn't its 639-1 form

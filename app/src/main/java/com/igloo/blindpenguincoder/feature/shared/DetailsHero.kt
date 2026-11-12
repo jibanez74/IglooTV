@@ -58,6 +58,7 @@ import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.LESS_THAN_A_MINUTE_LEFT
 import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
@@ -548,7 +549,7 @@ internal fun ResumeProgress(
             // Keep the longest caption in layout from first paint so a late progress response
             // cannot resize Play's column. Its width remains typography- and locale-derived.
             IglooText(
-                text = RESUME_CAPTION_WIDTH_RESERVATION,
+                text = LESS_THAN_A_MINUTE_LEFT,
                 style = IglooTheme.typography.label.overMedia(overMedia),
                 color = Color.Transparent,
                 modifier = Modifier.clearAndSetSemantics {},
@@ -572,8 +573,6 @@ internal fun ResumeProgress(
         }
     }
 }
-
-private const val RESUME_CAPTION_WIDTH_RESERVATION = "Less than 1m left"
 
 /** About 60% of the reference viewport's height (section 8.1); contains text, so a minimum. */
 private val HERO_MIN_HEIGHT = 320.dp

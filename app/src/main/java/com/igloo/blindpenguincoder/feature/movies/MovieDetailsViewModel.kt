@@ -9,7 +9,7 @@ import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatReleaseDate
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
 import com.igloo.blindpenguincoder.core.ui.joinedLine
-import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
+import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpecOrNull
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
@@ -586,7 +586,7 @@ class MovieDetailsViewModel(
         val movie = details.movie
         val apiBaseUrl = serverUrl.require().apiBaseUrl
         // Zero-guarded like the Home hero: the scraper writes TMDB's "no data" as a valid 0.
-        val ratingBadge = movie.criticRating?.orNull()?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
+        val ratingBadge = ratingBadgeSpecOrNull(movie.criticRating?.orNull())
         val certification = movie.certification?.orNullIfBlank()
         val technical = technicalRead.value
         val badges = technical?.let(::mediaBadges).orEmpty()
