@@ -40,6 +40,7 @@ import com.igloo.blindpenguincoder.feature.shared.PaneFocusOwnership
 import com.igloo.blindpenguincoder.feature.shared.PaneGrid
 import com.igloo.blindpenguincoder.feature.shared.PaneGridSkeleton
 import com.igloo.blindpenguincoder.feature.shared.PaneHeader
+import com.igloo.blindpenguincoder.feature.shared.PaneListContent
 import com.igloo.blindpenguincoder.feature.shared.PaneRefreshButton
 import com.igloo.blindpenguincoder.feature.shared.PaneTabRow
 import com.igloo.blindpenguincoder.feature.shared.TabPresentation
@@ -50,6 +51,7 @@ import com.igloo.blindpenguincoder.feature.shared.loadedItems
 import com.igloo.blindpenguincoder.feature.shared.paneCardlessAnchor
 import com.igloo.blindpenguincoder.feature.shared.paneCountLine
 import com.igloo.blindpenguincoder.feature.shared.showingCountLine
+import com.igloo.blindpenguincoder.feature.shared.toPaneListContent
 import kotlinx.serialization.Serializable
 
 /** What the Music pane needs from its view model, bundled rather than threaded as ten lambdas. */
@@ -124,7 +126,7 @@ fun MusicScreen(
         MusicTab.Albums -> state.albums
         MusicTab.Tracks -> state.tracks
     }
-    val content = paged.toMusicContent()
+    val content = paged.content.toPaneListContent()
     val refreshRequester = remember { FocusRequester() }
     val tabRowRequester = remember { FocusRequester() }
     val playAllRequester = remember { FocusRequester() }
@@ -135,7 +137,7 @@ fun MusicScreen(
     val focusOwnership = remember { PaneFocusOwnership(MUSIC_TAB_FOCUS_KEYS) }
     // The Tracks tab's action row exists only over a populated list; the strip's way down and
     // the first row's way up follow whether it is composed.
-    val trackActionsShown = tab == MusicTab.Tracks && content is MusicContent.Populated
+    val trackActionsShown = tab == MusicTab.Tracks && content is PaneListContent.Populated
     var lastFocusedTrackAction by remember { mutableStateOf(playAllRequester) }
     val contentUp = if (trackActionsShown) lastFocusedTrackAction else tabRowRequester
     // The row whose More menu is open; the menu is the pane's last child, over everything.
@@ -243,7 +245,7 @@ fun MusicScreen(
             )
 
             when (content) {
-                MusicContent.Loading -> when (tab) {
+                PaneListContent.Loading -> when (tab) {
                     MusicTab.Tracks -> TracksListSkeleton(
                         contentInset = contentInset,
                         anchorModifier = cardlessAnchor,
@@ -259,7 +261,7 @@ fun MusicScreen(
                     )
                 }
 
-                is MusicContent.Error -> PaneFirstPageError(
+                is PaneListContent.Error -> PaneFirstPageError(
                     message = content.message,
                     retryLabel = "Retry loading ${tab.presentation.semanticLabel.lowercase()}",
                     onRetry = actions.onRetryFirstPage,
@@ -267,14 +269,14 @@ fun MusicScreen(
                     contentInset = contentInset,
                 )
 
-                MusicContent.Empty -> PaneEmpty(
+                PaneListContent.Empty -> PaneEmpty(
                     icon = tab.emptyIcon(),
                     message = tab.emptyMessage(),
                     anchorModifier = cardlessAnchor,
                     contentInset = contentInset,
                 )
 
-                is MusicContent.Populated -> when (tab) {
+                is PaneListContent.Populated -> when (tab) {
                     MusicTab.Musicians -> PaneGrid(
                         items = state.musicians.loadedItems().orEmpty(),
                         itemId = { it.id },
