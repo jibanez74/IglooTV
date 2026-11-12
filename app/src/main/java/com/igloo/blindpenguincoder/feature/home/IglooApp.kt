@@ -117,6 +117,9 @@ import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsScreen
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsActions
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsScreen
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsUiState
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
@@ -208,6 +211,8 @@ fun IglooApp(
     musicActions: MusicActions,
     search: SearchUiState,
     searchActions: SearchActions,
+    watchRooms: WatchRoomsUiState,
+    watchRoomsActions: WatchRoomsActions,
     /** The platform's speech recogniser, or a fake under instrumentation. */
     voiceSearch: VoiceSearch,
     details: MovieDetailsUiState,
@@ -646,6 +651,8 @@ fun IglooApp(
                 musicActions = musicActions,
                 search = search,
                 searchActions = searchActions,
+                watchRooms = watchRooms,
+                watchRoomsActions = watchRoomsActions,
                 voiceSearch = voiceSearch,
                 trackLikes = trackLikes,
                 // The details header owns the notice while the overlay is up; rendering it here too
@@ -1019,6 +1026,8 @@ private fun ContentPane(
     musicActions: MusicActions,
     search: SearchUiState,
     searchActions: SearchActions,
+    watchRooms: WatchRoomsUiState,
+    watchRoomsActions: WatchRoomsActions,
     voiceSearch: VoiceSearch,
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
@@ -1077,6 +1086,9 @@ private fun ContentPane(
     // The Search pane's scroll and focus memory, bundled: six surfaces would otherwise be
     // twelve more fields here.
     val searchMemory = rememberSearchPaneMemory()
+    // The Watch Rooms grid's pair, kept for the same round trip as the library grids'.
+    val watchRoomsGridState = rememberLazyGridState()
+    var lastFocusedRoomId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     // The pane's one gutter, handed to the sections instead of applied here: the collapsed rail
     // plus a reading gutter on the start, the overscan inset on the end. Chrome and text take it;
@@ -1127,6 +1139,18 @@ private fun ContentPane(
                 lastFocusedByRail = lastFocusedByRail,
                 heroPageKind = heroPageKind,
                 onHeroPageChange = { heroPageKind = it },
+            )
+
+            IglooDestination.WatchRooms -> WatchRoomsScreen(
+                state = watchRooms,
+                actions = watchRoomsActions,
+                contentInset = contentInset,
+                gridState = watchRoomsGridState,
+                contentStartRequester = contentStartRequester,
+                navigationRequester = navigationRequesters.getValue(IglooDestination.WatchRooms),
+                lastFocusedId = lastFocusedRoomId,
+                onItemFocused = { lastFocusedRoomId = it },
+                spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
             IglooDestination.Movies -> LibraryScreen(
@@ -1235,11 +1259,12 @@ private fun ContentPane(
 }
 
 /** Which of ContentPane's trees a destination renders; the focus anchor moves with the branch. */
-private enum class PaneBranch { Home, Movies, TvShows, Music, Search, Placeholder }
+private enum class PaneBranch { Home, WatchRooms, Movies, TvShows, Music, Search, Placeholder }
 
 private fun paneBranchOf(destination: IglooDestination): PaneBranch = when (destination) {
     IglooDestination.Search -> PaneBranch.Search
     IglooDestination.Home -> PaneBranch.Home
+    IglooDestination.WatchRooms -> PaneBranch.WatchRooms
     IglooDestination.Movies -> PaneBranch.Movies
     IglooDestination.TvShows -> PaneBranch.TvShows
     IglooDestination.Music -> PaneBranch.Music

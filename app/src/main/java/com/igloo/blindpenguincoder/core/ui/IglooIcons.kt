@@ -50,6 +50,27 @@ object IglooIcons {
         }
     }
 
+    val WatchRooms: ImageVector by lazy {
+        icon("WatchRooms") {
+            // A screen with the play mark cut out, and two people in front of it.
+            path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {
+                moveTo(3f, 2.5f)
+                lineTo(21f, 2.5f)
+                lineTo(21f, 13.5f)
+                lineTo(3f, 13.5f)
+                close()
+                moveTo(10f, 5.2f)
+                lineTo(15.2f, 8f)
+                lineTo(10f, 10.8f)
+                close()
+            }
+            path(fill = SolidColor(Color.White)) {
+                viewer(7.6f)
+                viewer(16.4f)
+            }
+        }
+    }
+
     val Movies: ImageVector by lazy {
         icon("Movies") {
             // Film strip: outer frame with the screen window and sprocket holes cut out.
@@ -435,6 +456,15 @@ object IglooIcons {
             12f - halfWidth * 0.4f, y + thickness - bow,
             12f - halfWidth, y + thickness,
         )
+        close()
+    }
+
+    /** One head and shoulders seen from behind, centred on [cx] along the glyph's bottom edge. */
+    private fun PathBuilder.viewer(cx: Float) {
+        circle(cx, 17.3f, 1.9f)
+        moveTo(cx - 3.6f, 22f)
+        curveTo(cx - 3.6f, 20.5f, cx - 2.1f, 19.9f, cx, 19.9f)
+        curveTo(cx + 2.1f, 19.9f, cx + 3.6f, 20.5f, cx + 3.6f, 22f)
         close()
     }
 

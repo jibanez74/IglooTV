@@ -59,6 +59,10 @@ import com.igloo.blindpenguincoder.feature.shows.SeasonUi
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUi
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
+import com.igloo.blindpenguincoder.feature.watchrooms.RoomMemberUi
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomUi
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsActions
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsUiState
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
@@ -792,3 +796,49 @@ internal fun testMusicianDetails(
     heroInfoDescription = "The Beatles. 2 albums, 3 tracks. Total duration: 7 minutes and 5 seconds. " +
         "Genres: Rock, Pop. Spotify popularity 88 out of 100.",
 )
+
+/**
+ * A poster-less, avatar-less watch room; the spoken sentence is a pinned literal of the mapping
+ * contract. Room 1 is the signed-in profile's own and overflows the avatar stack.
+ */
+internal fun testWatchRoom(id: Long): WatchRoomUi {
+    val own = id == 1L
+    val names = if (own) listOf("Jose", "Maria", "Jorge", "Ana") else listOf("Maria", "Jose")
+    val hidden = if (own) 2 else 0
+    return WatchRoomUi(
+        id = id,
+        title = "Movie $id",
+        posterUrl = null,
+        hostLine = if (own) "Hosted by Jose (you)" else "Hosted by Maria",
+        members = names.mapIndexed { index, name ->
+            RoomMemberUi(id = index + 1L, name = name, avatarUrl = null)
+        },
+        overflowCount = hidden,
+        memberLine = "${names.size + hidden} members",
+        description = if (own) {
+            "Movie 1, hosted by you, 6 members: Jose, Maria, Jorge, Ana and 2 more"
+        } else {
+            "Movie $id, hosted by Maria, 2 members: Maria, Jose"
+        },
+    )
+}
+
+/** Enough rooms for three rows at two columns, and a scroll at one. */
+internal val testWatchRooms = (1L..5L).map(::testWatchRoom)
+
+/** The Watch Rooms pane with its list loaded. */
+internal fun testWatchRoomsState(
+    rooms: IglooRailState<WatchRoomUi> = IglooRailState.Loaded(testWatchRooms),
+    refreshing: Boolean = false,
+    notice: String? = null,
+    contentGeneration: Int = 0,
+    reconcileGeneration: Int = 0,
+) = WatchRoomsUiState(
+    rooms = rooms,
+    refreshing = refreshing,
+    notice = notice,
+    contentGeneration = contentGeneration,
+    reconcileGeneration = reconcileGeneration,
+)
+
+internal val inertWatchRoomsActions = WatchRoomsActions(onShown = {}, onRefresh = {})

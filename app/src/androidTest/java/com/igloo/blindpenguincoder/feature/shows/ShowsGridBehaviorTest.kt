@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.library.LibraryActions
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
@@ -23,6 +24,7 @@ import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
+import com.igloo.blindpenguincoder.openDestination
 import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testShowDetails
@@ -89,8 +91,7 @@ class ShowsGridBehaviorTest {
     }
 
     private fun openShows() {
-        composeRule.onNodeWithContentDescription("TV Shows").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.TvShows)
     }
 
     private fun card(id: Long) = composeRule.onNodeWithTag("show_card_$id")
@@ -224,8 +225,7 @@ class ShowsGridBehaviorTest {
         card(1).performKeyInput { pressKey(Key.DirectionRight) }
         card(2).assertIsFocused()
 
-        composeRule.onNodeWithContentDescription("Home").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Home)
         openShows()
 
         card(2).assertIsFocused()

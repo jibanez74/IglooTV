@@ -4,6 +4,7 @@ import com.igloo.blindpenguincoder.core.config.ServerAddress
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.error.flatMap
+import com.igloo.blindpenguincoder.core.error.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,14 +31,20 @@ internal fun isIglooServerUrl(url: String?, origin: String?): Boolean =
     url != null && origin != null && url.startsWith("$origin/")
 
 /**
- * Pairs a response with the API base URL its paths resolve against. The session keeps the address
- * set while the app is signed in, but a sign-out can clear it between a response and its mapping;
- * that reads as a failed load rather than an exception thrown out of the coroutine. Only mappings
- * that build URLs take it — album covers, for one, arrive as the API returns them, and the
- * image loader resolves a server path among them against the origin.
+ * Pairs a response with the server address its paths resolve against. The session keeps the
+ * address set while the app is signed in, but a sign-out can clear it between a response and its
+ * mapping; that reads as a failed load rather than an exception thrown out of the coroutine. Only
+ * mappings that build URLs take it — album covers, for one, arrive as the API returns them, and
+ * the image loader resolves a server path among them against the origin.
  */
-fun <T> ApiResult<T>.withApiBaseUrl(serverUrl: ServerUrlProvider): ApiResult<Pair<T, String>> =
+fun <T> ApiResult<T>.withServerAddress(
+    serverUrl: ServerUrlProvider,
+): ApiResult<Pair<T, ServerAddress>> =
     flatMap { value ->
-        serverUrl.current.value?.let { ApiResult.Success(value to it.apiBaseUrl) }
+        serverUrl.current.value?.let { ApiResult.Success(value to it) }
             ?: ApiResult.Failure(AppError.Unexpected("Server address cleared mid-load"))
     }
+
+/** [withServerAddress] for a mapping that only builds API URLs. */
+fun <T> ApiResult<T>.withApiBaseUrl(serverUrl: ServerUrlProvider): ApiResult<Pair<T, String>> =
+    withServerAddress(serverUrl).map { (value, address) -> value to address.apiBaseUrl }

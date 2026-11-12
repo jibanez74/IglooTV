@@ -15,7 +15,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
@@ -24,12 +23,14 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.FakeVoiceSearch
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.inertSearchActions
 import com.igloo.blindpenguincoder.isPoliteLiveRegion
+import com.igloo.blindpenguincoder.openDestination
 import com.igloo.blindpenguincoder.testSearchState
 import org.junit.Rule
 import org.junit.Test
@@ -77,8 +78,7 @@ class SearchPaneAccessibilityTest {
             }
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("Search").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Search)
     }
 
     private fun node(tag: String) = composeRule.onNodeWithTag(tag)

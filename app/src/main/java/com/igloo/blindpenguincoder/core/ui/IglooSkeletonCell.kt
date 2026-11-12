@@ -94,13 +94,33 @@ internal fun IglooSkeletonAnchorCell(
     cardWidth: Dp,
     artworkRadius: Dp = IglooTheme.radius.lg,
 ) {
+    SkeletonAnchor(anchorModifier, loadingLabel) { focused, modifier ->
+        IglooSkeletonCell(
+            focused = focused,
+            cardAspect = cardAspect,
+            cardWidth = cardWidth,
+            artworkRadius = artworkRadius,
+            modifier = modifier,
+        )
+    }
+}
+
+/**
+ * What makes a skeleton cell the anchor, whatever shape [cell] draws: it takes focus, tells
+ * [cell] so it can show the ring, and announces [loadingLabel].
+ */
+// The anchor's modifier, not this composable's; lint's naming rule is about the latter.
+@Suppress("ModifierParameter")
+@Composable
+internal fun SkeletonAnchor(
+    anchorModifier: Modifier,
+    loadingLabel: String,
+    cell: @Composable (focused: Boolean, modifier: Modifier) -> Unit,
+) {
     var focused by remember { mutableStateOf(false) }
-    IglooSkeletonCell(
-        focused = focused,
-        cardAspect = cardAspect,
-        cardWidth = cardWidth,
-        artworkRadius = artworkRadius,
-        modifier = anchorModifier
+    cell(
+        focused,
+        anchorModifier
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .semantics { contentDescription = loadingLabel },

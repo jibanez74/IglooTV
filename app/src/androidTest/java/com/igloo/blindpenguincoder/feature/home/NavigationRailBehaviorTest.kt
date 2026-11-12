@@ -26,7 +26,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Dp
@@ -41,6 +40,7 @@ import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.findActivity
+import com.igloo.blindpenguincoder.openDestination
 import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
@@ -52,6 +52,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.math.abs
 
 /**
  * The rail's expand/collapse contract and the three-state Back model. Animations are off via
@@ -132,11 +133,21 @@ class NavigationRailBehaviorTest {
     )
 
     private fun openSettings() {
-        composeRule.onNodeWithContentDescription("Settings").performScrollTo().performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Settings)
     }
 
     private fun rail() = composeRule.onNodeWithTag("navigation_rail")
+
+    /**
+     * Walks the rail's focus from [from] to [to] with the d-pad, [past] rows further on the way
+     * down for the account rows below the last destination. Counted from the destination list,
+     * so the walks hold whatever the rail grows to.
+     */
+    private fun walkRail(from: IglooDestination, to: IglooDestination, past: Int = 0) {
+        val rows = PrimaryIglooDestinations.indexOf(to) - PrimaryIglooDestinations.indexOf(from)
+        val key = if (rows > 0) Key.DirectionDown else Key.DirectionUp
+        repeat(abs(rows) + past) { rail().performKeyInput { pressKey(key) } }
+    }
 
     private fun railRow(label: String) = composeRule.onNodeWithContentDescription(label)
 
@@ -246,7 +257,7 @@ class NavigationRailBehaviorTest {
     fun underAScreenReaderACrossBranchPressHandsFocusOverAfterTheWait() {
         setShellContent(spokenAccessibilityEnabled = true)
         contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
-        rail().performKeyInput { pressKey(Key.DirectionDown) }
+        walkRail(IglooDestination.Home, IglooDestination.Movies)
         val moviesRow = composeRule.onNodeWithContentDescription("Movies")
         moviesRow.assertIsFocused()
 
@@ -273,14 +284,14 @@ class NavigationRailBehaviorTest {
     fun aMoveIntoThePaneDuringTheWaitIsNotOverridden() {
         setShellContent(spokenAccessibilityEnabled = true)
         contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
-        rail().performKeyInput { pressKey(Key.DirectionDown) }
+        walkRail(IglooDestination.Home, IglooDestination.Movies)
         composeRule.onNodeWithContentDescription("Movies")
             .performKeyInput { pressKey(Key.DirectionCenter) }
         // waitForIdle does not fast-forward the deferred request's delay; the clock has to.
         composeRule.mainClock.advanceTimeBy(ANNOUNCE_WAIT_MS)
         composeRule.onNodeWithTag("poster_card_1").assertIsFocused()
         composeRule.onNodeWithTag("poster_card_1").performKeyInput { pressKey(Key.DirectionLeft) }
-        rail().performKeyInput { pressKey(Key.DirectionUp) }
+        walkRail(IglooDestination.Movies, IglooDestination.Home)
         val homeRow = composeRule.onNodeWithContentDescription("Home")
         homeRow.assertIsFocused()
 
@@ -306,15 +317,15 @@ class NavigationRailBehaviorTest {
     fun signOutOpenedDuringTheWaitKeepsFocusInTheDialog() {
         setShellContent(spokenAccessibilityEnabled = true)
         contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
-        rail().performKeyInput { pressKey(Key.DirectionDown) }
+        walkRail(IglooDestination.Home, IglooDestination.Movies)
 
         composeRule.mainClock.autoAdvance = false
         composeRule.onNodeWithContentDescription("Movies")
             .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.mainClock.advanceTimeByFrame()
         composeRule.mainClock.advanceTimeByFrame()
-        // Movies -> TV Shows -> Music -> Settings -> Switch profile -> Sign out
-        repeat(5) { rail().performKeyInput { pressKey(Key.DirectionDown) } }
+        // Down the destinations to Settings, then Switch profile, then Sign out.
+        walkRail(IglooDestination.Movies, IglooDestination.Settings, past = 2)
         composeRule.onNodeWithContentDescription("Sign out")
             .performKeyInput { pressKey(Key.DirectionCenter) }
         repeat(2) { composeRule.mainClock.advanceTimeByFrame() }
@@ -332,7 +343,7 @@ class NavigationRailBehaviorTest {
     fun searchIsReachableFromTheRail() {
         setShellContent()
 
-        composeRule.onNodeWithContentDescription("Search").performClick()
+        composeRule.openDestination(IglooDestination.Search)
 
         // The pane's one focus target with nothing typed yet: the query field.
         composeRule.onNodeWithTag("search_field").assertIsDisplayed().assertIsFocused()
@@ -341,8 +352,8 @@ class NavigationRailBehaviorTest {
     /**
      * The destinations overflow the rail at 540dp, and a TV's default bring-into-view parks the
      * focused row 30% down the column, which scrolled it for every row below Home and left Search
-     * cut in half behind the Movies pane. Movies and both its neighbours fit at rest, so reaching
-     * it must not move the column at all.
+     * cut in half behind the Movies pane. The row below Home and both its neighbours fit at rest,
+     * so reaching it must not move the column at all.
      */
     @Test
     fun focusingADestinationWhoseNeighboursAreInViewDoesNotScrollTheRail() {
@@ -352,7 +363,7 @@ class NavigationRailBehaviorTest {
 
         contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
         rail().performKeyInput { pressKey(Key.DirectionDown) }
-        composeRule.onNodeWithContentDescription("Movies").assertIsFocused()
+        composeRule.onNodeWithContentDescription("Watch Rooms").assertIsFocused()
 
         assertEquals(restingTop, search.getUnclippedBoundsInRoot().top)
     }
@@ -405,7 +416,7 @@ class NavigationRailBehaviorTest {
     }
 
     /**
-     * At Large the six destinations overflow their column, so a walk to Settings scrolls Home
+     * At Large the destinations overflow their column, so a walk to Settings scrolls Home
      * off the top. Collapsing must scroll it back: it is the only row TalkBack can reach.
      */
     @Test
@@ -413,8 +424,7 @@ class NavigationRailBehaviorTest {
         setShellContent(uiScale = UiScale.Large)
 
         contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
-        // Home -> Movies -> TV Shows -> Music -> Settings
-        repeat(4) { rail().performKeyInput { pressKey(Key.DirectionDown) } }
+        walkRail(IglooDestination.Home, IglooDestination.Settings)
         composeRule.onNodeWithContentDescription("Settings").assertIsFocused()
         railRow("Home").assertIsNotDisplayed()
 
@@ -433,8 +443,7 @@ class NavigationRailBehaviorTest {
 
         placeholderStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
         composeRule.onNodeWithContentDescription("Settings").assertIsFocused()
-        // Settings -> Music -> TV Shows -> Movies -> Home -> Search
-        repeat(5) { rail().performKeyInput { pressKey(Key.DirectionUp) } }
+        walkRail(IglooDestination.Settings, IglooDestination.Search)
         composeRule.onNodeWithContentDescription("Search").assertIsFocused()
         railRow("Settings").assertIsNotDisplayed()
 
@@ -463,8 +472,8 @@ class NavigationRailBehaviorTest {
         contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
 
-        // Home -> Movies -> TV Shows -> Music -> Settings -> Switch profile -> Sign out
-        repeat(6) { rail().performKeyInput { pressKey(Key.DirectionDown) } }
+        // Down the destinations to Settings, then Switch profile, then Sign out.
+        walkRail(IglooDestination.Home, IglooDestination.Settings, past = 2)
         composeRule.onNodeWithContentDescription("Sign out").assertIsFocused()
 
         composeRule.onNodeWithContentDescription("Sign out")

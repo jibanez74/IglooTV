@@ -37,11 +37,13 @@ import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.assertPlatformTree
 import com.igloo.blindpenguincoder.clickActionLabel
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_LINE_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
+import com.igloo.blindpenguincoder.openDestination
 import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueEpisode
@@ -238,10 +240,8 @@ class HomeRailBehaviorTest {
         continueCard(1).performKeyInput { pressKey(Key.DirectionRight) }
         continueCard(2).assertIsFocused()
 
-        composeRule.onNodeWithContentDescription("Movies").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("Home").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Movies)
+        composeRule.openDestination(IglooDestination.Home)
 
         continueCard(2).assertIsFocused()
     }
@@ -838,9 +838,8 @@ class HomeRailBehaviorTest {
         showCard(12).performKeyInput { pressKey(Key.DirectionUp) }
         latestCard(2).assertIsFocused()
 
-        composeRule.onNodeWithContentDescription("Movies").performClick()
-        composeRule.onNodeWithContentDescription("Home").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Movies)
+        composeRule.openDestination(IglooDestination.Home)
         // A restored rail hands a subsequent state swap back to its saved show id.
         showCard(12).performScrollTo().requestFocus()
         showsState = IglooRailState.Loading

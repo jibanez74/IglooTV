@@ -24,6 +24,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.FakeVoiceSearch
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
@@ -31,6 +32,7 @@ import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.PagedState
+import com.igloo.blindpenguincoder.openDestination
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
@@ -185,8 +187,7 @@ class SearchPaneBehaviorTest {
     }
 
     private fun openSearch() {
-        composeRule.onNodeWithContentDescription("Search").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Search)
     }
 
     private fun node(tag: String) = composeRule.onNodeWithTag(tag)
@@ -938,8 +939,7 @@ class SearchPaneBehaviorTest {
         node("album_card_103").requestFocus()
         node("album_card_103").assertIsFocused()
 
-        composeRule.onNodeWithContentDescription("Home").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Home)
         openSearch()
 
         node("search_albums_grid").assertExists()
@@ -953,8 +953,7 @@ class SearchPaneBehaviorTest {
         node("poster_card_3").requestFocus()
         node("poster_card_3").assertIsFocused()
 
-        composeRule.onNodeWithContentDescription("Home").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Home)
         openSearch()
 
         // The pane's entry is the first section's remembered card; the rails below are a
@@ -971,8 +970,7 @@ class SearchPaneBehaviorTest {
         node("poster_card_32").requestFocus()
         node("poster_card_32").assertIsFocused()
 
-        composeRule.onNodeWithContentDescription("Home").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Home)
         // The debounced search lands while Home is showing, so the pane never sees it happen.
         val replaced = testMovieGridItems.map { it.copy(id = it.id + 100) }
         searchState = testSearchState(

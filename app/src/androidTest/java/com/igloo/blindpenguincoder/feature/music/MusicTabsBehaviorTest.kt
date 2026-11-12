@@ -8,7 +8,6 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
@@ -16,8 +15,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.shared.PagedState
+import com.igloo.blindpenguincoder.openDestination
 import com.igloo.blindpenguincoder.testMusicState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -71,8 +72,7 @@ class MusicTabsBehaviorTest {
             }
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("Music").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Music)
     }
 
     @Test
@@ -134,10 +134,8 @@ class MusicTabsBehaviorTest {
         composeRule.onNodeWithTag("musician_card_3").requestFocus()
         composeRule.onNodeWithTag("musician_card_3").assertIsFocused()
 
-        composeRule.onNodeWithContentDescription("Home").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("Music").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Home)
+        composeRule.openDestination(IglooDestination.Music)
 
         composeRule.onNodeWithTag("musician_card_3").assertIsFocused()
     }

@@ -158,7 +158,8 @@ internal fun Modifier.mediaCardInteraction(
     onFocusChanged: (Boolean) -> Unit,
     onClick: (() -> Unit)?,
     description: String,
-    actionLabel: String,
+    /** What a press does; null only with a null [onClick], which has nothing to name. */
+    actionLabel: String? = null,
     /**
      * A held Center — foundation's key timer fires it after the system long-press timeout and
      * swallows the release's click. TalkBack is not offered a long-click gesture TV has no idiom

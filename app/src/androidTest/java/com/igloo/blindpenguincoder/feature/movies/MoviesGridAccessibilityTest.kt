@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.feature.movies
 
 import androidx.compose.runtime.getValue
 import com.igloo.blindpenguincoder.clickActionLabelled
+import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,7 +19,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
@@ -29,6 +29,7 @@ import com.igloo.blindpenguincoder.feature.library.LibraryFilter
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.isPoliteLiveRegion
+import com.igloo.blindpenguincoder.openDestination
 import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testMovieGridItems
 import org.junit.Rule
@@ -64,8 +65,7 @@ class MoviesGridAccessibilityTest {
             }
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("Movies").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Movies)
     }
 
     /**

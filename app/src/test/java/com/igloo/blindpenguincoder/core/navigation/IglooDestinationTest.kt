@@ -11,6 +11,7 @@ class IglooDestinationTest {
             listOf(
                 "Search",
                 "Home",
+                "Watch Rooms",
                 "Movies",
                 "TV Shows",
                 "Music",

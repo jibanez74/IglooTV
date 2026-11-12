@@ -12,12 +12,14 @@ Igloo server so you can browse and play your library using a TV remote.
   section, with Direct or server-produced HLS playback, audio/subtitle selection, and saved
   watch progress.
 - Play music from albums, musicians, or the track library, including shuffle.
+- See the watch rooms you host or were invited to.
 - Sign in with Quick Connect or email/password, save multiple household profiles, and unlock
   PIN-protected profiles. Sign-out applies to the selected profile.
 - Navigate with a D-pad and remote, with focus treatments and TalkBack support.
 
 **Development is ongoing; the app is pre-production.** On the show details page the extra videos
-do not play yet. Settings is a placeholder destination. Playlists, music
+do not play yet. Watch rooms are listed but cannot be joined from the TV yet. Settings is a
+placeholder destination. Playlists, music
 play-stat reporting, and background music playback are also unfinished. See
 [known issues](docs/known-issues.md) for more context.
 

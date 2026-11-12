@@ -21,6 +21,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_LINE_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
@@ -31,6 +32,7 @@ import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.openDestination
 import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testMovieDetails
@@ -154,8 +156,7 @@ class MoviesGridBehaviorTest {
     }
 
     private fun openMovies() {
-        composeRule.onNodeWithContentDescription("Movies").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Movies)
     }
 
     private fun card(id: Long) = composeRule.onNodeWithTag("poster_card_$id")
@@ -1189,8 +1190,7 @@ class MoviesGridBehaviorTest {
         card(2).performKeyInput { pressKey(Key.DirectionRight) }
         card(3).assertIsFocused()
 
-        composeRule.onNodeWithContentDescription("Home").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Home)
         openMovies()
 
         card(3).assertIsFocused()
@@ -1203,8 +1203,7 @@ class MoviesGridBehaviorTest {
         card(2).performKeyInput { pressKey(Key.DirectionRight) }
         card(3).assertIsFocused()
 
-        composeRule.onNodeWithContentDescription("Home").performClick()
-        composeRule.waitForIdle()
+        composeRule.openDestination(IglooDestination.Home)
         moviesState = testLibraryState(contentGeneration = 1)
         composeRule.waitForIdle()
         openMovies()
