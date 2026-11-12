@@ -19,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -43,6 +42,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.formatEpisodeCode
+import com.igloo.blindpenguincoder.core.ui.pinnedSideways
 import com.igloo.blindpenguincoder.core.ui.spokenSeason
 import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
 
@@ -85,12 +85,7 @@ internal fun UpNextCard(
                 onFocusChanged(it.isFocused)
             }
             .focusRequester(requester)
-            .focusProperties {
-                up = upRequester
-                down = downRequester
-                left = FocusRequester.Cancel
-                right = FocusRequester.Cancel
-            }
+            .pinnedSideways(up = upRequester, down = downRequester)
             .clickable(interactionSource = null, indication = null, onClick = onPlayNow)
             .clearAndSetSemantics {
                 contentDescription = spoken

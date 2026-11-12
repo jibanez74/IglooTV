@@ -46,6 +46,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
+import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
@@ -129,7 +130,7 @@ internal fun <T : Any> MusicDetailsScaffold(
         Box(
             modifier = Modifier
                 .testTag("${tag}_body")
-                .then(if (trackMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
+                .clearedSemanticsIf(trackMenu != null),
         ) {
             when {
                 loaded != null -> content(

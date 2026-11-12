@@ -19,7 +19,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -29,6 +28,7 @@ import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooMenu
 import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
 import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
+import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
@@ -195,13 +195,7 @@ fun MovieDetailsScreen(
         Box(
             modifier = Modifier
                 .testTag("details_body")
-                .then(
-                    if (moreMenuOpen || playbackSettingsOpen) {
-                        Modifier.clearAndSetSemantics { }
-                    } else {
-                        Modifier
-                    },
-                ),
+                .clearedSemanticsIf(moreMenuOpen || playbackSettingsOpen),
         ) {
             DetailsBody(
                 state = state,

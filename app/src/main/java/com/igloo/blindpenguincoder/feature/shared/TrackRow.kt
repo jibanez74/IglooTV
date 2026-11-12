@@ -33,7 +33,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -46,6 +45,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SkeletonStub
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.hiddenFromAccessibilityIf
 
 /** The three controls of a track row, left to right. */
 enum class TrackRowColumn { Play, Like, More }
@@ -296,7 +296,7 @@ fun TrackRowSkeleton(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (anchorModifier == null) Modifier.semantics { hideFromAccessibility() } else Modifier)
+            .hiddenFromAccessibilityIf(anchorModifier == null)
             .padding(horizontal = IglooTheme.spacing.sm, vertical = IglooTheme.spacing.xs),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         verticalAlignment = Alignment.CenterVertically,

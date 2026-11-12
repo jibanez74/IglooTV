@@ -42,7 +42,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -70,6 +69,7 @@ import com.igloo.blindpenguincoder.core.ui.PosterCardProgress
 import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.announcedSection
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.hiddenFromAccessibilityIf
 import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
 import com.igloo.blindpenguincoder.core.ui.insetHorizontally
 import com.igloo.blindpenguincoder.core.ui.rememberAnnouncedSectionColumn
@@ -1703,9 +1703,6 @@ private fun DetailsLayer(hiddenFromAccessibility: Boolean, content: @Composable 
         content()
     }
 }
-
-private fun Modifier.hiddenFromAccessibilityIf(hidden: Boolean): Modifier =
-    if (hidden) semantics { hideFromAccessibility() } else this
 
 /** The details overlay's write report, left on the shell after Back; text, so it owes the inset. */
 @Composable

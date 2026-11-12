@@ -1,13 +1,11 @@
 package com.igloo.blindpenguincoder.feature.shows
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,22 +15,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
+import com.igloo.blindpenguincoder.core.ui.IglooGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.cardWidth
 import com.igloo.blindpenguincoder.core.ui.focusRing
-import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.core.ui.mediaCardInteraction
 import com.igloo.blindpenguincoder.core.ui.mediaSectionDescription
+import com.igloo.blindpenguincoder.core.ui.overMediaPill
 import com.igloo.blindpenguincoder.core.ui.rememberArtworkState
 import com.igloo.blindpenguincoder.feature.shared.FadeClampedText
 
@@ -152,20 +149,13 @@ internal fun EpisodeCard(
 private fun WatchedCheck(overMedia: Boolean, modifier: Modifier = Modifier) {
     val colors = IglooTheme.colors
     Box(
-        modifier = modifier.iglooSurface(
-            radius = IglooTheme.radius.pill,
-            fill = if (overMedia) OVER_MEDIA_CONTROL_FILL else colors.muted,
-            border = if (overMedia) Color.White.copy(alpha = 0.25f) else colors.border,
-        ),
+        modifier = modifier.overMediaPill(overMedia),
         contentAlignment = Alignment.Center,
     ) {
-        Image(
-            imageVector = IglooIcons.Check,
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(if (overMedia) Color.White else colors.foreground),
-            modifier = Modifier
-                .padding(IglooTheme.spacing.xs)
-                .size(IglooTheme.icons.md),
+        IglooGlyph(
+            icon = IglooIcons.Check,
+            tint = if (overMedia) Color.White else colors.foreground,
+            modifier = Modifier.padding(IglooTheme.spacing.xs),
         )
     }
 }

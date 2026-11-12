@@ -24,12 +24,12 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.core.ui.countNoun
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.feature.shared.AppendState
@@ -154,7 +154,7 @@ fun MusicScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("music_body")
-                .then(if (trackMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
+                .clearedSemanticsIf(trackMenu != null),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
             PaneHeader(

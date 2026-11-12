@@ -133,7 +133,6 @@ internal fun QuickConnectContent(
                         actionText = "Try again",
                         actionSemanticLabel = "Request a new pairing code",
                         onAction = onRetryPairing,
-                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 if (notice != null) {

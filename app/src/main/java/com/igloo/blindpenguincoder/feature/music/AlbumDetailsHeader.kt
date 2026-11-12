@@ -1,18 +1,15 @@
 package com.igloo.blindpenguincoder.feature.music
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
@@ -21,6 +18,7 @@ import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.ui.IglooGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.ProgressTrack
@@ -94,12 +92,7 @@ internal fun SpotifyPopularityMeter(
             horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(
-                imageVector = IglooIcons.Spotify,
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(SpotifyGreen),
-                modifier = Modifier.size(IglooTheme.icons.md),
-            )
+            IglooGlyph(icon = IglooIcons.Spotify, tint = SpotifyGreen)
             IglooText(
                 text = "Spotify popularity",
                 style = IglooTheme.typography.label.overMedia(overMedia),

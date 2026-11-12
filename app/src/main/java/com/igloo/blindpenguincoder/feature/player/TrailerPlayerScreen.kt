@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +39,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
+import com.igloo.blindpenguincoder.core.design.iglooSafeArea
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.ui.IglooText
@@ -230,7 +230,6 @@ private fun PlayerChrome(
     onTogglePlayPause: () -> Unit,
     onSeekBy: (Double) -> Unit,
 ) {
-    val layout = IglooTheme.layout
     // Always composed, alpha-hidden: dismissal must not detach the focused control or reshuffle
     // TalkBack traversal. Under reduced motion iglooTween snaps.
     val chromeAlpha by animateFloatAsState(
@@ -273,10 +272,7 @@ private fun PlayerChrome(
             modifier = Modifier
                 .fillMaxWidth()
                 .playerBottomScrim()
-                .padding(
-                    horizontal = layout.safeAreaHorizontal,
-                    vertical = layout.safeAreaVertical,
-                ),
+                .iglooSafeArea(),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
             Row(

@@ -40,7 +40,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -48,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
+import com.igloo.blindpenguincoder.core.design.iglooSafeArea
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.error.ApiResult
@@ -58,8 +58,10 @@ import com.igloo.blindpenguincoder.core.ui.IglooRadioListDialog
 import com.igloo.blindpenguincoder.core.ui.IglooRadioRow
 import com.igloo.blindpenguincoder.core.ui.IglooDialogCard
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
+import com.igloo.blindpenguincoder.core.ui.pinnedSideways
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
@@ -446,7 +448,7 @@ fun VideoPlayerScreen(
                     .testTag("movie_chrome")
                     .focusProperties { onEnter = { if (playerMenu != null) cancelFocusChange() } }
                     .focusGroup()
-                    .then(if (playerMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
+                    .clearedSemanticsIf(playerMenu != null),
             )
         }
 
@@ -612,7 +614,6 @@ private fun VideoPlayerChrome(
     onOpenMenu: (PlayerMenu) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val layout = IglooTheme.layout
     // Always composed, alpha-hidden: dismissal must not detach the focused control or reshuffle
     // TalkBack traversal. Under reduced motion iglooTween snaps.
     val chromeAlpha by animateFloatAsState(
@@ -675,12 +676,10 @@ private fun VideoPlayerChrome(
                     onRetry = onRetryProgressSync,
                     retryModifier = Modifier
                         .focusRequester(progressRetryRequester)
-                        .focusProperties {
-                            up = backRequester
-                            down = upNextRequester ?: playPauseRequester
-                            left = FocusRequester.Cancel
-                            right = FocusRequester.Cancel
-                        }
+                        .pinnedSideways(
+                            up = backRequester,
+                            down = upNextRequester ?: playPauseRequester,
+                        )
                         .onFocusChanged {
                             onProgressRetryFocusChanged(it.isFocused)
                             if (it.isFocused) onAnyControlFocused()
@@ -698,10 +697,7 @@ private fun VideoPlayerChrome(
                 .fillMaxWidth()
                 .onSizeChanged { onBottomBlockSizeChanged(it.height) }
                 .playerBottomScrim()
-                .padding(
-                    horizontal = layout.safeAreaHorizontal,
-                    vertical = layout.safeAreaVertical,
-                ),
+                .iglooSafeArea(),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
             // The track-menu buttons stay one Right press away, so only the row's outer
@@ -786,12 +782,7 @@ private fun ResumePrompt(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(resumeRequester)
-                .focusProperties {
-                    left = FocusRequester.Cancel
-                    right = FocusRequester.Cancel
-                    up = FocusRequester.Cancel
-                    down = startOverRequester
-                }
+                .pinnedSideways(down = startOverRequester)
                 .testTag("movie_resume"),
         )
         IglooButton(
@@ -802,12 +793,7 @@ private fun ResumePrompt(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(startOverRequester)
-                .focusProperties {
-                    left = FocusRequester.Cancel
-                    right = FocusRequester.Cancel
-                    up = resumeRequester
-                    down = FocusRequester.Cancel
-                }
+                .pinnedSideways(up = resumeRequester)
                 .testTag("movie_start_over"),
         )
     }

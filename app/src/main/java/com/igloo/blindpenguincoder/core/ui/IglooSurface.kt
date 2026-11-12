@@ -9,6 +9,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_HAIRLINE
 
 /**
  * A panel that is chrome, not a control: clipped, filled, and outlined by the hairline.
@@ -29,4 +31,18 @@ fun Modifier.iglooSurface(
     return clip(shape)
         .background(fill, shape)
         .border(borderWidth, border, shape)
+}
+
+/**
+ * A pill of chrome that may sit over media: there, the section 3.2 chip ground under its
+ * hairline; on a plain canvas, the muted fill and the theme border.
+ */
+@Composable
+internal fun Modifier.overMediaPill(overMedia: Boolean): Modifier {
+    val colors = IglooTheme.colors
+    return iglooSurface(
+        radius = IglooTheme.radius.pill,
+        fill = if (overMedia) OVER_MEDIA_CONTROL_FILL else colors.muted,
+        border = if (overMedia) OVER_MEDIA_HAIRLINE else colors.border,
+    )
 }

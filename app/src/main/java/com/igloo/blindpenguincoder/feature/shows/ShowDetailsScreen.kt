@@ -24,7 +24,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -35,6 +34,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
 import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.announcedSection
+import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.rememberAnnouncedSectionColumn
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
@@ -137,7 +137,7 @@ fun ShowDetailsScreen(
         Box(
             modifier = Modifier
                 .testTag("show_details_body")
-                .then(if (episodeMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
+                .clearedSemanticsIf(episodeMenu != null),
         ) {
             when (val details = state.details) {
                 // Geometry-matched to the hero it stands in for: a poster and one action, so the

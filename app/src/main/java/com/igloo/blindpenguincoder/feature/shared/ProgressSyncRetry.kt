@@ -4,14 +4,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
+import com.igloo.blindpenguincoder.core.ui.pinnedSideways
 
 /**
  * A failed progress save's card: why, and a Retry that re-sends the snapshot. Polite, because the
@@ -52,12 +51,7 @@ internal fun DetailsProgressSyncRetry(
         onRetry = onRetry,
         retryModifier = Modifier
             .focusRequester(requester)
-            .focusProperties {
-                up = upRequester ?: Cancel
-                down = downRequester ?: Cancel
-                left = Cancel
-                right = Cancel
-            }
+            .pinnedSideways(up = upRequester, down = downRequester)
             .onFocusChanged { onFocusChanged(it.isFocused) }
             .testTag("details_progress_retry"),
         modifier = modifier.testTag("details_progress_error"),

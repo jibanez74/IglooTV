@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.core.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -11,7 +10,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
@@ -54,11 +52,6 @@ internal fun ArtworkOrGlyph(
             modifier = Modifier.fillMaxSize(),
         )
     } else {
-        Image(
-            imageVector = fallbackIcon,
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(fallbackTint),
-            modifier = Modifier.size(IglooTheme.icons.lg),
-        )
+        IglooGlyph(icon = fallbackIcon, tint = fallbackTint, size = IglooTheme.icons.lg)
     }
 }

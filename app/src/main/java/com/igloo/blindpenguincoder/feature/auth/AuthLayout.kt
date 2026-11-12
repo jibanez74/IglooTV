@@ -197,7 +197,6 @@ internal fun RestoreErrorRetry(error: AppError?, onRetry: () -> Unit) {
         actionText = "Retry",
         actionSemanticLabel = "Retry connecting to server",
         onAction = onRetry,
-        modifier = Modifier.fillMaxWidth(),
     )
 }
 
