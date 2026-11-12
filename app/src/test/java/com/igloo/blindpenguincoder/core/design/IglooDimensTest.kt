@@ -61,6 +61,7 @@ class IglooDimensTest {
             assertEquals(480.dp, dialogWidth)
             assertEquals(148.dp, posterWidth)
             assertEquals(264.dp, wideCardWidth)
+            assertEquals(112.dp, roomPosterWidth)
             assertEquals(2f / 3f, posterAspect, 0.0001f)
             assertEquals(16f / 9f, wideAspect, 0.0001f)
             assertEquals(1f, albumAspect, 0.0001f)
@@ -104,6 +105,13 @@ class IglooDimensTest {
         assertEquals(6, compact.layout.gridColumns)
         assertEquals(5, standard.layout.gridColumns)
         assertEquals(4, large.layout.gridColumns)
+    }
+
+    @Test
+    fun `room cards sit two to a row until the largest scale`() {
+        assertEquals(2, compact.layout.roomGridColumns)
+        assertEquals(2, standard.layout.roomGridColumns)
+        assertEquals(1, large.layout.roomGridColumns)
     }
 
     /**

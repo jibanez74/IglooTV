@@ -80,6 +80,10 @@ data class IglooLayout(
     val albumAspect: Float,
     /** Unscaled and inverse: a larger UI shows fewer columns. */
     val gridColumns: Int,
+    /** The poster on a watch-room card; the card is as tall as this at [posterAspect]. */
+    val roomPosterWidth: Dp,
+    /** Watch-room cards are wide, so they sit two to a row and one at the largest scale. */
+    val roomGridColumns: Int,
 )
 
 @Immutable
@@ -166,5 +170,7 @@ private fun iglooDimens(
             UiScale.Standard -> 5
             UiScale.Large -> 4
         },
+        roomPosterWidth = 112.dp.at(scale),
+        roomGridColumns = if (uiScale == UiScale.Large) 1 else 2,
     ),
 )
