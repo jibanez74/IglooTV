@@ -153,6 +153,10 @@ internal fun PaneHeader(
  * moment it is pressed. Deliberately never disabled: IglooButton is focusable only through its
  * clickable branch, so disabling it while refreshing would remove the very node the user is
  * focused on from the focus tree; the view model guards the repeat press instead.
+ *
+ * [label] is the resting text, for a pane whose Refresh names its list. [restingState] is what
+ * the button says about the pane while nothing is in flight — the empty state's copy, on a pane
+ * whose empty state leaves this button as the only focus target (section 11.10).
  */
 @Composable
 internal fun PaneRefreshButton(
@@ -160,14 +164,16 @@ internal fun PaneRefreshButton(
     semanticLabel: String,
     onRefresh: () -> Unit,
     modifier: Modifier,
+    label: String = REFRESH_LABEL,
+    restingState: String? = null,
 ) {
     IglooButton(
-        text = if (refreshing) REFRESHING_LABEL else REFRESH_LABEL,
-        labelVariants = listOf(REFRESH_LABEL, REFRESHING_LABEL),
+        text = if (refreshing) REFRESHING_LABEL else label,
+        labelVariants = listOf(label, REFRESHING_LABEL),
         onClick = onRefresh,
         variant = IglooButtonVariant.Ghost,
         semanticLabel = semanticLabel,
-        stateDescription = "Refreshing".takeIf { refreshing },
+        stateDescription = if (refreshing) "Refreshing" else restingState,
         modifier = modifier,
     )
 }
@@ -232,7 +238,8 @@ internal fun <T> PaneTabRow(
  */
 internal fun Modifier.paneCardlessAnchor(
     contentStartRequester: FocusRequester,
-    returnRequester: FocusRequester,
+    /** Null on a pane nothing opens over, which has no overlay to come back from. */
+    returnRequester: FocusRequester?,
     cardlessHandoffRequester: FocusRequester,
     navigationRequester: FocusRequester,
     upRequester: FocusRequester,
