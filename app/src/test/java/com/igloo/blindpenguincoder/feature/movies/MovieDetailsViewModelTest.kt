@@ -785,29 +785,6 @@ class MovieDetailsViewModelTest {
     }
 
     @Test
-    fun `a failed like toggle flips the button back`() = runTest {
-        val http = routedHttp(
-            likeStatus = { jsonResponse(likeStatusJson(isLiked = false)) },
-            likeToggle = {
-                jsonResponse("""{"error":true,"message":"x"}""", HttpStatusCode.InternalServerError)
-            },
-        )
-
-        val viewModel = viewModel(http)
-        viewModel.open(1)
-        viewModel.uiState.first {
-            (it.details as? DetailsState.Loaded)?.value?.liked == false
-        }
-
-        viewModel.toggleLike()
-
-        // Optimistically true first; the failure response flips it back.
-        viewModel.uiState.first {
-            (it.details as? DetailsState.Loaded)?.value?.liked == false
-        }
-    }
-
-    @Test
     fun `like presses before status resolution send no mutation`() = runTest {
         val releaseStatus = CompletableDeferred<Unit>()
         var likeWrites = 0

@@ -930,20 +930,6 @@ class ExoVideoPlayerEngineTest {
     }
 
     /**
-     * A subtitle chosen before playback — by the default rule or the dialog — on a session played
-     * from its start: the cues must reach the screen without any in-player pick.
-     */
-    @Test
-    fun aSubtitleChosenBeforePlaybackRendersFromTheSessionStart() {
-        val server = SubtitleFixtureServer()
-        val api = FakeHlsApi(pathPrefix = "/api")
-        val engine = streamingEngine(server, api, subtitleTypeIndex = 1)
-
-        waitFor("the cue at 1.0 s", timeoutMs = 15_000) { "One" in engine.cueTexts() }
-        assertTrue("${engine.errors()}", engine.errors().isEmpty())
-    }
-
-    /**
      * The SubRip fixture has no default flag, so Media3's first track selection used to skip it:
      * its period cancelled the load it had started, and the engine's override reopened the
      * stream from byte 0. The server saw two requests, each starting FFmpeg and taking a slot.

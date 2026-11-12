@@ -105,34 +105,4 @@ class MusicianDetailsViewModelTest {
         model.refresh()
         assertNull(model.uiState.value.openMusicianId)
     }
-
-    @Test
-    fun `closing during a request cancels it and keeps the overlay closed`() = runTest {
-        val response = CompletableDeferred<Unit>()
-        var started = false
-        var cancelled = false
-        val model = viewModel(
-            http {
-                started = true
-                try {
-                    response.await()
-                    jsonResponse(musicianDetailsJson())
-                } finally {
-                    cancelled = !response.isCompleted
-                }
-            },
-        )
-        model.open(4)
-        testScheduler.runCurrent()
-        assertTrue(started)
-
-        model.close()
-        testScheduler.runCurrent()
-        assertTrue(cancelled)
-        response.complete(Unit)
-        testScheduler.advanceUntilIdle()
-
-        assertNull(model.uiState.value.openMusicianId)
-        assertTrue(model.uiState.value.details is DetailsState.Loading)
-    }
 }

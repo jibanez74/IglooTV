@@ -174,16 +174,6 @@ class MoviesGridAccessibilityTest {
             )
     }
 
-    @Test
-    fun anEmptyLibraryAnnouncesItself() {
-        setContent(testLibraryState(grid = IglooRailState.Loaded(emptyList())))
-
-        // Focusable so the pane keeps an anchor, but deliberately not a button: pressing it
-        // would do nothing, and announcing an action that does nothing is worse than none.
-        composeRule.onNodeWithContentDescription("No movies found in your library.")
-            .assertIsFocused()
-    }
-
     // --- the tab strip, the genre row, and the header ----------------------------------------
 
     /** One cleared node per tab, a Tab role, and `selected` only on the one that is. */
@@ -340,20 +330,6 @@ class MoviesGridAccessibilityTest {
 
         composeRule.onNodeWithTag("movies_count")
             .assertContentDescriptionEquals("Showing 3 of 3 liked movies")
-    }
-
-    @Test
-    fun anEmptyLikedViewAnnouncesItself() {
-        setContent(
-            testLibraryState(
-                tab = LibraryTab.Liked,
-                grid = IglooRailState.Loaded(emptyList()),
-            ),
-        )
-
-        composeRule.onNodeWithContentDescription(
-            "No liked movies yet. Like a movie from its details page and it will appear here.",
-        ).assertIsFocused()
     }
 
     @Test

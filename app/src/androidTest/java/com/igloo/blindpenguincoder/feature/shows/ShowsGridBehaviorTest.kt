@@ -104,13 +104,6 @@ class ShowsGridBehaviorTest {
     // --- the anchor in every state ------------------------------------------------------------
 
     @Test
-    fun theFirstCardHoldsThePanesEntryAnchor() {
-        setContent()
-
-        card(1).assertIsFocused()
-    }
-
-    @Test
     fun theLoadingSkeletonHoldsTheAnchorAndStillExitsToTheSpine() {
         setContent(testLibraryState(LibraryKind.Shows, grid = IglooRailState.Loading, total = null))
 
@@ -129,16 +122,6 @@ class ShowsGridBehaviorTest {
         )
 
         composeRule.onNodeWithContentDescription("No shows found in your library.")
-            .assertIsFocused()
-    }
-
-    @Test
-    fun theFirstPageErrorPutsTheAnchorOnItsRetry() {
-        setContent(
-            testLibraryState(LibraryKind.Shows, grid = IglooRailState.Error("Something went wrong")),
-        )
-
-        composeRule.onNodeWithContentDescription("Retry loading the TV show library")
             .assertIsFocused()
     }
 

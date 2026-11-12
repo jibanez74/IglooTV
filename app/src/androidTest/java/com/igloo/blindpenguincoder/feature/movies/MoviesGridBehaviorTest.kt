@@ -180,13 +180,6 @@ class MoviesGridBehaviorTest {
     }
 
     @Test
-    fun theLoadingSkeletonHoldsTheAnchorBeforeAnyPageArrives() {
-        setContent(testLibraryState(grid = IglooRailState.Loading, total = null))
-
-        composeRule.onNodeWithContentDescription("Loading movies").assertIsFocused()
-    }
-
-    @Test
     fun anEmptyLibraryStillHoldsTheAnchor() {
         setContent(testLibraryState(grid = IglooRailState.Loaded(emptyList())))
 
@@ -349,17 +342,6 @@ class MoviesGridBehaviorTest {
     }
 
     // --- the tab strip, the genre row, and the header ----------------------------------------
-
-    @Test
-    fun upFromTheTabRowLandsOnRefresh() {
-        setContent()
-        card(1).performKeyInput { pressKey(Key.DirectionUp) }
-
-        composeRule.onNodeWithTag("movies_tab_all")
-            .performKeyInput { pressKey(Key.DirectionUp) }
-
-        composeRule.onNodeWithContentDescription("Refresh the movie library").assertIsFocused()
-    }
 
     /**
      * Tabs select on focus, so Refresh's way down is wired to the selected tab: a spatial

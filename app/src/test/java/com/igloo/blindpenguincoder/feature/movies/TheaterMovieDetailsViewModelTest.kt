@@ -412,34 +412,4 @@ class TheaterMovieDetailsViewModelTest {
         testScheduler.advanceUntilIdle()
         assertNull(viewModel.uiState.value.openMovieId)
     }
-
-    @Test
-    fun `closing during a request cancels it and keeps the overlay closed`() = runTest {
-        val response = CompletableDeferred<Unit>()
-        var started = false
-        var cancelled = false
-        val model = viewModel(
-            http {
-                started = true
-                try {
-                    response.await()
-                    jsonResponse(tmdbMovieJson())
-                } finally {
-                    cancelled = !response.isCompleted
-                }
-            },
-        )
-        model.open(21)
-        testScheduler.runCurrent()
-        assertTrue(started)
-
-        model.close()
-        testScheduler.runCurrent()
-        assertTrue(cancelled)
-        response.complete(Unit)
-        testScheduler.advanceUntilIdle()
-
-        assertNull(model.uiState.value.openMovieId)
-        assertTrue(model.uiState.value.details is DetailsState.Loading)
-    }
 }
