@@ -736,6 +736,8 @@ hamburger, and no fully-hidden mode.
 | `wideAspect` | 16:9 | |
 | `albumAspect` | 1:1 | Album art is square |
 | `gridColumns` | 6 / 5 / 4 ⚑ | Compact / Standard / Large — *unscaled, and inverse* |
+| `roomPosterWidth` | 112dp | The poster on a watch-room card (§11.10); the card is this wide's 2:3 height, 168dp |
+| `roomGridColumns` | 2 / 2 / 1 | Compact / Standard / Large — a wide card and its member line need the row to themselves at Large |
 
 Album art is square and musician thumbnails are circular. Both use `posterWidth` as their base
 width, so an album card is a movie poster's width and a movie poster's width tall; the circle is
@@ -869,7 +871,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
 | `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg` by default and `artworkRadius = radius.pill` for a musician's circle — §8.2's circle is a radius the focus ring clamps, not a second component — with `centerText` for the text under it and `semanticLabel` when "Title, Year" is not the sentence to read, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. An optional `detail` third line in the context line's tier (a show's cast card: "228 episodes") joins the spoken sentence. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose fully spoken remaining-time description joins the cleared node ("Title, Year, 2 hours and 20 minutes remaining", §12) so the bar can never render unannounced. The description is semantic only; no numeric percentage or remaining-time caption renders on the card. |
 | `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), the minimal `IglooFocusableEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). Takes the pane's `contentInset` and splits it by node per §8.3 — heading and non-scrolling states pad, the `LazyRow` carries it as `contentPadding` so cards bleed off the panel edge. Optional `upFocusRequester` / `downFocusRequester` pin the vertical edges for a rail between hand-wired neighbours (a details page's sections) on every card **and** on whichever anchor the state holds — skeleton cell, Retry or empty box — so no state leaves an edge to a spatial search; null leaves it spatial, as Home's column wants. |
-| `IglooFocusableEmpty` | §10 empty state, minimal variant only: faded icon + one line, as the pane's focusable anchor announcing the line when focused — no live region (§6.3). The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. |
+| `IglooFocusableEmpty` | §10 empty state, minimal variant only: faded icon + one line, as the pane's focusable anchor announcing the line when focused — no live region (§6.3). The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. The Watch Rooms pane's empty state is §10's illustrated variant, which is not focusable at all (§11.10). |
 | `IglooRadioListDialog` | The scrimmed radio-list dialog behind Playback Settings and the player's track and chapter menus: the `IglooConfirmDialog` recipe (§9.3) — both, and the player's resume prompt, sit on the one `IglooDialogCard` frame (scrim, reveal, card, pane title, heading) — around one flat, scrolling list of `IglooRadioRow`s and a pinned Done. The caller draws the rows, applying `rowFocus(n)` to row `n`, which walks up/down and onto Done and cancels every other direction; entry focus lands on `entryIndex`. |
 | `IglooPinnedError` | A screen's full-screen error: `IglooInlineError` centred in the safe area at `dialogWidth`, its one action pinned in every direction because the host is still composed underneath. Assertive — it is the only region on screen. |
 | `ProgressTrack` | The one thin progress bar: 4dp, a ground and a fill, square where it sits flush on an edge (poster card, seek bar) and `rounded` where it stands free (the resume strip, the popularity meter). |
@@ -891,7 +893,15 @@ the video pages share (`CrewEntry`, `CastMemberUi`, `ExtraVideoUi`, `ProgressUi`
 and extras rules live in `DetailsMapping.kt`. `SelectableChipRow` is the scrolling row of
 press-to-select chips behind the Genres picker and the show page's seasons. The library and Music
 panes share `PaneGrid`, `PaneGridSkeleton`, `PaneTabRow`, `PaneHeader` and the card-less states
-from the same package. A scrolling column whose vertical moves a screen reader must hear — Home
+from the same package. `PaneGrid` is the paging around `PaneCardGrid`, which owns the cards, their
+focus memory, their edges and the announced row moves, and `PaneGridSkeleton` is the poster-cell
+case of `PaneSkeletonGrid`; a pane whose list arrives whole (Watch Rooms, §11.10) takes the two
+inner ones directly, with `SkeletonAnchor` (`core/ui`) making its own cell shape the loading
+anchor. `PaneListContent` is the four surfaces such a list can draw — loading, error, empty,
+populated — for the screen and the focus coordinator to branch on. `PaneRefreshButton` takes a
+`label` for a pane whose Refresh names its list and a `restingState` it speaks while nothing is in
+flight. A media card that is one focus target takes its focus, press and announcement from
+`mediaCardInteraction`; with no press it is a plain focus target with no role and no action. A scrolling column whose vertical moves a screen reader must hear — Home
 and the show page — wraps its sections in `rememberAnnouncedSectionColumn`
 (`core/ui/AnnouncedSectionMove.kt`), which reveals an off-screen section, waits for a snapshot
 and focuses into it with the scroll held; its `handOff` does the same for a press that lands focus
@@ -1031,7 +1041,11 @@ Build these **once** as shared composables. Three states, one recipe each.
 - **`IglooEmpty`** — two variants. *Minimal*: large faded icon + one line ("No movies found in
   your library."). *Rich CTA*: icon orb, heading, description, and a focusable primary action.
   Use the rich variant only when there is a real action to offer. (Only the minimal variant is
-  built, as `IglooFocusableEmpty` — §9.1.)
+  built, as `IglooFocusableEmpty` — §9.1.) *Illustrated*: a drawn scene, a heading and two lines,
+  for a destination whose whole pane is the empty state and whose one action already sits in its
+  header. It is not focusable and not announced: the header action holds the pane's anchor and
+  speaks the copy as its state (§11.10). A pane-local composable, not a shared one, until a
+  second pane wants it.
 - **`IglooError`** — inline card, `destructive @ 0.10` fill / `@ 0.25` border, a message, and a
   **focusable Retry** that re-runs the query. Retry must be reachable by d-pad without leaving
   the screen. This recipe is `IglooInlineError` (§9.1) — there is no separate composable. Its
@@ -1323,8 +1337,8 @@ stays reachable.
 
 ### 11.2 Navigation spine
 
-Six destinations, icon + label: **Search**, **Home**, **Movies**, **TV Shows**, **Music**,
-**Settings**. Brand tile + wordmark at the top, the active profile's name and two
+Seven destinations, icon + label: **Search**, **Home**, **Watch Rooms**, **Movies**,
+**TV Shows**, **Music**, **Settings**. Brand tile + wordmark at the top, the active profile's name and two
 account actions at the bottom: **Switch profile** above **Sign out**.
 
 The two are deliberately separate. Switch profile returns to the picker with the token intact;
@@ -1395,7 +1409,7 @@ The footer must remain visible at every `UiScale` — at 540dp tall this is the 
 constraint in the app and the first thing to break. It now carries two rows rather than one,
 so re-verify it at `UiScale.Large` after any spine change.
 
-**The destinations scroll only when the d-pad needs them to.** Six rows plus the footer do not
+**The destinations scroll only when the d-pad needs them to.** Seven rows plus the footer do not
 fit in 540dp, so the destinations have their own scrolling column. When a row takes focus, the
 column scrolls just far enough to show one whole row past it on each side
 (`NeighbourRevealingScroll`). The row the d-pad reaches next must already be on screen, or
@@ -1408,8 +1422,9 @@ details pages' hero rule (§11.4.1, Focus).
 ### 11.3 Home
 
 Stacked horizontal rails — continue watching, latest movies, latest shows, latest albums, movies
-in theaters, watch rooms — under the hero, which features the newest movie and the newest show (§11.3.1). This is the most TV-native layout in the product and the model for other
-index screens. Vertical d-pad moves between rails; horizontal moves within one; focus is
+in theaters — under the hero, which features the newest movie and the newest show (§11.3.1). Watch
+rooms, a section of the web client's home page, are a destination of their own here (§11.10).
+This is the most TV-native layout in the product and the model for other index screens. Vertical d-pad moves between rails; horizontal moves within one; focus is
 restored per-rail on return.
 
 **There is no pane header.** Home opens on the hero's backdrop at the top edge of the panel; the
@@ -2833,6 +2848,71 @@ A badge on the spine when unread. At 10 feet a small anchored popover reads poor
 
 The unread count polls every 30s; the full list is fetched only while the panel is open.
 
+### 11.10 Watch Rooms
+
+**The list, as built (2026-11-12).** The rooms the signed-in profile hosts or was invited to
+(`GET /watch-rooms`): on the web a section of the home page, here the destination under Home. A
+heading with the room count and one action, **Refresh Watch Rooms**, over a grid of wide cards.
+The list is short and arrives whole — no paging, no tabs, no sort; the server orders it newest
+first.
+
+**Joining a room is not built.** The cards are inert: focusable and spoken, with no press. Synced
+playback over the room's WebSocket is its own pass, and it brings the card's action, the pane's
+return requester and the room page with it. Rooms are created on the web (a movie's Watch
+Together), which is what the empty state says.
+
+**The card** (`WatchRoomCard`) is one `card` surface at `radius.lg`, as tall as its poster
+(`roomPosterWidth` at 2:3). The poster's box runs down the left edge on `muted`, the film glyph
+standing in for a missing poster. Beside it, padded `spacing.md`: the movie's title (`bodyLarge`,
+2 lines), "Hosted by {name}" with "(you)" on the profile's own room (`label`,
+`mutedForeground`), then at the bottom the first four members as overlapping `IglooAvatar`s at
+`icons.lg` — each on a 2dp rim of the card's colour, a "+N" pill for the rest — over the member
+count. The whole card is the focus target (§6.1 on the surface) and one cleared node speaking
+everything drawn: "Dune: Part Two, hosted by you, 6 members: Maria, Jorge, Ana, Luis and 2 more".
+No role and no action, the inert-card contract (§9.1). Cards sit `roomGridColumns` to a row.
+
+**States.** Loading is the card's own skeleton on the grid's geometry, the first cell the anchor
+("Loading watch rooms"). A failed first load is `IglooInlineError` with Retry ("Retry loading
+watch rooms"), which stays on screen while the retry is out. A Refresh that fails with rooms on
+screen keeps them and reports in the header's notice (§11.4's rule). No rooms is the illustrated
+empty state (§10): a lit screen with the play mark over a row of five empty seats, "No watch
+rooms right now", and two lines — "Rooms you host or are invited to show up here." and "Start one
+from a movie on the web with Watch Together."
+
+**When the list is read.** The server pushes nothing when a room is created, so an invitation
+appears only on a re-read. The pane asks for one whenever it comes on screen — when it is opened,
+and when the app returns to the foreground on it — through a start effect of its own, and on its
+Refresh button. It is deliberately **not** in the host's start effect, which re-reads every
+library on each foreground: this list is only worth a request while someone is looking at it.
+The view model keeps the list for the session, so a return shows it at once while the re-read is
+out. There is no timer.
+
+**Two kinds of arrival.** A list the user asked for — the first load, a Refresh, a Retry —
+replaces what is on screen: the grid returns to the top and focus goes to the first room, the
+newest, as on §11.4's Refresh. A re-read nobody pressed for reconciles in place: the user is left
+where they are, and focus moves only if the room it was on is gone (to the first room, or to
+Refresh when that was the last one). A background failure over a loaded list says nothing. The
+two are `contentGeneration` and `reconcileGeneration` on the state, the pair
+`PaneFocusHandoffCoordinator` already takes.
+
+**Focus.** The pane's entry anchor is the remembered card if it is still in the list, otherwise
+the first; the first skeleton cell while loading; Retry on the error card. **With no rooms it is
+the Refresh button** — the empty scene offers nothing to do, so the anchor goes to the one
+control that does, and its Down is cancelled because nothing below takes focus. The left column
+and Refresh exit to the spine; the first row climbs to Refresh and Refresh returns to the entry
+card; Refresh's Up and Right, the grid's right edge and its last row are pinned. Nothing opens
+over the pane, so it has no return requester.
+
+**What TalkBack hears.** The destination through `paneTitle` (§12). The count as a polite live
+region: "Loading your watch rooms", "3 watch rooms", "Watch rooms unavailable". The button as
+"Refresh watch rooms", with "Refreshing" as its state while the request is out. The empty scene
+is hidden from accessibility — a d-pad user's screen reader follows focus and would never visit
+its text — and its copy is the Refresh button's state description instead, so it is read on
+every entry, after the load that found nothing, and again when a Refresh comes back empty.
+
+**Tags.** `watch_rooms_grid`, `watch_room_card_{id}`, `watch_rooms_count`, `watch_rooms_notice`,
+`watch_rooms_empty`.
+
 ---
 
 ## 12. Accessibility
@@ -2939,6 +3019,20 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-11-12 — Watch Rooms, a destination of its own (§8.2, §9.1, §10, §11.2, §11.3, §11.10).**
+
+- **§11.10** is new: the rooms the profile hosts or was invited to, as wide cards under a
+  Refresh Watch Rooms action, with an illustrated empty state. The cards are inert until joining
+  a room is built.
+- **§11.2**: seven destinations; Watch Rooms sits under Home. **§11.3** no longer lists watch
+  rooms as a Home rail, which was never built.
+- **§8.2** gains `roomPosterWidth` and `roomGridColumns`; **§10** gains the illustrated empty
+  variant.
+- **§9.1**: `PaneGrid` is now the paging around `PaneCardGrid`, and `PaneGridSkeleton` the
+  poster case of `PaneSkeletonGrid`, so a list that arrives whole reuses the cards' focus and
+  edges without the paging. `MusicContent` became the shared `PaneListContent`.
+  `PaneRefreshButton` can name its list and speak a resting state.
 
 **2026-11-12 — Pre-feature cleanup: one primitive per repeated idiom (§9.1).**
 
