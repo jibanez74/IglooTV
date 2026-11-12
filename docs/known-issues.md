@@ -38,7 +38,7 @@ Seen so far:
 
 Not yet checked, but wired the same way: the details pages (reading stops, extras rails, season
 chips, the More menu), the player chrome's Cancel pins, the up-next card, every dialog, the
-library, music and Watch Rooms panes' header chains, Search, and Quick Connect. VoiceView on the Firestick is
+library and music panes' header chains, Search, and Quick Connect. VoiceView on the Firestick is
 untested too.
 
 **Why earlier passes missed it.** `adb shell input keyevent` (and `input dpad keyevent`) is
