@@ -1,15 +1,21 @@
 package com.igloo.blindpenguincoder.feature.watchrooms
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEqualTo
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -18,6 +24,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -34,6 +44,7 @@ import com.igloo.blindpenguincoder.testWatchRoom
 import com.igloo.blindpenguincoder.testWatchRooms
 import com.igloo.blindpenguincoder.testWatchRoomsState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -353,6 +364,55 @@ class WatchRoomsBehaviorTest {
         show(empty.copy(reconcileGeneration = 1))
 
         refresh().assertIsFocused()
+    }
+
+    // --- the card's size ----------------------------------------------------------------------
+
+    private var posterHeight = Dp.Unspecified
+
+    /** Two cards in one grid cell's width: a title that fits one line, and one that wraps. */
+    private fun setCards(fontScale: Float) {
+        composeRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+                IglooTheme {
+                    posterHeight = IglooTheme.layout.roomPosterWidth / IglooTheme.layout.posterAspect
+                    Column(modifier = Modifier.width(368.dp)) {
+                        WatchRoomCard(testWatchRoom(1), Modifier.testTag("short"))
+                        WatchRoomCard(
+                            testWatchRoom(1).copy(title = "Three Billboards Outside Ebbing, Missouri"),
+                            Modifier.testTag("long"),
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun cardHeight(tag: String) =
+        composeRule.onNodeWithTag(tag).getUnclippedBoundsInRoot().height
+
+    /** The poster's height holds a wrapped title, so the grid's rows stay even. */
+    @Test
+    fun aWrappedTitleLeavesTheCardAtItsPostersHeightAtTheDefaultFontScale() {
+        setCards(fontScale = 1f)
+
+        cardHeight("short").assertIsEqualTo(posterHeight, "one-line card")
+        cardHeight("long").assertIsEqualTo(posterHeight, "two-line card")
+    }
+
+    /** That height is a minimum (section 2.6): larger text makes the card taller, never clipped. */
+    @Test
+    fun atTheLargestFontScaleAWrappedTitleGrowsTheCard() {
+        setCards(fontScale = 1.3f)
+
+        cardHeight("short").assertIsEqualTo(posterHeight, "one-line card")
+        val grown = cardHeight("long")
+        assertTrue(
+            "the two-line card is $grown tall; it must outgrow its poster's $posterHeight",
+            grown > posterHeight + 2.dp,
+        )
     }
 
     // --- when the list is read ----------------------------------------------------------------

@@ -6,11 +6,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -53,78 +53,101 @@ internal fun WatchRoomCard(room: WatchRoomUi, modifier: Modifier = Modifier) {
             description = room.description,
         ),
         poster = { ArtworkOrGlyph(room.posterUrl, IglooIcons.Movies) },
-    ) {
-        IglooText(
-            text = room.title,
-            style = IglooTheme.typography.bodyLarge,
-            color = colors.cardForeground,
-            maxLines = 2,
-        )
-        IglooText(
-            text = room.hostLine,
-            style = IglooTheme.typography.label,
-            color = colors.mutedForeground,
-            maxLines = 1,
-        )
-        Spacer(Modifier.weight(1f))
-        MemberStack(room.members, room.overflowCount)
-        IglooText(
-            text = room.memberLine,
-            style = IglooTheme.typography.label,
-            color = colors.mutedForeground,
-            maxLines = 1,
-        )
-    }
+        heading = {
+            IglooText(
+                text = room.title,
+                style = IglooTheme.typography.bodyLarge,
+                color = colors.cardForeground,
+                maxLines = 2,
+            )
+            IglooText(
+                text = room.hostLine,
+                style = IglooTheme.typography.label,
+                color = colors.mutedForeground,
+                maxLines = 1,
+            )
+        },
+        footing = {
+            MemberStack(room.members, room.overflowCount)
+            IglooText(
+                text = room.memberLine,
+                style = IglooTheme.typography.label,
+                color = colors.mutedForeground,
+                maxLines = 1,
+            )
+        },
+    )
 }
 
 /** The room card's loading placeholder, on the card's own geometry. */
 @Composable
 internal fun WatchRoomCardSkeleton(focused: Boolean, modifier: Modifier = Modifier) {
-    RoomCardFrame(focused = focused, modifier = modifier, poster = {}) {
-        SkeletonStub(height = 18.dp, modifier = Modifier.fillMaxWidth(0.7f))
-        SkeletonStub(height = 12.dp, modifier = Modifier.fillMaxWidth(0.45f))
-        Spacer(Modifier.weight(1f))
-        SkeletonStub(height = 12.dp, modifier = Modifier.fillMaxWidth(0.3f))
-    }
+    RoomCardFrame(
+        focused = focused,
+        modifier = modifier,
+        poster = {},
+        heading = {
+            SkeletonStub(height = 18.dp, modifier = Modifier.fillMaxWidth(0.7f))
+            SkeletonStub(height = 12.dp, modifier = Modifier.fillMaxWidth(0.45f))
+        },
+        footing = { SkeletonStub(height = 12.dp, modifier = Modifier.fillMaxWidth(0.3f)) },
+    )
 }
 
 /**
- * The geometry the card and its skeleton share: a `card` surface as tall as its poster, the
- * poster's box on the muted fill at the left edge, and the text column beside it.
+ * The geometry the card and its skeleton share: a `card` surface, the poster's box on the muted
+ * fill down its left edge, and beside it the text column — [heading] at its top, [footing] at
+ * its bottom.
+ *
+ * The poster's 2:3 height is the card's **minimum**, not its height (section 2.6): it holds a
+ * two-line title at the default font scale, so every card in the grid is the same size there,
+ * and at a larger system font scale the text makes the card taller instead of being clipped. The
+ * text column is what sizes the card; the poster's box only matches whatever that comes to.
  */
 @Composable
 private fun RoomCardFrame(
     focused: Boolean,
     modifier: Modifier,
     poster: @Composable () -> Unit,
-    text: @Composable ColumnScope.() -> Unit,
+    heading: @Composable ColumnScope.() -> Unit,
+    footing: @Composable ColumnScope.() -> Unit,
 ) {
     val posterWidth = IglooTheme.layout.roomPosterWidth
-    Row(
+    val lineGap = Arrangement.spacedBy(IglooTheme.spacing.xs)
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(posterWidth / IglooTheme.layout.posterAspect)
             // focusRing owns the clip, so the poster's box reaches the card's rounded corners
             // without clipping anything itself.
             .focusRing(focused = focused, radius = IglooTheme.radius.lg, fill = IglooTheme.colors.card),
     ) {
-        Box(
-            modifier = Modifier
-                .width(posterWidth)
-                .fillMaxHeight()
-                .background(IglooTheme.colors.muted),
-            contentAlignment = Alignment.Center,
-        ) {
-            poster()
+        Box(modifier = Modifier.matchParentSize()) {
+            Box(
+                modifier = Modifier
+                    .width(posterWidth)
+                    .fillMaxHeight()
+                    .background(IglooTheme.colors.muted),
+                contentAlignment = Alignment.Center,
+            ) {
+                poster()
+            }
         }
         Column(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
+                .fillMaxWidth()
+                .heightIn(min = posterWidth / IglooTheme.layout.posterAspect)
+                .padding(start = posterWidth)
                 .padding(IglooTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
+            // Whatever the minimum height leaves over goes between the two groups; a card that
+            // has outgrown it keeps one line gap there instead.
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            text()
+            Column(verticalArrangement = lineGap, content = heading)
+            Column(
+                modifier = Modifier.padding(top = IglooTheme.spacing.xs),
+                verticalArrangement = lineGap,
+                content = footing,
+            )
         }
     }
 }

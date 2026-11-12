@@ -736,7 +736,7 @@ hamburger, and no fully-hidden mode.
 | `wideAspect` | 16:9 | |
 | `albumAspect` | 1:1 | Album art is square |
 | `gridColumns` | 6 / 5 / 4 ⚑ | Compact / Standard / Large — *unscaled, and inverse* |
-| `roomPosterWidth` | 112dp | The poster on a watch-room card (§11.10); the card is this wide's 2:3 height, 168dp |
+| `roomPosterWidth` | 116dp | The poster on a watch-room card (§11.10). Its 2:3 height, 174dp, is the card's minimum: enough for a two-line title at the default font scale, so cards match there and grow with their text beyond it (§2.6) |
 | `roomGridColumns` | 2 / 2 / 1 | Compact / Standard / Large — a wide card and its member line need the row to themselves at Large |
 
 Album art is square and musician thumbnails are circular. Both use `posterWidth` as their base
@@ -2861,8 +2861,8 @@ playback over the room's WebSocket is its own pass, and it brings the card's act
 return requester and the room page with it. Rooms are created on the web (a movie's Watch
 Together), which is what the empty state says.
 
-**The card** (`WatchRoomCard`) is one `card` surface at `radius.lg`, as tall as its poster
-(`roomPosterWidth` at 2:3). The poster's box runs down the left edge on `muted`, the film glyph
+**The card** (`WatchRoomCard`) is one `card` surface at `radius.lg`, at least as tall as its
+poster (`roomPosterWidth` at 2:3) and taller when a larger font scale needs it (§2.6). The poster's box runs down the left edge on `muted`, the film glyph
 standing in for a missing poster. Beside it, padded `spacing.md`: the movie's title (`bodyLarge`,
 2 lines), "Hosted by {name}" with "(you)" on the profile's own room (`label`,
 `mutedForeground`), then at the bottom the first four members as overlapping `IglooAvatar`s at
