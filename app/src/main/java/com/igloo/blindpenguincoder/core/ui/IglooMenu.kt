@@ -94,11 +94,7 @@ fun IglooMenu(
                 modifier = Modifier
                     .width(MENU_WIDTH.scaled())
                     .graphicsLayer { alpha = reveal }
-                    .iglooSurface(
-                        radius = IglooTheme.radius.lg,
-                        fill = colors.card,
-                        border = colors.border,
-                    )
+                    .iglooSurface(radius = IglooTheme.radius.lg, fill = colors.card)
                     // Padding on every side so a row's focus ring glows inside the card
                     // instead of being clipped by its surface.
                     .padding(IglooTheme.spacing.xs)

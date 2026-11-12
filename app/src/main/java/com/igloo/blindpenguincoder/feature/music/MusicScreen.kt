@@ -239,8 +239,8 @@ fun MusicScreen(
                 firstItemRequester = firstItemRequester,
                 cardlessHandoffRequester = cardlessHandoffRequester,
                 focusOwnership = focusOwnership,
-                            screenReader = spokenAccessibilityEnabled,
-)
+                screenReader = spokenAccessibilityEnabled,
+            )
 
             when (content) {
                 MusicContent.Loading -> when (tab) {

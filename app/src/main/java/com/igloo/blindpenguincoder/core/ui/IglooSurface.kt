@@ -25,12 +25,11 @@ fun Modifier.iglooSurface(
     radius: Dp,
     fill: Color,
     border: Color = IglooTheme.colors.border,
-    borderWidth: Dp = IglooTheme.focus.restWidth,
 ): Modifier {
     val shape = RoundedCornerShape(radius)
     return clip(shape)
         .background(fill, shape)
-        .border(borderWidth, border, shape)
+        .border(IglooTheme.focus.restWidth, border, shape)
 }
 
 /**

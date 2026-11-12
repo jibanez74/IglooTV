@@ -179,7 +179,6 @@ fun SearchScreen(
             // padding so the scroll surface spans the panel (section 8.3).
             modifier = Modifier
                 .fillMaxSize()
-                .testTag("search_body")
                 .clearedSemanticsIf(trackMenu != null),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
@@ -635,7 +634,6 @@ private fun SearchAllResults(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .testTag("search_all")
             .then(sectionColumn.modifier)
             .verticalScroll(memory.allScrollState)
             // The scroll surface's own room, as the grids carry: the last section clears overscan.

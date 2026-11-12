@@ -44,9 +44,9 @@ internal fun PlaybackException.toPlaybackFailure(
 }
 
 /**
- * A player failure as the error surface's plain sentences, with the codec/container/network
- * detail AGENTS.md asks for. Pure over the exception's already-extracted facts so the whole
- * mapping table is JVM-testable. The 401 message rides `unauthorized = true` so the screen can
+ * A player failure as the error surface's plain sentences, with the codec, container or network
+ * detail that tells the user what to change. Pure over the exception's already-extracted facts so
+ * the whole mapping table is JVM-testable. The 401 message rides `unauthorized = true` so the screen can
  * treat a revoked session distinctly; the session state machine was already signalled by the
  * data source.
  */

@@ -20,9 +20,9 @@ import androidx.media3.exoplayer.LoadControl
  * two thirds of the heap left over, and the large heap the manifest asks for is the margin on the
  * Shield.
  */
-internal fun heapBoundedLoadControl(maxHeapBytes: Long = Runtime.getRuntime().maxMemory()): LoadControl =
+internal fun heapBoundedLoadControl(): LoadControl =
     DefaultLoadControl.Builder()
-        .setTargetBufferBytes(videoBufferBudgetBytes(maxHeapBytes))
+        .setTargetBufferBytes(videoBufferBudgetBytes(Runtime.getRuntime().maxMemory()))
         .build()
 
 internal fun videoBufferBudgetBytes(maxHeapBytes: Long): Int =

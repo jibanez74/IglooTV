@@ -15,7 +15,6 @@ enum class MusicPlayerPhase { Loading, Playing, Paused, Buffering, Ended, Error 
  */
 data class MusicPlayerState(
     val phase: MusicPlayerPhase = MusicPlayerPhase.Loading,
-    val ready: Boolean = false,
     val playWhenReady: Boolean = true,
     val currentTrackIndex: Int = 0,
     val currentTimeSec: Double = 0.0,
@@ -29,11 +28,10 @@ data class MusicPlayerState(
     fun onReady(durationSec: Double): MusicPlayerState = when (phase) {
         MusicPlayerPhase.Error, MusicPlayerPhase.Ended -> this
         MusicPlayerPhase.Loading, MusicPlayerPhase.Buffering -> copy(
-            ready = true,
             phase = MusicPlayerPhase.Paused,
             durationSec = keptDuration(durationSec),
         )
-        else -> copy(ready = true, durationSec = keptDuration(durationSec))
+        else -> copy(durationSec = keptDuration(durationSec))
     }
 
     fun onBuffering(): MusicPlayerState = when (phase) {

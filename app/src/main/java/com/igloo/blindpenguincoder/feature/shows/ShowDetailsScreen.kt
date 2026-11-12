@@ -134,9 +134,7 @@ fun ShowDetailsScreen(
         // The menu occludes nothing, so the body leaves the semantics tree while it is up (the
         // movie details rule); the tag and the pane title stay outside, on the root.
         Box(
-            modifier = Modifier
-                .testTag("show_details_body")
-                .clearedSemanticsIf(episodeMenu != null),
+            modifier = Modifier.clearedSemanticsIf(episodeMenu != null),
         ) {
             when (val details = state.details) {
                 // Geometry-matched to the hero it stands in for: a poster and one action, so the

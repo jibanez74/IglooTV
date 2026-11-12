@@ -23,7 +23,6 @@ data class TrackOption(
  */
 data class VideoPlayerState(
     val phase: VideoPlayerPhase = VideoPlayerPhase.Loading,
-    val ready: Boolean = false,
     val playWhenReady: Boolean = false,
     val currentTimeSec: Double = 0.0,
     val durationSec: Double = 0.0,
@@ -55,12 +54,11 @@ data class VideoPlayerState(
     fun onReady(durationSec: Double): VideoPlayerState = when (phase) {
         VideoPlayerPhase.Error, VideoPlayerPhase.Ended -> this
         VideoPlayerPhase.Loading, VideoPlayerPhase.Buffering -> copy(
-            ready = true,
             phase = VideoPlayerPhase.Paused,
             durationSec = keptDuration(durationSec),
             statusMessage = null,
         )
-        else -> copy(ready = true, durationSec = keptDuration(durationSec), statusMessage = null)
+        else -> copy(durationSec = keptDuration(durationSec), statusMessage = null)
     }
 
     fun onBuffering(): VideoPlayerState = when (phase) {

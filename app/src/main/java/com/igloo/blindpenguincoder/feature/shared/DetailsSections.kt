@@ -22,7 +22,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -74,7 +73,6 @@ internal fun OverviewSection(
         SectionHeading("Overview")
         FadeClampedText(
             text = text,
-            style = IglooTheme.typography.bodyMedium,
             // foreground, not mutedForeground: prose the user came to read has to clear the
             // section 12 body contrast target. The visual clamp is not an accessibility clamp —
             // the semantics tree carries the whole string.
@@ -95,7 +93,6 @@ internal fun OverviewSection(
 @Composable
 internal fun FadeClampedText(
     text: String,
-    style: TextStyle,
     color: Color,
     maxLines: Int,
     modifier: Modifier = Modifier,
@@ -105,7 +102,7 @@ internal fun FadeClampedText(
     val fadeHeight = PROSE_FADE_HEIGHT.scaled()
     IglooText(
         text = text,
-        style = style,
+        style = IglooTheme.typography.bodyMedium,
         color = color,
         maxLines = maxLines,
         overflow = TextOverflow.Clip,

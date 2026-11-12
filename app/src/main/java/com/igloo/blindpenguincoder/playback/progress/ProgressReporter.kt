@@ -9,7 +9,7 @@ import com.igloo.blindpenguincoder.playback.model.clampSecondsToDuration
 import java.util.UUID
 
 /**
- * The cadence rule (AGENTS.md, web parity): a periodic save needs at least [MIN_PLAYED_SEC] of
+ * The cadence rule (web parity): a periodic save needs at least [MIN_PLAYED_SEC] of
  * actual playback, a position past [MIN_POSITION_SEC] (the server's own continue-watching
  * floor), and [SAVE_INTERVAL_SEC] since the previous save. In practice the first save lands
  * around 30 seconds of real playback. Pure, for exhaustive table tests.

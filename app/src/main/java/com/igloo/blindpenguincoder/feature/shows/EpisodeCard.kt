@@ -136,7 +136,6 @@ internal fun EpisodeCard(
             // section 12 body contrast target.
             FadeClampedText(
                 text = episode.overview,
-                style = IglooTheme.typography.bodyMedium,
                 color = colors.foreground,
                 maxLines = EPISODE_OVERVIEW_MAX_LINES,
             )
