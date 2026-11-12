@@ -1,10 +1,9 @@
 package com.igloo.blindpenguincoder.feature.auth
 
 import com.igloo.blindpenguincoder.MainDispatcherRule
-import com.igloo.blindpenguincoder.core.image.NoOpImageCache
-import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
-import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.TestHttp
+import com.igloo.blindpenguincoder.data.repository.authUserJson
+import com.igloo.blindpenguincoder.data.repository.deviceTokenJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.testStoredProfile
 import io.ktor.client.engine.mock.MockRequestHandler
@@ -29,22 +28,6 @@ class LoginViewModelTest {
     @get:Rule
     val main = MainDispatcherRule()
 
-    private val userJson = """
-        {"error":false,"message":"user found","data":{"user":{
-            "id":1,"name":"Jose","email":"jose@example.com","is_admin":false,
-            "avatar":null,"has_pin":false,
-            "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
-        }}}
-    """.trimIndent()
-
-    private val deviceTokenJson = """
-        {"error":false,"data":{"token":"igd_test","device":{
-            "id":9,"name":"Shield","platform":"android_tv","app_version":"0.1.0",
-            "created_at":"2026-07-01T00:00:00Z",
-            "last_used_at":"2026-07-01T00:01:00Z"
-        }}}
-    """.trimIndent()
-
     private class Fixture(
         val viewModel: LoginViewModel,
         val sessionManager: SessionManager,
@@ -58,16 +41,7 @@ class LoginViewModelTest {
     private fun TestScope.fixture(handler: MockRequestHandler): Fixture {
         val http = TestHttp(UnconfinedTestDispatcher(testScheduler), handler)
         val repository = http.authRepository
-        val sessionManager = SessionManager(
-            authRepository = repository,
-            profiles = http.profiles,
-            settings = ServerSettingsStore(InMemoryPreferencesDataStore()),
-            serverUrl = http.serverUrl,
-            authEvents = http.authEvents,
-            imageCache = NoOpImageCache,
-            elapsed = { 0L },
-            scope = main.newScope(),
-        )
+        val sessionManager = http.sessionManager(main.newScope())
         return Fixture(
             viewModel = LoginViewModel(repository, sessionManager),
             sessionManager = sessionManager,
@@ -75,7 +49,6 @@ class LoginViewModelTest {
         )
     }
 
-    private fun TestHttp.pendingToken() = profileStore.vault.pendingToken
 
     private fun TestScope.viewModel(handler: MockRequestHandler): Pair<LoginViewModel, SessionManager> =
         fixture(handler).let { it.viewModel to it.sessionManager }
@@ -85,10 +58,10 @@ class LoginViewModelTest {
         val (viewModel, sessionManager) = viewModel { request ->
             if (request.url.encodedPath.endsWith("/auth/device-login")) {
                 assertNull(request.headers[HttpHeaders.Authorization])
-                jsonResponse(deviceTokenJson)
+                jsonResponse(deviceTokenJson())
             } else {
                 assertEquals("Bearer igd_test", request.headers[HttpHeaders.Authorization])
-                jsonResponse(userJson)
+                jsonResponse(authUserJson())
             }
         }
 
@@ -158,7 +131,7 @@ class LoginViewModelTest {
         val finishUserRequest = CompletableDeferred<Unit>()
         val (viewModel, _) = viewModel { request ->
             if (request.url.encodedPath.endsWith("/auth/device-login")) {
-                jsonResponse(deviceTokenJson)
+                jsonResponse(deviceTokenJson())
             } else {
                 userRequestStarted.complete(Unit)
                 finishUserRequest.await()
@@ -186,10 +159,10 @@ class LoginViewModelTest {
         val (viewModel, sessionManager) = viewModel { request ->
             if (request.url.encodedPath.endsWith("/auth/device-login")) {
                 deviceLogins++
-                jsonResponse(deviceTokenJson)
+                jsonResponse(deviceTokenJson())
             } else {
                 // The token is issued, then the user fetch fails once before recovering.
-                if (++userFetches == 1) throw IOException("unreachable") else jsonResponse(userJson)
+                if (++userFetches == 1) throw IOException("unreachable") else jsonResponse(authUserJson())
             }
         }
 
@@ -217,10 +190,10 @@ class LoginViewModelTest {
             requests += request.url.encodedPath
             when {
                 request.url.encodedPath.endsWith("/auth/device-login") ->
-                    jsonResponse(deviceTokenJson)
+                    jsonResponse(deviceTokenJson())
                 requests.count { it.endsWith("/auth/user") } == 1 ->
                     throw IOException("unreachable")
-                else -> jsonResponse(userJson)
+                else -> jsonResponse(authUserJson())
             }
         }
         val viewModel = fixture.viewModel
@@ -257,9 +230,9 @@ class LoginViewModelTest {
         val fixture = fixture { request ->
             requests += request.url.encodedPath
             if (request.url.encodedPath.endsWith("/auth/device-login")) {
-                jsonResponse(deviceTokenJson)
+                jsonResponse(deviceTokenJson())
             } else {
-                jsonResponse(userJson.replace("\"id\":1", "\"id\":2").replace("Jose", "Ana"))
+                jsonResponse(authUserJson().replace("\"id\":1", "\"id\":2").replace("Jose", "Ana"))
             }
         }
         fixture.http.seedVault(testStoredProfile(userId = 1, name = "Jose"))
@@ -281,7 +254,7 @@ class LoginViewModelTest {
     fun `clearPassword preserves email and pending token state`() = runTest {
         val fixture = fixture { request ->
             if (request.url.encodedPath.endsWith("/auth/device-login")) {
-                jsonResponse(deviceTokenJson)
+                jsonResponse(deviceTokenJson())
             } else {
                 throw IOException("unreachable")
             }

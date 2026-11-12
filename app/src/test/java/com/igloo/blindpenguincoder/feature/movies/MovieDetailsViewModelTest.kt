@@ -24,10 +24,8 @@ import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.ProgressUi
-import io.ktor.client.engine.mock.MockRequestHandleScope
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.client.engine.mock.toByteArray
-import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -36,7 +34,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -48,17 +45,6 @@ import org.junit.Test
 class MovieDetailsViewModelTest {
     @get:Rule
     val main = MainDispatcherRule()
-
-    // A view model outlives the test body — its scope is not runTest's child — so an unfinished
-    // load would still be on Dispatchers.Main when the next class calls setMain. Closing cancels
-    // every load, which is also what Back does in production.
-    private val viewModels = mutableListOf<MovieDetailsViewModel>()
-
-    @After
-    fun tearDown() {
-        viewModels.forEach { it.close() }
-        viewModels.clear()
-    }
 
     private fun viewModel(
         http: TestHttp,
@@ -73,7 +59,7 @@ class MovieDetailsViewModelTest {
             canPlayVideoMime = { true },
             canPlayAudioMime = { _, _ -> true },
         )
-            .also { viewModels += it }
+            .also { main.closeAfter(it::close) }
 
     /**
      * `open` fires four requests in parallel; handlers route by path. The mock engine runs on
@@ -82,18 +68,12 @@ class MovieDetailsViewModelTest {
      * then (see TestHttp's note on the health probe).
      */
     private fun TestScope.routedHttp(
-        details: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(populatedDetailsJson()) },
-        technical: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(technicalDetailsJson()) },
-        progress: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(watchProgressJson()) },
-        likeStatus: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(likeStatusJson()) },
-        likeToggle: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(likeToggleJson()) },
-        setWatched: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(watchedUpdateJson()) },
+        details: MockRequestHandler = { jsonResponse(populatedDetailsJson()) },
+        technical: MockRequestHandler = { jsonResponse(technicalDetailsJson()) },
+        progress: MockRequestHandler = { jsonResponse(watchProgressJson()) },
+        likeStatus: MockRequestHandler = { jsonResponse(likeStatusJson()) },
+        likeToggle: MockRequestHandler = { jsonResponse(likeToggleJson()) },
+        setWatched: MockRequestHandler = { jsonResponse(watchedUpdateJson()) },
     ) = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
         val path = request.url.encodedPath
         when {

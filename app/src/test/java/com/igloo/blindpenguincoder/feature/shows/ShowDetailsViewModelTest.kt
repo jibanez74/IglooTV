@@ -30,7 +30,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -42,17 +41,7 @@ class ShowDetailsViewModelTest {
     @get:Rule
     val main = MainDispatcherRule()
 
-    // A view model outlives the test body — its scope is not runTest's child — so an unfinished
-    // load would still be on Dispatchers.Main when the next class calls setMain. Closing cancels
-    // it, which is also what Back does in production.
-    private val viewModels = mutableListOf<ShowDetailsViewModel>()
     private var committed = 0
-
-    @After
-    fun tearDown() {
-        viewModels.forEach { it.close() }
-        viewModels.clear()
-    }
 
     /**
      * A fake server for one show: [details] answers the details route, [season] each season route
@@ -128,7 +117,7 @@ class ShowDetailsViewModelTest {
                 canPlayAudioMime = { _, _ -> canPlayAudio },
             ),
             onWatchedStateCommitted = { committed += 1 },
-        ).also { viewModels += it }
+        ).also { main.closeAfter(it::close) }
     }
 
     /**

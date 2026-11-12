@@ -1,9 +1,6 @@
 package com.igloo.blindpenguincoder.feature.auth
 
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -21,6 +18,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.LocalApiServer
 import com.igloo.blindpenguincoder.MainActivity
 import com.igloo.blindpenguincoder.awaitScreen
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import com.igloo.blindpenguincoder.seedPinProtectedProfile
 import org.junit.After
 import org.junit.Assert.assertFalse
@@ -69,12 +67,7 @@ class PinEntryAccessibilityTest {
 
             composeRule
                 .onNodeWithContentDescription("PIN, 2 of 4 digits entered")
-                .assert(
-                    SemanticsMatcher.expectValue(
-                        SemanticsProperties.LiveRegion,
-                        LiveRegionMode.Polite,
-                    ),
-                )
+                .assert(isPoliteLiveRegion())
         }
     }
 

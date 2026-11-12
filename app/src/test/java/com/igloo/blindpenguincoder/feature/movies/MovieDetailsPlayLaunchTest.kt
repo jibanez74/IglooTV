@@ -22,7 +22,6 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -39,14 +38,6 @@ import io.ktor.http.HttpStatusCode
 class MovieDetailsPlayLaunchTest {
     @get:Rule
     val main = MainDispatcherRule()
-
-    private val viewModels = mutableListOf<MovieDetailsViewModel>()
-
-    @After
-    fun tearDown() {
-        viewModels.forEach { it.close() }
-        viewModels.clear()
-    }
 
     private fun TestScope.http(
         progressJson: String = watchProgressJson(),
@@ -76,7 +67,7 @@ class MovieDetailsPlayLaunchTest {
         onWatchedStateCommitted = {},
         canPlayVideoMime = canPlayVideoMime,
         canPlayAudioMime = canPlayAudioMime,
-    ).also { viewModels += it }
+    ).also { main.closeAfter(it::close) }
 
     private suspend fun MovieDetailsViewModel.awaitTracksResolved() {
         uiState.first {

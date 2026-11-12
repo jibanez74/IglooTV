@@ -1,10 +1,6 @@
 package com.igloo.blindpenguincoder.feature.home
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -15,10 +11,10 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.AssertReferenceViewport
+import com.igloo.blindpenguincoder.ReferenceViewport
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
@@ -27,6 +23,7 @@ import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
 import com.igloo.blindpenguincoder.testHomeMovies
+import com.igloo.blindpenguincoder.viewportBounds
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -65,11 +62,7 @@ class ShellBleedTest {
                 // The ambient backdrop loops forever, so with motion on the Compose clock never
                 // goes idle and every assertion below would spin until it timed out.
                 CompositionLocalProvider(LocalIglooReducedMotion provides true) {
-                    Box(
-                        Modifier
-                            .size(width = VIEWPORT_WIDTH, height = VIEWPORT_HEIGHT)
-                            .testTag(VIEWPORT_TAG),
-                    ) {
+                    ReferenceViewport {
                         TestIglooApp(
                             home = HomeUiState(
                                 hero = HomeHeroState.Loaded(listOf(testHero)),
@@ -85,19 +78,12 @@ class ShellBleedTest {
         composeRule.waitForIdle()
     }
 
-    /**
-     * IglooTheme derives its viewport factor from the window rather than from the box below, so a
-     * device reporting 1200dp or wider would double every dimension and fail this suite for the
-     * wrong reason.
-     */
-
-    private fun viewport() = composeRule.onNodeWithTag(VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
 
     @Test
     fun theHeroBackdropReachesEveryPhysicalEdgeItCan() {
         setShellContent()
 
-        val panel = viewport()
+        val panel = composeRule.viewportBounds()
         val hero = composeRule.onNodeWithTag("home_hero_bleed").fetchSemanticsNode().boundsInRoot
 
         assertTrue("hero left ${hero.left} should sit on the panel edge ${panel.left}", hero.left == panel.left)
@@ -126,7 +112,7 @@ class ShellBleedTest {
     fun theRailScrollSurfaceSpansThePanelWhileItsCardsStayInset() {
         setShellContent()
 
-        val panel = viewport()
+        val panel = composeRule.viewportBounds()
         val density = composeRule.density
         val rail = composeRule.onNodeWithTag("rail_scroll_Continue Watching")
             .fetchSemanticsNode().boundsInRoot
@@ -169,11 +155,5 @@ class ShellBleedTest {
 
         composeRule.onNodeWithTag("content_pane")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Movies"))
-    }
-
-    private companion object {
-        const val VIEWPORT_TAG = "tv-viewport"
-        val VIEWPORT_WIDTH = 960.dp
-        val VIEWPORT_HEIGHT = 540.dp
     }
 }

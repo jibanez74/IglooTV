@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -237,12 +236,7 @@ class IglooBaseAppTest {
         composeRule.onNodeWithContentDescription("Signing out…")
             .assertIsDisplayed()
             .assertIsFocused()
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
         // No confirm control exists while the revoke is in flight, so it cannot be pressed twice.
         composeRule.onAllNodesWithContentDescription("Cancel").assertCountEquals(0)
     }

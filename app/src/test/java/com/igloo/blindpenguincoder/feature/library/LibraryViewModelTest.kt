@@ -13,6 +13,7 @@ import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import com.igloo.blindpenguincoder.feature.shared.showingCountLine
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -1704,7 +1705,7 @@ class LibraryViewModelTest {
         val appendGate = CompletableDeferred<Unit>()
         val replacementGate = CompletableDeferred<Unit>()
         var firstPageCalls = 0
-        val replacement: LibraryRoute = {
+        val replacement: MockRequestHandler = {
             replacementGate.await()
             jsonResponse(page(number = 1, total = 12, totalPages = 1, ids = 7L..9L))
         }
@@ -1763,7 +1764,7 @@ class LibraryViewModelTest {
         LibraryViewModel(movieLibrarySource(http.test.movieRepository), http.test.serverUrl)
             .also { it.refresh() }
 
-    private fun failingAfterFirstPage(): LibraryRoute = {
+    private fun failingAfterFirstPage(): MockRequestHandler = {
         if (it.page() == "1") {
             jsonResponse(page(number = 1, totalPages = 3, ids = 1L..48L))
         } else {
@@ -1784,11 +1785,11 @@ class LibraryViewModelTest {
     )
 
     private fun TestScope.routedHttp(
-        stats: LibraryRoute = { jsonResponse(moviesStatsJson()) },
-        genres: LibraryRoute = { jsonResponse(moviesGenresJson()) },
-        library: LibraryRoute = { jsonResponse(moviesLibraryJson()) },
-        liked: LibraryRoute = { jsonResponse(moviesLibraryJson()) },
-        genreMovies: LibraryRoute = { jsonResponse(moviesLibraryJson()) },
+        stats: MockRequestHandler = { jsonResponse(moviesStatsJson()) },
+        genres: MockRequestHandler = { jsonResponse(moviesGenresJson()) },
+        library: MockRequestHandler = { jsonResponse(moviesLibraryJson()) },
+        liked: MockRequestHandler = { jsonResponse(moviesLibraryJson()) },
+        genreMovies: MockRequestHandler = { jsonResponse(moviesLibraryJson()) },
     ): RoutedHttp = routedLibraryHttp(
         resource = "movies",
         stats = stats,

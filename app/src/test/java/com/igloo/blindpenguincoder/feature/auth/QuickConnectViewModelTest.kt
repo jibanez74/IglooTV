@@ -1,10 +1,9 @@
 package com.igloo.blindpenguincoder.feature.auth
 
 import com.igloo.blindpenguincoder.MainDispatcherRule
-import com.igloo.blindpenguincoder.core.image.NoOpImageCache
-import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
-import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.TestHttp
+import com.igloo.blindpenguincoder.data.repository.authUserJson
+import com.igloo.blindpenguincoder.data.repository.deviceTokenJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
@@ -36,20 +35,7 @@ class QuickConnectViewModelTest {
 
     private val pendingJson = """{"error":false,"data":{"status":"pending"}}"""
 
-    private val approvedJson = """
-        {"error":false,"data":{"status":"approved","token":"igd_paired","device":{
-            "id":9,"name":"Shield","platform":"android_tv","app_version":"0.1.0",
-            "created_at":"2026-07-01T00:00:00Z",
-            "last_used_at":"2026-07-01T00:01:00Z"
-        }}}
-    """.trimIndent()
-
-    private val userJson = """
-        {"error":false,"message":"user found","data":{"user":{
-            "id":1,"name":"Jose","email":"jose@example.com","is_admin":false,"has_pin":false,
-            "avatar":null,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
-        }}}
-    """.trimIndent()
+    private val approvedJson = deviceTokenJson("igd_paired", status = "approved")
 
     private class Fixture(
         val viewModel: QuickConnectViewModel,
@@ -61,6 +47,17 @@ class QuickConnectViewModelTest {
         val phase: QuickConnectPhase get() = viewModel.uiState.value.phase
     }
 
+    /** A pairing the server approves on the first poll; [user] answers the user fetch that follows. */
+    private fun approvedPairing(user: MockRequestHandler = { jsonResponse(authUserJson()) }) =
+        fixture { request ->
+            when {
+                request.url.encodedPath.endsWith("/initiate") ->
+                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
+                request.url.encodedPath.endsWith("/redeem") -> jsonResponse(approvedJson)
+                else -> user(request)
+            }
+        }
+
     private fun fixture(handler: MockRequestHandler): Fixture {
         val requests = mutableListOf<String>()
         // Unconfined engine dispatcher keeps the whole loop on the test scheduler,
@@ -70,16 +67,7 @@ class QuickConnectViewModelTest {
             handler(request)
         }
         val repository = http.authRepository
-        val sessionManager = SessionManager(
-            authRepository = repository,
-            profiles = http.profiles,
-            settings = ServerSettingsStore(InMemoryPreferencesDataStore()),
-            serverUrl = http.serverUrl,
-            authEvents = http.authEvents,
-            imageCache = NoOpImageCache,
-            elapsed = { 0L },
-            scope = main.newScope(Dispatchers.Unconfined),
-        )
+        val sessionManager = http.sessionManager(main.newScope(Dispatchers.Unconfined))
         return Fixture(
             QuickConnectViewModel(repository, http.profiles, sessionManager),
             sessionManager,
@@ -158,14 +146,7 @@ class QuickConnectViewModelTest {
 
     @Test
     fun `approval stores the token, authenticates, and stops polling`() = runTest {
-        val f = fixture { request ->
-            when {
-                request.url.encodedPath.endsWith("/initiate") ->
-                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
-                request.url.encodedPath.endsWith("/redeem") -> jsonResponse(approvedJson)
-                else -> jsonResponse(userJson)
-            }
-        }
+        val f = approvedPairing()
 
         f.viewModel.start()
         advanceTimeBy(2_001)
@@ -505,17 +486,10 @@ class QuickConnectViewModelTest {
     @Test
     fun `a failed user fetch after approval retries without re-pairing`() = runTest {
         var userFetches = 0
-        val f = fixture { request ->
-            when {
-                request.url.encodedPath.endsWith("/initiate") ->
-                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
-                request.url.encodedPath.endsWith("/redeem") -> jsonResponse(approvedJson)
-                else -> {
-                    userFetches += 1
-                    if (userFetches == 1) throw IOException("blip")
-                    jsonResponse(userJson)
-                }
-            }
+        val f = approvedPairing {
+            userFetches += 1
+            if (userFetches == 1) throw IOException("blip")
+            jsonResponse(authUserJson())
         }
 
         f.viewModel.start()
@@ -534,16 +508,9 @@ class QuickConnectViewModelTest {
     @Test
     fun `approval replaces the code with a signing-in state`() = runTest {
         var userFetches = 0
-        val f = fixture { request ->
-            when {
-                request.url.encodedPath.endsWith("/initiate") ->
-                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
-                request.url.encodedPath.endsWith("/redeem") -> jsonResponse(approvedJson)
-                else -> {
-                    userFetches += 1
-                    if (userFetches == 1) throw IOException("blip") else jsonResponse(userJson)
-                }
-            }
+        val f = approvedPairing {
+            userFetches += 1
+            if (userFetches == 1) throw IOException("blip") else jsonResponse(authUserJson())
         }
 
         f.viewModel.start()
@@ -561,16 +528,9 @@ class QuickConnectViewModelTest {
     @Test
     fun `a user fetch that keeps failing stops retrying and fails visibly`() = runTest {
         var userFetches = 0
-        val f = fixture { request ->
-            when {
-                request.url.encodedPath.endsWith("/initiate") ->
-                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
-                request.url.encodedPath.endsWith("/redeem") -> jsonResponse(approvedJson)
-                else -> {
-                    userFetches += 1
-                    throw IOException("still down")
-                }
-            }
+        val f = approvedPairing {
+            userFetches += 1
+            throw IOException("still down")
         }
 
         f.viewModel.start()
@@ -594,16 +554,9 @@ class QuickConnectViewModelTest {
     @Test
     fun `retry after a failed sign-in resumes with the stored token`() = runTest {
         var userFetches = 0
-        val f = fixture { request ->
-            when {
-                request.url.encodedPath.endsWith("/initiate") ->
-                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
-                request.url.encodedPath.endsWith("/redeem") -> jsonResponse(approvedJson)
-                else -> {
-                    userFetches += 1
-                    if (userFetches <= 6) throw IOException("down") else jsonResponse(userJson)
-                }
-            }
+        val f = approvedPairing {
+            userFetches += 1
+            if (userFetches <= 6) throw IOException("down") else jsonResponse(authUserJson())
         }
 
         f.viewModel.start()
@@ -648,7 +601,7 @@ class QuickConnectViewModelTest {
     fun `a stored token finishes sign-in instead of pairing again`() = runTest {
         val f = fixture { request ->
             if (request.url.encodedPath.endsWith("/auth/user")) {
-                jsonResponse(userJson)
+                jsonResponse(authUserJson())
             } else {
                 error("unexpected request to ${request.url.encodedPath}")
             }
@@ -666,16 +619,11 @@ class QuickConnectViewModelTest {
 
     @Test
     fun `unauthorized after approval clears the session and fails`() = runTest {
-        val f = fixture { request ->
-            when {
-                request.url.encodedPath.endsWith("/initiate") ->
-                    jsonResponse(initiateJson("ABCD12"), HttpStatusCode.Created)
-                request.url.encodedPath.endsWith("/redeem") -> jsonResponse(approvedJson)
-                else -> jsonResponse(
-                    """{"error":true,"message":"unauthorized"}""",
-                    HttpStatusCode.Unauthorized,
-                )
-            }
+        val f = approvedPairing {
+            jsonResponse(
+                """{"error":true,"message":"unauthorized"}""",
+                HttpStatusCode.Unauthorized,
+            )
         }
 
         f.viewModel.start()

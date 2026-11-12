@@ -1,11 +1,9 @@
 package com.igloo.blindpenguincoder.core.network
 
-import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.*
 import com.igloo.blindpenguincoder.feature.auth.AppAuthState
-import com.igloo.blindpenguincoder.feature.auth.SessionManager
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockEngineConfig
 import io.ktor.client.engine.mock.respond
@@ -105,10 +103,7 @@ class LocalNetworkGatesTest {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
         settings.save(TEST_SERVER)
         http.serverUrl.set(null)
-        val manager = SessionManager(
-            http.authRepository, http.profiles, settings, http.serverUrl, http.authEvents,
-            backgroundScope, NoOpImageCache, elapsed = { 0L }, networkAccess = permission,
-        )
+        val manager = http.sessionManager(backgroundScope, settings, networkAccess = permission)
         val pending = async { manager.restoreOnLaunch() }
         runCurrent()
         permission.onPermissionResult()

@@ -17,6 +17,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.focusAndPress
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
@@ -99,13 +100,7 @@ class MusicianDetailsFocusTest {
         composeRule.waitForIdle()
     }
 
-    private fun openMusicianCard(id: Long) {
-        composeRule.onNodeWithTag("musician_card_$id").requestFocus()
-        composeRule.onNodeWithTag("musician_card_$id")
-            .assertIsFocused()
-            .performKeyInput { pressKey(Key.DirectionCenter) }
-        composeRule.waitForIdle()
-    }
+    private fun openMusicianCard(id: Long) = composeRule.focusAndPress("musician_card_$id")
 
     @Test
     fun openingFromAMusicianCardLandsFocusOnPlayAll() {

@@ -1,6 +1,7 @@
 package com.igloo.blindpenguincoder.feature.player
 
 import android.view.View
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -8,9 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -30,6 +29,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
@@ -120,29 +120,19 @@ class MusicPlayerScreenTest {
         composeRule.setContent {
             val view = LocalView.current
             SideEffect { hostView = view }
-            IglooTheme {
-                CompositionLocalProvider(
-                    LocalLifecycleOwner provides lifecycleOwner,
-                    com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery provides networkRecovery,
-                ) {
-                    if (open) {
-                        MusicPlayerScreen(
-                            request = request,
-                            onClose = {
-                                closes += 1
-                                open = false
-                            },
-                            engineFactory = { _, played ->
-                                engineRequests += played
-                                createdEngines += engine
-                                engine
-                            },
-                            queueFetcher = queueFetcher,
-                            onQueueChanged = { queueChanges += it },
-                            spokenAccessibilityEnabled = spokenAccessibilityEnabled,
-                        )
-                    }
-                }
+            PlayerHost {
+                MusicPlayerScreen(
+                    request = request,
+                    onClose = ::close,
+                    engineFactory = { _, played ->
+                        engineRequests += played
+                        createdEngines += engine
+                        engine
+                    },
+                    queueFetcher = queueFetcher,
+                    onQueueChanged = { queueChanges += it },
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                )
             }
         }
         composeRule.waitForIdle()
@@ -157,31 +147,39 @@ class MusicPlayerScreenTest {
         lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         restorationTester = StateRestorationTester(composeRule)
         restorationTester.setContent {
-            IglooTheme {
-                CompositionLocalProvider(
-                    LocalLifecycleOwner provides lifecycleOwner,
-                    com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery provides networkRecovery,
-                ) {
-                    if (open) {
-                        MusicPlayerScreen(
-                            request = request,
-                            onClose = {
-                                closes += 1
-                                open = false
-                            },
-                            engineFactory = { _, played ->
-                                FakeMusicPlayerEngine(played.tracks.map { it.durationSec }).also {
-                                    engine = it
-                                    createdEngines += it
-                                }
-                            },
-                            queueFetcher = InertMusicQueueFetcher,
-                        )
-                    }
-                }
+            PlayerHost {
+                MusicPlayerScreen(
+                    request = request,
+                    onClose = ::close,
+                    engineFactory = { _, played ->
+                        FakeMusicPlayerEngine(played.tracks.map { it.durationSec }).also {
+                            engine = it
+                            createdEngines += it
+                        }
+                    },
+                    queueFetcher = InertMusicQueueFetcher,
+                )
             }
         }
         composeRule.waitForIdle()
+    }
+
+    /** The test's lifecycle and network locals around a screen that is mounted while [open]. */
+    @Composable
+    private fun PlayerHost(content: @Composable () -> Unit) {
+        IglooTheme {
+            CompositionLocalProvider(
+                LocalLifecycleOwner provides lifecycleOwner,
+                com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery provides networkRecovery,
+            ) {
+                if (open) content()
+            }
+        }
+    }
+
+    private fun close() {
+        closes += 1
+        open = false
     }
 
     private fun startPlaying() {
@@ -416,12 +414,7 @@ class MusicPlayerScreenTest {
         // The auto-advance narration: same Playing phase, new sentence because the title rides
         // in it. Polite — it narrates, it never interrupts.
         composeRule.onNodeWithContentDescription("Playing: Ticket to Ride")
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
     }
 
     @Test

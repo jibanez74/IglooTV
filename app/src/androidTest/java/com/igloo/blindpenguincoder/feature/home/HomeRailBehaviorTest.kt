@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.feature.home
 
-import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,7 +8,6 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -34,9 +32,10 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.Dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
+import com.igloo.blindpenguincoder.assertPlatformTree
+import com.igloo.blindpenguincoder.clickActionLabel
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_LINE_WAIT_MS
@@ -690,10 +689,7 @@ class HomeRailBehaviorTest {
             .assertContentDescriptionEquals("Recently Added Shows. Severance, 2022")
             .assertHasClickAction()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
-        assertEquals(
-            "Open Severance",
-            showCard(40).fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label,
-        )
+        assertEquals("Open Severance", showCard(40).clickActionLabel())
         composeRule.onAllNodesWithText("Severance").assertCountEquals(0)
         composeRule.onAllNodesWithText("2022").assertCountEquals(0)
         assertShowCardInPlatformTree()
@@ -720,20 +716,7 @@ class HomeRailBehaviorTest {
     private fun assertPlatformTreeHolds(
         expected: List<Triple<String, Boolean, Boolean>>,
         matches: (String) -> Boolean,
-    ) {
-        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val deadline = SystemClock.uptimeMillis() + 5_000
-        var found: List<Triple<String, Boolean, Boolean>>
-        do {
-            composeRule.waitForIdle()
-            found = buildList {
-                automation.rootInActiveWindow?.let { collectNodes(it, this, matches) }
-            }
-            if (found == expected) return
-            Thread.sleep(100)
-        } while (SystemClock.uptimeMillis() < deadline)
-        assertEquals(expected, found)
-    }
+    ) = composeRule.assertPlatformTree(expected) { root, into -> collectNodes(root, into, matches) }
 
     private fun collectNodes(
         node: AccessibilityNodeInfo,

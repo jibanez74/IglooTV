@@ -11,9 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.feature.auth.WelcomeSteps
-import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -100,26 +98,6 @@ class WelcomeGateTest {
     }
 
     /** Two profiles, so the picker appears and offers "Change server address". */
-    private fun seedProfile() {
-        val app = iglooApp()
-        runBlocking {
-            app.container.serverSettingsStore.save("http://192.0.2.1:8080/api")
-            app.container.profileRepository.clearAll()
-            app.container.profileRepository.setPending("igd_jose")
-            app.container.profileRepository.commitSignIn(testUser(1, "Jose"))
-            app.container.profileRepository.setPending("igd_ana")
-            app.container.profileRepository.commitSignIn(testUser(2, "Ana"))
-            app.container.profileRepository.deactivate()
-        }
-        app.container.serverUrlProvider.set(null)
-    }
-
-
-    private fun testUser(id: Long, name: String) = AuthUser(
-        id = id,
-        name = name,
-        isAdmin = false,
-        avatar = null,
-        hasPin = false,
-    )
+    private fun seedProfile() =
+        seedInactiveProfiles("http://192.0.2.1:8080/api", testUser(1, "Jose"), testUser(2, "Ana"))
 }

@@ -21,6 +21,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.focusAndPress
 import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testAlbums
@@ -100,13 +101,7 @@ class AlbumDetailsFocusTest {
         AlbumDetailsUiState(openAlbumId = album.id, details = DetailsState.Loaded(album))
     }
 
-    private fun openAlbumCard(id: Long) {
-        composeRule.onNodeWithTag("album_card_$id").requestFocus()
-        composeRule.onNodeWithTag("album_card_$id")
-            .assertIsFocused()
-            .performKeyInput { pressKey(Key.DirectionCenter) }
-        composeRule.waitForIdle()
-    }
+    private fun openAlbumCard(id: Long) = composeRule.focusAndPress("album_card_$id")
 
     @Test
     fun openingFromAnAlbumCardLandsFocusOnPlayAlbum() {

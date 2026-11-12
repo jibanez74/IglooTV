@@ -22,6 +22,7 @@ import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.focusAndPress
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
@@ -89,13 +90,7 @@ class MusicPlayerOverlayFocusTest {
         composeRule.waitForIdle()
     }
 
-    private fun openAlbumCard() {
-        composeRule.onNodeWithTag("album_card_11").requestFocus()
-        composeRule.onNodeWithTag("album_card_11")
-            .assertIsFocused()
-            .performKeyInput { pressKey(Key.DirectionCenter) }
-        composeRule.waitForIdle()
-    }
+    private fun openAlbumCard() = composeRule.focusAndPress("album_card_11")
 
     private fun pressPlayAlbum() {
         // Entry focus already anchors on Play Album (section 11.5.1).

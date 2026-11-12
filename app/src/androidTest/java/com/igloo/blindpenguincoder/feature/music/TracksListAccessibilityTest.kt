@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -27,6 +26,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.PagedState
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import com.igloo.blindpenguincoder.testMusicState
 import com.igloo.blindpenguincoder.testTrackEntries
 import org.junit.Rule
@@ -81,7 +81,7 @@ class TracksListAccessibilityTest {
 
         composeRule.onNodeWithTag("music_count")
             .assertContentDescriptionEquals("Showing 5 of 5 tracks")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(isPoliteLiveRegion())
 
         musicState = testMusicState(
             tab = MusicTab.Tracks,
@@ -144,6 +144,6 @@ class TracksListAccessibilityTest {
         setContent(testMusicState(tab = MusicTab.Tracks, tracks = PagedState(IglooRailState.Loading)))
 
         composeRule.onNodeWithContentDescription("Loading tracks")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(isPoliteLiveRegion())
     }
 }

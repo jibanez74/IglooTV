@@ -1,7 +1,6 @@
 package com.igloo.blindpenguincoder.feature.auth
 
 import com.igloo.blindpenguincoder.MainDispatcherRule
-import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
@@ -47,16 +46,7 @@ class PinEntryViewModelTest {
                 jsonResponse(authUserJson(name = "Jose", hasPin = true))
             }
         }
-        val sessionManager = SessionManager(
-            authRepository = http.authRepository,
-            profiles = http.profiles,
-            settings = settings,
-            serverUrl = http.serverUrl,
-            authEvents = http.authEvents,
-            imageCache = NoOpImageCache,
-            scope = main.newScope(),
-            elapsed = { 0L },
-        )
+        val sessionManager = http.sessionManager(main.newScope(), settings)
         http.seedVault(
             testStoredProfile(userId = 1, name = "Jose", hasPin = true),
             testStoredProfile(userId = 2, name = "Ana"),

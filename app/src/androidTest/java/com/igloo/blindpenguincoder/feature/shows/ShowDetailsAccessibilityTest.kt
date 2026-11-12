@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -42,6 +41,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.isHeading
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import com.igloo.blindpenguincoder.testSeason
 import com.igloo.blindpenguincoder.testShowDetails
 import com.igloo.blindpenguincoder.testShowDetailsState
@@ -129,7 +129,7 @@ class ShowDetailsAccessibilityTest {
 
         composeRule.onNodeWithContentDescription("Loading show details")
             .assertIsFocused()
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(isPoliteLiveRegion())
     }
 
     @Test
@@ -188,7 +188,7 @@ class ShowDetailsAccessibilityTest {
 
         composeRule.onNodeWithTag("details_playback_notice")
             .assert(hasText(notice))
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(isPoliteLiveRegion())
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Focused))
     }
 
@@ -202,7 +202,7 @@ class ShowDetailsAccessibilityTest {
         composeRule
             .onAllNodesWithText("Couldn't save playback progress: no connection.", substring = true)
             .filterToOne(hasAnyAncestor(hasTestTag("details_progress_error")))
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(isPoliteLiveRegion())
         composeRule.onNodeWithTag("details_progress_retry")
             .assertContentDescriptionEquals("Retry saving playback progress")
             .assertHasClickAction()
@@ -483,7 +483,7 @@ class ShowDetailsAccessibilityTest {
         setContent(testShowDetailsState(watchedNotice = "Couldn't update watched status: Offline."))
 
         composeRule.onNodeWithTag("episode_watched_notice")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(isPoliteLiveRegion())
             .assert(hasText("Couldn't update watched status: Offline."))
     }
 }

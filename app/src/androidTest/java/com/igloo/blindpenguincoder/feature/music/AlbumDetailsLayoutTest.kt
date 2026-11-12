@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.feature.music
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,18 +12,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AssertReferenceViewport
+import com.igloo.blindpenguincoder.ReferenceViewport
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.testAlbumDetails
+import com.igloo.blindpenguincoder.viewportBounds
 import kotlin.math.abs
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -64,7 +63,7 @@ class AlbumDetailsLayoutTest {
                 }
                 composeRule.waitForIdle()
                 val wrapped = artistBounds()
-                val viewport = viewportBounds()
+                val viewport = composeRule.viewportBounds()
                 val inset = with(composeRule.density) { safeAreaHorizontal.toPx() }
                 val case = "$scale at font scale $font"
 
@@ -93,11 +92,7 @@ class AlbumDetailsLayoutTest {
             ) {
                 IglooTheme(uiScale = uiScale) {
                     safeAreaHorizontal = IglooTheme.layout.safeAreaHorizontal
-                    Box(
-                        Modifier
-                            .size(VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
-                            .testTag(VIEWPORT_TAG),
-                    ) {
+                    ReferenceViewport {
                         val factsRequester = remember { FocusRequester() }
                         val playReturnRequester = remember { FocusRequester() }
                         val trackRequesters = remember(album.discs) {
@@ -130,13 +125,7 @@ class AlbumDetailsLayoutTest {
     private fun artistBounds() = composeRule.onNodeWithTag("album_artists")
         .fetchSemanticsNode().boundsInRoot
 
-    private fun viewportBounds() = composeRule.onNodeWithTag(VIEWPORT_TAG)
-        .fetchSemanticsNode().boundsInRoot
-
     private companion object {
-        const val VIEWPORT_TAG = "album-layout-viewport"
-        val VIEWPORT_WIDTH = 960.dp
-        val VIEWPORT_HEIGHT = 540.dp
         val WRAPPING_ARTISTS = listOf(
             "Alexandria Northern Ensemble",
             "Benjamin Evergreen Collective",

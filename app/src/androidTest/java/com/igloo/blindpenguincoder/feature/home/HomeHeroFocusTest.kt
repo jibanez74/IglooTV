@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.feature.home
 
-import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,9 +20,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
+import com.igloo.blindpenguincoder.assertPlatformTree
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.pressBack
@@ -139,19 +138,8 @@ class HomeHeroFocusTest {
         assertHeroNodesInPlatformTree(listOf(showPageDescription to true))
     }
 
-    /** Polls: the platform tree trails Compose's semantics by an accessibility batch. */
-    private fun assertHeroNodesInPlatformTree(expected: List<Pair<String, Boolean>>) {
-        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val deadline = SystemClock.uptimeMillis() + PLATFORM_TREE_TIMEOUT_MS
-        var found: List<Pair<String, Boolean>>
-        do {
-            composeRule.waitForIdle()
-            found = buildList { automation.rootInActiveWindow?.let { collectHeroNodes(it, this) } }
-            if (found == expected) return
-            Thread.sleep(100)
-        } while (SystemClock.uptimeMillis() < deadline)
-        assertEquals(expected, found)
-    }
+    private fun assertHeroNodesInPlatformTree(expected: List<Pair<String, Boolean>>) =
+        composeRule.assertPlatformTree(expected, PLATFORM_TREE_TIMEOUT_MS, ::collectHeroNodes)
 
     /** Every node announcing a hero page, with whether it holds input focus. */
     private fun collectHeroNodes(node: AccessibilityNodeInfo, into: MutableList<Pair<String, Boolean>>) {

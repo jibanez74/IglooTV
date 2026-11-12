@@ -2,18 +2,18 @@ package com.igloo.blindpenguincoder.feature.library
 
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.repository.TestHttp
+import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
-import io.ktor.client.engine.mock.MockRequestHandleScope
+import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
-
-/** One mocked route's answer. */
-internal typealias LibraryRoute =
-    suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData
 
 internal const val ERROR_BODY = """{"error":true,"message":"nope"}"""
 
@@ -41,11 +41,11 @@ internal class RoutedHttp {
 @OptIn(ExperimentalCoroutinesApi::class)
 internal fun TestScope.routedLibraryHttp(
     resource: String,
-    stats: LibraryRoute,
-    genres: LibraryRoute,
-    library: LibraryRoute,
-    genreList: LibraryRoute,
-    liked: LibraryRoute?,
+    stats: MockRequestHandler,
+    genres: MockRequestHandler,
+    library: MockRequestHandler,
+    genreList: MockRequestHandler,
+    liked: MockRequestHandler?,
 ): RoutedHttp {
     val routed = RoutedHttp()
     val genreListPath = Regex("/api/$resource/genres/(\\d+)/$resource")
@@ -97,3 +97,15 @@ internal fun LibraryUiState.gridIds(): List<Long> =
     (paged.content as IglooRailState.Loaded).items.map { it.id }
 
 internal fun HttpRequestData.page(): String = url.parameters["page"].orEmpty()
+
+/** The rows a loaded list holds; a test that reads them has already driven the list to Loaded. */
+internal fun <T> PagedState<T>.items(): List<T> = (content as IglooRailState.Loaded).items
+
+/** Collects a pane's play requests for the rest of the test; cancel the job when done. */
+internal fun TestScope.collectPlayRequests(
+    playRequests: Flow<MusicPlayRequest>,
+): Pair<MutableList<MusicPlayRequest>, Job> {
+    val requests = mutableListOf<MusicPlayRequest>()
+    val job = launch(UnconfinedTestDispatcher(testScheduler)) { playRequests.collect { requests += it } }
+    return requests to job
+}

@@ -29,9 +29,7 @@ import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shows.EpisodePlayPreparer
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
-import io.ktor.client.engine.mock.MockRequestHandleScope
-import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
@@ -91,25 +89,16 @@ class HomeViewModelTest {
      * wait for would resume the view model on `Dispatchers.Main` while `tearDown` resets it.
      */
     private fun TestScope.routedHttp(
-        continueWatching: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(continueWatchingJson()) },
-        latest: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(latestMoviesJson()) },
-        details: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(movieDetailsJson()) },
-        albums: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(latestAlbumsJson()) },
-        theaters: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(theaterMoviesJson()) },
-        latestShows: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(latestShowsJson()) },
-        showDetails: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(showDetailsJson()) },
-        episode: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(episodePlaybackJson()) },
-        episodeTechnical: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(episodeTechnicalDetailsJson()) },
-        episodeProgress: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+        continueWatching: MockRequestHandler = { jsonResponse(continueWatchingJson()) },
+        latest: MockRequestHandler = { jsonResponse(latestMoviesJson()) },
+        details: MockRequestHandler = { jsonResponse(movieDetailsJson()) },
+        albums: MockRequestHandler = { jsonResponse(latestAlbumsJson()) },
+        theaters: MockRequestHandler = { jsonResponse(theaterMoviesJson()) },
+        latestShows: MockRequestHandler = { jsonResponse(latestShowsJson()) },
+        showDetails: MockRequestHandler = { jsonResponse(showDetailsJson()) },
+        episode: MockRequestHandler = { jsonResponse(episodePlaybackJson()) },
+        episodeTechnical: MockRequestHandler = { jsonResponse(episodeTechnicalDetailsJson()) },
+        episodeProgress: MockRequestHandler =
             { jsonResponse(watchProgressJson(progressSec = 600.0, durationSec = 3300.0)) },
     ) = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
         val path = request.url.encodedPath
@@ -1262,8 +1251,8 @@ class HomeViewModelTest {
     @Test
     fun `a show page that cannot load leaves the movie page alone`() = runTest {
         suspend fun pagesWhen(
-            latestShows: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
-            showDetails: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
+            latestShows: MockRequestHandler,
+            showDetails: MockRequestHandler,
         ): List<HomeHeroKind> {
             val http = routedHttp(
                 latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat"))) },
@@ -1273,7 +1262,7 @@ class HomeViewModelTest {
             )
             return viewModel(http).awaitHeroPages().map { it.kind }
         }
-        val boom: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData = {
+        val boom: MockRequestHandler = {
             jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
         }
 

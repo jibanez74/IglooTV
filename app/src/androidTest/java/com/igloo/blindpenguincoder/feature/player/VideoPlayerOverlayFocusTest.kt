@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -35,6 +34,8 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
+import com.igloo.blindpenguincoder.focusAndPress
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.EpisodeContext
 import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
@@ -219,12 +220,28 @@ class VideoPlayerOverlayFocusTest {
     }
 
     /** Moves onto the show page's episode card [id] and presses it. */
-    private fun pressEpisodeCard(id: Long) {
-        val card = composeRule.onNodeWithTag("episode_card_$id")
-        card.requestFocus()
-        card.assertIsFocused()
-        card.performKeyInput { pressKey(Key.DirectionCenter) }
+    private fun pressEpisodeCard(id: Long) = composeRule.focusAndPress("episode_card_$id")
+
+    /**
+     * After Back from a player whose save failed: focus is on [anchorTag], the Retry tagged
+     * `<surface>_progress_retry` is one [toRetry] press away, and a retry that succeeds clears the
+     * error and returns focus to the anchor.
+     */
+    private fun assertRetryClearsTheErrorFrom(surface: String, anchorTag: String, toRetry: Key) {
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        composeRule.onNodeWithTag("${surface}_progress_error").assertExists()
+        val anchor = composeRule.onNodeWithTag(anchorTag)
+        anchor.assertIsFocused()
+        anchor.performKeyInput { pressKey(toRetry) }
+        val retry = composeRule.onNodeWithTag("${surface}_progress_retry")
+        retry.assertIsFocused()
+
+        failProgressSaves = false
+        retry.performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("${surface}_progress_error").assertDoesNotExist()
+        anchor.assertIsFocused()
     }
 
     private fun emitDelayedPlayRequest() {
@@ -267,29 +284,11 @@ class VideoPlayerOverlayFocusTest {
         composeRule
             .onAllNodesWithText("Couldn't save playback progress:", substring = true)
             .filterToOne(hasAnyAncestor(hasTestTag("movie_progress_error")))
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
 
         composeRule.pressBack()
 
-        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
-        composeRule.onNodeWithTag("details_progress_error").assertExists()
-        val play = composeRule.onNodeWithTag("details_play")
-        play.assertIsFocused()
-        play.performKeyInput { pressKey(Key.DirectionDown) }
-        val retry = composeRule.onNodeWithTag("details_progress_retry")
-        retry.assertIsFocused()
-
-        failProgressSaves = false
-        retry.performKeyInput { pressKey(Key.DirectionCenter) }
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithTag("details_progress_error").assertDoesNotExist()
-        play.assertIsFocused()
+        assertRetryClearsTheErrorFrom("details", anchorTag = "details_play", toRetry = Key.DirectionDown)
     }
 
     @Test
@@ -341,20 +340,11 @@ class VideoPlayerOverlayFocusTest {
 
         // No details page sits under a Home launch, so Home carries the Retry itself, directly
         // above the rail: Up from the card the player closed onto reaches it.
-        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
-        composeRule.onNodeWithTag("home_progress_error").assertExists()
-        val card = composeRule.onNodeWithTag("continue_episode_card_900")
-        card.assertIsFocused()
-        card.performKeyInput { pressKey(Key.DirectionUp) }
-        val retry = composeRule.onNodeWithTag("home_progress_retry")
-        retry.assertIsFocused()
-
-        failProgressSaves = false
-        retry.performKeyInput { pressKey(Key.DirectionCenter) }
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithTag("home_progress_error").assertDoesNotExist()
-        card.assertIsFocused()
+        assertRetryClearsTheErrorFrom(
+            "home",
+            anchorTag = "continue_episode_card_900",
+            toRetry = Key.DirectionUp,
+        )
     }
 
     @Test
@@ -426,20 +416,7 @@ class VideoPlayerOverlayFocusTest {
         composeRule.pressBack()
 
         // The show page carries the Retry under its hero action, one press down from Play.
-        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
-        composeRule.onNodeWithTag("details_progress_error").assertExists()
-        val play = composeRule.onNodeWithTag("details_play")
-        play.assertIsFocused()
-        play.performKeyInput { pressKey(Key.DirectionDown) }
-        val retry = composeRule.onNodeWithTag("details_progress_retry")
-        retry.assertIsFocused()
-
-        failProgressSaves = false
-        retry.performKeyInput { pressKey(Key.DirectionCenter) }
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithTag("details_progress_error").assertDoesNotExist()
-        play.assertIsFocused()
+        assertRetryClearsTheErrorFrom("details", anchorTag = "details_play", toRetry = Key.DirectionDown)
     }
 
     /** Each surface shows only the failures of the launches it made (section 11.8). */

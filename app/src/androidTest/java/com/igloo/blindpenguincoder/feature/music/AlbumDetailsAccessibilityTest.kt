@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -28,6 +27,8 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
+import com.igloo.blindpenguincoder.isHeading
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import com.igloo.blindpenguincoder.testAlbumDetails
 import com.igloo.blindpenguincoder.testAlbums
 import com.igloo.blindpenguincoder.testContinueMovies
@@ -113,12 +114,7 @@ class AlbumDetailsAccessibilityTest {
         )
 
         composeRule.onNodeWithContentDescription("Loading album details")
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
             .assertIsFocused()
     }
 
@@ -206,12 +202,7 @@ class AlbumDetailsAccessibilityTest {
             .assertTextEquals(
                 "Couldn't update like status: Something went wrong. Please try again.",
             )
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
     }
 
     @Test
@@ -295,8 +286,8 @@ class AlbumDetailsAccessibilityTest {
         setContent()
 
         composeRule.onNodeWithText("Track List")
-            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
+            .assert(isHeading())
         composeRule.onNodeWithText("Album Details")
-            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
+            .assert(isHeading())
     }
 }

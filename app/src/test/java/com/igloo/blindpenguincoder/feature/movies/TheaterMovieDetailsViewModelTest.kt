@@ -14,16 +14,13 @@ import com.igloo.blindpenguincoder.feature.shared.CrewEntry
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
 import com.igloo.blindpenguincoder.feature.shared.FactUi
-import io.ktor.client.engine.mock.MockRequestHandleScope
-import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -35,24 +32,12 @@ class TheaterMovieDetailsViewModelTest {
     @get:Rule
     val main = MainDispatcherRule()
 
-    // A view model outlives the test body — its scope is not runTest's child — so an unfinished
-    // load would still be on Dispatchers.Main when the next class calls setMain. Closing cancels
-    // it, which is also what Back does in production.
-    private val viewModels = mutableListOf<TheaterMovieDetailsViewModel>()
-
-    @After
-    fun tearDown() {
-        viewModels.forEach { it.close() }
-        viewModels.clear()
-    }
-
     private fun viewModel(http: TestHttp) =
         TheaterMovieDetailsViewModel(http.movieRepository, http.serverUrl)
-            .also { viewModels += it }
+            .also { main.closeAfter(it::close) }
 
     private fun TestScope.http(
-        respond: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(tmdbMovieJson()) },
+        respond: MockRequestHandler = { jsonResponse(tmdbMovieJson()) },
     ) = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
         check(request.url.encodedPath.startsWith("/api/tmdb/movies/")) {
             "Unrouted path: ${request.url.encodedPath}"
