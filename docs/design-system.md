@@ -5,8 +5,7 @@ The design system for **Igloo TV**, the Android TV client (Kotlin + Jetpack Comp
 - **Audience**: whoever is building or reviewing a screen in this repo.
 - **Status**: authoritative. `core/design/` implements this document; where they disagree,
   this document is the bug report and the code is what changes — or this document changes
-  first, deliberately. `AGENTS.md` §Design system and §"do not invent theme tokens" both
-  point here.
+  first, deliberately.
 - **Palette origin**: the Igloo web client (`../Igloo/web`). Colors are shared so the two
   clients stay recognizably one product. **Everything else — type sizes, spacing, geometry,
   focus, motion — is authored for the 10-foot TV target and does not mirror the web.**
@@ -359,8 +358,8 @@ Rules:
 - **16sp is the hard minimum for body copy.** If something needs to be smaller to fit, the
   layout is wrong, not the type. `label` at 15sp is the single exception and is reserved for
   short non-prose strings (nav labels, chips) — never a sentence.
-- **No new style without editing this table first.** `AGENTS.md` forbids inventing theme
-  tokens; adding a `TextStyle` in a feature package is exactly that. One is anticipated and
+- **No new style without editing this table first.** Inventing theme tokens is forbidden;
+  adding a `TextStyle` in a feature package is exactly that. One is anticipated and
   deliberately not added yet: `caption` (metadata chips). Add it when a feature actually needs it.
 - **`display` is sized against the vertical budget, not by eye.** At `UiScale.Large` with the
   font scale at its 1.30 ceiling, a 52sp line height renders at ~78dp per line — 16% of the 486dp
@@ -874,12 +873,14 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooRadioListDialog` | The scrimmed radio-list dialog behind Playback Settings and the player's track and chapter menus: the `IglooConfirmDialog` recipe (§9.3) — both, and the player's resume prompt, sit on the one `IglooDialogCard` frame (scrim, reveal, card, pane title, heading) — around one flat, scrolling list of `IglooRadioRow`s and a pinned Done. The caller draws the rows, applying `rowFocus(n)` to row `n`, which walks up/down and onto Done and cancels every other direction; entry focus lands on `entryIndex`. |
 | `IglooPinnedError` | A screen's full-screen error: `IglooInlineError` centred in the safe area at `dialogWidth`, its one action pinned in every direction because the host is still composed underneath. Assertive — it is the only region on screen. |
 | `ProgressTrack` | The one thin progress bar: 4dp, a ground and a fill, square where it sits flush on an edge (poster card, seek bar) and `rounded` where it stands free (the resume strip, the popularity meter). |
-| `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. A card whose text sits over the art hoists its `rememberArtworkState` so the §3.2 treatment follows the decode (the In Theaters card). |
+| `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. A surface whose text sits over the art hoists its `rememberArtworkState` so the §3.2 treatment follows the decode (the In Theaters card, the Home hero and the details hero, which draw the art themselves through `ArtworkImage`). |
+| `IglooGlyph` | A decorative glyph in one tint at `icons.md` unless told otherwise; no description, because the control or text it sits in says what it means. |
+| `pinnedSideways` / `pinnedToScreen` | The focus pins of §6: `pinnedSideways(up, down)` cancels Left and Right and names the vertical neighbours, a null one cancelled too; `pinnedToScreen()` cancels all four. |
 | `SectionHeading` | The one section heading style (`titleMedium`, `foreground`, `heading()`): every details section and every Home rail. |
 
 The details overlays share their hero from `feature/shared` — `DetailsHero` (the full-bleed
 backdrop, its two scrims and the decode-gated `overMedia` flag), `HeroArtwork`,
-`HeroReadingStop`, `HeroTitle`, `DetailChip`, `DetailsHeroSkeleton`, `DetailsHeroInfo` (title,
+`HeroReadingStop` (a `ReadingStopColumn`, like the Overview and Key Crew stops), `HeroTitle`, `DetailChip`, `DetailsHeroSkeleton`, `DetailsHeroInfo` (title,
 tagline, the metadata row of rating badge, chips and plain line spoken as one sentence, and the
 genres line inside the summary stop), `HeroSingleActionRow` (one Primary button, nullable press,
 optional state and an under-button slot), `ResumeProgress` (the resume strip and its reserved
@@ -2836,7 +2837,7 @@ The unread count polls every 30s; the full list is fetched only while the panel 
 
 ## 12. Accessibility
 
-Non-negotiable. `AGENTS.md` §Accessibility governs; this section covers the design-system side.
+Non-negotiable. This section covers the design-system side.
 
 - **Every screen works with D-pad only and with TalkBack on.** Both, at TV viewing distance.
 - **Focus visibility** is the accessibility feature on TV, more than any label. One treatment,
@@ -2921,7 +2922,7 @@ when syncing, and update the "Last verified" stamp at the top of this document.
 | Token group | Defined in |
 |---|---|
 | Colors (§3) | `core/design/IglooColors.kt` |
-| `UiScale`, `viewportFactor`, `effectiveScale` (§2) | `core/design/UiScale.kt` |
+| `UiScale`, `viewportFactor` (§2) | `core/design/UiScale.kt` |
 | Spacing, radius, sizes, icons, focus, layout (§5, §6, §8) | `core/design/IglooDimens.kt` |
 | Type styles (§4) | `core/design/IglooTypography.kt` |
 | Durations, easings, `iglooTween`, `rememberOverlayReveal`, `splashHold` (§7) | `core/design/IglooMotion.kt` |
@@ -2938,6 +2939,16 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-11-12 — Pre-feature cleanup: one primitive per repeated idiom (§9.1).**
+
+- **§9.1** gains `IglooGlyph` and the `pinnedSideways` / `pinnedToScreen` pair, and
+  `ArtworkOrGlyph`'s state now records the decode as well as the failure, so the Home hero and
+  the details hero read it instead of keeping their own flags. No rule changes: each replaces
+  copies that already followed this document.
+- The details overlays' reading stops share `ReadingStopColumn`.
+- Removed pointers to `AGENTS.md`, which is no longer in the repository, and Appendix B's
+  `effectiveScale`, a name the code never had.
 
 **2026-11-11 — TalkBack's Left from Home reaches the current destination (§6.3, §8.1, §11.2, §11.3.1).**
 

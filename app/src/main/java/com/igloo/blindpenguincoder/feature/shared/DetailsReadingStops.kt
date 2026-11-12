@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.feature.shared
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,8 +14,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -29,6 +28,7 @@ import com.igloo.blindpenguincoder.core.design.focusFill
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.pinnedSideways
 
 /**
  * The reading-stop treatment for a prose section while a screen reader runs: the About panel's
@@ -64,15 +64,51 @@ internal fun Modifier.readingStopTarget(
             scaleOnFocus = false,
         )
         .focusRequester(requester)
-        .focusProperties {
-            up = upRequester ?: Cancel
-            down = downRequester ?: Cancel
-            left = Cancel
-            right = Cancel
-        }
+        .pinnedSideways(up = upRequester, down = downRequester)
         .onFocusChanged { onFocusChanged(it.isFocused) }
         .focusable()
         .clearAndSetSemantics { contentDescription = description }
+}
+
+/**
+ * A column of prose that is one reading stop while [enabled] (see [readingStopTarget]) and
+ * plain text the d-pad passes by otherwise.
+ */
+@Composable
+internal fun ReadingStopColumn(
+    enabled: Boolean,
+    tag: String,
+    requester: FocusRequester,
+    upRequester: FocusRequester?,
+    downRequester: FocusRequester?,
+    description: String,
+    modifier: Modifier = Modifier,
+    radius: Dp = IglooTheme.radius.xl,
+    overMedia: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    Column(
+        modifier = modifier.then(
+            if (enabled) {
+                Modifier.readingStopTarget(
+                    tag = tag,
+                    focused = focused,
+                    requester = requester,
+                    upRequester = upRequester,
+                    downRequester = downRequester,
+                    onFocusChanged = { focused = it },
+                    description = description,
+                    radius = radius,
+                    overMedia = overMedia,
+                )
+            } else {
+                Modifier
+            },
+        ),
+        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+        content = content,
+    )
 }
 
 /** One facts-panel row; absent values never become rows, so the panel renders what it holds. */

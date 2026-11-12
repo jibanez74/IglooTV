@@ -3,7 +3,6 @@ package com.igloo.blindpenguincoder.feature.player
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +25,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
+import com.igloo.blindpenguincoder.core.design.iglooSafeArea
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
@@ -60,7 +60,6 @@ internal fun MusicPlayerChrome(
     onSkipToNext: () -> Unit,
     onSkipToPrevious: () -> Unit,
 ) {
-    val layout = IglooTheme.layout
     val playing = state.playWhenReady
     val trackTitle = currentTrack?.title ?: ""
     val transportUpRequester = if (spokenAccessibilityEnabled) metadataRequester else backRequester
@@ -104,10 +103,7 @@ internal fun MusicPlayerChrome(
             modifier = Modifier
                 .fillMaxWidth()
                 .playerBottomScrim()
-                .padding(
-                    horizontal = layout.safeAreaHorizontal,
-                    vertical = layout.safeAreaVertical,
-                ),
+                .iglooSafeArea(),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
             if (notice != null) {
@@ -162,14 +158,7 @@ internal fun MusicPlayerChrome(
             )
             fun Modifier.transportEdges(isFirst: Boolean = false, isLast: Boolean = false) =
                 transportFocus(transportUpRequester, isFirst, isLast)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(
-                    IglooTheme.spacing.lg,
-                    Alignment.CenterHorizontally,
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            PlayerTransportRow {
                 TransportButton(
                     icon = IglooIcons.SkipPrevious,
                     label = "Previous track",

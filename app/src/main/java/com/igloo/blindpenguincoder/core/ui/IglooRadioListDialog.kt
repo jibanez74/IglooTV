@@ -12,7 +12,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalInputModeManager
@@ -57,12 +56,10 @@ internal fun IglooRadioListDialog(
     }
 
     val rowFocus: Modifier.(Int) -> Modifier = { index ->
-        focusRequester(rowRequesters[index]).focusProperties {
-            left = FocusRequester.Cancel
-            right = FocusRequester.Cancel
-            up = rowRequesters.getOrNull(index - 1) ?: FocusRequester.Cancel
-            down = rowRequesters.getOrNull(index + 1) ?: doneRequester
-        }
+        focusRequester(rowRequesters[index]).pinnedSideways(
+            up = rowRequesters.getOrNull(index - 1),
+            down = rowRequesters.getOrNull(index + 1) ?: doneRequester,
+        )
     }
 
     IglooDialogCard(title = title, paneTitle = paneTitle, modifier = Modifier.testTag(testTag)) {
@@ -83,12 +80,7 @@ internal fun IglooRadioListDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(doneRequester)
-                .focusProperties {
-                    left = FocusRequester.Cancel
-                    right = FocusRequester.Cancel
-                    down = FocusRequester.Cancel
-                    up = rowRequesters.lastOrNull() ?: FocusRequester.Cancel
-                }
+                .pinnedSideways(up = rowRequesters.lastOrNull())
                 .testTag(doneTestTag),
         )
     }

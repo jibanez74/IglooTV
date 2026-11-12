@@ -26,6 +26,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
+import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.feature.shared.DetailChip
 import com.igloo.blindpenguincoder.feature.shared.FactsSection
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
@@ -150,7 +151,7 @@ private fun ArtistsSection(
         modifier = modifier
             .fillMaxWidth()
             .testTag("album_artists")
-            .then(if (actionable) Modifier else Modifier.clearAndSetSemantics { }),
+            .clearedSemanticsIf(!actionable),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
         SectionHeading(if (artists.size == 1) "Artist" else "Artists")

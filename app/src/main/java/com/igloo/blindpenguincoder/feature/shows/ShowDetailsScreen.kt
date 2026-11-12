@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,7 +23,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -35,7 +33,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
 import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.announcedSection
-import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
+import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.core.ui.rememberAnnouncedSectionColumn
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
@@ -50,6 +48,7 @@ import com.igloo.blindpenguincoder.feature.shared.ExtraVideosSection
 import com.igloo.blindpenguincoder.feature.shared.KeyCrewSection
 import com.igloo.blindpenguincoder.feature.shared.OverviewSection
 import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
+import com.igloo.blindpenguincoder.feature.shared.detailsSections
 import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 
 /** Which control asked for an episode; the host restores focus to it when the player closes. */
@@ -135,9 +134,7 @@ fun ShowDetailsScreen(
         // The menu occludes nothing, so the body leaves the semantics tree while it is up (the
         // movie details rule); the tag and the pane title stay outside, on the root.
         Box(
-            modifier = Modifier
-                .testTag("show_details_body")
-                .then(if (episodeMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
+            modifier = Modifier.clearedSemanticsIf(episodeMenu != null),
         ) {
             when (val details = state.details) {
                 // Geometry-matched to the hero it stands in for: a poster and one action, so the
@@ -342,8 +339,6 @@ private fun ShowDetailsContent(
     }
 
     val contentInset = PaddingValues(horizontal = layout.safeAreaHorizontal)
-    var entered by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { entered = true }
 
     DetailsScrollColumn(
         scrollState = scrollState,
@@ -382,10 +377,7 @@ private fun ShowDetailsContent(
         },
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = layout.safeAreaVertical)
-                .iglooEnterStagger(entered = entered, index = 0),
+            modifier = Modifier.detailsSections(),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
         ) {
             OverviewSection(

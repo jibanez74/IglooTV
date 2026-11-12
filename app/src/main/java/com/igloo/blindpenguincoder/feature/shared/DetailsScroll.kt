@@ -9,15 +9,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
+import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 
 /**
  * The scrolling column of a details page (docs/design-system.md section 11.4.1, Focus): the
@@ -84,4 +90,17 @@ private class HeroFirstScroll(
         val inHero = offset + scrolled < heroHeightPx && heroHeightPx <= containerSize
         return if (inHero) -scrolled else platform.calculateScrollDistance(offset, size, containerSize)
     }
+}
+
+/**
+ * The sections under a details hero: the full width, the bottom safe area, and the page's one
+ * entrance, which starts on the first composition.
+ */
+@Composable
+internal fun Modifier.detailsSections(): Modifier {
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    return fillMaxWidth()
+        .padding(bottom = IglooTheme.layout.safeAreaVertical)
+        .iglooEnterStagger(entered = entered, index = 0)
 }

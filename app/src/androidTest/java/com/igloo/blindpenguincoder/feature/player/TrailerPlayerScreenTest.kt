@@ -15,6 +15,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.letChromeHide
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEvent
 import com.igloo.blindpenguincoder.pressBack
@@ -79,17 +80,9 @@ class TrailerPlayerScreenTest {
     private fun lifecycleCommands(): List<String> =
         engine.commands.filter { it == "hostPaused" || it == "hostResumed" }
 
-    private fun startPlaying(durationSec: Double = 143.0) {
-        engine.emit(TrailerPlayerEvent.Ready(durationSec))
+    private fun startPlaying() {
+        engine.emit(TrailerPlayerEvent.Ready(143.0))
         engine.emit(TrailerPlayerEvent.StateChange(1))
-        composeRule.waitForIdle()
-    }
-
-    /** Runs the auto-hide clock dry so the chrome rests hidden over the playing video. */
-    private fun letChromeHide() {
-        composeRule.mainClock.autoAdvance = false
-        composeRule.mainClock.advanceTimeBy(4_500)
-        composeRule.mainClock.autoAdvance = true
         composeRule.waitForIdle()
     }
 
@@ -185,7 +178,7 @@ class TrailerPlayerScreenTest {
         startPlaying()
         engine.emit(TrailerPlayerEvent.Time(currentSec = 60.0, durationSec = 143.0))
         composeRule.waitForIdle()
-        letChromeHide()
+        composeRule.letChromeHide()
 
         val playPause = composeRule.onNodeWithTag("trailer_play_pause")
         playPause.performKeyInput { pressKey(Key.DirectionLeft) }

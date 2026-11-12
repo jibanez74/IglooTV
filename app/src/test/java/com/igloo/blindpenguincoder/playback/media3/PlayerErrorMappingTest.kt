@@ -22,8 +22,7 @@ class PlayerErrorMappingTest {
         } else {
             null
         },
-        mediaNoun: String = "movie",
-    ) = playerFailure(errorCode, errorCodeName, httpResponseCode, isHls, httpRequestPath, mediaNoun)
+    ) = playerFailure(errorCode, errorCodeName, httpResponseCode, isHls, httpRequestPath, "movie")
 
     // --- HTTP statuses outrank error codes ---
 

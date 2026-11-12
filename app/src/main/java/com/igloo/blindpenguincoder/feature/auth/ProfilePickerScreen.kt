@@ -206,7 +206,7 @@ private fun AddProfileTile(
         announce = false,
         enabled = enabled,
         onClick = onClick,
-        modifier = modifier.testTag("add_profile_tile"),
+        modifier = modifier,
     ) {
         Box(
             modifier = Modifier

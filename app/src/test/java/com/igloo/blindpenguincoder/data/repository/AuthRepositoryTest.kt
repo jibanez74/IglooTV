@@ -22,24 +22,15 @@ class AuthRepositoryTest {
     private fun repo(http: TestHttp) = http.authRepository
 
     /** A minted token is held pending until its owner is known. */
-    private fun TestHttp.pendingToken() = profileStore.vault.pendingToken
 
     private suspend fun TestHttp.activate(token: String) = profiles.setPending(token)
-
-    private val deviceTokenJson = """
-        {"error":false,"data":{"token":"igd_test","device":{
-            "id":9,"name":"Shield","platform":"android_tv","app_version":"0.1.0",
-            "created_at":"2026-07-01T00:00:00Z",
-            "last_used_at":"2026-07-01T00:01:00Z"
-        }}}
-    """.trimIndent()
 
     @Test
     fun `device login decodes and stores the token`() = runTest {
         val http = TestHttp { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals("$TEST_SERVER/auth/device-login", request.url.toString())
-            jsonResponse(deviceTokenJson)
+            jsonResponse(deviceTokenJson())
         }
 
         val result = repo(http).deviceLogin("jose@example.com", "hunter2")
@@ -53,7 +44,7 @@ class AuthRepositoryTest {
         var body: String? = null
         val http = TestHttp { request ->
             body = String(request.body.toByteArray())
-            jsonResponse(deviceTokenJson)
+            jsonResponse(deviceTokenJson())
         }
 
         repo(http).deviceLogin("jose@example.com", "hunter2")
@@ -137,7 +128,7 @@ class AuthRepositoryTest {
             requestIndex += 1
             assertNull(request.headers[HttpHeaders.Authorization])
             when {
-                request.url.encodedPath.endsWith("/auth/device-login") -> jsonResponse(deviceTokenJson)
+                request.url.encodedPath.endsWith("/auth/device-login") -> jsonResponse(deviceTokenJson())
                 request.url.encodedPath.endsWith("/quick-connect/initiate") -> jsonResponse(
                     body = """
                         {"error":false,"data":{
@@ -218,15 +209,7 @@ class AuthRepositoryTest {
     @Test
     fun `approved redeem stores the token`() = runTest {
         val http = TestHttp {
-            jsonResponse(
-                body = """
-                    {"error":false,"data":{"status":"approved","token":"igd_paired","device":{
-                        "id":9,"name":"Shield","platform":"android_tv","app_version":"0.1.0",
-                        "created_at":"2026-07-01T00:00:00Z",
-                        "last_used_at":"2026-07-01T00:01:00Z"
-                    }}}
-                """.trimIndent(),
-            )
+            jsonResponse(deviceTokenJson("igd_paired", status = "approved"))
         }
 
         val result = repo(http).redeemQuickConnect("ABCD12", "device-secret")

@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.core.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +14,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -38,11 +36,10 @@ internal fun IglooEmpty(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
     ) {
-        Image(
-            imageVector = icon,
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(colors.mutedForeground.copy(alpha = 0.6f)),
-            modifier = Modifier.size(IglooTheme.icons.lg),
+        IglooGlyph(
+            icon = icon,
+            tint = colors.mutedForeground.copy(alpha = 0.6f),
+            size = IglooTheme.icons.lg,
         )
         IglooText(
             text = message,

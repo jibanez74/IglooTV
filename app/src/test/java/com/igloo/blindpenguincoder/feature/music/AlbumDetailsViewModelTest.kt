@@ -11,16 +11,13 @@ import com.igloo.blindpenguincoder.data.repository.albumTrackJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.trackGenreJson
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
-import io.ktor.client.engine.mock.MockRequestHandleScope
-import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -32,23 +29,11 @@ class AlbumDetailsViewModelTest {
     @get:Rule
     val main = MainDispatcherRule()
 
-    // A view model outlives the test body — its scope is not runTest's child — so an unfinished
-    // load would still be on Dispatchers.Main when the next class calls setMain. Closing cancels
-    // it, which is also what Back does in production.
-    private val viewModels = mutableListOf<AlbumDetailsViewModel>()
-
-    @After
-    fun tearDown() {
-        viewModels.forEach { it.close() }
-        viewModels.clear()
-    }
-
     private fun viewModel(http: TestHttp) =
-        AlbumDetailsViewModel(http.musicRepository).also { viewModels += it }
+        AlbumDetailsViewModel(http.musicRepository).also { main.closeAfter(it::close) }
 
     private fun TestScope.http(
-        respond: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(albumDetailsJson()) },
+        respond: MockRequestHandler = { jsonResponse(albumDetailsJson()) },
     ) = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
         check(request.url.encodedPath.startsWith("/api/music/albums/details/")) {
             "Unrouted path: ${request.url.encodedPath}"
@@ -61,18 +46,15 @@ class AlbumDetailsViewModelTest {
 
     private fun track(
         id: Long = 1,
-        trackIndex: Long = 1,
-        durationMs: Long = 125_000,
-        disc: Long = 1,
         codec: String = "flac",
         bitRate: Long = 900_000,
         channelLayout: String = "stereo",
     ) = AlbumTrack(
         id = id,
         title = "Track $id",
-        trackIndex = trackIndex,
-        duration = durationMs,
-        disc = disc,
+        trackIndex = 1,
+        duration = 125_000,
+        disc = 1,
         codec = codec,
         bitRate = bitRate,
         channelLayout = channelLayout,

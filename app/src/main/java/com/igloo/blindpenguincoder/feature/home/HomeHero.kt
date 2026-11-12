@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -43,7 +42,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -54,8 +52,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import coil3.compose.AsyncImage
-import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.CONFIRM_KEYS
 import com.igloo.blindpenguincoder.core.design.IglooEasing
 import com.igloo.blindpenguincoder.core.design.IglooMotion
@@ -66,11 +62,14 @@ import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.overMediaSideScrim
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.ui.ArtworkImage
+import com.igloo.blindpenguincoder.core.ui.ArtworkState
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SkeletonStub
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.insetHorizontally
 import com.igloo.blindpenguincoder.core.ui.joinedLine
+import com.igloo.blindpenguincoder.core.ui.rememberArtworkState
 import com.igloo.blindpenguincoder.feature.shared.HeroMetadataRow
 
 /**
@@ -132,8 +131,9 @@ fun HomeHero(
     var focused by remember { mutableStateOf(false) }
     val activeIndex = pages.indexOfFirst { it != null && it.kind == pageKind }.takeIf { it >= 0 } ?: 0
     val activePage = pages[activeIndex]
+    // Hoisted out of the art so the plate reads the decode too: over-media text needs media behind it.
     val arts = pages.mapIndexed { index, page ->
-        key(index) { remember(page?.backdropUrl) { HeroArt() } }
+        key(index) { rememberArtworkState(page?.backdropUrl) }
     }
     val transition = updateTransition(targetState = activeIndex, label = "heroPage")
     val openPage = activePage?.let { page ->
@@ -160,7 +160,6 @@ fun HomeHero(
                 if (page != null) {
                     key(index) {
                         HeroArtLayer(
-                            url = page.backdropUrl,
                             art = arts[index],
                             pageAlpha = transition.artAlpha(index),
                             modifier = Modifier
@@ -312,48 +311,24 @@ internal fun heroPageDescription(hero: HomeHero, index: Int, count: Int): String
 }
 
 /**
- * Whether a page's backdrop has decoded or failed. Hoisted out of the art so the plate can read
- * it too: section 3.2's over-media literals are licensed only by media actually behind them, and
- * a URL alone would paint white text over the bare fill for the whole load window.
- */
-@Stable
-private class HeroArt {
-    var loaded by mutableStateOf(false)
-    var failed by mutableStateOf(false)
-}
-
-/**
  * One page's backdrop and its two over-media scrims, which fade in together once the image
  * decodes and are absent when there is none — the page is then the plain card fill (section 3.2).
  * The inactive page's image still loads, at zero alpha, so a page turn never waits on the network.
  */
 @Composable
 private fun HeroArtLayer(
-    url: String?,
-    art: HeroArt,
+    art: ArtworkState,
     pageAlpha: () -> Float,
     modifier: Modifier = Modifier,
 ) {
-    if (url == null || art.failed) return
+    if (!art.showsArtwork) return
     val decodeAlpha by animateFloatAsState(
         targetValue = if (art.loaded) 1f else 0f,
         animationSpec = iglooTween(IglooMotion.PAGE_MS),
         label = "heroBackdrop",
     )
     Box(modifier = modifier.graphicsLayer { alpha = pageAlpha() * decodeAlpha }) {
-        AsyncImage(
-            model = url,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            onState = { state ->
-                when (state) {
-                    is AsyncImagePainter.State.Success -> art.loaded = true
-                    is AsyncImagePainter.State.Error -> art.failed = true
-                    else -> Unit
-                }
-            },
-            modifier = Modifier.matchParentSize(),
-        )
+        ArtworkImage(art, Modifier.matchParentSize())
         // Over-media literals per section 3.2. The side scrim carries the text column against
         // busy art — the detail hero's, because the old card ramp decays to almost nothing across
         // a full-bleed panel. The bottom one carries the title and the page dots. Both fill with

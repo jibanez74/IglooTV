@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -11,7 +12,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -49,7 +49,10 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
 import com.igloo.blindpenguincoder.findActivity
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
+import com.igloo.blindpenguincoder.letChromeHide
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
+import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.EpisodeContext
 import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
@@ -192,52 +195,24 @@ class VideoPlayerScreenTest {
         lifecycleOwner = TestLifecycleOwner()
         lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         composeRule.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
-            IglooTheme {
-                CompositionLocalProvider(
-                    LocalLifecycleOwner provides lifecycleOwner,
-                    com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery provides networkRecovery,
-                ) {
-                    if (open) {
-                        VideoPlayerScreen(
-                            request = requireNotNull(currentRequest),
-                            viewModel = viewModel,
-                            onClose = {
-                                closes += 1
-                                open = false
-                            },
-                            onPlaybackModeRequested = { mode ->
-                                requestedModes += mode
-                                currentRequest = requireNotNull(currentRequest).copy(mode = mode)
-                            },
-                            onTrackSelectionChanged = { audioTypeIndex, subtitleTypeIndex ->
-                                currentRequest = requireNotNull(currentRequest).copy(
-                                    audioTypeIndex = audioTypeIndex,
-                                    subtitleTypeIndex = subtitleTypeIndex,
-                                )
-                            },
-                            engineFactory = { _, engineRequest ->
-                                engineRequests += engineRequest
-                                engine.setCurrentTrackSelection(
-                                    engineRequest.audioTypeIndex,
-                                    engineRequest.subtitleTypeIndex,
-                                )
-                                engine
-                            },
-                            prepareUpNext = { next ->
-                                prepared += next
-                                prepareUpNext(next)
-                            },
-                            // The host mounts the next screen; here the hand-off ends this one.
-                            onAdvance = { next ->
-                                advanced += next
-                                open = false
-                            },
-                        )
-                    }
-                }
-            }
+            PlayerHost(
+                engineFactory = { engineRequest ->
+                    engine.setCurrentTrackSelection(
+                        engineRequest.audioTypeIndex,
+                        engineRequest.subtitleTypeIndex,
+                    )
+                    engine
+                },
+                prepareUpNext = { next ->
+                    prepared += next
+                    prepareUpNext(next)
+                },
+                // The host mounts the next screen; here the hand-off ends this one.
+                onAdvance = { next ->
+                    advanced += next
+                    open = false
+                },
+            )
         }
         composeRule.waitForIdle()
     }
@@ -262,54 +237,70 @@ class VideoPlayerScreenTest {
         lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         restorationTester = StateRestorationTester(composeRule)
         restorationTester.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
-            IglooTheme {
-                CompositionLocalProvider(
-                    LocalLifecycleOwner provides lifecycleOwner,
-                    com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery provides networkRecovery,
-                ) {
-                    if (open) {
-                        VideoPlayerScreen(
-                            request = requireNotNull(currentRequest),
-                            viewModel = viewModel,
-                            onClose = {
-                                closes += 1
-                                open = false
-                            },
-                            onPlaybackModeRequested = { mode ->
-                                requestedModes += mode
-                                currentRequest = requireNotNull(currentRequest).copy(mode = mode)
-                            },
-                            onTrackSelectionChanged = { audioTypeIndex, subtitleTypeIndex ->
-                                currentRequest = requireNotNull(currentRequest).copy(
-                                    audioTypeIndex = audioTypeIndex,
-                                    subtitleTypeIndex = subtitleTypeIndex,
-                                )
-                            },
-                            engineFactory = { _, engineRequest ->
-                                engineRequests += engineRequest
-                                FakeVideoPlayerEngine().also {
-                                    it.setCurrentTrackSelection(
-                                        engineRequest.audioTypeIndex,
-                                        engineRequest.subtitleTypeIndex,
-                                    )
-                                    engine = it
-                                    restorationEngines += it
-                                }
-                            },
-                            prepareUpNext = { ApiResult.Failure(AppError.Network) },
-                            onAdvance = {},
+            PlayerHost(
+                engineFactory = { engineRequest ->
+                    FakeVideoPlayerEngine().also {
+                        it.setCurrentTrackSelection(
+                            engineRequest.audioTypeIndex,
+                            engineRequest.subtitleTypeIndex,
                         )
+                        engine = it
+                        restorationEngines += it
                     }
-                }
-            }
+                },
+                prepareUpNext = { ApiResult.Failure(AppError.Network) },
+                onAdvance = {},
+            )
         }
         composeRule.waitForIdle()
     }
 
-    private fun startPlaying(durationSec: Double = 7200.0) {
-        engine.emit(VideoPlayerEvent.Ready(durationSec))
+    /** The screen as both hosts mount it: under the test's lifecycle and network locals, while [open]. */
+    @Composable
+    private fun PlayerHost(
+        engineFactory: (VideoPlayRequest) -> VideoPlayerEngine,
+        prepareUpNext: suspend (UpNextEpisode) -> ApiResult<VideoPlayRequest>,
+        onAdvance: (VideoPlayRequest) -> Unit,
+    ) {
+        val context = LocalContext.current
+        SideEffect { hostActivity = context.findActivity() }
+        IglooTheme {
+            CompositionLocalProvider(
+                LocalLifecycleOwner provides lifecycleOwner,
+                com.igloo.blindpenguincoder.feature.auth.LocalNetworkRecovery provides networkRecovery,
+            ) {
+                if (open) {
+                    VideoPlayerScreen(
+                        request = requireNotNull(currentRequest),
+                        viewModel = viewModel,
+                        onClose = {
+                            closes += 1
+                            open = false
+                        },
+                        onPlaybackModeRequested = { mode ->
+                            requestedModes += mode
+                            currentRequest = requireNotNull(currentRequest).copy(mode = mode)
+                        },
+                        onTrackSelectionChanged = { audioTypeIndex, subtitleTypeIndex ->
+                            currentRequest = requireNotNull(currentRequest).copy(
+                                audioTypeIndex = audioTypeIndex,
+                                subtitleTypeIndex = subtitleTypeIndex,
+                            )
+                        },
+                        engineFactory = { _, engineRequest ->
+                            engineRequests += engineRequest
+                            engineFactory(engineRequest)
+                        },
+                        prepareUpNext = prepareUpNext,
+                        onAdvance = onAdvance,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun startPlaying() {
+        engine.emit(VideoPlayerEvent.Ready(7200.0))
         engine.emit(VideoPlayerEvent.IsPlayingChanged(true))
         composeRule.waitForIdle()
     }
@@ -385,13 +376,6 @@ class VideoPlayerScreenTest {
         },
         requestedMode,
     )
-
-    private fun letChromeHide() {
-        composeRule.mainClock.autoAdvance = false
-        composeRule.mainClock.advanceTimeBy(4_500)
-        composeRule.mainClock.autoAdvance = true
-        composeRule.waitForIdle()
-    }
 
     private fun awaitSaveCount(expected: Int) {
         composeRule.waitUntil(timeoutMillis = 5_000) { savedRequests.size >= expected }
@@ -617,7 +601,7 @@ class VideoPlayerScreenTest {
         startPlaying()
         engine.emit(VideoPlayerEvent.Time(currentSec = 30.0, durationSec = 7200.0))
         composeRule.waitForIdle()
-        letChromeHide()
+        composeRule.letChromeHide()
 
         val playPause = composeRule.onNodeWithTag("movie_play_pause")
         playPause.performKeyInput { pressKey(Key.MediaRewind) }
@@ -635,7 +619,7 @@ class VideoPlayerScreenTest {
         startPlaying()
         engine.emit(VideoPlayerEvent.Time(currentSec = 60.0, durationSec = 7200.0))
         composeRule.waitForIdle()
-        letChromeHide()
+        composeRule.letChromeHide()
 
         val playPause = composeRule.onNodeWithTag("movie_play_pause")
         playPause.performKeyInput { pressKey(Key.DirectionLeft) }
@@ -882,22 +866,12 @@ class VideoPlayerScreenTest {
 
         composeRule.onNodeWithText("Waiting for the server to free up…").assertExists()
         composeRule.onNodeWithContentDescription("Waiting for the server to free up…")
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
 
         engine.emit(VideoPlayerEvent.StatusMessage("Reconnecting to the stream…"))
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("Reconnecting to the stream…")
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
 
         startPlaying()
         engine.emit(VideoPlayerEvent.Buffering)
@@ -905,12 +879,7 @@ class VideoPlayerScreenTest {
 
         composeRule.onNodeWithText("Buffering…").assertExists()
         composeRule.onNodeWithContentDescription("Buffering")
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
     }
 
     @Test
@@ -1837,7 +1806,7 @@ class VideoPlayerScreenTest {
     @Test
     fun upAndDownFromTheCardRevealTheChromeAndTheCardKeepsCounting() {
         playEpisodeTo(7185)
-        letChromeHide()
+        composeRule.letChromeHide()
         upNextCard().assertIsFocused()
 
         upNextCard().performKeyInput { pressKey(Key.DirectionDown) }
@@ -1861,7 +1830,7 @@ class VideoPlayerScreenTest {
     @Test
     fun leftAndRightOnTheFocusedCardNeitherSeekNorMoveFocus() {
         playEpisodeTo(7185)
-        letChromeHide()
+        composeRule.letChromeHide()
         val commandsBefore = engine.playbackCommands.toList()
 
         upNextCard().performKeyInput { pressKey(Key.DirectionLeft) }
@@ -1875,7 +1844,7 @@ class VideoPlayerScreenTest {
     @Test
     fun mediaKeysStillActWithTheCardFocused() {
         playEpisodeTo(7185)
-        letChromeHide()
+        composeRule.letChromeHide()
 
         upNextCard().performKeyInput { pressKey(Key.MediaPause) }
         composeRule.waitForIdle()

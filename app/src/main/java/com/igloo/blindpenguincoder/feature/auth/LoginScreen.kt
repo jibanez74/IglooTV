@@ -45,7 +45,7 @@ fun LoginScreen(
     ) {
         RestoreErrorRetry(restoreError, viewModel::retryRestore)
         state.error?.let { message ->
-            IglooInlineError(message = message, modifier = Modifier.fillMaxWidth())
+            IglooInlineError(message = message)
         }
         if (notice != null) {
             IglooNotice(text = notice)

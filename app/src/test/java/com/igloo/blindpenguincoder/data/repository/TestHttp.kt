@@ -4,14 +4,20 @@ import com.igloo.blindpenguincoder.core.config.DeviceIdentity
 import com.igloo.blindpenguincoder.core.config.ServerAddress
 import com.igloo.blindpenguincoder.core.config.ServerAddressParseResult
 import com.igloo.blindpenguincoder.core.config.parseServerAddress
+import com.igloo.blindpenguincoder.core.image.ImageCache
+import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.network.AuthEventBus
 import com.igloo.blindpenguincoder.core.network.BearerTokenProvider
+import com.igloo.blindpenguincoder.core.network.NetworkAccess
 import com.igloo.blindpenguincoder.core.network.ServerHealthProbe
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.UnrestrictedNetworkAccess
 import com.igloo.blindpenguincoder.core.network.createIglooHttpClient
 import com.igloo.blindpenguincoder.core.network.createServerProbeHttpClient
 import com.igloo.blindpenguincoder.core.storage.FakeProfileStore
+import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ProfileVault
+import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.core.storage.StoredProfile
 import com.igloo.blindpenguincoder.data.api.AuthApi
 import com.igloo.blindpenguincoder.data.api.MovieApi
@@ -19,6 +25,7 @@ import com.igloo.blindpenguincoder.data.api.MusicApi
 import com.igloo.blindpenguincoder.data.api.SearchApi
 import com.igloo.blindpenguincoder.data.api.ShowApi
 import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
+import com.igloo.blindpenguincoder.feature.auth.SessionManager
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockEngineConfig
@@ -30,6 +37,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 
 const val TEST_SERVER = "http://igloo.test:8080/api"
 
@@ -47,10 +55,7 @@ class TestHttp(
     val credentials = BearerTokenProvider()
     val authEvents = AuthEventBus()
 
-    /** Advanced by tests that care about last-used ordering. */
-    var clockMillis = 1_000L
-
-    val profiles = ProfileRepository(profileStore, credentials, clock = { clockMillis })
+    val profiles = ProfileRepository(profileStore, credentials, clock = { 1_000L })
     val serverUrl = ServerUrlProvider().apply { set(testServerAddress()) }
     val client: HttpClient = createIglooHttpClient(
         credentials = credentials,
@@ -64,16 +69,25 @@ class TestHttp(
     )
     val api = AuthApi(client, serverUrl)
     val authRepository = AuthRepository(api, profiles, testDeviceIdentity)
-    val movieApi = MovieApi(client, serverUrl)
-    val movieRepository = MovieRepository(movieApi)
-    val musicApi = MusicApi(client, serverUrl)
-    val musicRepository = MusicRepository(musicApi)
-    val searchApi = SearchApi(client, serverUrl)
-    val searchRepository = SearchRepository(searchApi)
-    val showApi = ShowApi(client, serverUrl)
-    val showRepository = ShowRepository(showApi)
-    val videoPlaybackApi = VideoPlaybackApi(client, serverUrl)
-    val videoPlaybackRepository = VideoPlaybackRepository(videoPlaybackApi)
+    val movieRepository = MovieRepository(MovieApi(client, serverUrl))
+    val musicRepository = MusicRepository(MusicApi(client, serverUrl))
+    val searchRepository = SearchRepository(SearchApi(client, serverUrl))
+    val showRepository = ShowRepository(ShowApi(client, serverUrl))
+    val videoPlaybackRepository = VideoPlaybackRepository(VideoPlaybackApi(client, serverUrl))
+
+    /** A minted token is held pending until its owner is known. */
+    fun pendingToken() = profileStore.vault.pendingToken
+
+    /** A session manager over this stack, its clock frozen unless a test passes [elapsed]. */
+    fun sessionManager(
+        scope: CoroutineScope,
+        settings: ServerSettingsStore = ServerSettingsStore(InMemoryPreferencesDataStore()),
+        imageCache: ImageCache = NoOpImageCache,
+        elapsed: () -> Long = { 0L },
+        networkAccess: NetworkAccess = UnrestrictedNetworkAccess,
+    ) = SessionManager(
+        authRepository, profiles, settings, serverUrl, authEvents, scope, imageCache, elapsed, networkAccess,
+    )
 
     /** Puts profiles in the vault without going through a sign-in. */
     fun seedVault(
@@ -938,6 +952,15 @@ fun episodeWatchedJson(episodeId: Long = 900, watched: Boolean = true): String =
     """{"error":false,"message":"watched updated","data":{"episode_id":$episodeId,"watched":$watched}}"""
 
 /** `GET /auth/user` payload; `has_pin` is required by the contract. */
+/** A minted device token, as login sends it; [status] is the field quick-connect's redeem adds. */
+fun deviceTokenJson(token: String = "igd_test", status: String? = null): String = """
+    {"error":false,"data":{${status?.let { "\"status\":\"$it\"," }.orEmpty()}"token":"$token","device":{
+        "id":9,"name":"Shield","platform":"android_tv","app_version":"0.1.0",
+        "created_at":"2026-07-01T00:00:00Z",
+        "last_used_at":"2026-07-01T00:01:00Z"
+    }}}
+""".trimIndent()
+
 fun authUserJson(
     id: Long = 1,
     name: String = "Jose",

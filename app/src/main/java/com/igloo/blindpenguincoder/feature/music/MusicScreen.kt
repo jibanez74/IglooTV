@@ -14,7 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -24,13 +23,14 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
+import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.core.ui.countNoun
+import com.igloo.blindpenguincoder.core.ui.jsonSaver
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.PaneEmpty
@@ -50,6 +50,7 @@ import com.igloo.blindpenguincoder.feature.shared.loadedItems
 import com.igloo.blindpenguincoder.feature.shared.paneCardlessAnchor
 import com.igloo.blindpenguincoder.feature.shared.paneCountLine
 import com.igloo.blindpenguincoder.feature.shared.showingCountLine
+import kotlinx.serialization.Serializable
 
 /** What the Music pane needs from its view model, bundled rather than threaded as ten lambdas. */
 data class MusicActions(
@@ -70,18 +71,12 @@ data class MusicActions(
 /**
  * Which row and which of its three controls the Tracks tab last had focus on, so a return —
  * from the player, or from an album opened through More — lands on the exact control that led
- * away. Saved as `"id:column"`.
+ * away.
  */
+@Serializable
 data class TrackFocusMemory(val id: Long, val column: TrackRowColumn) {
     companion object {
-        val Saver: Saver<TrackFocusMemory?, String> = Saver(
-            save = { memory -> memory?.let { "${it.id}:${it.column.name}" } ?: "" },
-            restore = { saved ->
-                saved.split(':').takeIf { it.size == 2 }?.let { (id, column) ->
-                    runCatching { TrackFocusMemory(id.toLong(), TrackRowColumn.valueOf(column)) }.getOrNull()
-                }
-            },
-        )
+        val Saver = jsonSaver<TrackFocusMemory>()
     }
 }
 
@@ -154,7 +149,7 @@ fun MusicScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("music_body")
-                .then(if (trackMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
+                .clearedSemanticsIf(trackMenu != null),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
             PaneHeader(
@@ -244,8 +239,8 @@ fun MusicScreen(
                 firstItemRequester = firstItemRequester,
                 cardlessHandoffRequester = cardlessHandoffRequester,
                 focusOwnership = focusOwnership,
-                            screenReader = spokenAccessibilityEnabled,
-)
+                screenReader = spokenAccessibilityEnabled,
+            )
 
             when (content) {
                 MusicContent.Loading -> when (tab) {

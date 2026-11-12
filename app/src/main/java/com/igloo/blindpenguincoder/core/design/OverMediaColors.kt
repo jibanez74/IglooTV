@@ -12,6 +12,9 @@ import androidx.compose.ui.graphics.Color
 /** The ground of a chip or control over media, held through focus. */
 internal val OVER_MEDIA_CONTROL_FILL = Color.Black.copy(alpha = 0.45f)
 
+/** The hairline around a chip or control over media. */
+internal val OVER_MEDIA_HAIRLINE = Color.White.copy(alpha = 0.25f)
+
 /** Secondary text over media. */
 internal val OVER_MEDIA_SECONDARY = Color.White.copy(alpha = 0.85f)
 

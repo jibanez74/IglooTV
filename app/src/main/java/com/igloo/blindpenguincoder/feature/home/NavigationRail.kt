@@ -2,7 +2,6 @@ package com.igloo.blindpenguincoder.feature.home
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -34,7 +33,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -58,6 +56,7 @@ import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.IglooAvatar
 import com.igloo.blindpenguincoder.core.ui.IglooBrandMark
+import com.igloo.blindpenguincoder.core.ui.IglooGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.focusRing
@@ -328,12 +327,7 @@ private fun RailRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
     ) {
-        Image(
-            imageVector = icon,
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(iconTint(focused)),
-            modifier = Modifier.size(IglooTheme.icons.md),
-        )
+        IglooGlyph(icon = icon, tint = iconTint(focused))
         RailLabel(
             text = label,
             style = IglooTheme.typography.label,

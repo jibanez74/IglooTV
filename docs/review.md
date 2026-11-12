@@ -351,9 +351,9 @@ release {
 
 No R8 optimization and no resource shrinking. For a Compose + Media3 + Coil + Ktor app on
 low-end TV hardware this means a larger APK, more DEX to verify at install, and a slower cold
-start. ProGuard rules already exist; enabling `isMinifyEnabled = true` and
-`isShrinkResources = true` for release is usually a measurable win. Keep `isMinifyEnabled = false`
-for debug if desired.
+start. `proguard-rules.pro` is wired in but empty, so keep rules come first; enabling
+`isMinifyEnabled = true` and `isShrinkResources = true` for release is usually a measurable win.
+Keep `isMinifyEnabled = false` for debug if desired.
 
 ---
 

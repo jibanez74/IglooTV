@@ -138,12 +138,7 @@ private fun AuthHeadline(
             color = colors.mutedForeground,
         )
     }
-    val mark: @Composable () -> Unit = {
-        IglooBrandMark(
-            size = 64.dp.scaled(),
-            textStyle = IglooTheme.typography.titleLarge,
-        )
-    }
+    val mark: @Composable () -> Unit = { AuthBrandMark() }
 
     if (stacked) {
         Column(
@@ -197,7 +192,6 @@ internal fun RestoreErrorRetry(error: AppError?, onRetry: () -> Unit) {
         actionText = "Retry",
         actionSemanticLabel = "Retry connecting to server",
         onAction = onRetry,
-        modifier = Modifier.fillMaxWidth(),
     )
 }
 
@@ -213,4 +207,10 @@ internal fun AuthBusyText(text: String) {
         color = IglooTheme.colors.mutedForeground,
         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
     )
+}
+
+/** The large brand tile every auth surface opens with. */
+@Composable
+internal fun AuthBrandMark() {
+    IglooBrandMark(size = 64.dp.scaled(), textStyle = IglooTheme.typography.titleLarge)
 }

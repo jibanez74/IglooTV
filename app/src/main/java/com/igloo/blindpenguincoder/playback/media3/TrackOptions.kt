@@ -5,8 +5,9 @@ import androidx.media3.common.Tracks
 import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.TrackOption
+import com.igloo.blindpenguincoder.playback.model.describeAudioTrack
 import com.igloo.blindpenguincoder.playback.model.describeChannelLayout
-import com.igloo.blindpenguincoder.playback.model.languageDisplayName
+import com.igloo.blindpenguincoder.playback.model.describeSubtitleTrack
 
 /**
  * ExoPlayer's [Tracks] as menu rows, labelled with the same vocabulary as the pre-play dialog.
@@ -17,13 +18,11 @@ import com.igloo.blindpenguincoder.playback.model.languageDisplayName
 internal fun audioTrackOptions(tracks: Tracks): List<TrackOption> =
     typeGroups(tracks, C.TRACK_TYPE_AUDIO).mapIndexed { ordinal, (groupIndex, group) ->
         val format = group.getTrackFormat(0)
-        val language = languageDisplayName(format.language) ?: "Track ${ordinal + 1}"
-        val layout = format.channelCount.takeIf { it > 0 }
-            ?.let { " · ${describeChannelLayout(null, it.toLong())}" }
-            .orEmpty()
+        val channels = format.channelCount.takeIf { it > 0 }
+            ?.let { describeChannelLayout(null, it.toLong()) }
         TrackOption(
             id = groupOptionId(groupIndex),
-            label = "$language$layout",
+            label = describeAudioTrack(format.language, channels, ordinal),
             selected = group.isTrackSelected(0),
         )
     }
@@ -31,17 +30,15 @@ internal fun audioTrackOptions(tracks: Tracks): List<TrackOption> =
 internal fun subtitleTrackOptions(tracks: Tracks): List<TrackOption> =
     typeGroups(tracks, C.TRACK_TYPE_TEXT).mapIndexed { ordinal, (groupIndex, group) ->
         val format = group.getTrackFormat(0)
-        val language = languageDisplayName(format.language)
-        val title = format.label?.takeIf { it.isNotBlank() && it != language }
-        val parts = buildList {
-            language?.let { add(it) }
-            title?.let { add(it) }
-            if (format.selectionFlags and C.SELECTION_FLAG_FORCED != 0) add("Forced")
-            if (format.selectionFlags and C.SELECTION_FLAG_DEFAULT != 0) add("Default")
-        }
         TrackOption(
             id = groupOptionId(groupIndex),
-            label = if (parts.isNotEmpty()) parts.joinToString(" · ") else "Track ${ordinal + 1}",
+            label = describeSubtitleTrack(
+                languageCode = format.language,
+                title = format.label,
+                forced = format.selectionFlags and C.SELECTION_FLAG_FORCED != 0,
+                isDefault = format.selectionFlags and C.SELECTION_FLAG_DEFAULT != 0,
+                ordinal = ordinal,
+            ),
             selected = group.isTrackSelected(0),
         )
     }

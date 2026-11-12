@@ -1,13 +1,6 @@
 package com.igloo.blindpenguincoder.feature.auth
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -17,22 +10,21 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AssertReferenceViewport
+import com.igloo.blindpenguincoder.ReferenceViewport
+import com.igloo.blindpenguincoder.VIEWPORT_TAG
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
 import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 private const val SERVER_ORIGIN = "http://192.0.2.1:8080"
-
-/** The 960×540 box the card is measured against — see `assertFullyOnscreen`. */
-private const val VIEWPORT_TAG = "tv-viewport"
 
 private const val NOTICE =
     "Signed out on this TV. The server couldn't be reached, so it may still list " +
@@ -111,12 +103,7 @@ class QuickConnectLayoutTest {
 
         composeRule.onNodeWithText(NOTICE)
             .assertIsDisplayed()
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
         composeRule.onNodeWithContentDescription("Use email and password instead")
             .assertIsFocused()
             .assertFullyOnscreen("switch button with a notice")
@@ -133,11 +120,7 @@ class QuickConnectLayoutTest {
             AssertReferenceViewport()
             IglooTheme(uiScale = UiScale.Standard) {
                 CompositionLocalProvider(LocalIglooReducedMotion provides true) {
-                    Box(
-                        Modifier
-                            .size(width = 960.dp, height = 540.dp)
-                            .testTag(VIEWPORT_TAG),
-                    ) {
+                    ReferenceViewport {
                         QuickConnectContent(
                             phase = phase,
                             serverOrigin = SERVER_ORIGIN,

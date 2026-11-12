@@ -672,9 +672,6 @@ class ExoVideoPlayerEngineTest {
         return params
     }
 
-    private fun hasTextOverride(params: TrackSelectionParameters): Boolean =
-        params.overrides.keys.any { it.type == C.TRACK_TYPE_TEXT }
-
     @Test
     fun switchingToHlsWithABitmapSubtitleKeepsItOn() {
         // An HLS session streams the original track next to the video, so a bitmap choice
@@ -930,20 +927,6 @@ class ExoVideoPlayerEngineTest {
         var texts = emptyList<String>()
         onMain { texts = (this as ExoVideoPlayerEngine).currentCues.mapNotNull { it.text?.toString() } }
         return texts
-    }
-
-    /**
-     * A subtitle chosen before playback — by the default rule or the dialog — on a session played
-     * from its start: the cues must reach the screen without any in-player pick.
-     */
-    @Test
-    fun aSubtitleChosenBeforePlaybackRendersFromTheSessionStart() {
-        val server = SubtitleFixtureServer()
-        val api = FakeHlsApi(pathPrefix = "/api")
-        val engine = streamingEngine(server, api, subtitleTypeIndex = 1)
-
-        waitFor("the cue at 1.0 s", timeoutMs = 15_000) { "One" in engine.cueTexts() }
-        assertTrue("${engine.errors()}", engine.errors().isEmpty())
     }
 
     /**

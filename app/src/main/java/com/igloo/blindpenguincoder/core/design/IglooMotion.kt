@@ -98,7 +98,7 @@ fun rememberOverlayReveal(label: String): State<Float> {
  * a frame callback sixty times a second for as long as the screen is composed.
  */
 @Composable
-fun rememberAmbientProgress(periodMillis: Int = IglooMotion.AMBIENT_MS): State<Float> =
+fun rememberAmbientProgress(): State<Float> =
     if (LocalIglooReducedMotion.current) {
         remember { mutableFloatStateOf(0f) }
     } else {
@@ -106,7 +106,7 @@ fun rememberAmbientProgress(periodMillis: Int = IglooMotion.AMBIENT_MS): State<F
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = periodMillis, easing = LinearEasing),
+                animation = tween(durationMillis = IglooMotion.AMBIENT_MS, easing = LinearEasing),
                 repeatMode = RepeatMode.Restart,
             ),
             label = "iglooAmbientProgress",

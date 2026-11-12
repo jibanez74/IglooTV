@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.core.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -11,7 +10,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
@@ -27,6 +25,10 @@ data class RatingBadgeSpec(val label: String, val tier: RatingTier)
 
 /** The badge's one spoken form, wherever it joins a sentence: "Rated 7.9 out of 10". */
 fun RatingBadgeSpec.spoken(): String = "Rated $label out of 10"
+
+/** The badge for a score the server may not have: null and zero both mean "unrated", so no badge. */
+fun ratingBadgeSpecOrNull(rating: Double?): RatingBadgeSpec? =
+    rating?.takeIf { it > 0 }?.let(::ratingBadgeSpec)
 
 /**
  * Scores carry more decimals than the badge shows one of, so the tier is read off the rounded
@@ -75,12 +77,7 @@ fun RatingBadge(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp.scaled()),
     ) {
-        Image(
-            imageVector = IglooIcons.Star,
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(foreground),
-            modifier = Modifier.size(10.dp.scaled()),
-        )
+        IglooGlyph(icon = IglooIcons.Star, tint = foreground, size = 10.dp.scaled())
         IglooText(
             text = spec.label,
             style = IglooTheme.typography.label,

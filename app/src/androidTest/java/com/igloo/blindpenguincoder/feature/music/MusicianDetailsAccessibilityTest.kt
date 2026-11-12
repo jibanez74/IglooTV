@@ -61,10 +61,9 @@ class MusicianDetailsAccessibilityTest {
         composeRule.waitForIdle()
     }
 
-    private fun loadedState(musician: MusicianDetailsUi = testMusicianDetails()) = MusicianDetailsUiState(
-        openMusicianId = musician.id,
-        details = DetailsState.Loaded(musician),
-    )
+    private fun loadedState() = testMusicianDetails().let { musician ->
+        MusicianDetailsUiState(openMusicianId = musician.id, details = DetailsState.Loaded(musician))
+    }
 
     @Test
     fun thePaneAnnouncesTheArtistOnceLoaded() {

@@ -25,7 +25,6 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.iglooSafeArea
 import com.igloo.blindpenguincoder.core.design.rememberAmbientProgress
 import com.igloo.blindpenguincoder.core.design.scaled
-import com.igloo.blindpenguincoder.core.ui.IglooBrandMark
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
@@ -118,7 +117,7 @@ private fun Hero(modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IglooBrandMark(size = 64.dp.scaled(), textStyle = IglooTheme.typography.titleLarge)
+            AuthBrandMark()
             IglooText(
                 text = WELCOME_HEADLINE,
                 style = IglooTheme.typography.display,

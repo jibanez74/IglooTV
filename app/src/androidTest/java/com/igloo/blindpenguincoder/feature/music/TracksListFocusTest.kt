@@ -57,7 +57,6 @@ class TracksListFocusTest {
     private val played = mutableListOf<Long>()
     private val openedAlbums = mutableListOf<Long>()
     private var loadMoreCalls = 0
-    private var playAllCalls = 0
     private val playRequests = MutableSharedFlow<MusicPlayRequest>(extraBufferCapacity = 1)
 
     private fun setContent(initial: MusicUiState = testMusicState(tab = MusicTab.Tracks)) {
@@ -66,7 +65,6 @@ class TracksListFocusTest {
         played.clear()
         openedAlbums.clear()
         loadMoreCalls = 0
-        playAllCalls = 0
         composeRule.setContent {
             IglooTheme {
                 TestIglooApp(
@@ -79,7 +77,7 @@ class TracksListFocusTest {
                         onSelectTab = {},
                         onPressTab = {},
                         onPlayTrack = { played += it },
-                        onPlayAll = { playAllCalls += 1 },
+                        onPlayAll = {},
                         onShuffleAll = {},
                         onToggleLike = {},
                     ),

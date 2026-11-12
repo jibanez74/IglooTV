@@ -12,18 +12,15 @@ import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
 import com.igloo.blindpenguincoder.data.repository.simpleMusicianJson
 import com.igloo.blindpenguincoder.data.repository.trackListItemJson
 import com.igloo.blindpenguincoder.data.repository.tracksJson
-import com.igloo.blindpenguincoder.feature.shared.PagedState
+import com.igloo.blindpenguincoder.feature.library.ERROR_BODY
+import com.igloo.blindpenguincoder.feature.library.collectPlayRequests
+import com.igloo.blindpenguincoder.feature.library.items
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import com.igloo.blindpenguincoder.feature.shared.AppendState
-import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
-import io.ktor.client.engine.mock.MockRequestHandleScope
-import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -58,13 +55,12 @@ class MusicViewModelTest {
     }
 
     private fun TestScope.routedHttp(
-        musicians: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+        musicians: MockRequestHandler =
             { jsonResponse(musiciansPage(1, totalPages = 1, ids = 1L..3L)) },
-        albums: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(albumsPage(1, totalPages = 1, ids = 1L..3L)) },
-        tracks: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+        albums: MockRequestHandler = { jsonResponse(albumsPage(1, totalPages = 1, ids = 1L..3L)) },
+        tracks: MockRequestHandler =
             { jsonResponse(tracksPage(0, ids = 1L..3L, total = 3, hasMore = false)) },
-        shuffle: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
+        shuffle: MockRequestHandler =
             { jsonResponse(shuffleTracksJson(trackListItemJson(id = 7, title = "Seven"))) },
     ): RoutedHttp {
         val routed = RoutedHttp()
@@ -99,11 +95,11 @@ class MusicViewModelTest {
         return routed
     }
 
-    private fun musiciansPage(number: Long, totalPages: Long, ids: LongRange, total: Long = 60) =
-        musiciansJson(ids.map { simpleMusicianJson(id = it, name = "Musician $it") }, total, number, 48, totalPages)
+    private fun musiciansPage(number: Long, totalPages: Long, ids: LongRange) =
+        musiciansJson(ids.map { simpleMusicianJson(id = it, name = "Musician $it") }, 60, number, 48, totalPages)
 
-    private fun albumsPage(number: Long, totalPages: Long, ids: LongRange, total: Long = 90) =
-        albumsJson(ids.map { simpleAlbumJson(id = it, title = "Album $it") }, total, number, 48, totalPages)
+    private fun albumsPage(number: Long, totalPages: Long, ids: LongRange) =
+        albumsJson(ids.map { simpleAlbumJson(id = it, title = "Album $it") }, 90, number, 48, totalPages)
 
     private fun tracksPage(offset: Long, ids: LongRange, total: Long, hasMore: Boolean) =
         tracksJson(ids.map { trackListItemJson(id = it, title = "Track $it") }, total, offset, 50, hasMore)
@@ -114,14 +110,6 @@ class MusicViewModelTest {
     private fun TestScope.landOn(model: MusicViewModel, tab: MusicTab) {
         model.selectTab(tab)
         advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS + 1)
-    }
-
-    private fun <T> PagedState<T>.items(): List<T> = (content as IglooRailState.Loaded).items
-
-    private fun TestScope.collectPlayRequests(model: MusicViewModel): Pair<MutableList<MusicPlayRequest>, Job> {
-        val requests = mutableListOf<MusicPlayRequest>()
-        val job = launch(UnconfinedTestDispatcher(testScheduler)) { model.playRequests.collect { requests += it } }
-        return requests to job
     }
 
     // --- wiring ---
@@ -141,7 +129,7 @@ class MusicViewModelTest {
         val model = loaded(http)
         val liked = mutableListOf<Long>()
         val actions = model.actions(onToggleLike = { liked += it })
-        val (requests, job) = collectPlayRequests(model)
+        val (requests, job) = collectPlayRequests(model.playRequests)
 
         actions.onRefresh()
         assertEquals(listOf("1", "1"), http.musicianPages)
@@ -366,7 +354,7 @@ class MusicViewModelTest {
         val http = routedHttp()
         val model = loaded(http)
         model.pressTab(MusicTab.Tracks)
-        val (requests, job) = collectPlayRequests(model)
+        val (requests, job) = collectPlayRequests(model.playRequests)
 
         model.playTrack(2)
 
@@ -382,7 +370,7 @@ class MusicViewModelTest {
         val http = routedHttp(tracks = { jsonResponse(tracksPage(0, ids = 1L..3L, total = 120, hasMore = true)) })
         val model = loaded(http)
         model.pressTab(MusicTab.Tracks)
-        val (requests, job) = collectPlayRequests(model)
+        val (requests, job) = collectPlayRequests(model.playRequests)
 
         model.playAll()
 
@@ -394,7 +382,7 @@ class MusicViewModelTest {
     fun `shuffle all fetches a batch, shows the wait, and launches the shuffle queue`() = runTest {
         val http = routedHttp()
         val model = loaded(http)
-        val (requests, job) = collectPlayRequests(model)
+        val (requests, job) = collectPlayRequests(model.playRequests)
 
         model.shuffleAll()
 
@@ -413,7 +401,7 @@ class MusicViewModelTest {
             else jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
         })
         val model = loaded(http)
-        val (requests, job) = collectPlayRequests(model)
+        val (requests, job) = collectPlayRequests(model.playRequests)
 
         model.shuffleAll()
         assertEquals("No tracks to shuffle.", model.uiState.value.notice)
@@ -423,9 +411,5 @@ class MusicViewModelTest {
         assertTrue(model.uiState.value.notice!!.startsWith("Couldn't start shuffle"))
         assertTrue(requests.isEmpty())
         job.cancel()
-    }
-
-    private companion object {
-        const val ERROR_BODY = """{"error":true,"message":"nope"}"""
     }
 }

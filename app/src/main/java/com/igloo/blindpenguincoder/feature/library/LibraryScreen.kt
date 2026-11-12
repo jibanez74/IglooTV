@@ -179,8 +179,8 @@ fun LibraryScreen(
             focusOwnership = focusOwnership,
             silentReconcileGeneration = state.silentReconcileGeneration,
             containsItem = LibraryContent::containsItem,
-                    screenReader = spokenAccessibilityEnabled,
-)
+            screenReader = spokenAccessibilityEnabled,
+        )
 
         when (content) {
             // The Genres tab waiting on its list is a skeleton like any other wait: the grid it

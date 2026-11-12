@@ -13,13 +13,12 @@ import kotlin.random.Random
 class MusicQueueMappingTest {
 
     private fun row(
-        id: Long = 900,
         durationMs: Long = 125_000,
         musician: String? = "The Beatles",
         albumTitle: String? = "Help!",
         cover: String? = "https://i.scdn.co/image/help.jpg",
     ) = TrackListItem(
-        id = id,
+        id = 900,
         title = "Yesterday",
         duration = durationMs,
         albumId = SqlNullInt64(1, valid = albumTitle != null),

@@ -2,12 +2,9 @@ package com.igloo.blindpenguincoder.feature.search
 
 import com.igloo.blindpenguincoder.core.ui.countNoun
 import com.igloo.blindpenguincoder.core.ui.formatCount
-import com.igloo.blindpenguincoder.data.model.MovieLibraryItem
 import com.igloo.blindpenguincoder.data.model.SearchAllData
-import com.igloo.blindpenguincoder.data.model.ShowLibraryItem
 import com.igloo.blindpenguincoder.data.model.TrackListItem
-import com.igloo.blindpenguincoder.feature.library.toPosterItem
-import com.igloo.blindpenguincoder.feature.movies.toLibraryRow
+import com.igloo.blindpenguincoder.feature.movies.toPosterItem
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
 import com.igloo.blindpenguincoder.feature.music.MusicianCardUi
 import com.igloo.blindpenguincoder.feature.music.TracksEntry
@@ -15,7 +12,7 @@ import com.igloo.blindpenguincoder.feature.music.toCardUi
 import com.igloo.blindpenguincoder.feature.music.toRowUi
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
-import com.igloo.blindpenguincoder.feature.shows.toLibraryRow
+import com.igloo.blindpenguincoder.feature.shows.toPosterItem
 
 /**
  * Wire-to-render rules for the Search pane (docs/design-system.md section 11.6), pure so every
@@ -86,10 +83,6 @@ internal fun SearchAllData.toSections(apiBaseUrl: String): List<SearchSectionUi>
 
 /** A section's heading on the All view: `"Movies (12)"`, the count being the full match count. */
 internal fun sectionTitle(kind: SearchKind, total: Long): String = "${kind.title} (${formatCount(total)})"
-
-internal fun MovieLibraryItem.toPosterItem(apiBaseUrl: String): PosterItem = toLibraryRow().toPosterItem(apiBaseUrl)
-
-internal fun ShowLibraryItem.toPosterItem(apiBaseUrl: String): PosterItem = toLibraryRow().toPosterItem(apiBaseUrl)
 
 /** The Tracks tab's flat list: ranked rows, no letter headers — the server's order is relevance. */
 internal fun TrackListItem.toSearchEntry(): TracksEntry = TracksEntry.Track(toRowUi())

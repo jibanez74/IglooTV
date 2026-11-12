@@ -21,7 +21,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
@@ -95,11 +94,7 @@ fun IglooMenu(
                 modifier = Modifier
                     .width(MENU_WIDTH.scaled())
                     .graphicsLayer { alpha = reveal }
-                    .iglooSurface(
-                        radius = IglooTheme.radius.lg,
-                        fill = colors.card,
-                        border = colors.border,
-                    )
+                    .iglooSurface(radius = IglooTheme.radius.lg, fill = colors.card)
                     // Padding on every side so a row's focus ring glows inside the card
                     // instead of being clipped by its surface.
                     .padding(IglooTheme.spacing.xs)
@@ -117,12 +112,10 @@ fun IglooMenu(
                         item = item,
                         modifier = Modifier
                             .focusRequester(requesters[index])
-                            .focusProperties {
-                                left = FocusRequester.Cancel
-                                right = FocusRequester.Cancel
-                                up = requesters.getOrNull(index - 1) ?: FocusRequester.Cancel
-                                down = requesters.getOrNull(index + 1) ?: FocusRequester.Cancel
-                            }
+                            .pinnedSideways(
+                                up = requesters.getOrNull(index - 1),
+                                down = requesters.getOrNull(index + 1),
+                            )
                             .testTag("more_menu_item_$index"),
                     )
                 }

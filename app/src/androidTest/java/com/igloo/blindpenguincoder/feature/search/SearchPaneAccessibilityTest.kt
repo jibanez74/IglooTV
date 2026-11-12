@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -30,6 +29,7 @@ import com.igloo.blindpenguincoder.feature.music.TrackLikesUiState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.inertSearchActions
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import com.igloo.blindpenguincoder.testSearchState
 import org.junit.Rule
 import org.junit.Test
@@ -109,7 +109,7 @@ class SearchPaneAccessibilityTest {
         // The wait keeps the line it replaced, so a search is announced once, when it settles.
         node("search_count")
             .assertContentDescriptionEquals("Find anything in your library")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(isPoliteLiveRegion())
 
         searchState = testSearchState()
         composeRule.waitForIdle()
@@ -216,7 +216,7 @@ class SearchPaneAccessibilityTest {
 
         node("search_notice")
             .assertTextEquals("Didn't catch that. Try again.")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(isPoliteLiveRegion())
     }
 
     @Test
@@ -225,7 +225,7 @@ class SearchPaneAccessibilityTest {
 
         node("search_voice").assertContentDescriptionEquals("Cancel voice search").assertHasClickAction()
         node("search_notice").assertTextEquals(VOICE_STARTING_LINE)
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(isPoliteLiveRegion())
         composeRule.onNodeWithText(VOICE_LISTENING_LINE).assertDoesNotExist()
         composeRule.onNodeWithContentDescription("Stop listening").assertDoesNotExist()
         val startingWidth = node("search_voice").fetchSemanticsNode().boundsInRoot.width
@@ -234,7 +234,7 @@ class SearchPaneAccessibilityTest {
         composeRule.waitForIdle()
         node("search_voice").assertContentDescriptionEquals("Stop listening")
         node("search_notice").assertTextEquals(VOICE_LISTENING_LINE)
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(isPoliteLiveRegion())
         org.junit.Assert.assertEquals(startingWidth, node("search_voice").fetchSemanticsNode().boundsInRoot.width, 0f)
     }
 
@@ -248,7 +248,7 @@ class SearchPaneAccessibilityTest {
         node("search_voice").assertContentDescriptionEquals("Stop listening")
         node("search_notice")
             .assertTextEquals(VOICE_LISTENING_LINE)
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite))
+            .assert(isPoliteLiveRegion())
     }
 
     @Test

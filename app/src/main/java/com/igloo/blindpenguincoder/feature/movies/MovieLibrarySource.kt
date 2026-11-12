@@ -9,6 +9,8 @@ import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryPage
 import com.igloo.blindpenguincoder.feature.library.LibraryRow
 import com.igloo.blindpenguincoder.feature.library.LibrarySource
+import com.igloo.blindpenguincoder.feature.library.toPosterItem
+import com.igloo.blindpenguincoder.feature.shared.PosterItem
 
 /**
  * The movie library's routes as a [LibrarySource]: library, genre and liked pages, the count,
@@ -42,3 +44,7 @@ private fun MoviesLibraryData.toLibraryPage(): LibraryPage = LibraryPage(
 /** A movie as the library grid's row; search results map through here too. */
 fun MovieLibraryItem.toLibraryRow(): LibraryRow =
     LibraryRow(id = id, title = title, posterPath = posterPath, year = year)
+
+/** A movie as a poster card, wherever it is listed: a search result or a Home rail. */
+internal fun MovieLibraryItem.toPosterItem(apiBaseUrl: String): PosterItem =
+    toLibraryRow().toPosterItem(apiBaseUrl)

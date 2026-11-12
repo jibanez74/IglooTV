@@ -10,19 +10,15 @@ import com.igloo.blindpenguincoder.data.repository.searchPageJson
 import com.igloo.blindpenguincoder.data.repository.searchSectionJson
 import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
 import com.igloo.blindpenguincoder.data.repository.trackListItemJson
+import com.igloo.blindpenguincoder.feature.library.collectPlayRequests
+import com.igloo.blindpenguincoder.feature.library.items
 import com.igloo.blindpenguincoder.feature.shared.AppendState
-import com.igloo.blindpenguincoder.feature.shared.PagedState
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
-import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
-import io.ktor.client.engine.mock.MockRequestHandleScope
-import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -54,10 +50,10 @@ class SearchViewModelTest {
     }
 
     private fun TestScope.routedHttp(
-        all: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData = { request ->
+        all: MockRequestHandler = { request ->
             jsonResponse(allBody(request.url.parameters["q"].orEmpty()))
         },
-        page: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData = { request ->
+        page: MockRequestHandler = { request ->
             jsonResponse(moviesPage(request.url.parameters["page"]!!.toLong(), totalPages = 1))
         },
     ): RoutedHttp {
@@ -76,19 +72,19 @@ class SearchViewModelTest {
         return routed
     }
 
-    private fun allBody(query: String, moviesTotal: Long = 12, tracksTotal: Long = 2) = searchAllJson(
+    private fun allBody(query: String, moviesTotal: Long = 12) = searchAllJson(
         query = query,
         movies = searchSectionJson(listOf(movieLibraryItemJson(id = 3, title = "Help!")), total = moviesTotal),
         albums = searchSectionJson(listOf(simpleAlbumJson(id = 5)), total = 1),
         tracks = searchSectionJson(
             listOf(trackListItemJson(id = 1, title = "Help!"), trackListItemJson(id = 2, title = "Yesterday")),
-            total = tracksTotal,
+            total = 2,
         ),
     )
 
-    private fun moviesPage(number: Long, totalPages: Long, ids: LongRange = (number * 10)..(number * 10 + 2)) =
+    private fun moviesPage(number: Long, totalPages: Long) =
         searchPageJson(
-            results = ids.map { movieLibraryItemJson(id = it, title = "Movie $it") },
+            results = ((number * 10)..(number * 10 + 2)).map { movieLibraryItemJson(id = it, title = "Movie $it") },
             total = 6,
             page = number,
             totalPages = totalPages,
@@ -111,14 +107,6 @@ class SearchViewModelTest {
     private fun TestScope.landOn(model: SearchViewModel, tab: SearchTab) {
         model.selectTab(tab)
         advanceTimeBy(TAB_SWITCH_DEBOUNCE_MS + 1)
-    }
-
-    private fun <T> PagedState<T>.items(): List<T> = (content as IglooRailState.Loaded).items
-
-    private fun TestScope.collectPlayRequests(model: SearchViewModel): Pair<MutableList<MusicPlayRequest>, Job> {
-        val requests = mutableListOf<MusicPlayRequest>()
-        val job = launch(UnconfinedTestDispatcher(testScheduler)) { model.playRequests.collect { requests += it } }
-        return requests to job
     }
 
     // --- the query ---
@@ -774,7 +762,7 @@ class SearchViewModelTest {
             jsonResponse(tracksPage(request.url.parameters["page"]!!.toLong(), 1L..3L))
         })
         val model = model(http)
-        val (requests, job) = collectPlayRequests(model)
+        val (requests, job) = collectPlayRequests(model.playRequests)
         type(model, "help")
         model.pressTab(SearchTab.Tracks)
 
@@ -791,7 +779,7 @@ class SearchViewModelTest {
     fun `Play on the All view queues the rows its tracks section shows`() = runTest {
         val http = routedHttp()
         val model = model(http)
-        val (requests, job) = collectPlayRequests(model)
+        val (requests, job) = collectPlayRequests(model.playRequests)
         type(model, "help")
 
         model.playTrack(2)

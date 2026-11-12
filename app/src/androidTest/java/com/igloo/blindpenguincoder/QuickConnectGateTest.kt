@@ -5,15 +5,12 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
-import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
@@ -136,20 +133,20 @@ class QuickConnectGateTest {
             val pairing = composeRule.onNodeWithContentDescription("Use pairing code instead")
             val changeServer = composeRule.onNodeWithContentDescription("Change server address")
 
-            email.assertIsFocused().assertFullyOnscreen()
+            email.assertIsFocused().assertFullyOnscreen(composeRule)
             email.performKeyInput { pressKey(Key.DirectionUp) }
-            recovery.assertIsFocused().assertFullyOnscreen()
+            recovery.assertIsFocused().assertFullyOnscreen(composeRule)
 
             recovery.performKeyInput { pressKey(Key.DirectionDown) }
-            email.assertIsFocused().assertFullyOnscreen()
+            email.assertIsFocused().assertFullyOnscreen(composeRule)
             email.performKeyInput { pressKey(Key.DirectionDown) }
-            password.assertIsFocused().assertFullyOnscreen()
+            password.assertIsFocused().assertFullyOnscreen(composeRule)
             password.performKeyInput { pressKey(Key.DirectionDown) }
-            signIn.assertIsFocused().assertFullyOnscreen()
+            signIn.assertIsFocused().assertFullyOnscreen(composeRule)
             signIn.performKeyInput { pressKey(Key.DirectionDown) }
-            pairing.assertIsFocused().assertFullyOnscreen()
+            pairing.assertIsFocused().assertFullyOnscreen(composeRule)
             pairing.performKeyInput { pressKey(Key.DirectionDown) }
-            changeServer.assertIsFocused().assertFullyOnscreen()
+            changeServer.assertIsFocused().assertFullyOnscreen(composeRule)
         }
     }
 
@@ -254,14 +251,5 @@ class QuickConnectGateTest {
             also(app.container.profileRepository)
         }
         app.container.serverUrlProvider.set(ServerAddress.fromApiBaseUrl(apiBaseUrl))
-    }
-
-    private fun SemanticsNodeInteraction.assertFullyOnscreen(): SemanticsNodeInteraction {
-        assertIsDisplayed()
-        val root = composeRule.onRoot().getUnclippedBoundsInRoot()
-        val bounds = getUnclippedBoundsInRoot()
-        assertTrue("Focused control starts above the viewport: $bounds", bounds.top >= root.top)
-        assertTrue("Focused control ends below the viewport: $bounds", bounds.bottom <= root.bottom)
-        return this
     }
 }

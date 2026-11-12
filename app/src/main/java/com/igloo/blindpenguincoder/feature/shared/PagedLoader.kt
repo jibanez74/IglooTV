@@ -19,6 +19,10 @@ class LoadedPage<T>(
     val append: AppendState,
 )
 
+/** A page of a page-numbered route: `page + 1` is the next cursor, and the tail ends on the last page. */
+internal fun <T> pageNumberedPage(rows: List<T>, page: Long, total: Long, totalPages: Long): LoadedPage<T> =
+    LoadedPage(rows, total, page + 1, pageAppendState(page, totalPages, rows.isEmpty()))
+
 /**
  * One infinite list's paging machine — cursor, loaded rows, job and generation — writing its
  * [PagedState] into one field of a view model's state [S] through [read] and [write], so a view

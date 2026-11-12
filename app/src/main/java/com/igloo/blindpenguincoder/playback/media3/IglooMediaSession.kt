@@ -23,21 +23,21 @@ private val sessionInstance = AtomicLong(0)
  * [Player.seekToNext]/[Player.seekToPrevious], the split the music transport row implements.
  *
  * [idPrefix] names the media ("movie-7", "music-album-11"); the instance suffix is appended
- * here. [bitmapLoader] is null wherever Media3's default will do — the movie's poster proxy
- * and server-hosted music covers need a bearer token system surfaces cannot attach.
+ * here. [bitmapLoader] replaces Media3's default: the movie's poster proxy and server-hosted
+ * music covers need a bearer token system surfaces cannot attach.
  */
 internal fun buildIglooMediaSession(
     context: Context,
     player: Player,
     idPrefix: String,
-    bitmapLoader: BitmapLoader? = null,
+    bitmapLoader: BitmapLoader,
 ): MediaSession {
     val builder = MediaSession.Builder(context, player)
         // On error-Retry the replacement engine (and its session) is constructed before the
         // old one's disposal releases it; two live sessions with equal ids throw, so every
         // instance gets its own.
         .setId("$idPrefix-${sessionInstance.incrementAndGet()}")
-    bitmapLoader?.let(builder::setBitmapLoader)
+        .setBitmapLoader(bitmapLoader)
     context.packageManager.getLeanbackLaunchIntentForPackage(context.packageName)?.let { launch ->
         builder.setSessionActivity(
             PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_IMMUTABLE),

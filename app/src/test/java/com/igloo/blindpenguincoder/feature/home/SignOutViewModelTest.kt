@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import com.igloo.blindpenguincoder.MainDispatcherRule
-import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
@@ -16,8 +15,7 @@ import com.igloo.blindpenguincoder.data.repository.testStoredProfile
 import com.igloo.blindpenguincoder.feature.auth.AppAuthState
 import com.igloo.blindpenguincoder.feature.auth.SessionManager
 import io.ktor.client.engine.mock.MockRequestHandleScope
-import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
+import io.ktor.client.engine.mock.MockRequestHandler
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -49,7 +47,7 @@ class SignOutViewModelTest {
      * survived — the invariant in docs/design-system.md section 11.2.
      */
     private suspend fun fixture(
-        logout: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
+        logout: MockRequestHandler,
     ): Fixture {
         val settings = ServerSettingsStore(InMemoryPreferencesDataStore())
         settings.save(TEST_SERVER)
@@ -65,16 +63,7 @@ class SignOutViewModelTest {
             }
         }
         val scope = main.newScope()
-        val sessionManager = SessionManager(
-            authRepository = http.authRepository,
-            profiles = http.profiles,
-            settings = settings,
-            serverUrl = http.serverUrl,
-            authEvents = http.authEvents,
-            imageCache = NoOpImageCache,
-            scope = scope,
-            elapsed = { 0L },
-        )
+        val sessionManager = http.sessionManager(scope, settings)
         fixture = Fixture(SignOutViewModel(sessionManager), sessionManager, http)
         http.seedVault(
             testStoredProfile(userId = 1, name = "Jose"),

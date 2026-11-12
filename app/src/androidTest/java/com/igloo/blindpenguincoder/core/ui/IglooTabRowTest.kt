@@ -6,7 +6,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -20,6 +19,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.igloo.blindpenguincoder.clickActionLabelled
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -117,10 +117,6 @@ class IglooTabRowTest {
     fun theClickActionCarriesTheCallersLabel() {
         composeRule.setContent { Strip(current = "All") }
 
-        composeRule.onNodeWithTag("Liked").assert(
-            SemanticsMatcher("has the caller's click label") { node ->
-                node.config.getOrNull(SemanticsActions.OnClick)?.label == "Show Liked movies"
-            },
-        )
+        composeRule.onNodeWithTag("Liked").assert(clickActionLabelled("Show Liked movies"))
     }
 }

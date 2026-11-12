@@ -4,8 +4,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * One entry of a paged show listing. The route also sends `certification`, left to
- * `ignoreUnknownKeys` — the grid card renders name and premiere year only.
+ * One entry of a show listing: a page of the library, or `GET /shows/latest` for Home's rail
+ * and newest-show hero. The library route also sends `certification`, left to
+ * `ignoreUnknownKeys` — the card renders name and premiere year only.
  */
 @Serializable
 data class ShowLibraryItem(
@@ -115,19 +116,10 @@ data class ShowTechnicalFile(
     val duration: SqlNullFloat64,
 )
 
-/** One entry of `GET /shows/latest`, shared by Home's rail and newest-show hero. */
-@Serializable
-data class LatestShow(
-    val id: Long,
-    val name: String,
-    @SerialName("poster_path") val posterPath: SqlNullString,
-    @SerialName("premiere_year") val premiereYear: SqlNullInt64,
-)
-
 /** Payload of `LatestShowsEnvelope.data`. */
 @Serializable
 data class LatestShowsData(
-    val shows: List<LatestShow>,
+    val shows: List<ShowLibraryItem>,
 )
 
 /**

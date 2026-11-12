@@ -6,7 +6,6 @@ import com.igloo.blindpenguincoder.data.model.SearchAllData
 import com.igloo.blindpenguincoder.data.model.SearchSection
 import com.igloo.blindpenguincoder.data.model.ShowLibraryItem
 import com.igloo.blindpenguincoder.data.model.SimpleAlbum
-import com.igloo.blindpenguincoder.data.model.SimpleMusician
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.data.model.TrackListItem
@@ -37,13 +36,6 @@ class SearchMappingTest {
         title = "Help!",
         cover = SqlNullString("https://i.scdn.co/image/help.jpg", valid = true),
         musician = SqlNullString("The Beatles", valid = true),
-    )
-    private val musician = SimpleMusician(
-        id = 4,
-        name = "The Beatles",
-        thumb = SqlNullString("", valid = false),
-        albumCount = 3,
-        trackCount = 40,
     )
     private fun track(id: Long, title: String) = TrackListItem(
         id = id,

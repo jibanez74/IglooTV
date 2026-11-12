@@ -3,15 +3,15 @@ package com.igloo.blindpenguincoder.feature.player
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,7 +29,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -50,9 +49,11 @@ import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
+import com.igloo.blindpenguincoder.core.design.iglooSafeArea
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
+import com.igloo.blindpenguincoder.core.ui.IglooGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.IglooText
@@ -60,6 +61,7 @@ import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
+import com.igloo.blindpenguincoder.core.ui.pinnedSideways
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 import kotlinx.coroutines.delay
 
@@ -105,12 +107,7 @@ internal fun TransportButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Image(
-            imageVector = icon,
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(Color.White),
-            modifier = Modifier.size(IglooTheme.icons.md),
-        )
+        IglooGlyph(icon = icon, tint = Color.White)
     }
 }
 
@@ -178,15 +175,11 @@ internal fun PlayerTopBar(
     closeLabel: String = "Close player",
     subtitle: String? = null,
 ) {
-    val layout = IglooTheme.layout
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .playerTopScrim()
-            .padding(
-                horizontal = layout.safeAreaHorizontal,
-                vertical = layout.safeAreaVertical,
-            ),
+            .iglooSafeArea(),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -200,12 +193,7 @@ internal fun PlayerTopBar(
             modifier = Modifier
                 .focusRequester(backRequester)
                 .onFocusChanged { if (it.isFocused) onFocused() }
-                .focusProperties {
-                    left = FocusRequester.Cancel
-                    right = FocusRequester.Cancel
-                    up = FocusRequester.Cancel
-                    down = downRequester
-                }
+                .pinnedSideways(down = downRequester)
                 .testTag(backTag),
         )
         Column {
@@ -242,6 +230,33 @@ internal fun Modifier.playerBottomScrim(): Modifier = background(
         1f to Color.Black.copy(alpha = SCRIM_STRENGTH),
     ),
 )
+
+/** What a video player says in the middle of the picture while it has nothing to show. */
+@Composable
+internal fun BoxScope.PlayerHoldMessage(text: String, tag: String) {
+    IglooText(
+        text = text,
+        style = IglooTheme.typography.bodyLarge.overMedia(true),
+        color = OVER_MEDIA_SECONDARY,
+        modifier = Modifier
+            .align(Alignment.Center)
+            .testTag(tag),
+    )
+}
+
+/** The centred row every player lays its transport controls out in. */
+@Composable
+internal fun PlayerTransportRow(content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(
+            IglooTheme.spacing.lg,
+            Alignment.CenterHorizontally,
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
 
 /**
  * Rewind, Play/Pause and Forward, the run of transport every player shares, tagged

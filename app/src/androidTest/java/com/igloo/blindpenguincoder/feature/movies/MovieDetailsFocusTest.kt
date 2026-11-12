@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -33,6 +32,7 @@ import com.igloo.blindpenguincoder.feature.home.HomeHeroState
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ProgressUi
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAuthUser
 import com.igloo.blindpenguincoder.testContinueMovies
@@ -174,12 +174,7 @@ class MovieDetailsFocusTest {
 
         composeRule.onNodeWithTag("movie_details").assertDoesNotExist()
         composeRule.onNodeWithTag("shell_mutation_notice")
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
             .assertHasNoClickAction()
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Focused))
         composeRule.onNodeWithTag("continue_card_1").assertIsFocused()

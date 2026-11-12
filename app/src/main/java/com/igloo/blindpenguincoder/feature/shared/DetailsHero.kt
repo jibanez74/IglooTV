@@ -25,8 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -34,7 +32,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -45,11 +42,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
@@ -57,16 +51,23 @@ import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.overMediaSideScrim
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.ui.ArtworkImage
 import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.LESS_THAN_A_MINUTE_LEFT
 import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
+import com.igloo.blindpenguincoder.core.ui.SkeletonStub
+import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
+import com.igloo.blindpenguincoder.core.ui.overMediaPill
+import com.igloo.blindpenguincoder.core.ui.pinnedSideways
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
+import com.igloo.blindpenguincoder.core.ui.rememberArtworkState
 import com.igloo.blindpenguincoder.core.ui.withRequester
 
 /*
@@ -98,12 +99,10 @@ internal fun DetailsHero(
     header: @Composable BoxScope.(overMedia: Boolean) -> Unit,
 ) {
     val colors = IglooTheme.colors
-    var imageFailed by remember(imageUrl) { mutableStateOf(false) }
-    var imageLoaded by remember(imageUrl) { mutableStateOf(false) }
-    val showBackdrop = imageUrl != null && !imageFailed
-    val overMedia = imageLoaded
+    val art = rememberArtworkState(imageUrl)
+    val overMedia = art.loaded
     val backdropAlpha by animateFloatAsState(
-        targetValue = if (imageLoaded) 1f else 0f,
+        targetValue = if (art.loaded) 1f else 0f,
         animationSpec = iglooTween(IglooMotion.PAGE_MS),
         label = "detailsBackdrop",
     )
@@ -114,18 +113,9 @@ internal fun DetailsHero(
             .fillMaxWidth()
             .heightIn(min = HERO_MIN_HEIGHT.scaled()),
     ) {
-        if (showBackdrop) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                onState = { state ->
-                    when (state) {
-                        is AsyncImagePainter.State.Success -> imageLoaded = true
-                        is AsyncImagePainter.State.Error -> imageFailed = true
-                        else -> Unit
-                    }
-                },
+        if (art.showsArtwork) {
+            ArtworkImage(
+                state = art,
                 modifier = Modifier
                     .testTag(backdropTag)
                     .matchParentSize()
@@ -215,26 +205,16 @@ internal fun HeroReadingStop(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    var focused by remember { mutableStateOf(false) }
-    Column(
-        modifier = modifier.then(
-            if (enabled) {
-                Modifier.readingStopTarget(
-                    tag = tag,
-                    focused = focused,
-                    requester = requester,
-                    upRequester = null,
-                    downRequester = downRequester,
-                    onFocusChanged = { focused = it },
-                    description = description,
-                    radius = IglooTheme.radius.lg,
-                    overMedia = overMedia,
-                )
-            } else {
-                Modifier
-            },
-        ),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+    ReadingStopColumn(
+        enabled = enabled,
+        tag = tag,
+        requester = requester,
+        upRequester = null,
+        downRequester = downRequester,
+        description = description,
+        modifier = modifier,
+        radius = IglooTheme.radius.lg,
+        overMedia = overMedia,
         content = content,
     )
 }
@@ -401,12 +381,7 @@ internal fun HeroSingleActionRow(
                     .testTag(tag)
                     .focusRequester(requester)
                     .withRequester(returnRequester)
-                    .focusProperties {
-                        up = upRequester
-                        left = Cancel
-                        right = Cancel
-                        down = downRequester ?: Cancel
-                    }
+                    .pinnedSideways(up = upRequester, down = downRequester)
                     .onFocusChanged { if (it.isFocused) onFocused() },
             )
             belowButton?.invoke()
@@ -431,11 +406,7 @@ internal fun DetailChip(
         color = if (overMedia) Color.White.copy(alpha = 0.90f) else colors.foreground,
         maxLines = 1,
         modifier = Modifier
-            .iglooSurface(
-                radius = IglooTheme.radius.pill,
-                fill = if (overMedia) OVER_MEDIA_CONTROL_FILL else colors.muted,
-                border = if (overMedia) Color.White.copy(alpha = 0.25f) else colors.border,
-            )
+            .overMediaPill(overMedia)
             .padding(horizontal = 12.dp.scaled(), vertical = IglooTheme.spacing.xs),
     )
 }
@@ -459,7 +430,6 @@ internal fun DetailsHeroSkeleton(
 ) {
     val colors = IglooTheme.colors
     val layout = IglooTheme.layout
-    val stubShape = RoundedCornerShape(IglooTheme.radius.sm)
     val controlShape = RoundedCornerShape(IglooTheme.radius.lg)
     var focused by remember { mutableStateOf(false) }
 
@@ -480,18 +450,8 @@ internal fun DetailsHeroSkeleton(
                     .background(colors.muted, artworkShape),
             )
             Column(verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md)) {
-                Box(
-                    modifier = Modifier
-                        .width(320.dp.scaled())
-                        .heightIn(min = 30.dp.scaled())
-                        .background(colors.muted, stubShape),
-                )
-                Box(
-                    modifier = Modifier
-                        .width(220.dp.scaled())
-                        .heightIn(min = 16.dp.scaled())
-                        .background(colors.muted, stubShape),
-                )
+                SkeletonStub(height = 30.dp, modifier = Modifier.width(320.dp.scaled()))
+                SkeletonStub(height = 16.dp, modifier = Modifier.width(220.dp.scaled()))
                 Row(horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md)) {
                     Column {
                         Box(
@@ -553,7 +513,7 @@ internal fun ResumeProgress(
         modifier = Modifier
             .padding(top = IglooTheme.spacing.sm)
             .alpha(if (visible) 1f else 0f)
-            .then(if (visible) Modifier else Modifier.clearAndSetSemantics {}),
+            .clearedSemanticsIf(!visible),
         verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
     ) {
         ProgressTrack(
@@ -567,7 +527,7 @@ internal fun ResumeProgress(
             // Keep the longest caption in layout from first paint so a late progress response
             // cannot resize Play's column. Its width remains typography- and locale-derived.
             IglooText(
-                text = RESUME_CAPTION_WIDTH_RESERVATION,
+                text = LESS_THAN_A_MINUTE_LEFT,
                 style = IglooTheme.typography.label.overMedia(overMedia),
                 color = Color.Transparent,
                 modifier = Modifier.clearAndSetSemantics {},
@@ -591,8 +551,6 @@ internal fun ResumeProgress(
         }
     }
 }
-
-private const val RESUME_CAPTION_WIDTH_RESERVATION = "Less than 1m left"
 
 /** About 60% of the reference viewport's height (section 8.1); contains text, so a minimum. */
 private val HERO_MIN_HEIGHT = 320.dp

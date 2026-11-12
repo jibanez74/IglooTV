@@ -1,25 +1,23 @@
 package com.igloo.blindpenguincoder.feature.auth
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.AssertReferenceViewport
+import com.igloo.blindpenguincoder.ReferenceViewport
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
 import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.core.ui.IglooButton
+import com.igloo.blindpenguincoder.viewportBounds
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -55,11 +53,7 @@ class AuthSurfaceLayoutTest {
                 safeAreaHorizontal = IglooTheme.layout.safeAreaHorizontal
                 // The backdrop's ambient loop never lets the Compose clock go idle.
                 CompositionLocalProvider(LocalIglooReducedMotion provides true) {
-                    Box(
-                        Modifier
-                            .size(width = VIEWPORT_WIDTH, height = VIEWPORT_HEIGHT)
-                            .testTag(VIEWPORT_TAG),
-                    ) {
+                    ReferenceViewport {
                         AuthSurface(
                             title = "Sign in to Igloo",
                             subtitle = "https://igloo.test",
@@ -83,7 +77,6 @@ class AuthSurfaceLayoutTest {
         composeRule.waitForIdle()
     }
 
-    private fun viewport() = composeRule.onNodeWithTag(VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
 
     @Test
     fun theCanvasItselfIsFullBleedAtEveryScale() {
@@ -91,7 +84,7 @@ class AuthSurfaceLayoutTest {
 
         UiScale.entries.forEach { scale ->
             atScale(scale)
-            val panel = viewport()
+            val panel = composeRule.viewportBounds()
             val canvas = composeRule.onNodeWithTag("auth_surface").fetchSemanticsNode().boundsInRoot
             assertTrue(
                 "at $scale the canvas $canvas should cover the panel $panel",
@@ -107,7 +100,7 @@ class AuthSurfaceLayoutTest {
 
         UiScale.entries.forEach { scale ->
             atScale(scale)
-            val panel = viewport()
+            val panel = composeRule.viewportBounds()
             val form = composeRule.onNodeWithTag("auth_form").fetchSemanticsNode().boundsInRoot
             val expected = panel.right - with(composeRule.density) { safeAreaHorizontal.toPx() }
             assertTrue(
@@ -123,7 +116,7 @@ class AuthSurfaceLayoutTest {
 
         UiScale.entries.forEach { scale ->
             atScale(scale)
-            val panel = viewport()
+            val panel = composeRule.viewportBounds()
             val form = composeRule.onNodeWithTag("auth_form").fetchSemanticsNode().boundsInRoot
             val inset = with(composeRule.density) { safeAreaHorizontal.toPx() }
             assertTrue(
@@ -133,11 +126,5 @@ class AuthSurfaceLayoutTest {
                     kotlin.math.abs(form.right - (panel.right - inset)) < 2f,
             )
         }
-    }
-
-    private companion object {
-        const val VIEWPORT_TAG = "tv-viewport"
-        val VIEWPORT_WIDTH = 960.dp
-        val VIEWPORT_HEIGHT = 540.dp
     }
 }

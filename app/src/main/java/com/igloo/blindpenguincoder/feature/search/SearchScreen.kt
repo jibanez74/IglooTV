@@ -40,6 +40,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooTextField
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.core.ui.announcedSection
+import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.core.ui.formatCount
 import com.igloo.blindpenguincoder.core.ui.insetHorizontally
 import com.igloo.blindpenguincoder.core.ui.rememberAnnouncedSectionColumn
@@ -178,8 +179,7 @@ fun SearchScreen(
             // padding so the scroll surface spans the panel (section 8.3).
             modifier = Modifier
                 .fillMaxSize()
-                .testTag("search_body")
-                .then(if (trackMenu != null) Modifier.clearAndSetSemantics { } else Modifier),
+                .clearedSemanticsIf(trackMenu != null),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
             PaneHeader(
@@ -634,7 +634,6 @@ private fun SearchAllResults(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .testTag("search_all")
             .then(sectionColumn.modifier)
             .verticalScroll(memory.allScrollState)
             // The scroll surface's own room, as the grids carry: the last section clears overscan.

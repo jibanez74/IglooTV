@@ -28,7 +28,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,7 +41,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -70,8 +68,10 @@ import com.igloo.blindpenguincoder.core.ui.PosterCardProgress
 import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.announcedSection
 import com.igloo.blindpenguincoder.core.ui.focusRing
+import com.igloo.blindpenguincoder.core.ui.hiddenFromAccessibilityIf
 import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
 import com.igloo.blindpenguincoder.core.ui.insetHorizontally
+import com.igloo.blindpenguincoder.core.ui.jsonSaver
 import com.igloo.blindpenguincoder.core.ui.rememberAnnouncedSectionColumn
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
@@ -131,56 +131,36 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.serialization.Serializable
 
 /** Which surface opened the details overlay, so Back can put focus back where it came from. */
+@Serializable
 internal sealed interface DetailsOrigin {
+    @Serializable
     data object Hero : DetailsOrigin
+
+    @Serializable
     data class Rail(val rail: HomeRail) : DetailsOrigin
 
     /** The Movies grid. No payload: the grid's own focus memory names the cell, not the origin. */
+    @Serializable
     data object MoviesGrid : DetailsOrigin
 
     /** The TV Shows grid, on the Movies grid's terms. */
+    @Serializable
     data object ShowsGrid : DetailsOrigin
 
     /** The Music pane, whichever tab: its selected surface parks the return requester itself. */
+    @Serializable
     data object Music : DetailsOrigin
 
     /** The Search pane, whichever tab: its selected surface parks the return requester itself. */
+    @Serializable
     data object Search : DetailsOrigin
 
     companion object {
-        /** One string, because the overlay outlives activity recreation but `remember` does not. */
-        val Saver: Saver<DetailsOrigin?, String> = Saver(
-            save = { origin ->
-                when (origin) {
-                    is Rail -> origin.rail.name
-                    Hero -> HERO
-                    MoviesGrid -> MOVIES_GRID
-                    ShowsGrid -> SHOWS_GRID
-                    Music -> MUSIC
-                    Search -> SEARCH
-                    null -> NONE
-                }
-            },
-            restore = { saved ->
-                when (saved) {
-                    NONE -> null
-                    HERO -> Hero
-                    MOVIES_GRID -> MoviesGrid
-                    SHOWS_GRID -> ShowsGrid
-                    MUSIC -> Music
-                    SEARCH -> Search
-                    // An unknown name is a rail a newer build renamed: no origin, not a crash.
-                    else -> HomeRail.entries.firstOrNull { it.name == saved }?.let(::Rail)
-                }
-            },
-        )
-
-        private const val HERO = "hero"
-        private const val MOVIES_GRID = "movies_grid"
-        private const val SHOWS_GRID = "shows_grid"
-        private const val MUSIC = "music"
-        private const val SEARCH = "search"
-        private const val NONE = "none"
+        /**
+         * Saved, because the overlay outlives activity recreation but `remember` does not. A
+         * rail a newer build renamed no longer parses: no origin, not a crash.
+         */
+        val Saver = jsonSaver<DetailsOrigin>()
     }
 }
 
@@ -1703,9 +1683,6 @@ private fun DetailsLayer(hiddenFromAccessibility: Boolean, content: @Composable 
         content()
     }
 }
-
-private fun Modifier.hiddenFromAccessibilityIf(hidden: Boolean): Modifier =
-    if (hidden) semantics { hideFromAccessibility() } else this
 
 /** The details overlay's write report, left on the shell after Back; text, so it owes the inset. */
 @Composable

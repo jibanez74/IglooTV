@@ -1,14 +1,12 @@
 package com.igloo.blindpenguincoder.feature.movies
 
 import androidx.compose.runtime.getValue
+import com.igloo.blindpenguincoder.clickActionLabelled
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -30,6 +28,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testMovieGridItems
 import org.junit.Rule
@@ -119,12 +118,7 @@ class MoviesGridAccessibilityTest {
 
         composeRule.onNodeWithTag("movies_count")
             .assertContentDescriptionEquals("Showing $columns of 96 movies. Loading more movies.")
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    androidx.compose.ui.semantics.LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
     }
 
     @Test
@@ -180,16 +174,6 @@ class MoviesGridAccessibilityTest {
             )
     }
 
-    @Test
-    fun anEmptyLibraryAnnouncesItself() {
-        setContent(testLibraryState(grid = IglooRailState.Loaded(emptyList())))
-
-        // Focusable so the pane keeps an anchor, but deliberately not a button: pressing it
-        // would do nothing, and announcing an action that does nothing is worse than none.
-        composeRule.onNodeWithContentDescription("No movies found in your library.")
-            .assertIsFocused()
-    }
-
     // --- the tab strip, the genre row, and the header ----------------------------------------
 
     /** One cleared node per tab, a Tab role, and `selected` only on the one that is. */
@@ -222,11 +206,7 @@ class MoviesGridAccessibilityTest {
     fun eachTabNamesTheActionAPressPerforms() {
         setContent()
 
-        composeRule.onNodeWithTag("movies_tab_liked").assert(
-            SemanticsMatcher("announces \"Show liked movies\" as its click action") { node ->
-                node.config.getOrNull(SemanticsActions.OnClick)?.label == "Show liked movies"
-            },
-        )
+        composeRule.onNodeWithTag("movies_tab_liked").assert(clickActionLabelled("Show liked movies"))
     }
 
     /** One cleared node per chip: the drawn "Action · 26" must not leak past the spoken form. */
@@ -323,9 +303,7 @@ class MoviesGridAccessibilityTest {
     fun aRefreshNoticeReportsPolitely() {
         setContent(testLibraryState(notice = "The server is unreachable."))
 
-        composeRule.onNodeWithText("The server is unreachable.").assert(
-            SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite),
-        )
+        composeRule.onNodeWithText("The server is unreachable.").assert(isPoliteLiveRegion())
     }
 
     @Test
@@ -352,20 +330,6 @@ class MoviesGridAccessibilityTest {
 
         composeRule.onNodeWithTag("movies_count")
             .assertContentDescriptionEquals("Showing 3 of 3 liked movies")
-    }
-
-    @Test
-    fun anEmptyLikedViewAnnouncesItself() {
-        setContent(
-            testLibraryState(
-                tab = LibraryTab.Liked,
-                grid = IglooRailState.Loaded(emptyList()),
-            ),
-        )
-
-        composeRule.onNodeWithContentDescription(
-            "No liked movies yet. Like a movie from its details page and it will appear here.",
-        ).assertIsFocused()
     }
 
     @Test

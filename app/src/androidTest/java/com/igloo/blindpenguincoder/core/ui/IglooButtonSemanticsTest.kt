@@ -5,7 +5,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -18,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.igloo.blindpenguincoder.clickActionLabelled
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -53,11 +53,7 @@ class IglooButtonSemanticsTest {
         val button = composeRule.onNodeWithTag("button")
         button.assertContentDescriptionEquals("Play Heat")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
-            .assert(
-                SemanticsMatcher("action label is the label") {
-                    it.config.getOrNull(SemanticsActions.OnClick)?.label == "Play Heat"
-                },
-            )
+            .assert(clickActionLabelled("Play Heat"))
             .assertIsEnabled()
         button.performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(1, presses)

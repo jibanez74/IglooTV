@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.core.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -23,7 +21,6 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
@@ -108,12 +105,7 @@ fun IglooTextField(
             horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         ) {
             if (leadingIcon != null) {
-                Image(
-                    imageVector = leadingIcon,
-                    contentDescription = null,
-                    colorFilter = ColorFilter.tint(colors.mutedForeground),
-                    modifier = Modifier.size(IglooTheme.icons.md),
-                )
+                IglooGlyph(icon = leadingIcon, tint = colors.mutedForeground)
             }
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 BasicTextField(

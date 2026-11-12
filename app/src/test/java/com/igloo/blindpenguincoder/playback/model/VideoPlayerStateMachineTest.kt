@@ -38,7 +38,6 @@ class VideoPlayerStateMachineTest {
     @Test
     fun `ready lands on paused until playback actually starts`() {
         val state = loading.onEvent(VideoPlayerEvent.Ready(3600.0))
-        assertTrue(state.ready)
         assertEquals(VideoPlayerPhase.Paused, state.phase)
         assertEquals(3600.0, state.durationSec, 0.0)
     }

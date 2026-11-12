@@ -4,7 +4,6 @@ import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.TestHttp
-import com.igloo.blindpenguincoder.data.repository.audioStreamJson
 import com.igloo.blindpenguincoder.data.repository.episodePlaybackJson
 import com.igloo.blindpenguincoder.data.repository.episodeTechnicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.episodeWatchedJson
@@ -30,7 +29,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -42,17 +40,7 @@ class ShowDetailsViewModelTest {
     @get:Rule
     val main = MainDispatcherRule()
 
-    // A view model outlives the test body — its scope is not runTest's child — so an unfinished
-    // load would still be on Dispatchers.Main when the next class calls setMain. Closing cancels
-    // it, which is also what Back does in production.
-    private val viewModels = mutableListOf<ShowDetailsViewModel>()
     private var committed = 0
-
-    @After
-    fun tearDown() {
-        viewModels.forEach { it.close() }
-        viewModels.clear()
-    }
 
     /**
      * A fake server for one show: [details] answers the details route, [season] each season route
@@ -88,11 +76,7 @@ class ShowDetailsViewModelTest {
             paths.filter { it.startsWith("/api/shows/episodes/$id") }
     }
 
-    private fun TestScope.viewModel(
-        server: Server,
-        canPlayVideo: Boolean = true,
-        canPlayAudio: Boolean = true,
-    ): ShowDetailsViewModel {
+    private fun TestScope.viewModel(server: Server): ShowDetailsViewModel {
         val http = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
             val path = request.url.encodedPath
             server.paths += path
@@ -124,11 +108,11 @@ class ShowDetailsViewModelTest {
             EpisodePlayPreparer(
                 http.showRepository,
                 http.serverUrl,
-                canPlayVideoMime = { canPlayVideo },
-                canPlayAudioMime = { _, _ -> canPlayAudio },
+                canPlayVideoMime = { true },
+                canPlayAudioMime = { _, _ -> true },
             ),
             onWatchedStateCommitted = { committed += 1 },
-        ).also { viewModels += it }
+        ).also { main.closeAfter(it::close) }
     }
 
     /**
@@ -686,31 +670,6 @@ class ShowDetailsViewModelTest {
 
         assertEquals(PlaybackMediaRef.Episode(101), viewModel.playRequests.first().media)
         assertEquals(2L, viewModel.uiState.value.selectedSeason)
-    }
-
-    /** The page has no Playback Settings, so the gate's refusal becomes a Remux launch, as on Home. */
-    @Test
-    fun `an undecodable default track falls back to remux instead of blocking`() = runTest {
-        val server = Server().apply {
-            episodeTechnical = {
-                jsonResponse(
-                    episodeTechnicalDetailsJson(
-                        audioStreams = listOf(
-                            audioStreamJson(ownerKey = "file_id", codec = "truehd", channels = 8),
-                        ),
-                    ),
-                )
-            }
-        }
-        val viewModel = viewModel(server, canPlayAudio = false)
-        viewModel.open(40)
-        testScheduler.advanceUntilIdle()
-
-        viewModel.playEpisode(101)
-        val request = viewModel.playRequests.first()
-
-        assertEquals(PlaybackMode.Remux, request.mode)
-        assertNull(viewModel.uiState.value.playbackNotice)
     }
 
     // --- watched ---

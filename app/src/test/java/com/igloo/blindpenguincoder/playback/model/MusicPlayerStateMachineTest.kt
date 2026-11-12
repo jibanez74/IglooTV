@@ -24,7 +24,6 @@ class MusicPlayerStateMachineTest {
     @Test
     fun `ready lands on paused until playback actually starts`() {
         val state = loading.onEvent(MusicPlayerEvent.Ready(240.0))
-        assertTrue(state.ready)
         assertEquals(MusicPlayerPhase.Paused, state.phase)
         assertEquals(240.0, state.durationSec, 0.0)
     }

@@ -35,7 +35,7 @@ fun ServerSetupScreen(viewModel: ServerSetupViewModel) {
         subtitle = "Enter the address of your self-hosted Igloo backend.",
     ) {
         state.error?.let { message ->
-            IglooInlineError(message = message, modifier = Modifier.fillMaxWidth())
+            IglooInlineError(message = message)
         }
         IglooTextField(
             value = state.input,

@@ -17,26 +17,22 @@ fun remainingSec(durationSec: Double, currentTimeSec: Double): Double? {
 /**
  * Whether the Up Next card belongs on screen, and what it counts. Null is no card: the viewer
  * dismissed it, the picture is not yet or no longer moving (Loading, the resume prompt, an error),
- * the duration is unknown, or more than [leadSec] remain. Ended always offers, with nothing left
+ * the duration is unknown, or more than [UP_NEXT_LEAD_SEC] remain. Ended always offers, with nothing left
  * to count, so an episode whose duration never arrived still gets its hand-off and the held frame
  * has something to say while the next episode prepares.
  */
-fun upNextOffer(
-    state: VideoPlayerState,
-    dismissed: Boolean,
-    leadSec: Double = UP_NEXT_LEAD_SEC,
-): UpNextOffer? {
+fun upNextOffer(state: VideoPlayerState, dismissed: Boolean): UpNextOffer? {
     if (dismissed) return null
     return when (state.phase) {
         VideoPlayerPhase.Ended -> UpNextOffer(secondsLeft = 0)
         VideoPlayerPhase.Playing, VideoPlayerPhase.Paused, VideoPlayerPhase.Buffering -> {
             val remaining = remainingSec(state.durationSec, state.currentTimeSec) ?: return null
-            if (remaining > leadSec) null else UpNextOffer(secondsLeft = ceil(remaining).toInt())
+            if (remaining > UP_NEXT_LEAD_SEC) null else UpNextOffer(secondsLeft = ceil(remaining).toInt())
         }
         VideoPlayerPhase.AwaitingResume, VideoPlayerPhase.Loading, VideoPlayerPhase.Error -> null
     }
 }
 
-/** True once the playhead sits more than [leadSec] from the end: an earlier dismissal no longer applies. */
-fun upNextOutsideLead(state: VideoPlayerState, leadSec: Double = UP_NEXT_LEAD_SEC): Boolean =
-    remainingSec(state.durationSec, state.currentTimeSec)?.let { it > leadSec } == true
+/** True once the playhead sits more than [UP_NEXT_LEAD_SEC] from the end: an earlier dismissal no longer applies. */
+fun upNextOutsideLead(state: VideoPlayerState): Boolean =
+    remainingSec(state.durationSec, state.currentTimeSec)?.let { it > UP_NEXT_LEAD_SEC } == true

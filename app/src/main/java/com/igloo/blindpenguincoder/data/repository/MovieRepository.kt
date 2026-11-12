@@ -5,12 +5,12 @@ import com.igloo.blindpenguincoder.core.error.map
 import com.igloo.blindpenguincoder.data.api.MovieApi
 import com.igloo.blindpenguincoder.data.model.ContinueWatchingData
 import com.igloo.blindpenguincoder.data.model.ContinueWatchingItem
-import com.igloo.blindpenguincoder.data.model.LatestMovie
 import com.igloo.blindpenguincoder.data.model.LatestMoviesData
 import com.igloo.blindpenguincoder.data.model.MovieDetailsData
 import com.igloo.blindpenguincoder.data.model.MovieGenreWithCount
 import com.igloo.blindpenguincoder.data.model.MovieGenresData
 import com.igloo.blindpenguincoder.data.model.LikedData
+import com.igloo.blindpenguincoder.data.model.MovieLibraryItem
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
 import com.igloo.blindpenguincoder.data.model.WatchedData
 import com.igloo.blindpenguincoder.data.model.MoviesLibraryData
@@ -26,7 +26,7 @@ import com.igloo.blindpenguincoder.data.model.WatchProgress
 class MovieRepository(
     private val api: MovieApi,
 ) {
-    suspend fun latestMovies(): ApiResult<List<LatestMovie>> =
+    suspend fun latestMovies(): ApiResult<List<MovieLibraryItem>> =
         envelopeData<LatestMoviesData>("latest movies") { api.latestMovies() }.map { it.movies }
 
     /** One page of the browsable library. The envelope's paging counts are part of the result. */

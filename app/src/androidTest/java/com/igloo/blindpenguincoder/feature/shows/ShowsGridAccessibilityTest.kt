@@ -3,11 +3,8 @@ package com.igloo.blindpenguincoder.feature.shows
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -20,6 +17,8 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
+import com.igloo.blindpenguincoder.clickActionLabel
+import com.igloo.blindpenguincoder.clickActionLabelled
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
@@ -27,6 +26,7 @@ import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import com.igloo.blindpenguincoder.testLibraryState
 import com.igloo.blindpenguincoder.testShowGridItems
 import org.junit.Assert.assertEquals
@@ -82,10 +82,7 @@ class ShowsGridAccessibilityTest {
             .assertContentDescriptionEquals("Show 1, 2001")
             .assertHasClickAction()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
-        assertEquals(
-            "Open Show 1",
-            card.fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label,
-        )
+        assertEquals("Open Show 1", card.clickActionLabel())
     }
 
     @Test
@@ -113,9 +110,7 @@ class ShowsGridAccessibilityTest {
 
         composeRule.onNodeWithTag("shows_count")
             .assertContentDescriptionEquals("Showing $columns of 96 shows. Loading more shows.")
-            .assert(
-                SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite),
-            )
+            .assert(isPoliteLiveRegion())
     }
 
     @Test
@@ -154,11 +149,7 @@ class ShowsGridAccessibilityTest {
             .assertContentDescriptionEquals("All shows")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
-            .assert(
-                SemanticsMatcher("announces \"Show all shows\" as its click action") { node ->
-                    node.config.getOrNull(SemanticsActions.OnClick)?.label == "Show all shows"
-                },
-            )
+            .assert(clickActionLabelled("Show all shows"))
         composeRule.onNodeWithTag("shows_tab_genres")
             .assertContentDescriptionEquals("Genres")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
@@ -181,11 +172,7 @@ class ShowsGridAccessibilityTest {
             .assertContentDescriptionEquals("Comedy, 2 shows")
             .assertHasClickAction()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
-            .assert(
-                SemanticsMatcher("announces \"Show Comedy shows\" as its click action") { node ->
-                    node.config.getOrNull(SemanticsActions.OnClick)?.label == "Show Comedy shows"
-                },
-            )
+            .assert(clickActionLabelled("Show Comedy shows"))
         composeRule.onNodeWithTag("shows_genre_9")
             .assertContentDescriptionEquals("Drama, 1 show")
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))

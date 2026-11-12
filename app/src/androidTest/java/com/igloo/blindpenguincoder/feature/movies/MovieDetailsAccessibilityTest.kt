@@ -6,7 +6,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -35,6 +34,7 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.isHeading
+import com.igloo.blindpenguincoder.isPoliteLiveRegion
 import com.igloo.blindpenguincoder.testMovieDetails
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -214,12 +214,7 @@ class MovieDetailsAccessibilityTest {
         setContent(mutationNotice = "Couldn't update like status: backend refused it")
 
         composeRule.onNodeWithTag("details_mutation_notice")
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
             .assertHasNoClickAction()
             .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Focused))
         composeRule.onNodeWithTag("details_play").assertIsFocused()
@@ -318,12 +313,7 @@ class MovieDetailsAccessibilityTest {
 
         composeRule.onNodeWithContentDescription("Loading movie details")
             .assertIsFocused()
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.LiveRegion,
-                    LiveRegionMode.Polite,
-                ),
-            )
+            .assert(isPoliteLiveRegion())
     }
 
     @Test

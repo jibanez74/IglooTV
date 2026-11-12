@@ -63,16 +63,7 @@ class SessionManagerTest {
             handler(request)
         }
         http.serverUrl.set(null)
-        val manager = SessionManager(
-            authRepository = http.authRepository,
-            profiles = http.profiles,
-            settings = settings,
-            serverUrl = http.serverUrl,
-            authEvents = http.authEvents,
-            scope = scope,
-            imageCache = imageCache,
-            elapsed = { fixture.elapsed },
-        )
+        val manager = http.sessionManager(scope, settings, imageCache, elapsed = { fixture.elapsed })
         fixture = Fixture(manager, http)
         if (storedServerUrl != null) settings.save(storedServerUrl)
         return fixture

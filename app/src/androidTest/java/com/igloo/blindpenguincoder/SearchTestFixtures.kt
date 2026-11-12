@@ -4,8 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
-import com.igloo.blindpenguincoder.feature.music.MusicianCardUi
 import com.igloo.blindpenguincoder.feature.music.TracksEntry
 import com.igloo.blindpenguincoder.feature.music.toRowUi
 import com.igloo.blindpenguincoder.feature.search.SearchActions
@@ -53,9 +51,6 @@ internal fun testSearchState(
     all: PagedState<SearchSectionUi> = PagedState(IglooRailState.Loaded(testSearchSections), append = AppendState.End, total = 29),
     movies: PagedState<PosterItem> = PagedState(IglooRailState.Loaded(testMovieGridItems), total = 40, append = AppendState.End),
     shows: PagedState<PosterItem> = PagedState(IglooRailState.Loaded(testShowGridItems), total = 40, append = AppendState.End),
-    albums: PagedState<AlbumCardUi> = PagedState(IglooRailState.Loaded(testMusicAlbums), total = 30, append = AppendState.End),
-    musicians: PagedState<MusicianCardUi> = PagedState(IglooRailState.Loaded(testMusicians), total = 30, append = AppendState.End),
-    tracks: PagedState<TracksEntry> = PagedState(IglooRailState.Loaded(testSearchTrackEntries), total = 5, append = AppendState.End),
 ) = SearchUiState(
     query = query,
     searched = searched,
@@ -63,9 +58,9 @@ internal fun testSearchState(
     all = all,
     movies = movies,
     shows = shows,
-    albums = albums,
-    musicians = musicians,
-    tracks = tracks,
+    albums = PagedState(IglooRailState.Loaded(testMusicAlbums), total = 30, append = AppendState.End),
+    musicians = PagedState(IglooRailState.Loaded(testMusicians), total = 30, append = AppendState.End),
+    tracks = PagedState(IglooRailState.Loaded(testSearchTrackEntries), total = 5, append = AppendState.End),
 )
 
 internal val inertSearchActions = SearchActions(

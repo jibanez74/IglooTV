@@ -1,7 +1,6 @@
 package com.igloo.blindpenguincoder.feature.auth
 
 import com.igloo.blindpenguincoder.MainDispatcherRule
-import com.igloo.blindpenguincoder.core.image.NoOpImageCache
 import com.igloo.blindpenguincoder.core.storage.InMemoryPreferencesDataStore
 import com.igloo.blindpenguincoder.core.storage.ServerSettingsStore
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
@@ -53,16 +52,7 @@ class ServerSetupViewModelTest {
             http.profiles,
             networkAccess,
         )
-        val sessionManager = SessionManager(
-            authRepository = authRepository,
-            profiles = http.profiles,
-            settings = settings,
-            serverUrl = http.serverUrl,
-            authEvents = http.authEvents,
-            imageCache = NoOpImageCache,
-            elapsed = { 0L },
-            scope = main.newScope(),
-        )
+        val sessionManager = http.sessionManager(main.newScope(), settings)
         val viewModel = ServerSetupViewModel(serverRepository, sessionManager).apply {
             beginSetup(initialOrigin)
         }

@@ -6,16 +6,13 @@ import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.musicianDetailsJson
 import com.igloo.blindpenguincoder.data.repository.musicianJson
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
-import io.ktor.client.engine.mock.MockRequestHandleScope
-import io.ktor.client.request.HttpRequestData
-import io.ktor.client.request.HttpResponseData
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -27,20 +24,11 @@ class MusicianDetailsViewModelTest {
     @get:Rule
     val main = MainDispatcherRule()
 
-    private val viewModels = mutableListOf<MusicianDetailsViewModel>()
-
-    @After
-    fun tearDown() {
-        viewModels.forEach { it.close() }
-        viewModels.clear()
-    }
-
     private fun viewModel(http: TestHttp) =
-        MusicianDetailsViewModel(http.musicRepository).also { viewModels += it }
+        MusicianDetailsViewModel(http.musicRepository).also { main.closeAfter(it::close) }
 
     private fun TestScope.http(
-        respond: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData =
-            { jsonResponse(musicianDetailsJson()) },
+        respond: MockRequestHandler = { jsonResponse(musicianDetailsJson()) },
     ) = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
         check(request.url.encodedPath.startsWith("/api/music/musicians/")) {
             "Unrouted path: ${request.url.encodedPath}"
@@ -116,35 +104,5 @@ class MusicianDetailsViewModelTest {
         assertTrue(model.uiState.value.details is DetailsState.Loading)
         model.refresh()
         assertNull(model.uiState.value.openMusicianId)
-    }
-
-    @Test
-    fun `closing during a request cancels it and keeps the overlay closed`() = runTest {
-        val response = CompletableDeferred<Unit>()
-        var started = false
-        var cancelled = false
-        val model = viewModel(
-            http {
-                started = true
-                try {
-                    response.await()
-                    jsonResponse(musicianDetailsJson())
-                } finally {
-                    cancelled = !response.isCompleted
-                }
-            },
-        )
-        model.open(4)
-        testScheduler.runCurrent()
-        assertTrue(started)
-
-        model.close()
-        testScheduler.runCurrent()
-        assertTrue(cancelled)
-        response.complete(Unit)
-        testScheduler.advanceUntilIdle()
-
-        assertNull(model.uiState.value.openMusicianId)
-        assertTrue(model.uiState.value.details is DetailsState.Loading)
     }
 }

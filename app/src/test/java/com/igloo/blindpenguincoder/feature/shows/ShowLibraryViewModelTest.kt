@@ -13,7 +13,6 @@ import com.igloo.blindpenguincoder.feature.library.ERROR_BODY
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
 import com.igloo.blindpenguincoder.feature.library.LibraryGenre
 import com.igloo.blindpenguincoder.feature.library.LibraryKind
-import com.igloo.blindpenguincoder.feature.library.LibraryRoute
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryViewModel
 import com.igloo.blindpenguincoder.feature.library.RoutedHttp
@@ -25,6 +24,7 @@ import com.igloo.blindpenguincoder.feature.library.routedLibraryHttp
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
+import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -261,16 +261,15 @@ class ShowLibraryViewModelTest {
 
     /** No liked route: the backend keeps no show likes, so a request there fails the test. */
     private fun TestScope.routedHttp(
-        stats: LibraryRoute = { jsonResponse(showsStatsJson()) },
-        genres: LibraryRoute = { jsonResponse(showsGenresJson(showGenreWithCountJson())) },
-        library: LibraryRoute = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
-        genreShows: LibraryRoute = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..2L)) },
+        stats: MockRequestHandler = { jsonResponse(showsStatsJson()) },
+        genres: MockRequestHandler = { jsonResponse(showsGenresJson(showGenreWithCountJson())) },
+        library: MockRequestHandler = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
     ): RoutedHttp = routedLibraryHttp(
         resource = "shows",
         stats = stats,
         genres = genres,
         library = library,
-        genreList = genreShows,
+        genreList = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..2L)) },
         liked = null,
     )
 }

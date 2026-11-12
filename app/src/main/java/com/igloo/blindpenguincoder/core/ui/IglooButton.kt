@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.core.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -19,7 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -142,12 +139,7 @@ fun IglooButton(
             horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         ) {
             if (icon != null) {
-                Image(
-                    imageVector = icon,
-                    contentDescription = null,
-                    colorFilter = ColorFilter.tint(iconTint ?: foreground),
-                    modifier = Modifier.size(IglooTheme.icons.md),
-                )
+                IglooGlyph(icon = icon, tint = iconTint ?: foreground)
             }
             Box(contentAlignment = Alignment.Center) {
                 labelVariants.filter { it != text }.forEach { reserved ->
@@ -233,11 +225,6 @@ fun IglooIconButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Image(
-            imageVector = icon,
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(iconTint ?: foreground),
-            modifier = Modifier.size(IglooTheme.icons.md),
-        )
+        IglooGlyph(icon = icon, tint = iconTint ?: foreground)
     }
 }

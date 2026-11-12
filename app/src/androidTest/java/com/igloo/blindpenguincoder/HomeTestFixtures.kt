@@ -370,19 +370,15 @@ internal fun testMovieDetails(
  * everything the library fills from its own reads is absent and the hero's action is a trailer.
  */
 internal fun testTheaterMovieDetails(
-    id: Long = 21,
-    title: String = "Heat 2",
     heroTrailer: ExtraVideoUi? = testExtraVideos.first(),
-    cast: List<CastMemberUi> = testCast,
-    extraVideos: List<ExtraVideoUi> = testExtraVideos,
 ) = testMovieDetails(
-    id = id,
-    title = title,
+    id = 21,
+    title = "Heat 2",
     watched = null,
     liked = null,
     progress = null,
-    cast = cast,
-    extraVideos = extraVideos,
+    cast = testCast,
+    extraVideos = testExtraVideos,
 ).copy(
     mediaBadges = emptyList(),
     about = movieAboutFacts(
@@ -405,10 +401,9 @@ internal fun testTheaterMovieDetails(
  */
 internal fun testAlbumDetails(
     id: Long = 11,
-    title: String = "Help!",
 ) = AlbumDetailsUi(
     id = id,
-    title = title,
+    title = "Help!",
     artistName = "The Beatles",
     coverUrl = null,
     releaseDateText = "August 6, 1965",
@@ -538,13 +533,12 @@ internal fun testEpisode(
     name: String,
     watched: Boolean = false,
     progressFraction: Float? = null,
-    overview: String? = "$name, the episode.",
 ): EpisodeUi = EpisodeUi(
     id = id,
     title = "$number. $name",
     stillUrl = null,
     metaLine = "57m · February 17, 2022" + if (progressFraction != null) " · 45m left" else "",
-    overview = overview,
+    overview = "$name, the episode.",
     watched = watched,
     progressFraction = progressFraction,
     description = listOfNotNull(
@@ -555,7 +549,7 @@ internal fun testEpisode(
             progressFraction != null -> "45 minutes remaining"
             else -> null
         },
-        overview?.trimEnd('.'),
+        "$name, the episode",
     ).joinToString(". "),
 )
 
@@ -581,19 +575,11 @@ internal val testPlayTarget = PlayTargetUi(
 /** Image-less like the movie fixtures: every artwork path falls back to a glyph. */
 internal fun testShowDetails(
     id: Long = 40,
-    title: String = "Severance",
     seasons: List<SeasonUi> = testSeasons,
     keyCrew: List<CrewEntry> = listOf(CrewEntry("Creator", "Dan Erickson")),
-    cast: List<CastMemberUi> = testShowCast,
-    extraVideos: List<ExtraVideoUi> = testExtraVideos,
-    about: List<FactUi> = listOf(
-        FactUi("Network", "Apple TV+"),
-        FactUi("Status", "Returning Series"),
-        FactUi("First aired", "February 17, 2022"),
-    ),
 ) = ShowDetailsUi(
     id = id,
-    title = title,
+    title = "Severance",
     tagline = "Please enjoy each fact equally.",
     backdropUrl = null,
     posterUrl = null,
@@ -607,9 +593,13 @@ internal fun testShowDetails(
     overview = "Mark leads a team of office workers whose memories have been split.",
     seasons = seasons,
     keyCrew = keyCrew,
-    cast = cast,
-    extraVideos = extraVideos,
-    about = about,
+    cast = testShowCast,
+    extraVideos = testExtraVideos,
+    about = listOf(
+        FactUi("Network", "Apple TV+"),
+        FactUi("Status", "Returning Series"),
+        FactUi("First aired", "February 17, 2022"),
+    ),
 )
 
 /** An open show page on its first season, loaded. */
@@ -646,7 +636,6 @@ internal fun testAlbumTrackRow(
     durationText: String,
     durationSec: Double,
     spokenInfo: String,
-    musicianId: Long? = 4,
 ) = TrackRowUi(
     id = id,
     title = title,
@@ -655,7 +644,7 @@ internal fun testAlbumTrackRow(
     durationText = durationText,
     durationSec = durationSec,
     albumId = null,
-    musicianId = musicianId,
+    musicianId = 4,
     spokenInfo = spokenInfo,
 )
 
@@ -709,21 +698,16 @@ internal fun testLibraryTrack(
 internal fun testMusicState(
     tab: MusicTab = MusicTab.Musicians,
     musicians: PagedState<MusicianCardUi> = PagedState(IglooRailState.Loaded(testMusicians), total = 60),
-    albums: PagedState<AlbumCardUi> = PagedState(IglooRailState.Loaded(testMusicAlbums), total = 90),
     tracks: PagedState<TracksEntry> = PagedState(IglooRailState.Loaded(testTrackEntries), total = 5, append = AppendState.End),
-    stats: MusicStats? = MusicStats(totalAlbums = 90, totalTracks = 5, totalMusicians = 60),
-    refreshing: Boolean = false,
-    notice: String? = null,
-    shufflePending: Boolean = false,
 ) = MusicUiState(
     tab = tab,
     musicians = musicians,
-    albums = albums,
+    albums = PagedState(IglooRailState.Loaded(testMusicAlbums), total = 90),
     tracks = tracks,
-    stats = stats,
-    refreshing = refreshing,
-    notice = notice,
-    shufflePending = shufflePending,
+    stats = MusicStats(totalAlbums = 90, totalTracks = 5, totalMusicians = 60),
+    refreshing = false,
+    notice = null,
+    shufflePending = false,
 )
 
 internal val inertMusicActions = MusicActions(
@@ -745,10 +729,9 @@ internal val inertMusicActions = MusicActions(
  */
 internal fun testMusicianDetails(
     id: Long = 4,
-    name: String = "The Beatles",
 ) = MusicianDetailsUi(
     id = id,
-    name = name,
+    name = "The Beatles",
     thumbUrl = null,
     albumCountText = "2 albums",
     trackCountText = "3 tracks",
