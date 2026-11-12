@@ -139,23 +139,26 @@ class IglooBaseAppTest {
     fun navigationItemsChangeContentPane() {
         setShellContent()
 
-        // Movies has a real screen: its pane is the library grid, identified by its own tag.
-        composeRule.onNodeWithContentDescription("Movies").performClick()
+        // Each pane with a real screen is identified by its own tag. The rail's rows overflow
+        // its column at 540dp, which is why openDestination brings each into view first.
+        composeRule.openDestination(IglooDestination.WatchRooms)
+        composeRule.onNodeWithTag("watch_rooms_grid").assertIsDisplayed()
+
+        composeRule.openDestination(IglooDestination.Movies)
         composeRule.onNodeWithTag("movies_grid").assertIsDisplayed()
 
-        // Music has a real screen too: its pane is the tabbed library, identified by its strip.
-        composeRule.onNodeWithContentDescription("Music").performClick()
+        // Music's pane is the tabbed library, identified by its strip.
+        composeRule.openDestination(IglooDestination.Music)
         composeRule.onNodeWithTag("music_tabs").assertIsDisplayed()
 
         // TV Shows shares the library grid with Movies, under its own tag.
-        composeRule.onNodeWithContentDescription("TV Shows").performClick()
+        composeRule.openDestination(IglooDestination.TvShows)
         composeRule.onNodeWithTag("shows_grid").assertIsDisplayed()
 
         // A destination with no screen yet still swaps the pane. The placeholder is one cleared
         // node (section 10's inert-anchor contract), so it is identified by what it announces
-        // rather than by a loose text node inside it. Settings sits past the fold of the rail's
-        // scrolling column at 540dp, so it is brought into view the way d-pad focus would.
-        composeRule.onNodeWithContentDescription("Settings").performScrollTo().performClick()
+        // rather than by a loose text node inside it.
+        composeRule.openDestination(IglooDestination.Settings)
         composeRule.onNodeWithContentDescription(
             "Settings. ${IglooDestination.Settings.supportingText}",
         ).assertIsDisplayed()

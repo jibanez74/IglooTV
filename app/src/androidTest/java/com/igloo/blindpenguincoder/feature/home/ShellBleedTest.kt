@@ -9,7 +9,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
@@ -18,7 +17,9 @@ import com.igloo.blindpenguincoder.ReferenceViewport
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.LocalIglooReducedMotion
+import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.openDestination
 import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -151,7 +152,7 @@ class ShellBleedTest {
         composeRule.onNodeWithTag("content_pane")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Home"))
 
-        composeRule.onNodeWithContentDescription("Movies").performClick()
+        composeRule.openDestination(IglooDestination.Movies)
 
         composeRule.onNodeWithTag("content_pane")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, "Movies"))

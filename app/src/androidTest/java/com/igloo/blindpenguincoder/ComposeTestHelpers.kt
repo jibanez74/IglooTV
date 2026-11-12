@@ -26,9 +26,12 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.ComposeTestRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
@@ -36,6 +39,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.igloo.blindpenguincoder.core.design.viewportFactor
+import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 
@@ -78,6 +82,15 @@ internal fun SemanticsNodeInteraction.clickActionLabel(): String? =
 
 internal fun clickActionLabelled(label: String) = SemanticsMatcher("click action labelled $label") {
     it.config.getOrNull(SemanticsActions.OnClick)?.label == label
+}
+
+/**
+ * Selects [destination] on the navigation rail. The rail's rows overflow its column at 540dp, so
+ * the row is brought into view first, the way d-pad focus would bring it.
+ */
+internal fun ComposeTestRule.openDestination(destination: IglooDestination) {
+    onNodeWithContentDescription(destination.label).performScrollTo().performClick()
+    waitForIdle()
 }
 
 /** Focuses the node tagged [tag], presses select on it, and waits for what that opens to settle. */
