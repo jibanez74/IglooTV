@@ -4,8 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -29,7 +27,6 @@ import com.igloo.blindpenguincoder.core.ui.IglooMenu
 import com.igloo.blindpenguincoder.core.ui.IglooMenuItem
 import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
-import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
@@ -40,6 +37,7 @@ import com.igloo.blindpenguincoder.feature.shared.DetailsScrollColumn
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
 import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
+import com.igloo.blindpenguincoder.feature.shared.detailsSections
 import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 
 /**
@@ -438,9 +436,6 @@ private fun DetailsContent(
     val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError, spokenAccessibilityEnabled) {
         if (progressSyncError == null) lastFocusedAction?.requestFocusSafely()
     }
-    var entered by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { entered = true }
-
     DetailsScrollColumn(
         scrollState = rememberScrollState(),
         hero = {
@@ -490,10 +485,7 @@ private fun DetailsContent(
             // take it, the cast and extras rails carry it as scroll padding so their cards run
             // off the panel's edge instead of stopping short of it (section 8.3).
             contentInset = PaddingValues(horizontal = layout.safeAreaHorizontal),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = layout.safeAreaVertical)
-                .iglooEnterStagger(entered = entered, index = 0),
+            modifier = Modifier.detailsSections(),
         )
     }
 }

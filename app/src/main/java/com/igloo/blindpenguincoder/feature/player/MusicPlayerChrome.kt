@@ -3,7 +3,6 @@ package com.igloo.blindpenguincoder.feature.player
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -159,14 +158,7 @@ internal fun MusicPlayerChrome(
             )
             fun Modifier.transportEdges(isFirst: Boolean = false, isLast: Boolean = false) =
                 transportFocus(transportUpRequester, isFirst, isLast)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(
-                    IglooTheme.spacing.lg,
-                    Alignment.CenterHorizontally,
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            PlayerTransportRow {
                 TransportButton(
                     icon = IglooIcons.SkipPrevious,
                     label = "Previous track",

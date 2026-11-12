@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.feature.shared
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -67,6 +68,47 @@ internal fun Modifier.readingStopTarget(
         .onFocusChanged { onFocusChanged(it.isFocused) }
         .focusable()
         .clearAndSetSemantics { contentDescription = description }
+}
+
+/**
+ * A column of prose that is one reading stop while [enabled] (see [readingStopTarget]) and
+ * plain text the d-pad passes by otherwise.
+ */
+@Composable
+internal fun ReadingStopColumn(
+    enabled: Boolean,
+    tag: String,
+    requester: FocusRequester,
+    upRequester: FocusRequester?,
+    downRequester: FocusRequester?,
+    description: String,
+    modifier: Modifier = Modifier,
+    radius: Dp = IglooTheme.radius.xl,
+    overMedia: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    Column(
+        modifier = modifier.then(
+            if (enabled) {
+                Modifier.readingStopTarget(
+                    tag = tag,
+                    focused = focused,
+                    requester = requester,
+                    upRequester = upRequester,
+                    downRequester = downRequester,
+                    onFocusChanged = { focused = it },
+                    description = description,
+                    radius = radius,
+                    overMedia = overMedia,
+                )
+            } else {
+                Modifier
+            },
+        ),
+        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+        content = content,
+    )
 }
 
 /** One facts-panel row; absent values never become rows, so the panel renders what it holds. */

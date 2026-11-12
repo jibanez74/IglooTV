@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,7 +34,6 @@ import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.announcedSection
 import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
-import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.rememberAnnouncedSectionColumn
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
@@ -50,6 +48,7 @@ import com.igloo.blindpenguincoder.feature.shared.ExtraVideosSection
 import com.igloo.blindpenguincoder.feature.shared.KeyCrewSection
 import com.igloo.blindpenguincoder.feature.shared.OverviewSection
 import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
+import com.igloo.blindpenguincoder.feature.shared.detailsSections
 import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 
 /** Which control asked for an episode; the host restores focus to it when the player closes. */
@@ -342,8 +341,6 @@ private fun ShowDetailsContent(
     }
 
     val contentInset = PaddingValues(horizontal = layout.safeAreaHorizontal)
-    var entered by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { entered = true }
 
     DetailsScrollColumn(
         scrollState = scrollState,
@@ -382,10 +379,7 @@ private fun ShowDetailsContent(
         },
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = layout.safeAreaVertical)
-                .iglooEnterStagger(entered = entered, index = 0),
+            modifier = Modifier.detailsSections(),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
         ) {
             OverviewSection(

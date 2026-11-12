@@ -7,8 +7,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -228,6 +230,33 @@ internal fun Modifier.playerBottomScrim(): Modifier = background(
         1f to Color.Black.copy(alpha = SCRIM_STRENGTH),
     ),
 )
+
+/** What a video player says in the middle of the picture while it has nothing to show. */
+@Composable
+internal fun BoxScope.PlayerHoldMessage(text: String, tag: String) {
+    IglooText(
+        text = text,
+        style = IglooTheme.typography.bodyLarge.overMedia(true),
+        color = OVER_MEDIA_SECONDARY,
+        modifier = Modifier
+            .align(Alignment.Center)
+            .testTag(tag),
+    )
+}
+
+/** The centred row every player lays its transport controls out in. */
+@Composable
+internal fun PlayerTransportRow(content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(
+            IglooTheme.spacing.lg,
+            Alignment.CenterHorizontally,
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
 
 /**
  * Rewind, Play/Pause and Forward, the run of transport every player shares, tagged

@@ -59,27 +59,17 @@ internal fun OverviewSection(
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
-    var focused by remember { mutableStateOf(false) }
     // Rendered even with nothing to say (web parity): a title without an overview reads as
     // "none available", not as a page with a piece missing — and the reading stop says the same.
     val text = overview ?: "No overview available."
-    Column(
-        modifier = modifier.then(
-            if (readingStop) {
-                Modifier.readingStopTarget(
-                    tag = "details_overview_stop",
-                    focused = focused,
-                    requester = requester,
-                    upRequester = upRequester,
-                    downRequester = downRequester,
-                    onFocusChanged = { focused = it },
-                    description = "Overview. $text",
-                )
-            } else {
-                Modifier
-            },
-        ),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+    ReadingStopColumn(
+        enabled = readingStop,
+        tag = "details_overview_stop",
+        requester = requester,
+        upRequester = upRequester,
+        downRequester = downRequester,
+        description = "Overview. $text",
+        modifier = modifier,
     ) {
         SectionHeading("Overview")
         FadeClampedText(
@@ -150,25 +140,14 @@ internal fun KeyCrewSection(
     modifier: Modifier = Modifier,
 ) {
     val colors = IglooTheme.colors
-    var focused by remember { mutableStateOf(false) }
-    Column(
-        modifier = modifier.then(
-            if (readingStop) {
-                Modifier.readingStopTarget(
-                    tag = "details_key_crew_stop",
-                    focused = focused,
-                    requester = requester,
-                    upRequester = upRequester,
-                    downRequester = downRequester,
-                    onFocusChanged = { focused = it },
-                    description = "Key Crew. " +
-                        crew.joinToString(". ") { "${it.job}: ${it.name}" },
-                )
-            } else {
-                Modifier
-            },
-        ),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+    ReadingStopColumn(
+        enabled = readingStop,
+        tag = "details_key_crew_stop",
+        requester = requester,
+        upRequester = upRequester,
+        downRequester = downRequester,
+        description = "Key Crew. " + crew.joinToString(". ") { "${it.job}: ${it.name}" },
+        modifier = modifier,
     ) {
         SectionHeading("Key Crew")
         crew.chunked(CREW_COLUMNS).forEach { rowEntries ->

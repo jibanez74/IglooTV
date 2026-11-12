@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
@@ -19,7 +18,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -38,11 +36,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.iglooSafeArea
 import com.igloo.blindpenguincoder.core.design.iglooTween
-import com.igloo.blindpenguincoder.core.design.overMedia
-import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPhase
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
@@ -257,14 +252,7 @@ private fun PlayerChrome(
 
         Box(modifier = Modifier.weight(1f)) {
             if (state.phase == TrailerPhase.Loading) {
-                IglooText(
-                    text = "Loading trailer…",
-                    style = IglooTheme.typography.bodyLarge.overMedia(true),
-                    color = OVER_MEDIA_SECONDARY,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .testTag("trailer_loading"),
-                )
+                PlayerHoldMessage(text = "Loading trailer…", tag = "trailer_loading")
             }
         }
 
@@ -275,11 +263,7 @@ private fun PlayerChrome(
                 .iglooSafeArea(),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            PlayerTransportRow {
                 SeekTransportButtons(
                     tagPrefix = "trailer_",
                     playing = playing,

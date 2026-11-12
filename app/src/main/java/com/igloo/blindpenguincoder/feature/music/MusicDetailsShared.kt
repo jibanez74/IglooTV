@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -47,7 +46,6 @@ import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
-import com.igloo.blindpenguincoder.core.ui.iglooEnterStagger
 import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.core.ui.withRequester
@@ -58,6 +56,7 @@ import com.igloo.blindpenguincoder.feature.shared.TrackRow
 import com.igloo.blindpenguincoder.feature.shared.TrackRowMenu
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
+import com.igloo.blindpenguincoder.feature.shared.detailsSections
 import com.igloo.blindpenguincoder.feature.shared.rememberPlainColumnTrackRowFocus
 
 /**
@@ -184,8 +183,6 @@ internal fun MusicDetailsBody(
     sections: @Composable ColumnScope.() -> Unit,
 ) {
     val layout = IglooTheme.layout
-    var entered by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { entered = true }
 
     DetailsScrollColumn(scrollState = rememberScrollState(), hero = hero) {
         if (notice != null) {
@@ -198,10 +195,7 @@ internal fun MusicDetailsBody(
             )
         }
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = layout.safeAreaVertical)
-                .iglooEnterStagger(entered = entered, index = 0),
+            modifier = Modifier.detailsSections(),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
             content = sections,
         )

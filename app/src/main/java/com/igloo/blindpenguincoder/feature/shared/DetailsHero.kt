@@ -32,7 +32,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -43,8 +42,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
@@ -54,6 +51,7 @@ import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.overMediaSideScrim
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.ui.ArtworkImage
 import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
@@ -69,6 +67,7 @@ import com.igloo.blindpenguincoder.core.ui.iglooSurface
 import com.igloo.blindpenguincoder.core.ui.overMediaPill
 import com.igloo.blindpenguincoder.core.ui.pinnedSideways
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
+import com.igloo.blindpenguincoder.core.ui.rememberArtworkState
 import com.igloo.blindpenguincoder.core.ui.withRequester
 
 /*
@@ -100,12 +99,10 @@ internal fun DetailsHero(
     header: @Composable BoxScope.(overMedia: Boolean) -> Unit,
 ) {
     val colors = IglooTheme.colors
-    var imageFailed by remember(imageUrl) { mutableStateOf(false) }
-    var imageLoaded by remember(imageUrl) { mutableStateOf(false) }
-    val showBackdrop = imageUrl != null && !imageFailed
-    val overMedia = imageLoaded
+    val art = rememberArtworkState(imageUrl)
+    val overMedia = art.loaded
     val backdropAlpha by animateFloatAsState(
-        targetValue = if (imageLoaded) 1f else 0f,
+        targetValue = if (art.loaded) 1f else 0f,
         animationSpec = iglooTween(IglooMotion.PAGE_MS),
         label = "detailsBackdrop",
     )
@@ -116,18 +113,9 @@ internal fun DetailsHero(
             .fillMaxWidth()
             .heightIn(min = HERO_MIN_HEIGHT.scaled()),
     ) {
-        if (showBackdrop) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                onState = { state ->
-                    when (state) {
-                        is AsyncImagePainter.State.Success -> imageLoaded = true
-                        is AsyncImagePainter.State.Error -> imageFailed = true
-                        else -> Unit
-                    }
-                },
+        if (art.showsArtwork) {
+            ArtworkImage(
+                state = art,
                 modifier = Modifier
                     .testTag(backdropTag)
                     .matchParentSize()
@@ -217,26 +205,16 @@ internal fun HeroReadingStop(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    var focused by remember { mutableStateOf(false) }
-    Column(
-        modifier = modifier.then(
-            if (enabled) {
-                Modifier.readingStopTarget(
-                    tag = tag,
-                    focused = focused,
-                    requester = requester,
-                    upRequester = null,
-                    downRequester = downRequester,
-                    onFocusChanged = { focused = it },
-                    description = description,
-                    radius = IglooTheme.radius.lg,
-                    overMedia = overMedia,
-                )
-            } else {
-                Modifier
-            },
-        ),
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
+    ReadingStopColumn(
+        enabled = enabled,
+        tag = tag,
+        requester = requester,
+        upRequester = null,
+        downRequester = downRequester,
+        description = description,
+        modifier = modifier,
+        radius = IglooTheme.radius.lg,
+        overMedia = overMedia,
         content = content,
     )
 }

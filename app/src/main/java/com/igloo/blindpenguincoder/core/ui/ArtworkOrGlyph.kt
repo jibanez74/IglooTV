@@ -17,12 +17,14 @@ import coil3.compose.AsyncImagePainter
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 
 /**
- * Whether the artwork at [imageUrl] is on screen: it is until the decode fails. Hoisted through
- * [rememberArtworkState] by a card whose own treatment depends on it — text drawn over the art
- * needs the over-media colours only while there is art under it (section 3.2).
+ * Whether the artwork at [imageUrl] is on screen: it is until the decode fails, and [loaded] says
+ * the decode has landed. Hoisted through [rememberArtworkState] by a surface whose own treatment
+ * depends on it — text drawn over the art needs the over-media colours only while there is art
+ * under it (section 3.2), and a URL alone would paint them over the bare fill while it loads.
  */
 @Stable
 internal class ArtworkState(val imageUrl: String?) {
+    var loaded by mutableStateOf(false)
     var failed by mutableStateOf(false)
     val showsArtwork: Boolean get() = imageUrl != null && !failed
 }
@@ -44,14 +46,26 @@ internal fun ArtworkOrGlyph(
     state: ArtworkState = rememberArtworkState(imageUrl),
 ) {
     if (state.showsArtwork) {
-        AsyncImage(
-            model = state.imageUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            onState = { if (it is AsyncImagePainter.State.Error) state.failed = true },
-            modifier = Modifier.fillMaxSize(),
-        )
+        ArtworkImage(state, Modifier.fillMaxSize())
     } else {
         IglooGlyph(icon = fallbackIcon, tint = fallbackTint, size = IglooTheme.icons.lg)
     }
+}
+
+/** [state]'s artwork cropped to fill its box, reporting the decode back into [state]. Decorative. */
+@Composable
+internal fun ArtworkImage(state: ArtworkState, modifier: Modifier = Modifier) {
+    AsyncImage(
+        model = state.imageUrl,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        onState = {
+            when (it) {
+                is AsyncImagePainter.State.Success -> state.loaded = true
+                is AsyncImagePainter.State.Error -> state.failed = true
+                else -> Unit
+            }
+        },
+        modifier = modifier,
+    )
 }

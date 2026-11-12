@@ -1,34 +1,20 @@
 package com.igloo.blindpenguincoder.feature.home
 
-import androidx.compose.runtime.saveable.Saver
+import com.igloo.blindpenguincoder.core.ui.jsonSaver
 import com.igloo.blindpenguincoder.playback.model.MAX_QUEUE_TRACKS
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
-import kotlinx.serialization.json.Json
 
-/**
- * The shell's player overlays ride activity recreation as one JSON string each, "" for none.
- *
- * Restore is wrapped: it parses a bundle written by a possibly older build (one that saved a
- * slot list, or a request shape that has since changed), and a throw there lands inside saved
- * state restoration, which means a crash on relaunch — while the honest degradation is simply to
- * come back with no overlay, since the screen underneath is restored anyway.
+/*
+ * The shell's player overlays ride activity recreation through [jsonSaver]: a request that no
+ * longer parses comes back as no overlay, since the screen underneath is restored anyway.
  */
-internal inline fun <reified T : Any> overlaySaver(
-    crossinline keep: (T) -> Boolean = { true },
-): Saver<T?, Any> = Saver(
-    save = { request -> request?.takeIf(keep)?.let { Json.encodeToString(it) }.orEmpty() },
-    restore = { saved ->
-        (saved as? String)?.ifEmpty { null }
-            ?.let { runCatching { Json.decodeFromString<T>(it) }.getOrNull() }
-    },
-)
 
 /**
  * What the movie player overlay is playing (the screen itself restarts the engine and re-seeks
  * to its saved position).
  */
-internal val VideoPlayRequestSaver = overlaySaver<VideoPlayRequest>()
+internal val VideoPlayRequestSaver = jsonSaver<VideoPlayRequest>()
 
 /**
  * What the music player overlay is playing. The host keeps the request current as an endless
@@ -38,6 +24,6 @@ internal val VideoPlayRequestSaver = overlaySaver<VideoPlayRequest>()
  * overlay" is the saver's honest degradation.
  */
 internal val MusicPlayRequestSaver =
-    overlaySaver<MusicPlayRequest> { it.tracks.size <= MAX_QUEUE_TRACKS }
+    jsonSaver<MusicPlayRequest> { it.tracks.size <= MAX_QUEUE_TRACKS }
 
-internal val TrailerRequestSaver = overlaySaver<TrailerRequest>()
+internal val TrailerRequestSaver = jsonSaver<TrailerRequest>()

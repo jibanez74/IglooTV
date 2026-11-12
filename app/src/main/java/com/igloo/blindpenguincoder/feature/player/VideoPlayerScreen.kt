@@ -9,7 +9,6 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -46,7 +45,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.iglooSafeArea
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
@@ -57,7 +55,6 @@ import com.igloo.blindpenguincoder.core.ui.IglooInlineError
 import com.igloo.blindpenguincoder.core.ui.IglooRadioListDialog
 import com.igloo.blindpenguincoder.core.ui.IglooRadioRow
 import com.igloo.blindpenguincoder.core.ui.IglooDialogCard
-import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
@@ -661,14 +658,7 @@ private fun VideoPlayerChrome(
                 else -> null
             }
             if (holdMessage != null) {
-                IglooText(
-                    text = holdMessage,
-                    style = IglooTheme.typography.bodyLarge.overMedia(true),
-                    color = OVER_MEDIA_SECONDARY,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .testTag("movie_loading"),
-                )
+                PlayerHoldMessage(text = holdMessage, tag = "movie_loading")
             }
             if (progressSyncError != null) {
                 ProgressSyncRetry(
@@ -706,14 +696,7 @@ private fun VideoPlayerChrome(
                 ?: if (progressSyncError != null) progressRetryRequester else backRequester
             fun Modifier.transportEdges(isFirst: Boolean = false, isLast: Boolean = false) =
                 transportFocus(transportUp, isFirst, isLast, onAnyControlFocused)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(
-                    IglooTheme.spacing.lg,
-                    Alignment.CenterHorizontally,
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            PlayerTransportRow {
                 SeekTransportButtons(
                     tagPrefix = "movie_",
                     playing = playing,
