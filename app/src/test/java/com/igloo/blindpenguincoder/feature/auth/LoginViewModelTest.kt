@@ -47,7 +47,6 @@ class LoginViewModelTest {
 
     private class Fixture(
         val viewModel: LoginViewModel,
-        val quickConnectViewModel: QuickConnectViewModel,
         val sessionManager: SessionManager,
         val http: TestHttp,
     )
@@ -71,7 +70,6 @@ class LoginViewModelTest {
         )
         return Fixture(
             viewModel = LoginViewModel(repository, sessionManager),
-            quickConnectViewModel = QuickConnectViewModel(repository, http.profiles, sessionManager),
             sessionManager = sessionManager,
             http = http,
         )

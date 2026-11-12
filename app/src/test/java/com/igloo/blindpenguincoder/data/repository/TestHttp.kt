@@ -47,10 +47,7 @@ class TestHttp(
     val credentials = BearerTokenProvider()
     val authEvents = AuthEventBus()
 
-    /** Advanced by tests that care about last-used ordering. */
-    var clockMillis = 1_000L
-
-    val profiles = ProfileRepository(profileStore, credentials, clock = { clockMillis })
+    val profiles = ProfileRepository(profileStore, credentials, clock = { 1_000L })
     val serverUrl = ServerUrlProvider().apply { set(testServerAddress()) }
     val client: HttpClient = createIglooHttpClient(
         credentials = credentials,
@@ -64,16 +61,11 @@ class TestHttp(
     )
     val api = AuthApi(client, serverUrl)
     val authRepository = AuthRepository(api, profiles, testDeviceIdentity)
-    val movieApi = MovieApi(client, serverUrl)
-    val movieRepository = MovieRepository(movieApi)
-    val musicApi = MusicApi(client, serverUrl)
-    val musicRepository = MusicRepository(musicApi)
-    val searchApi = SearchApi(client, serverUrl)
-    val searchRepository = SearchRepository(searchApi)
-    val showApi = ShowApi(client, serverUrl)
-    val showRepository = ShowRepository(showApi)
-    val videoPlaybackApi = VideoPlaybackApi(client, serverUrl)
-    val videoPlaybackRepository = VideoPlaybackRepository(videoPlaybackApi)
+    val movieRepository = MovieRepository(MovieApi(client, serverUrl))
+    val musicRepository = MusicRepository(MusicApi(client, serverUrl))
+    val searchRepository = SearchRepository(SearchApi(client, serverUrl))
+    val showRepository = ShowRepository(ShowApi(client, serverUrl))
+    val videoPlaybackRepository = VideoPlaybackRepository(VideoPlaybackApi(client, serverUrl))
 
     /** Puts profiles in the vault without going through a sign-in. */
     fun seedVault(

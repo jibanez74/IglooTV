@@ -672,9 +672,6 @@ class ExoVideoPlayerEngineTest {
         return params
     }
 
-    private fun hasTextOverride(params: TrackSelectionParameters): Boolean =
-        params.overrides.keys.any { it.type == C.TRACK_TYPE_TEXT }
-
     @Test
     fun switchingToHlsWithABitmapSubtitleKeepsItOn() {
         // An HLS session streams the original track next to the video, so a bitmap choice

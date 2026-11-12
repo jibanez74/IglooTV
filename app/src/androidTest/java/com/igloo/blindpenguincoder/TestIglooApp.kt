@@ -6,7 +6,6 @@ import androidx.compose.runtime.remember
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.AuthUser
-import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.feature.home.HomeRail
 import com.igloo.blindpenguincoder.feature.home.HomeUiState
 import com.igloo.blindpenguincoder.feature.home.IglooApp
@@ -84,22 +83,18 @@ internal fun TestIglooApp(
     showDetailsActions: ShowDetailsActions = inertShowDetailsActions,
     onShowSelected: (Long) -> Unit = {},
     albumDetails: AlbumDetailsUiState = AlbumDetailsUiState(),
-    onRetryAlbumDetails: () -> Unit = {},
     onAlbumSelected: (Long) -> Unit = {},
     musicianDetails: MusicianDetailsUiState = MusicianDetailsUiState(),
-    onRetryMusicianDetails: () -> Unit = {},
     onMusicianSelected: (Long) -> Unit = {},
     // Seeded and empty: rows are live but nothing is liked, so a suite asserts the resting
     // state unless it says otherwise.
     trackLikes: TrackLikesUiState = TrackLikesUiState(likedIds = emptySet()),
-    onToggleTrackLike: (Long) -> Unit = {},
     onRequestPlayback: () -> Unit = {},
     videoPlayerViewModel: VideoPlayerViewModel = rememberInertVideoPlayerViewModel(),
     videoPlayerEngineFactory: (Context, VideoPlayRequest) -> VideoPlayerEngine =
         fakeVideoPlayerEngineFactory,
     musicPlayerEngineFactory: (Context, MusicPlayRequest) -> MusicPlayerEngine =
         fakeMusicPlayerEngineFactory,
-    musicQueueFetcher: MusicQueueFetcher = InertMusicQueueFetcher,
     playRequests: Flow<VideoPlayRequest> = emptyFlow(),
     musicPlayRequests: Flow<MusicPlayRequest> = emptyFlow(),
     homePlayRequests: Flow<VideoPlayRequest> = emptyFlow(),
@@ -142,18 +137,18 @@ internal fun TestIglooApp(
         showDetailsActions = showDetailsActions,
         onShowSelected = onShowSelected,
         albumDetails = albumDetails,
-        onRetryAlbumDetails = onRetryAlbumDetails,
+        onRetryAlbumDetails = {},
         onAlbumSelected = onAlbumSelected,
         musicianDetails = musicianDetails,
-        onRetryMusicianDetails = onRetryMusicianDetails,
+        onRetryMusicianDetails = {},
         onMusicianSelected = onMusicianSelected,
         trackLikes = trackLikes,
-        onToggleTrackLike = onToggleTrackLike,
+        onToggleTrackLike = {},
         onRequestPlayback = onRequestPlayback,
         videoPlayerViewModel = videoPlayerViewModel,
         videoPlayerEngineFactory = videoPlayerEngineFactory,
         musicPlayerEngineFactory = musicPlayerEngineFactory,
-        musicQueueFetcher = musicQueueFetcher,
+        musicQueueFetcher = InertMusicQueueFetcher,
         playRequests = playRequests,
         musicPlayRequests = musicPlayRequests,
         homePlayRequests = homePlayRequests,

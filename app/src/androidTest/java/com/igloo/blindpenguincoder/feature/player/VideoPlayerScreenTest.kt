@@ -308,8 +308,8 @@ class VideoPlayerScreenTest {
         composeRule.waitForIdle()
     }
 
-    private fun startPlaying(durationSec: Double = 7200.0) {
-        engine.emit(VideoPlayerEvent.Ready(durationSec))
+    private fun startPlaying() {
+        engine.emit(VideoPlayerEvent.Ready(7200.0))
         engine.emit(VideoPlayerEvent.IsPlayingChanged(true))
         composeRule.waitForIdle()
     }

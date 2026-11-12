@@ -55,7 +55,6 @@ class VideoPlaybackRepositoryTest(
     }
 
     private fun hlsSpec(
-        reload: Int = 0,
         audioProfile: HlsAudioProfile? = null,
         videoCodecs: String? = null,
     ) = HlsSessionSpec(
@@ -64,7 +63,7 @@ class VideoPlaybackRepositoryTest(
         audioTypeIndex = 1,
         startSec = 90,
         sessionUuid = "5e0f8f2a-9df1-4f2f-8a53-0d9f8f2a9df1",
-        reload = reload,
+        reload = 0,
         audioProfile = audioProfile,
         videoCodecs = videoCodecs,
     )

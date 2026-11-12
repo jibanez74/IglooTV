@@ -76,19 +76,19 @@ class SearchViewModelTest {
         return routed
     }
 
-    private fun allBody(query: String, moviesTotal: Long = 12, tracksTotal: Long = 2) = searchAllJson(
+    private fun allBody(query: String, moviesTotal: Long = 12) = searchAllJson(
         query = query,
         movies = searchSectionJson(listOf(movieLibraryItemJson(id = 3, title = "Help!")), total = moviesTotal),
         albums = searchSectionJson(listOf(simpleAlbumJson(id = 5)), total = 1),
         tracks = searchSectionJson(
             listOf(trackListItemJson(id = 1, title = "Help!"), trackListItemJson(id = 2, title = "Yesterday")),
-            total = tracksTotal,
+            total = 2,
         ),
     )
 
-    private fun moviesPage(number: Long, totalPages: Long, ids: LongRange = (number * 10)..(number * 10 + 2)) =
+    private fun moviesPage(number: Long, totalPages: Long) =
         searchPageJson(
-            results = ids.map { movieLibraryItemJson(id = it, title = "Movie $it") },
+            results = ((number * 10)..(number * 10 + 2)).map { movieLibraryItemJson(id = it, title = "Movie $it") },
             total = 6,
             page = number,
             totalPages = totalPages,

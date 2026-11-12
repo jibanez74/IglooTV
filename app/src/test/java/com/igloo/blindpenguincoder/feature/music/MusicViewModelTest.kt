@@ -99,11 +99,11 @@ class MusicViewModelTest {
         return routed
     }
 
-    private fun musiciansPage(number: Long, totalPages: Long, ids: LongRange, total: Long = 60) =
-        musiciansJson(ids.map { simpleMusicianJson(id = it, name = "Musician $it") }, total, number, 48, totalPages)
+    private fun musiciansPage(number: Long, totalPages: Long, ids: LongRange) =
+        musiciansJson(ids.map { simpleMusicianJson(id = it, name = "Musician $it") }, 60, number, 48, totalPages)
 
-    private fun albumsPage(number: Long, totalPages: Long, ids: LongRange, total: Long = 90) =
-        albumsJson(ids.map { simpleAlbumJson(id = it, title = "Album $it") }, total, number, 48, totalPages)
+    private fun albumsPage(number: Long, totalPages: Long, ids: LongRange) =
+        albumsJson(ids.map { simpleAlbumJson(id = it, title = "Album $it") }, 90, number, 48, totalPages)
 
     private fun tracksPage(offset: Long, ids: LongRange, total: Long, hasMore: Boolean) =
         tracksJson(ids.map { trackListItemJson(id = it, title = "Track $it") }, total, offset, 50, hasMore)

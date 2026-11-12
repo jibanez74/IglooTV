@@ -112,7 +112,6 @@ class VideoPlayerOverlayFocusTest {
     private var showState by mutableStateOf(ShowDetailsUiState())
     private val engines = mutableListOf<FakeVideoPlayerEngine>()
     private val launched = mutableListOf<VideoPlayRequest>()
-    private val trailerEngines = mutableListOf<FakeTrailerPlayerEngine>()
     private lateinit var playRequests: MutableSharedFlow<VideoPlayRequest>
     private lateinit var homePlayRequests: MutableSharedFlow<VideoPlayRequest>
     private lateinit var showPlayRequests: MutableSharedFlow<VideoPlayRequest>
@@ -141,7 +140,6 @@ class VideoPlayerOverlayFocusTest {
         engines.clear()
         launched.clear()
         landed.clear()
-        trailerEngines.clear()
         failProgressSaves = false
         playRequests = MutableSharedFlow(extraBufferCapacity = 1)
         homePlayRequests = MutableSharedFlow(extraBufferCapacity = 1)
@@ -205,9 +203,7 @@ class VideoPlayerOverlayFocusTest {
                         )
                         showState = ShowDetailsUiState()
                     },
-                    trailerEngineFactory = { _, _ ->
-                        FakeTrailerPlayerEngine().also { trailerEngines += it }
-                    },
+                    trailerEngineFactory = { _, _ -> FakeTrailerPlayerEngine() },
                 )
             }
         }

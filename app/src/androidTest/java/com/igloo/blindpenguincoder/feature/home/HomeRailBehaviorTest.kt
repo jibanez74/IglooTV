@@ -102,7 +102,6 @@ class HomeRailBehaviorTest {
         initialShows: IglooRailState<PosterItem> = IglooRailState.Loaded(shows),
         initialAlbums: IglooRailState<AlbumCardUi> = IglooRailState.Loaded(albums),
         initialTheaters: IglooRailState<HomeTheaterMovie> = IglooRailState.Loaded(theaterMovies),
-        onMovieSelected: (Long) -> Unit = { opened += it },
         onTheaterMovieSelected: (Long) -> Unit = { theatersOpened += it },
         onAlbumSelected: (Long) -> Unit = { albumsOpened += it },
         onShowSelected: (Long) -> Unit = { showsOpened += it },
@@ -147,7 +146,7 @@ class HomeRailBehaviorTest {
                             HomeRail.InTheaters -> theaterRetries += 1
                         }
                     },
-                    onMovieSelected = onMovieSelected,
+                    onMovieSelected = { opened += it },
                     onTheaterMovieSelected = onTheaterMovieSelected,
                     onAlbumSelected = onAlbumSelected,
                     onShowSelected = onShowSelected,

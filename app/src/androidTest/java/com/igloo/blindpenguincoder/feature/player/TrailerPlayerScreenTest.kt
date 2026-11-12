@@ -79,8 +79,8 @@ class TrailerPlayerScreenTest {
     private fun lifecycleCommands(): List<String> =
         engine.commands.filter { it == "hostPaused" || it == "hostResumed" }
 
-    private fun startPlaying(durationSec: Double = 143.0) {
-        engine.emit(TrailerPlayerEvent.Ready(durationSec))
+    private fun startPlaying() {
+        engine.emit(TrailerPlayerEvent.Ready(143.0))
         engine.emit(TrailerPlayerEvent.StateChange(1))
         composeRule.waitForIdle()
     }

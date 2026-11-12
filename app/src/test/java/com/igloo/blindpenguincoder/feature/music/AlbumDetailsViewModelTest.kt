@@ -61,18 +61,15 @@ class AlbumDetailsViewModelTest {
 
     private fun track(
         id: Long = 1,
-        trackIndex: Long = 1,
-        durationMs: Long = 125_000,
-        disc: Long = 1,
         codec: String = "flac",
         bitRate: Long = 900_000,
         channelLayout: String = "stereo",
     ) = AlbumTrack(
         id = id,
         title = "Track $id",
-        trackIndex = trackIndex,
-        duration = durationMs,
-        disc = disc,
+        trackIndex = 1,
+        duration = 125_000,
+        disc = 1,
         codec = codec,
         bitRate = bitRate,
         channelLayout = channelLayout,

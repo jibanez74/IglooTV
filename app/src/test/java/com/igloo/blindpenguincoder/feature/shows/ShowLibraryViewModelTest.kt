@@ -264,13 +264,12 @@ class ShowLibraryViewModelTest {
         stats: LibraryRoute = { jsonResponse(showsStatsJson()) },
         genres: LibraryRoute = { jsonResponse(showsGenresJson(showGenreWithCountJson())) },
         library: LibraryRoute = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
-        genreShows: LibraryRoute = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..2L)) },
     ): RoutedHttp = routedLibraryHttp(
         resource = "shows",
         stats = stats,
         genres = genres,
         library = library,
-        genreList = genreShows,
+        genreList = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..2L)) },
         liked = null,
     )
 }

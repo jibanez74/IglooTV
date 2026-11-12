@@ -96,10 +96,9 @@ class AlbumDetailsFocusTest {
         composeRule.waitForIdle()
     }
 
-    private fun loadedState(album: AlbumDetailsUi = testAlbumDetails()) = AlbumDetailsUiState(
-        openAlbumId = album.id,
-        details = DetailsState.Loaded(album),
-    )
+    private fun loadedState() = testAlbumDetails().let { album ->
+        AlbumDetailsUiState(openAlbumId = album.id, details = DetailsState.Loaded(album))
+    }
 
     private fun openAlbumCard(id: Long) {
         composeRule.onNodeWithTag("album_card_$id").requestFocus()

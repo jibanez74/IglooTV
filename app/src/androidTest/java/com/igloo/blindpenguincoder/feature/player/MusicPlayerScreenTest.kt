@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.feature.player
 
-import android.app.Activity
 import android.view.View
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -8,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
@@ -32,7 +30,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.findActivity
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
 import com.igloo.blindpenguincoder.playback.model.MusicPlayTrack
@@ -74,7 +71,6 @@ class MusicPlayerScreenTest {
 
     private lateinit var engine: FakeMusicPlayerEngine
     private var closes = 0
-    private var hostActivity: Activity? = null
     private var hostView: View? = null
     private lateinit var restorationTester: StateRestorationTester
     private val createdEngines = mutableListOf<FakeMusicPlayerEngine>()
@@ -122,12 +118,8 @@ class MusicPlayerScreenTest {
         lifecycleOwner = TestLifecycleOwner()
         lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         composeRule.setContent {
-            val context = LocalContext.current
             val view = LocalView.current
-            SideEffect {
-                hostActivity = context.findActivity()
-                hostView = view
-            }
+            SideEffect { hostView = view }
             IglooTheme {
                 CompositionLocalProvider(
                     LocalLifecycleOwner provides lifecycleOwner,
@@ -156,7 +148,8 @@ class MusicPlayerScreenTest {
         composeRule.waitForIdle()
     }
 
-    private fun setRestorableContent(request: MusicPlayRequest = playRequest()) {
+    private fun setRestorableContent() {
+        val request = playRequest()
         createdEngines.clear()
         closes = 0
         open = true
@@ -164,8 +157,6 @@ class MusicPlayerScreenTest {
         lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED
         restorationTester = StateRestorationTester(composeRule)
         restorationTester.setContent {
-            val context = LocalContext.current
-            SideEffect { hostActivity = context.findActivity() }
             IglooTheme {
                 CompositionLocalProvider(
                     LocalLifecycleOwner provides lifecycleOwner,
@@ -193,12 +184,11 @@ class MusicPlayerScreenTest {
         composeRule.waitForIdle()
     }
 
-    private fun startPlaying(durationSec: Double = 125.0) {
-        engine.emit(MusicPlayerEvent.Ready(durationSec))
+    private fun startPlaying() {
+        engine.emit(MusicPlayerEvent.Ready(125.0))
         engine.emit(MusicPlayerEvent.IsPlayingChanged(true))
         composeRule.waitForIdle()
     }
-
 
     /** Home and back: the trip that releases the engine and rebuilds a paused replacement. */
     private fun backgroundAndReturn() {

@@ -29,10 +29,9 @@ class QuickConnectViewModelTest {
     private fun initiateJson(
         code: String,
         pollIntervalSeconds: Int = 2,
-        expiresInSeconds: Int = 300,
     ) = """
         {"error":false,"data":{"code":"$code","secret":"device-secret",
-        "expires_in_seconds":$expiresInSeconds,"poll_interval_seconds":$pollIntervalSeconds}}
+        "expires_in_seconds":300,"poll_interval_seconds":$pollIntervalSeconds}}
     """.trimIndent()
 
     private val pendingJson = """{"error":false,"data":{"status":"pending"}}"""

@@ -89,9 +89,9 @@ class MusicPlayerOverlayFocusTest {
         composeRule.waitForIdle()
     }
 
-    private fun openAlbumCard(id: Long = 11) {
-        composeRule.onNodeWithTag("album_card_$id").requestFocus()
-        composeRule.onNodeWithTag("album_card_$id")
+    private fun openAlbumCard() {
+        composeRule.onNodeWithTag("album_card_11").requestFocus()
+        composeRule.onNodeWithTag("album_card_11")
             .assertIsFocused()
             .performKeyInput { pressKey(Key.DirectionCenter) }
         composeRule.waitForIdle()

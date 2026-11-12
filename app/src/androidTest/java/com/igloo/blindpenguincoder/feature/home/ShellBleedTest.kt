@@ -55,7 +55,6 @@ class ShellBleedTest {
 
     private var railWidth: Dp = Dp.Unspecified
     private var gutter: Dp = Dp.Unspecified
-    private var safeAreaHorizontal: Dp = Dp.Unspecified
 
     private fun setShellContent() {
         composeRule.setContent {
@@ -63,7 +62,6 @@ class ShellBleedTest {
                 AssertReferenceViewport()
                 railWidth = IglooTheme.layout.navRailCollapsedWidth
                 gutter = IglooTheme.spacing.xl
-                safeAreaHorizontal = IglooTheme.layout.safeAreaHorizontal
                 // The ambient backdrop loops forever, so with motion on the Compose clock never
                 // goes idle and every assertion below would spin until it timed out.
                 CompositionLocalProvider(LocalIglooReducedMotion provides true) {

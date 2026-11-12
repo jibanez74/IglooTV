@@ -17,12 +17,11 @@ import kotlin.random.Random
 class MusicPlayRequestMappingTest {
 
     private fun album(
-        title: String = "Test Album",
         musician: String? = "Test Artist",
         cover: String? = "https://i.scdn.co/image/abc",
     ) = Album(
         id = 7L,
-        title = title,
+        title = "Test Album",
         spotifyPopularity = SqlNullFloat64(0.0, false),
         musician = SqlNullString(musician.orEmpty(), musician != null),
         releaseDate = SqlNullString("", false),

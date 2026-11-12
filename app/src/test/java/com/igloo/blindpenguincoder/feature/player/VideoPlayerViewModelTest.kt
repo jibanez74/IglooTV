@@ -52,13 +52,13 @@ class VideoPlayerViewModelTest {
     }
 
     /** Half-second ticks from [fromSec] to [toSec], all playing — the engine's cadence. */
-    private fun VideoPlayerViewModel.play(fromSec: Double, toSec: Double, durationSec: Double = 600.0) {
+    private fun VideoPlayerViewModel.play(fromSec: Double, toSec: Double) {
         var position = fromSec
         while (position < toSec) {
-            onTick(position, durationSec, isPlaying = true)
+            onTick(position, 600.0, isPlaying = true)
             position += 0.5
         }
-        onTick(toSec, durationSec, isPlaying = true)
+        onTick(toSec, 600.0, isPlaying = true)
     }
 
     /** The hand-off: the new episode's session may already be active when the old screen disposes. */
