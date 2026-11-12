@@ -25,6 +25,7 @@ import com.igloo.blindpenguincoder.data.api.MusicApi
 import com.igloo.blindpenguincoder.data.api.SearchApi
 import com.igloo.blindpenguincoder.data.api.ShowApi
 import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
+import com.igloo.blindpenguincoder.data.api.WatchRoomApi
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.MusicRepository
@@ -33,6 +34,7 @@ import com.igloo.blindpenguincoder.data.repository.SearchRepository
 import com.igloo.blindpenguincoder.data.repository.ServerRepository
 import com.igloo.blindpenguincoder.data.repository.ShowRepository
 import com.igloo.blindpenguincoder.data.repository.VideoPlaybackRepository
+import com.igloo.blindpenguincoder.data.repository.WatchRoomRepository
 import com.igloo.blindpenguincoder.feature.auth.SessionManager
 import com.igloo.blindpenguincoder.feature.search.AndroidVoiceSearch
 import com.igloo.blindpenguincoder.feature.search.VoiceSearch
@@ -108,6 +110,8 @@ class IglooAppContainer(
     val musicRepository by lazy { MusicRepository(musicApi) }
     private val searchApi by lazy { SearchApi(httpClient, serverUrlProvider) }
     val searchRepository by lazy { SearchRepository(searchApi) }
+    private val watchRoomApi by lazy { WatchRoomApi(httpClient, serverUrlProvider) }
+    val watchRoomRepository by lazy { WatchRoomRepository(watchRoomApi) }
     val voiceSearch: VoiceSearch by lazy { AndroidVoiceSearch(appContext) }
     val authRepository by lazy {
         AuthRepository(authApi, profileRepository, identity)

@@ -25,6 +25,7 @@ import com.igloo.blindpenguincoder.data.api.MusicApi
 import com.igloo.blindpenguincoder.data.api.SearchApi
 import com.igloo.blindpenguincoder.data.api.ShowApi
 import com.igloo.blindpenguincoder.data.api.VideoPlaybackApi
+import com.igloo.blindpenguincoder.data.api.WatchRoomApi
 import com.igloo.blindpenguincoder.feature.auth.SessionManager
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -74,6 +75,7 @@ class TestHttp(
     val searchRepository = SearchRepository(SearchApi(client, serverUrl))
     val showRepository = ShowRepository(ShowApi(client, serverUrl))
     val videoPlaybackRepository = VideoPlaybackRepository(VideoPlaybackApi(client, serverUrl))
+    val watchRoomRepository = WatchRoomRepository(WatchRoomApi(client, serverUrl))
 
     /** A minted token is held pending until its owner is known. */
     fun pendingToken() = profileStore.vault.pendingToken
@@ -999,3 +1001,23 @@ fun searchPageJson(
 ): String = """{"error":false,"message":"search","data":{"query":"$query",""" +
     """"results":[${results.joinToString(",")}],"total":$total,"page":$page,""" +
     """"per_page":$perPage,"total_pages":$totalPages}}"""
+
+/** A `UserSummary`: a room's owner or one of its members. */
+fun userSummaryJson(id: Long = 1, name: String = "Maria", avatar: String? = null): String =
+    """{"id":$id,"name":"$name","avatar":${avatar?.let { "\"$it\"" }}}"""
+
+/** One `GET /watch-rooms` entry, with the fields the client leaves undecoded. */
+fun watchRoomJson(
+    id: Long = 1,
+    movieTitle: String = "Heat",
+    moviePoster: String? = "/heat.jpg",
+    owner: String = userSummaryJson(),
+    members: List<String> = listOf(owner),
+    isOwner: Boolean = true,
+): String = """{"id":$id,"movie_id":${id + 100},"movie_title":"$movieTitle",""" +
+    """"movie_poster":${moviePoster?.let { "\"$it\"" }},"owner":$owner,""" +
+    """"members":[${members.joinToString(",")}],"playback_mode":"direct","is_owner":$isOwner,""" +
+    """"created_at":"2026-11-12 18:30:00"}"""
+
+fun watchRoomsJson(vararg rooms: String): String =
+    """{"error":false,"message":"watch rooms","data":{"rooms":[${rooms.joinToString(",")}]}}"""
