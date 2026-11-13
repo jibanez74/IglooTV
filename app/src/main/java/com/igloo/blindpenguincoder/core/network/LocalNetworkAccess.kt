@@ -130,6 +130,13 @@ class LocalNetworkPermissionCoordinator(
 }
 
 /**
+ * Every scheme that opens a socket to the host. A watch room's WebSocket upgrade reaches the gate
+ * with a `ws`/`wss` URL, so leaving those out would let the room connect to a LAN server without
+ * the permission.
+ */
+private val NETWORK_SCHEMES = setOf("http", "https", "ws", "wss")
+
+/**
  * Resolve ordinary DNS off main as well: a public-looking hostname can resolve to a LAN IP.
  * Recognise .local before resolving, since mDNS itself needs permission. Failed DNS is left to
  * the HTTP stack to report normally. Android remains the final authority for redirects and
@@ -140,7 +147,7 @@ internal fun isLocalNetworkUrl(
     resolve: (String) -> List<InetAddress> = { InetAddress.getAllByName(it).toList() },
 ): Boolean {
     val uri = URI(url)
-    if (uri.scheme?.lowercase() !in setOf("http", "https")) return false
+    if (uri.scheme?.lowercase() !in NETWORK_SCHEMES) return false
     val host = uri.host?.removeSurrounding("[", "]")?.trimEnd('.')?.lowercase() ?: return false
     if (host.endsWith(".local") || !host.contains('.') && !host.contains(':')) return true
     return try {
