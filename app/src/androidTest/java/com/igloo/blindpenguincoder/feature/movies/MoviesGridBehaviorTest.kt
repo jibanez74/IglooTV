@@ -562,6 +562,56 @@ class MoviesGridBehaviorTest {
         card(11).assertIsFocused()
     }
 
+    /**
+     * The field bug (2026-11-13): a card focused on the Genres tab is still remembered when the
+     * All tab lands, scrolled to the top, with that card rows below the fold. The lazy grid had
+     * not composed it, so the entry requester riding it attached to nothing and every request
+     * went nowhere — Down from the strip, and the spine's Movies row and Right.
+     */
+    private fun returnToAllWithAGenresCardRememberedOffScreen() {
+        setContent(
+            testLibraryState(
+                tab = LibraryTab.Genres,
+                genre = LibraryFilter.Genre(id = 9, tag = "Drama"),
+                grid = IglooRailState.Loaded(testMovieGridItems.drop(30)),
+            ),
+        )
+        card(31).assertIsFocused()
+        card(31).performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_genre_9").performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.onNodeWithTag("movies_tab_genres").performKeyInput { pressKey(Key.DirectionLeft) }
+        composeRule.onNodeWithTag("movies_tab_all").assertIsFocused()
+
+        moviesState = testLibraryState(tab = LibraryTab.All, contentGeneration = 1)
+        composeRule.waitForIdle()
+        card(1).assertIsDisplayed()
+        composeRule.onNodeWithTag("poster_card_31").assertDoesNotExist()
+    }
+
+    @Test
+    fun downFromTheTabRowReachesTheGridWhenTheRememberedCardIsOffScreen() {
+        returnToAllWithAGenresCardRememberedOffScreen()
+
+        composeRule.onNodeWithTag("movies_tab_all").performKeyInput { pressKey(Key.DirectionDown) }
+
+        card(1).assertIsFocused()
+    }
+
+    @Test
+    fun theSpinesMoviesRowReachesTheGridWhenTheRememberedCardIsOffScreen() {
+        returnToAllWithAGenresCardRememberedOffScreen()
+        composeRule.onNodeWithTag("movies_tab_all").performKeyInput { pressKey(Key.DirectionLeft) }
+        val moviesRow = composeRule.onNodeWithContentDescription("Movies")
+        moviesRow.assertIsFocused()
+
+        moviesRow.performKeyInput { pressKey(Key.DirectionCenter) }
+        card(1).assertIsFocused()
+
+        card(1).performKeyInput { pressKey(Key.DirectionLeft) }
+        moviesRow.performKeyInput { pressKey(Key.DirectionRight) }
+        card(1).assertIsFocused()
+    }
+
     @Test
     fun aTabSwitchLandingOnAnEmptyViewKeepsFocusOnTheTab() {
         setContent()
