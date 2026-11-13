@@ -4,7 +4,6 @@ import com.igloo.blindpenguincoder.data.model.Musician
 import com.igloo.blindpenguincoder.data.model.MusicianAlbum
 import com.igloo.blindpenguincoder.data.model.MusicianDetailsData
 import com.igloo.blindpenguincoder.data.model.MusicianTrack
-import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
@@ -20,15 +19,11 @@ class MusicianDetailsMappingTest {
     private fun musician(
         name: String = "The Beatles",
         summary: String? = "Liverpool, 1960.",
-        popularity: Double? = 88.4,
-        followers: Long? = 25_000_000,
         thumb: String? = "https://i.scdn.co/image/beatles.jpg",
     ) = Musician(
         id = 4,
         name = name,
         summary = SqlNullString(summary.orEmpty(), valid = summary != null),
-        spotifyPopularity = SqlNullFloat64(popularity ?: 0.0, valid = popularity != null),
-        spotifyFollowers = SqlNullInt64(followers ?: 0, valid = followers != null),
         thumb = SqlNullString(thumb.orEmpty(), valid = thumb != null),
     )
 
@@ -61,7 +56,7 @@ class MusicianDetailsMappingTest {
     )
 
     @Test
-    fun `the hero carries counts, duration, genres, popularity and followers`() {
+    fun `the hero carries counts, duration and genres`() {
         val ui = toMusicianDetailsUi(data())
 
         assertEquals("The Beatles", ui.name)
@@ -69,14 +64,13 @@ class MusicianDetailsMappingTest {
         assertEquals("1 track", ui.trackCountText)
         assertEquals("2m 5s", ui.totalDurationText)
         assertEquals("Rock · Pop", ui.genresLine)
-        assertEquals(88, ui.popularity)
         assertEquals(
             "The Beatles. 1 album, 1 track. Total duration: 2 minutes and 5 seconds. " +
-                "Genres: Rock, Pop. Spotify popularity 88 out of 100.",
+                "Genres: Rock, Pop.",
             ui.heroInfoDescription,
         )
         assertEquals(
-            listOf("Albums", "Tracks", "Total duration", "Genres", "Spotify popularity", "Spotify followers", "About"),
+            listOf("Albums", "Tracks", "Total duration", "Genres", "About"),
             ui.facts.map { it.label },
         )
         assertTrue(ui.factsDescription.startsWith("Artist details. Albums: 1. Tracks: 1."))
@@ -86,7 +80,7 @@ class MusicianDetailsMappingTest {
     fun `a bare musician drops every optional field`() {
         val ui = toMusicianDetailsUi(
             data(
-                musician = musician(name = "", summary = null, popularity = null, followers = null, thumb = null),
+                musician = musician(name = "", summary = null, thumb = null),
                 albums = emptyList(),
                 tracks = emptyList(),
                 genres = emptyList(),
@@ -96,7 +90,6 @@ class MusicianDetailsMappingTest {
         assertEquals("Unknown artist", ui.name)
         assertNull(ui.thumbUrl)
         assertNull(ui.genresLine)
-        assertNull(ui.popularity)
         assertEquals("0 albums", ui.albumCountText)
         assertEquals(listOf("Albums", "Tracks", "Total duration"), ui.facts.map { it.label })
         assertEquals("Unknown artist. 0 albums, 0 tracks. Total duration: 0 seconds.", ui.heroInfoDescription)
