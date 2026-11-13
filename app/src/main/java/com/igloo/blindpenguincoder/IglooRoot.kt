@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder
 
+import android.os.SystemClock
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,6 +62,7 @@ import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.search.SearchViewModel
 import com.igloo.blindpenguincoder.feature.search.actions
 import com.igloo.blindpenguincoder.feature.shows.showLibrarySource
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomViewModel
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsViewModel
 import com.igloo.blindpenguincoder.feature.watchrooms.actions
 import com.igloo.blindpenguincoder.playback.media3.VideoPlaybackServices
@@ -308,6 +310,19 @@ fun IglooRoot(container: IglooAppContainer) {
                                 container.serverUrlProvider,
                             )
                         }
+                    // The open room, single-slot like the details pages. A room that goes away on
+                    // its own is taken off the list at once, with the reason in its header.
+                    val watchRoomViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "watch-room") {
+                            WatchRoomViewModel(
+                                link = container.watchRoomRepository,
+                                movies = container.movieRepository,
+                                serverUrl = container.serverUrlProvider,
+                                selfId = state.user.id,
+                                onRoomGone = watchRoomsViewModel::onRoomGone,
+                                clock = SystemClock::elapsedRealtime,
+                            )
+                        }
                     // One liked-id set for every track row in the session, so no two surfaces
                     // can disagree about a heart; cleared with the rest on sign-out.
                     val trackLikesViewModel =
@@ -378,6 +393,8 @@ fun IglooRoot(container: IglooAppContainer) {
                     val watchRoomsActions = remember(watchRoomsViewModel) {
                         watchRoomsViewModel.actions()
                     }
+                    val watchRoom by watchRoomViewModel.uiState.collectAsStateWithLifecycle()
+                    val watchRoomActions = remember(watchRoomViewModel) { watchRoomViewModel.actions() }
                     val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()
                     val theaterDetails by theaterDetailsViewModel.uiState
                         .collectAsStateWithLifecycle()
@@ -414,6 +431,11 @@ fun IglooRoot(container: IglooAppContainer) {
                         searchActions = searchActions,
                         watchRooms = watchRooms,
                         watchRoomsActions = watchRoomsActions,
+                        watchRoom = watchRoom,
+                        watchRoomActions = watchRoomActions,
+                        onRoomSelected = watchRoomViewModel::open,
+                        onLeaveRoom = watchRoomViewModel::leave,
+                        roomPlayRequests = watchRoomViewModel.playRequests,
                         voiceSearch = container.voiceSearch,
                         searchPlayRequests = searchViewModel.playRequests,
                         details = if (theaterOpen) theaterDetails else libraryDetails,

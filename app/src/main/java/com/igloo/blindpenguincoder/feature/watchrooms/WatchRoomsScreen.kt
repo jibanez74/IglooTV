@@ -52,7 +52,8 @@ internal const val REFRESH_ROOMS_SPOKEN = "Refresh watch rooms"
  * first skeleton cell, and after a failed first load the error card's Retry. With no rooms it
  * is **the Refresh button**: the empty scene offers nothing to do, so the anchor goes to the one
  * control that does. The left column and the header exit to the spine at [navigationRequester];
- * every other edge is pinned. Nothing opens over the pane yet, so it has no return requester.
+ * every other edge is pinned. A card's press opens its room over the pane ([onRoomSelected]), and
+ * [returnRequester] rides the entry card so leaving the room lands back on it.
  */
 @Composable
 fun WatchRoomsScreen(
@@ -62,8 +63,10 @@ fun WatchRoomsScreen(
     gridState: LazyGridState,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
+    returnRequester: FocusRequester,
     lastFocusedId: Long?,
     onItemFocused: (Long) -> Unit,
+    onRoomSelected: (Long) -> Unit,
     spokenAccessibilityEnabled: Boolean,
 ) {
     val content = state.rooms.toPaneListContent()
@@ -122,7 +125,7 @@ fun WatchRoomsScreen(
 
         val cardlessAnchor = Modifier.paneCardlessAnchor(
             contentStartRequester = contentStartRequester,
-            returnRequester = null,
+            returnRequester = returnRequester,
             cardlessHandoffRequester = cardlessHandoffRequester,
             navigationRequester = navigationRequester,
             upRequester = refreshRequester,
@@ -179,7 +182,7 @@ fun WatchRoomsScreen(
                 contentInset = contentInset,
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequester,
-                returnRequester = null,
+                returnRequester = returnRequester,
                 firstItemRequester = firstCardRequester,
                 upRequester = refreshRequester,
                 lastFocusedId = lastFocusedId,
@@ -188,7 +191,7 @@ fun WatchRoomsScreen(
                 testTag = "watch_rooms_grid",
                 cardTag = { "watch_room_card_${it.id}" },
             ) { room, modifier ->
-                WatchRoomCard(room = room, modifier = modifier)
+                WatchRoomCard(room = room, onClick = { onRoomSelected(room.id) }, modifier = modifier)
             }
         }
     }

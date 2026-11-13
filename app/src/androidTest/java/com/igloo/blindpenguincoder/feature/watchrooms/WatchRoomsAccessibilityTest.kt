@@ -1,6 +1,6 @@
 package com.igloo.blindpenguincoder.feature.watchrooms
 
-import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -15,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
+import com.igloo.blindpenguincoder.clickActionLabelled
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
@@ -61,17 +62,17 @@ class WatchRoomsAccessibilityTest {
         composeRule.onNode(hasText("Watch Rooms") and isHeading()).assertExists()
     }
 
-    /** Joining is not built: the card says who is in the room and offers nothing to press. */
+    /** The card says who is in the room, and its one action joins it. */
     @Test
-    fun eachRoomIsOneStopThatNamesNoAction() {
+    fun eachRoomIsOneStopThatJoinsTheRoom() {
         setContent()
 
         val own = composeRule.onNodeWithTag("watch_room_card_1")
         own.assertContentDescriptionEquals(
             "Movie 1, hosted by you, 6 members: Jose, Maria, Jorge, Ana and 2 more",
         )
-        own.assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
-        own.assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Role))
+        own.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        own.assert(clickActionLabelled("Join room"))
         composeRule.onNodeWithTag("watch_room_card_2")
             .assertContentDescriptionEquals("Movie 2, hosted by Maria, 2 members: Maria, Jose")
         // The lines the card draws are the sentence's, not stops of their own.

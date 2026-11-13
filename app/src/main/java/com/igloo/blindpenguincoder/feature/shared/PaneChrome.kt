@@ -238,8 +238,7 @@ internal fun <T> PaneTabRow(
  */
 internal fun Modifier.paneCardlessAnchor(
     contentStartRequester: FocusRequester,
-    /** Null on a pane nothing opens over, which has no overlay to come back from. */
-    returnRequester: FocusRequester?,
+    returnRequester: FocusRequester,
     cardlessHandoffRequester: FocusRequester,
     navigationRequester: FocusRequester,
     upRequester: FocusRequester,

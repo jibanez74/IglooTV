@@ -282,6 +282,23 @@ class WatchRoomsViewModelTest {
     }
 
     @Test
+    fun `a room that went away leaves the list at once and says why`() = runTest {
+        val http = roomsHttp { jsonResponse(rooms(1, 2, 3)) }
+        val model = model(http)
+        model.refresh()
+
+        model.onRoomGone(2, "The watch room for Movie 2 was closed.")
+
+        val state = model.uiState.value
+        assertEquals(listOf(1L, 3L), state.roomIds())
+        assertEquals("The watch room for Movie 2 was closed.", state.notice)
+        // A reconcile, so focus stays put unless it was on that card.
+        assertEquals(1, state.contentGeneration)
+        assertEquals(1, state.reconcileGeneration)
+        assertEquals("no re-read for it", 1, http.requests)
+    }
+
+    @Test
     fun `a sign-out clearing the address mid-load reads as a failed load`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val http = roomsHttp {

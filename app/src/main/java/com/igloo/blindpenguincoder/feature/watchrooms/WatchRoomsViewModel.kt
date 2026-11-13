@@ -82,6 +82,22 @@ class WatchRoomsViewModel(
         load(userInitiated = true)
     }
 
+    /**
+     * A room the user was in is gone: closed by its owner, its movie deleted, or never theirs.
+     * Its card goes at once, without waiting for a re-read, and [notice] says why in the header.
+     * A reconcile, not a replace: focus stays where the user is unless it was on that card.
+     */
+    fun onRoomGone(roomId: Long, notice: String?) {
+        _uiState.update { state ->
+            val rooms = state.rooms as? IglooRailState.Loaded ?: return@update state.copy(notice = notice)
+            state.copy(
+                rooms = IglooRailState.Loaded(rooms.items.filterNot { it.id == roomId }),
+                notice = notice,
+                reconcileGeneration = state.reconcileGeneration + 1,
+            )
+        }
+    }
+
     private fun load(userInitiated: Boolean) {
         loadJob?.cancel()
         if (userInitiated) _uiState.update { it.copy(refreshing = true, notice = null) }
