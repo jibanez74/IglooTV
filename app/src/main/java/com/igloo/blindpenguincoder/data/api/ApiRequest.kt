@@ -10,6 +10,9 @@ import io.ktor.http.contentType
 /** [path] (starting with `/`) on the API of the server the session points at. */
 internal fun ServerUrlProvider.api(path: String): String = "${require().apiBaseUrl}$path"
 
+/** The same address as [api] with its WebSocket scheme: `http` becomes `ws`, `https` `wss`. */
+internal fun ServerUrlProvider.webSocket(path: String): String = "ws" + api(path).removePrefix("http")
+
 /** [body] as the request's JSON payload. */
 internal inline fun <reified T> HttpRequestBuilder.jsonBody(body: T) {
     contentType(ContentType.Application.Json)

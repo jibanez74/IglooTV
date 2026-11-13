@@ -3,6 +3,8 @@ package com.igloo.blindpenguincoder.data.api
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.data.model.CreateWatchRoomRequest
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
+import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -40,6 +42,14 @@ class WatchRoomApi(
     /** Closes a room for everyone in it; only its owner may. */
     suspend fun delete(id: Long): HttpResponse =
         client.delete(serverUrl.api("/watch-rooms/$id"))
+
+    /**
+     * The room's socket, open while [session] runs. The server never sends a Close frame — not
+     * even after `room_deleted` — so its hanging up surfaces as an `EOFException`, the same as a
+     * refused upgrade or a link whose pings went unanswered.
+     */
+    suspend fun socket(id: Long, session: suspend DefaultClientWebSocketSession.() -> Unit) =
+        client.webSocket(serverUrl.webSocket("/watch-rooms/$id/ws"), block = session)
 
     /** Everyone a new room can invite: every user but the caller, by name. */
     suspend fun inviteUsers(): HttpResponse =

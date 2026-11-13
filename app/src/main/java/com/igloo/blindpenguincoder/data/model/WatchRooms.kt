@@ -93,3 +93,67 @@ data class UserSummary(
     // The same three shapes as AuthUser.avatar; resolve with serverImageUrl() before rendering.
     val avatar: String?,
 )
+
+/**
+ * One message on a room's WebSocket. Which fields come with which [type] is in
+ * [WatchRoomEventType]; Go's `omitempty` leaves the rest out. The server also sends `room_id`,
+ * which a socket already scoped to one room has no use for.
+ */
+@Serializable
+data class WatchRoomServerEvent(
+    val type: WatchRoomEventType,
+    val playback: WatchRoomPlaybackState? = null,
+    val member: UserSummary? = null,
+    /** Users with at least one open connection after the event, ascending. */
+    @SerialName("connected_user_ids") val connectedUserIds: List<Long>? = null,
+)
+
+@Serializable
+enum class WatchRoomEventType {
+    /** On connect: [WatchRoomServerEvent.playback] and who is connected. */
+    @SerialName("room_snapshot") RoomSnapshot,
+
+    /**
+     * After any member's play, pause or seek — the sender's own included, and without saying
+     * whose it was.
+     */
+    @SerialName("playback_changed") PlaybackChanged,
+
+    /** A user's first connection opened: the member, and who is connected now. */
+    @SerialName("member_joined") MemberJoined,
+
+    /** A user's last connection closed. */
+    @SerialName("member_left") MemberLeft,
+
+    /** The owner closed the room, or its movie or owner is gone; the socket closes next. */
+    @SerialName("room_deleted") RoomDeleted,
+
+    /** The answer to a JSON `ping`, which the TV never sends: OkHttp's own pings keep it alive. */
+    @SerialName("pong") Pong,
+}
+
+/**
+ * Where the room is. While playing, the position moves on in real time from when the server sent
+ * it; the server's `updated_at` is not read — the moment the message arrives is the clock, as on
+ * the web, so the two devices' clocks never have to agree.
+ */
+@Serializable
+data class WatchRoomPlaybackState(
+    val paused: Boolean,
+    @SerialName("position_sec") val positionSec: Double,
+)
+
+/** A command for the whole room. Every member may send one; the last to arrive wins. */
+@Serializable
+data class WatchRoomClientEvent(
+    val type: WatchRoomCommandType,
+    /** Where the sender's player is; the server takes it as the room's new position. */
+    @SerialName("position_sec") val positionSec: Double,
+)
+
+@Serializable
+enum class WatchRoomCommandType {
+    @SerialName("play") Play,
+    @SerialName("pause") Pause,
+    @SerialName("seek") Seek,
+}

@@ -3,6 +3,12 @@ package com.igloo.blindpenguincoder.data.repository
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.CreateWatchRoomRequest
+import com.igloo.blindpenguincoder.data.model.UserSummary
+import com.igloo.blindpenguincoder.data.model.WatchRoomClientEvent
+import com.igloo.blindpenguincoder.data.model.WatchRoomCommandType
+import com.igloo.blindpenguincoder.data.model.WatchRoomEventType
+import com.igloo.blindpenguincoder.data.model.WatchRoomPlaybackState
+import com.igloo.blindpenguincoder.data.model.WatchRoomServerEvent
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
@@ -201,5 +207,59 @@ class WatchRoomRepositoryTest {
         assertEquals("/api/users", requireNotNull(request).url.encodedPath)
         assertEquals(listOf(2L to "Jorge", 3L to "Ana"), users.map { it.id to it.name })
         assertEquals("/api/static/avatars/3.jpg", users.last().avatar)
+    }
+
+    @Test
+    fun `a snapshot frame decodes where the room is and who is connected`() {
+        val event = decodeRoomEvent(
+            """{"type":"room_snapshot","room_id":7,"playback":{"paused":false,"position_sec":61.5,""" +
+                """"updated_at":"2026-11-13T18:30:00.123456789Z"},"connected_user_ids":[1,3]}""",
+        )
+
+        assertEquals(
+            WatchRoomServerEvent(
+                type = WatchRoomEventType.RoomSnapshot,
+                playback = WatchRoomPlaybackState(paused = false, positionSec = 61.5),
+                connectedUserIds = listOf(1, 3),
+            ),
+            event,
+        )
+    }
+
+    @Test
+    fun `member and deletion frames decode with only the fields the server sends`() {
+        assertEquals(
+            WatchRoomServerEvent(
+                type = WatchRoomEventType.MemberJoined,
+                member = UserSummary(id = 3, name = "Ana", avatar = null),
+                connectedUserIds = listOf(1, 3),
+            ),
+            decodeRoomEvent(
+                """{"type":"member_joined","room_id":7,"member":{"id":3,"name":"Ana","avatar":null},""" +
+                    """"connected_user_ids":[1,3]}""",
+            ),
+        )
+        assertEquals(
+            WatchRoomServerEvent(type = WatchRoomEventType.RoomDeleted),
+            decodeRoomEvent("""{"type":"room_deleted","room_id":7}"""),
+        )
+    }
+
+    @Test
+    fun `a frame this build cannot read is skipped rather than ending the socket`() {
+        assertNull(decodeRoomEvent("""{"type":"chat_message","room_id":7,"text":"hi"}"""))
+        assertNull(decodeRoomEvent("not json"))
+    }
+
+    @Test
+    fun `a command encodes its contract type and the sender's position`() {
+        assertEquals(
+            """{"type":"seek","position_sec":3725.5}""",
+            encodeRoomCommand(WatchRoomClientEvent(WatchRoomCommandType.Seek, 3725.5)),
+        )
+        assertEquals(
+            """{"type":"pause","position_sec":0.0}""",
+            encodeRoomCommand(WatchRoomClientEvent(WatchRoomCommandType.Pause, 0.0)),
+        )
     }
 }
