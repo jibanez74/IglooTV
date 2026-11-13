@@ -251,7 +251,8 @@ private fun PlayerChrome(
             closeLabel = "Close trailer",
         )
 
-        Box(modifier = Modifier.weight(1f)) {
+        // The full width, so the hold message's centring is the picture's, not the left edge's.
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (state.phase == TrailerPhase.Loading) {
                 PlayerHoldMessage(text = "Loading trailer…", tag = "trailer_loading")
             }

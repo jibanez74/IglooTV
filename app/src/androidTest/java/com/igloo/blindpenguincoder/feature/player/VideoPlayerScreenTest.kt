@@ -574,6 +574,16 @@ class VideoPlayerScreenTest {
     }
 
     @Test
+    fun theLoadingWordsSitInTheMiddleOfThePicture() {
+        setContent()
+
+        val words = composeRule.onNodeWithTag("movie_loading").getUnclippedBoundsInRoot()
+        val picture = composeRule.onNodeWithTag("movie_player").getUnclippedBoundsInRoot()
+
+        assertEquals((picture.left + picture.right).value / 2, (words.left + words.right).value / 2, 1f)
+    }
+
+    @Test
     fun centerTogglesPlayPauseThroughTheEngine() {
         setContent()
         startPlaying()

@@ -720,7 +720,8 @@ private fun VideoPlayerChrome(
             titleAccessory = topBarAccessory,
         )
 
-        Box(modifier = Modifier.weight(1f)) {
+        // The full width, so the hold message's centring is the picture's, not the left edge's.
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             // The engine's own narration (capacity waits, reconnects) outranks the generic word.
             val holdMessage = when (state.phase) {
                 VideoPlayerPhase.Loading -> state.statusMessage ?: "Loading $mediaNoun…"
