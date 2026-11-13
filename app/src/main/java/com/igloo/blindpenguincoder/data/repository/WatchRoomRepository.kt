@@ -15,6 +15,7 @@ import com.igloo.blindpenguincoder.data.model.WatchRoomDetail
 import com.igloo.blindpenguincoder.data.model.WatchRoomListItem
 import com.igloo.blindpenguincoder.data.model.WatchRoomServerEvent
 import com.igloo.blindpenguincoder.data.model.WatchRoomsData
+import com.igloo.blindpenguincoder.playback.hls.HlsSessionApi
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.flow.Flow
@@ -82,6 +83,12 @@ class WatchRoomRepository(
             )
         }
     }
+
+    /** A direct room's stream, for Media3. */
+    fun streamUrl(id: Long): String = api.streamUrl(id)
+
+    /** Room [id]'s shared HLS session; [movies] serves the subtitles, which stay the movie's. */
+    fun hlsSession(id: Long, movies: HlsSessionApi): HlsSessionApi = WatchRoomHlsSession(id, api, movies)
 
     suspend fun inviteUsers(): ApiResult<List<UserSummary>> =
         envelopeData<InviteUsersData>("invite users") { api.inviteUsers() }.map { it.users }

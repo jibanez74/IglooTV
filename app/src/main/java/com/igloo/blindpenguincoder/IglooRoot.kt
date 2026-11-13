@@ -435,14 +435,20 @@ fun IglooRoot(container: IglooAppContainer) {
                         playRequests = detailsViewModel.playRequests,
                         videoPlayerViewModel = videoPlayerViewModel,
                         videoPlayerEngineFactory = { context, request ->
+                            val movies = container.videoPlaybackRepository
+                            val rooms = container.watchRoomRepository
+                            val roomId = request.watchRoomId
                             ExoVideoPlayerEngine(
                                 context = context,
                                 request = request,
                                 services = VideoPlaybackServices(
                                     progressiveDataSourceFactory = container.streamDataSourceFactory,
                                     hlsDataSourceFactory = container.hlsStreamDataSourceFactory,
-                                    directStreamUrl = container.videoPlaybackRepository::streamUrl,
-                                    hlsSessionApi = container.videoPlaybackRepository,
+                                    // A room plays its own stream or session, never the movie's.
+                                    directStreamUrl = { media ->
+                                        roomId?.let(rooms::streamUrl) ?: movies.streamUrl(media)
+                                    },
+                                    hlsSessionApi = roomId?.let { rooms.hlsSession(it, movies) } ?: movies,
                                     canPlayVideoMime = ::deviceCanDecodeVideoMime,
                                     canPlayAudioMime = canPlayAudioMime,
                                     stopScope = container.applicationScope,

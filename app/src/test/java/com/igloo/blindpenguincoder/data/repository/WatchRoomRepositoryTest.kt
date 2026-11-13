@@ -9,6 +9,10 @@ import com.igloo.blindpenguincoder.data.model.WatchRoomCommandType
 import com.igloo.blindpenguincoder.data.model.WatchRoomEventType
 import com.igloo.blindpenguincoder.data.model.WatchRoomPlaybackState
 import com.igloo.blindpenguincoder.data.model.WatchRoomServerEvent
+import com.igloo.blindpenguincoder.playback.hls.HlsManifestResult
+import com.igloo.blindpenguincoder.playback.hls.HlsSessionSpec
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.WATCH_ROOM_TRACKS_CHANGED_MESSAGE
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
@@ -261,5 +265,70 @@ class WatchRoomRepositoryTest {
             """{"type":"pause","position_sec":0.0}""",
             encodeRoomCommand(WatchRoomClientEvent(WatchRoomCommandType.Pause, 0.0)),
         )
+    }
+
+    // --- the room's shared HLS session ---
+
+    private val movieSessionSpec = HlsSessionSpec(
+        media = PlaybackMediaRef.Movie(101),
+        profileId = "remux",
+        audioTypeIndex = 0,
+        startSec = 600,
+        sessionUuid = "uuid",
+    )
+
+    @Test
+    fun `the room's manifest is a plain request whose media starts at 0`() = runTest {
+        val requests = mutableListOf<HttpRequestData>()
+        val http = TestHttp {
+            requests += it
+            respond("#EXTM3U", HttpStatusCode.OK)
+        }
+        val session = http.watchRoomRepository.hlsSession(7, http.videoPlaybackRepository)
+
+        val start = session.fetchHlsManifest(movieSessionSpec, keepalive = false)
+        val keepalive = session.fetchHlsManifest(movieSessionSpec, keepalive = true)
+
+        // Nothing of the player's spec is sent, the keepalive included: the room fixed it all.
+        assertEquals(listOf("/api/watch-rooms/7/hls/playlist.m3u8"), requests.map { it.url.encodedPath }.distinct())
+        assertTrue(requests.all { it.url.parameters.isEmpty() })
+        assertEquals(HlsManifestResult.Ready(effectiveProfileId = "remux", actualStartSec = 0.0), start)
+        assertEquals(start, keepalive)
+        assertEquals("$TEST_SERVER/watch-rooms/7/hls/playlist.m3u8", session.hlsPlaylistUrl(movieSessionSpec))
+    }
+
+    @Test
+    fun `the room's manifest reads a full server and a replaced file as their own states`() = runTest {
+        var status = HttpStatusCode.ServiceUnavailable
+        val http = TestHttp {
+            respond("", status, headersOf(HttpHeaders.RetryAfter, "5"))
+        }
+        val session = http.watchRoomRepository.hlsSession(7, http.videoPlaybackRepository)
+
+        assertEquals(HlsManifestResult.Busy(retryAfterSec = 5), session.fetchHlsManifest(movieSessionSpec))
+        status = HttpStatusCode.Conflict
+        assertEquals(
+            HlsManifestResult.Failed(WATCH_ROOM_TRACKS_CHANGED_MESSAGE),
+            session.fetchHlsManifest(movieSessionSpec),
+        )
+    }
+
+    @Test
+    fun `leaving the room never stops its session and subtitles stay the movie's`() = runTest {
+        val requests = mutableListOf<HttpRequestData>()
+        val http = TestHttp {
+            requests += it
+            respond("", HttpStatusCode.OK)
+        }
+        val session = http.watchRoomRepository.hlsSession(7, http.videoPlaybackRepository)
+
+        session.stopHlsSession(PlaybackMediaRef.Movie(101), "uuid")
+
+        assertTrue(requests.isEmpty())
+        assertEquals(
+            "$TEST_SERVER/movies/101/subtitles/2/stream.mkv",
+            session.subtitleStreamUrl(PlaybackMediaRef.Movie(101), trackIndex = 2, startSec = 0.0),
+        )
+        assertEquals("$TEST_SERVER/watch-rooms/7/stream", http.watchRoomRepository.streamUrl(7))
     }
 }

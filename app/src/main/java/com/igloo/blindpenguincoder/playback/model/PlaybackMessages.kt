@@ -19,6 +19,10 @@ const val PLAYBACK_SERVER_BUSY_MESSAGE =
 const val PLAYBACK_SERVER_UNREACHABLE_MESSAGE =
     "The server could not be reached. Check the connection and try again."
 
+/** A room's 409: a rescan replaced its movie's file and moved the tracks the room fixed. */
+const val WATCH_ROOM_TRACKS_CHANGED_MESSAGE =
+    "This room's movie file was replaced. The room has to be closed and created again."
+
 fun playbackServerRefusedMessage(httpStatus: Int): String =
     "The server refused the stream (HTTP $httpStatus)."
 

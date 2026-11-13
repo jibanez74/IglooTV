@@ -71,8 +71,10 @@ const val HLS_SESSION_LOST_INCIDENT_WINDOW_MS = 60_000L
 private const val HLS_SEGMENT_STATUS_HEADER = "X-Igloo-Segment"
 private const val HLS_SEGMENT_STATUS_PAST_END = "past-end"
 
-// Movies and TV episodes serve the same session assets under their own prefixes.
-private const val VIDEO_HLS_PREFIX = "^/api/(?:movies|shows/episodes)/[^/]+/hls/[^/]+/"
+// Movies and TV episodes serve the same session assets under their own prefixes, each behind a
+// profile segment; a watch room's one session has none, its profile fixed with the room.
+private const val VIDEO_HLS_PREFIX =
+    "^/api/(?:(?:movies|shows/episodes)/[^/]+/hls/[^/]+|watch-rooms/[^/]+/hls)/"
 
 private val VIDEO_HLS_REQUEST_PATH =
     Regex(VIDEO_HLS_PREFIX + "(?:playlist\\.m3u8|init\\.mp4|segment_[0-9]+\\.m4s)$")

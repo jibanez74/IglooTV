@@ -51,6 +51,20 @@ class WatchRoomApi(
     suspend fun socket(id: Long, session: suspend DefaultClientWebSocketSession.() -> Unit) =
         client.webSocket(serverUrl.webSocket("/watch-rooms/$id/ws"), block = session)
 
+    /** A direct room's original file, as a URL: Media3 fetches it on its own stack (Range/206). */
+    fun streamUrl(id: Long): String = serverUrl.api("/watch-rooms/$id/stream")
+
+    /**
+     * The room's shared HLS playlist. Any member's request keeps the room's one session alive,
+     * and one that idled out is started again from 0, so the same request is the keepalive. A
+     * cold session can take over a minute to answer ([awaitMediaPreparation]).
+     */
+    suspend fun hlsPlaylist(id: Long): HttpResponse =
+        client.get(hlsPlaylistUrl(id)) { awaitMediaPreparation() }
+
+    /** The same playlist as a URL, for Media3. */
+    fun hlsPlaylistUrl(id: Long): String = serverUrl.api("/watch-rooms/$id/hls/playlist.m3u8")
+
     /** Everyone a new room can invite: every user but the caller, by name. */
     suspend fun inviteUsers(): HttpResponse =
         client.get(serverUrl.api("/users"))

@@ -234,6 +234,26 @@ class ExoVideoPlayerEngineTest {
     }
 
     @Test
+    fun aWatchRoomsSessionIsNeverRebasedOrRewound() {
+        val api = FakeHlsApi()
+        val engine = engine(playRequest(mode = PlaybackMode.Remux).copy(watchRoomId = 7), api)
+
+        // Joining a room mid-movie starts exactly where the room is.
+        onMain { engine.startPlayback(600.0, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the room's manifest") { api.fetched.size == 1 }
+        assertEquals(600, api.fetched.single().startSec)
+
+        // The room's one session covers the movie from 0: far either way rides the player.
+        onMain {
+            engine.seekTo(20.0)
+            engine.seekTo(5_000.0)
+        }
+        SystemClock.sleep(HLS_SEEK_SETTLE_MS * 2)
+        instrumentation.waitForIdleSync()
+        assertEquals(1, api.fetched.size)
+    }
+
+    @Test
     fun aRunOfStepsPastTheWindowRebasesOnceAtItsFinalTarget() {
         val api = FakeHlsApi()
         val engine = engine(playRequest(mode = PlaybackMode.Remux), api)

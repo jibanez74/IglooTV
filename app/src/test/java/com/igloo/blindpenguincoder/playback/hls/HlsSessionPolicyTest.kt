@@ -226,7 +226,7 @@ class HlsSessionPolicyTest {
     // --- mid-play lost-session recovery ---
 
     @Test
-    fun `only movie and episode HLS asset 404s recover in place`() {
+    fun `only video HLS asset 404s recover in place`() {
         listOf(
             "/api/movies/7/hls/remux/playlist.m3u8",
             "/api/movies/7/hls/remux/init.mp4",
@@ -234,8 +234,12 @@ class HlsSessionPolicyTest {
             "/api/shows/episodes/900/hls/remux/playlist.m3u8",
             "/api/shows/episodes/900/hls/remux/init.mp4",
             EPISODE_SEGMENT_PATH,
+            // A watch room's one session has no profile segment in its path.
+            "/api/watch-rooms/7/hls/playlist.m3u8",
+            "/api/watch-rooms/7/hls/init.mp4",
+            ROOM_SEGMENT_PATH,
         ).forEach { path ->
-            assertTrue(shouldRecoverLostHlsSession(404, path, recoveries = 0))
+            assertTrue(path, shouldRecoverLostHlsSession(404, path, recoveries = 0))
         }
         assertFalse(
             shouldRecoverLostHlsSession(
@@ -244,7 +248,8 @@ class HlsSessionPolicyTest {
                 recoveries = 0,
             ),
         )
-        assertFalse(shouldRecoverLostHlsSession(404, "/api/watch-rooms/7/hls/playlist.m3u8", 0))
+        assertFalse(shouldRecoverLostHlsSession(404, "/api/watch-rooms/7/stream", 0))
+        assertFalse(shouldRecoverLostHlsSession(404, "/api/watch-rooms/7/hls/remux/playlist.m3u8", 0))
         assertFalse(
             shouldRecoverLostHlsSession(404, "/api/shows/episodes/900/subtitles/0/web.vtt", 0),
         )
@@ -256,6 +261,7 @@ class HlsSessionPolicyTest {
     fun `a segment 500 recovers because the server replaces a failed session`() {
         assertTrue(shouldRecoverLostHlsSession(500, MOVIE_SEGMENT_PATH, recoveries = 0))
         assertTrue(shouldRecoverLostHlsSession(500, EPISODE_SEGMENT_PATH, recoveries = 0))
+        assertTrue(shouldRecoverLostHlsSession(500, ROOM_SEGMENT_PATH, recoveries = 0))
         assertFalse(shouldRecoverLostHlsSession(500, "/api/movies/7/hls/remux/playlist.m3u8", 0))
         assertFalse(shouldRecoverLostHlsSession(500, "/api/movies/7/hls/remux/init.mp4", 0))
         assertFalse(
@@ -282,6 +288,7 @@ class HlsSessionPolicyTest {
         )
         assertTrue(isPastEndHlsSegment(404, MOVIE_SEGMENT_PATH, pastEnd))
         assertTrue(isPastEndHlsSegment(404, EPISODE_SEGMENT_PATH, pastEnd))
+        assertTrue(isPastEndHlsSegment(404, ROOM_SEGMENT_PATH, pastEnd))
     }
 
     @Test
@@ -356,6 +363,7 @@ class HlsSessionPolicyTest {
 
     private companion object {
         const val MOVIE_SEGMENT_PATH = "/api/movies/7/hls/remux/segment_1.m4s"
+        const val ROOM_SEGMENT_PATH = "/api/watch-rooms/7/hls/segment_1.m4s"
         const val EPISODE_SEGMENT_PATH = "/api/shows/episodes/900/hls/remux/segment_1.m4s"
     }
 }

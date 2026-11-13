@@ -498,6 +498,8 @@ class OpenApiContractTest {
             Route("POST", "/api/watch-rooms/{id}/join"),
             Route("DELETE", "/api/watch-rooms/{id}"),
             Route("GET", "/api/watch-rooms/{id}/ws"),
+            Route("GET", "/api/watch-rooms/{id}/stream"),
+            Route("GET", "/api/watch-rooms/{id}/hls/playlist.m3u8"),
             Route("GET", "/api/users", envelope(InviteUsersData.serializer())),
         )
 

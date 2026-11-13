@@ -147,6 +147,13 @@ internal class ExoVideoPlayerEngine(
     private var initialSelectionApplied = false
     private val playbackIntent = PlaybackIntent()
 
+    /**
+     * A watch room's shared session covers the whole movie from 0 and is everyone's, so this
+     * player never starts a session of its own elsewhere: no seek rebases and no resume rewinds.
+     * A far seek waits on the room's encoder instead (docs/known-issues.md).
+     */
+    private val roomSession = request.watchRoomId != null
+
     private val player: ExoPlayer = ExoPlayer.Builder(context)
         .setAudioAttributes(videoPlaybackAudioAttributes, /* handleAudioFocus= */ true)
         .setLoadControl(heapBoundedLoadControl())
@@ -282,7 +289,7 @@ internal class ExoVideoPlayerEngine(
             // Resuming over HLS rewinds a little; the session then starts right at the target.
             // Only a genuine resume earns it — a reconstruction already knows this visit's own
             // playhead, and rewinding again on every one walks the movie backwards.
-            startPositionSec != null && rewindOnResume ->
+            startPositionSec != null && rewindOnResume && !roomSession ->
                 hlsResumeStartSec(startPositionSec).toDouble()
             startPositionSec != null -> startPositionSec
             else -> 0.0
@@ -311,14 +318,15 @@ internal class ExoVideoPlayerEngine(
         when {
             // The frozen source is about to be replaced, so it is no measure: a seek the new
             // session covers only moves where its source will be prepared.
-            pending != null -> if (shouldRebasePendingHlsSeek(seconds, pending.startSec)) {
+            pending != null -> if (!roomSession && shouldRebasePendingHlsSeek(seconds, pending.startSec)) {
                 holdRebase(seconds)
             } else {
                 dropHeldRebase()
                 pendingRestart = pending.copy(targetSec = seconds)
             }
             !isHls -> player.seekTo((seconds * 1000).toLong())
-            shouldRebaseHlsSeek(seconds, timelineOffsetSec, settledAbsoluteSec) -> holdRebase(seconds)
+            !roomSession && shouldRebaseHlsSeek(seconds, timelineOffsetSec, settledAbsoluteSec) ->
+                holdRebase(seconds)
             else -> {
                 // Back in range: a far target the same run passed through is dropped.
                 dropHeldRebase()
