@@ -121,7 +121,7 @@ class MusicianDetailsAccessibilityTest {
 
         composeRule.onNodeWithTag("musician_details_facts").assertContentDescriptionEquals(
             "Artist details. Albums: 2. Tracks: 3. Total duration: 7m 5s. Genres: Rock, Pop. " +
-                "Spotify popularity: 88 / 100. Spotify followers: 25,000,000. About: Liverpool, 1960.",
+                "About: Liverpool, 1960.",
         )
     }
 
@@ -136,7 +136,7 @@ class MusicianDetailsAccessibilityTest {
             .assertIsFocused()
             .assertContentDescriptionEquals(
                 "The Beatles. 2 albums, 3 tracks. Total duration: 7 minutes and 5 seconds. " +
-                    "Genres: Rock, Pop. Spotify popularity 88 out of 100.",
+                    "Genres: Rock, Pop.",
             )
     }
 

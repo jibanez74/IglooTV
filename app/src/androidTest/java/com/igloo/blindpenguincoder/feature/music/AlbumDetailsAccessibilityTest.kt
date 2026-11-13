@@ -212,18 +212,7 @@ class AlbumDetailsAccessibilityTest {
         composeRule.onNodeWithTag("album_details_facts").assertContentDescriptionEquals(
             "Album details. Release date: August 6, 1965. Total tracks: 3. " +
                 "Total duration: 7m 5s. Artist: The Beatles. Genres: Rock, Pop. Discs: 2. " +
-                "Audio quality: FLAC · 900 kbps · stereo. Spotify popularity: 73 / 100.",
-        )
-    }
-
-    @Test
-    fun thePopularityMeterIsSilent() {
-        setContent()
-
-        // The score is spoken by the hero reading stop's sentence; the meter itself carries
-        // no announcement of its own.
-        composeRule.onNodeWithTag("album_popularity_meter").assert(
-            SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription),
+                "Audio quality: FLAC · 900 kbps · stereo.",
         )
     }
 
@@ -239,7 +228,7 @@ class AlbumDetailsAccessibilityTest {
             .assertIsFocused()
             .assertContentDescriptionEquals(
                 "Help! by The Beatles. 3 tracks. Total duration: 7 minutes and 5 seconds. " +
-                    "Genres: Rock, Pop. Spotify popularity 73 out of 100.",
+                    "Genres: Rock, Pop.",
             )
     }
 
@@ -248,12 +237,10 @@ class AlbumDetailsAccessibilityTest {
         val artists = listOf(AlbumArtistUi(4, "The Beatles"), AlbumArtistUi(5, "Billy Preston"))
         val artistNames = artists.map { it.name }
         val heroDescription = "Help! by The Beatles. Artists: The Beatles, Billy Preston. " +
-            "3 tracks. Total duration: 7 minutes and 5 seconds. Genres: Rock, Pop. " +
-            "Spotify popularity 73 out of 100."
+            "3 tracks. Total duration: 7 minutes and 5 seconds. Genres: Rock, Pop."
         val factsDescription = "Album details. Release date: August 6, 1965. Total tracks: 3. " +
             "Total duration: 7m 5s. Artist: The Beatles, Billy Preston. Genres: Rock, Pop. " +
-            "Discs: 2. Audio quality: FLAC · 900 kbps · stereo. " +
-            "Spotify popularity: 73 / 100."
+            "Discs: 2. Audio quality: FLAC · 900 kbps · stereo."
         val baseAlbum = testAlbumDetails()
         val album = baseAlbum.copy(
             artists = artists,

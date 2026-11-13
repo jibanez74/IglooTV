@@ -65,7 +65,6 @@ data class AlbumsData(
 data class Album(
     val id: Long,
     val title: String,
-    @SerialName("spotify_popularity") val spotifyPopularity: SqlNullFloat64,
     val musician: SqlNullString,
     @SerialName("release_date") val releaseDate: SqlNullString,
     val year: SqlNullInt64,
@@ -131,8 +130,6 @@ data class Musician(
     val id: Long,
     val name: String,
     val summary: SqlNullString,
-    @SerialName("spotify_popularity") val spotifyPopularity: SqlNullFloat64,
-    @SerialName("spotify_followers") val spotifyFollowers: SqlNullInt64,
     val thumb: SqlNullString,
 )
 

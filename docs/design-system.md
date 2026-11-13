@@ -874,7 +874,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooFocusableEmpty` | §10 empty state, minimal variant only: faded icon + one line, as the pane's focusable anchor announcing the line when focused — no live region (§6.3). The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. The Watch Rooms pane's empty state is §10's illustrated variant, which is not focusable at all (§11.10). |
 | `IglooRadioListDialog` | The scrimmed radio-list dialog behind Playback Settings and the player's track and chapter menus: the `IglooConfirmDialog` recipe (§9.3) — both, and the player's resume prompt, sit on the one `IglooDialogCard` frame (scrim, reveal, card, pane title, heading) — around one flat, scrolling list of `IglooRadioRow`s and a pinned Done. The caller draws the rows, applying `rowFocus(n)` to row `n`, which walks up/down and onto Done and cancels every other direction; entry focus lands on `entryIndex`. |
 | `IglooPinnedError` | A screen's full-screen error: `IglooInlineError` centred in the safe area at `dialogWidth`, its one action pinned in every direction because the host is still composed underneath. Assertive — it is the only region on screen. |
-| `ProgressTrack` | The one thin progress bar: 4dp, a ground and a fill, square where it sits flush on an edge (poster card, seek bar) and `rounded` where it stands free (the resume strip, the popularity meter). |
+| `ProgressTrack` | The one thin progress bar: 4dp, a ground and a fill, square where it sits flush on an edge (poster card, seek bar) and `rounded` where it stands free (the resume strip). |
 | `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. A surface whose text sits over the art hoists its `rememberArtworkState` so the §3.2 treatment follows the decode (the In Theaters card, the Home hero and the details hero, which draw the art themselves through `ArtworkImage`). |
 | `IglooGlyph` | A decorative glyph in one tint at `icons.md` unless told otherwise; no description, because the control or text it sits in says what it means. |
 | `pinnedSideways` / `pinnedToScreen` | The focus pins of §6: `pinnedSideways(up, down)` cancels Left and Right and names the vertical neighbours, a null one cancelled too; `pinnedToScreen()` cancels all four. |
@@ -2336,14 +2336,8 @@ decode-gated over-media licensing. The cover is used as the API returns it (§11
 rule: a provider URL straight from its CDN, the server's own copy from its origin). Beside a square cover
 (`posterWidth` × `albumAspect`, Music-glyph fallback, decorative): title at `titleLarge`
 (2 lines), the artist line, three §11.4.1 detail chips (release date — full date, else bare
-year — track count, total duration) cleared into one sentence, the genres line, the popularity
-meter, and the action row.
-
-**Spotify popularity.** The meter is web parity: glyph + "Spotify popularity" + bold score over
-a 4dp fill bar at `score/100`. Glyph and fill wear **Spotify's brand green** (`#1DB954`) — the
-one deliberate brand color in the app, because the number is Spotify's and painting it `primary`
-would claim it as ours. The meter is silent and unfocusable; its score rides the hero reading
-stop's sentence and the facts panel's row.
+year — track count, total duration) cleared into one sentence, the genres line, and the action
+row.
 
 **Actions.** Play Album (Primary, the entry anchor, held through the loading→loaded swap by the
 skeleton's geometry-matched stub) and Shuffle (Ghost, over-media resting fill per §3.2). Both
@@ -2382,7 +2376,7 @@ screen reader through the hero stop's sentence and the facts panel's Artist row.
 **Facts panel.** "Album Details", the §11.4.1 About treatment verbatim: heading outside the
 panel, `radius.xl` surface focus target, one cleared announcement folding the heading in. Rows —
 Release Date (full date only), Total Tracks, Total Duration, Artist, Genres, Discs (multi-disc
-only), Audio Quality, Spotify popularity ("73 / 100") — each dropped when absent. Audio Quality
+only), Audio Quality — each dropped when absent. Audio Quality
 is the web derivation exactly: dominant codec by track count (first past the post), peak
 bitrate in kbps, channel layout only when uniform across the album, `·`-joined, absent parts
 dropped, no summary without a codec.
@@ -2407,7 +2401,7 @@ album page's artist chip — the last two replacing the overlay that was up, ori
 it, §11.3.2) with §11.4.1's two scrims and decode-gated over-media licensing; beside a circular thumb
 (`posterWidth` at `radius.pill`, Person-glyph fallback, decorative): name at `titleLarge`,
 three chips cleared into one sentence (album count, track count, total duration), the genres
-line, the §11.5.1 Spotify popularity meter, and the action row — **Play all** (Primary, the
+line, and the action row — **Play all** (Primary, the
 entry anchor) and **Shuffle** (Ghost), both live over the musician queue, the return requester
 parked on whichever launched the player. With no tracks the action row is not composed and the
 entry anchor moves to the discography rail, or to the facts panel with no albums either. The
@@ -2424,7 +2418,7 @@ row's Play starting the musician queue at that row. Chain: actions → rail → 
 → facts panel; edges pinned.
 
 **Facts panel.** "Artist Details", the §11.4.1 About treatment: Albums, Tracks, Total duration,
-Genres, Spotify popularity, Spotify followers, About (the summary) — each dropped when absent.
+Genres, About (the summary) — each dropped when absent.
 
 ### 11.6 Search
 
@@ -3024,6 +3018,17 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-11-13 — Spotify popularity and followers are gone (§9.1, §11.5.1, §11.5.2).**
+
+- The server no longer sends `spotify_popularity` (albums) or `spotify_popularity` and
+  `spotify_followers` (musicians): Spotify stopped reporting them to Development Mode apps in
+  February 2026, so they were always empty. The album and musician heroes lose the Spotify
+  popularity meter, the facts panels lose the Spotify popularity and followers rows, and the hero
+  sentences lose "Spotify popularity N out of 100". The meter was silent and unfocusable, so no
+  focus target goes with it.
+- With the meter gone, the Spotify brand green and `IglooIcons.Spotify` had no caller and were
+  removed.
 
 **2026-11-13 — The grid's entry card is always on screen (§11.4, §11.10).**
 

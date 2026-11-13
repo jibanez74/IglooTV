@@ -414,7 +414,6 @@ internal fun testAlbumDetails(
     trackCountText = "3 tracks",
     totalDurationText = "7m 5s",
     genresLine = "Rock · Pop",
-    popularity = 73,
     artists = listOf(AlbumArtistUi(id = 4, name = "The Beatles")),
     discs = listOf(
         AlbumDiscUi(
@@ -466,14 +465,12 @@ internal fun testAlbumDetails(
         FactUi("Genres", "Rock, Pop"),
         FactUi("Discs", "2"),
         FactUi("Audio quality", "FLAC · 900 kbps · stereo"),
-        FactUi("Spotify popularity", "73 / 100"),
     ),
     factsDescription = "Album details. Release date: August 6, 1965. Total tracks: 3. " +
         "Total duration: 7m 5s. Artist: The Beatles. Genres: Rock, Pop. Discs: 2. " +
-        "Audio quality: FLAC · 900 kbps · stereo. Spotify popularity: 73 / 100.",
+        "Audio quality: FLAC · 900 kbps · stereo.",
     heroInfoDescription = "Help! by The Beatles. 3 tracks. " +
-        "Total duration: 7 minutes and 5 seconds. Genres: Rock, Pop. " +
-        "Spotify popularity 73 out of 100.",
+        "Total duration: 7 minutes and 5 seconds. Genres: Rock, Pop.",
 )
 
 internal val testExtraVideos = listOf(
@@ -741,7 +738,6 @@ internal fun testMusicianDetails(
     trackCountText = "3 tracks",
     totalDurationText = "7m 5s",
     genresLine = "Rock · Pop",
-    popularity = 88,
     albums = listOf(
         AlbumCardUi(id = 11, title = "Help!", subtitle = "1965", coverUrl = null),
         AlbumCardUi(id = 12, title = "Revolver", subtitle = "1966", coverUrl = null),
@@ -786,15 +782,12 @@ internal fun testMusicianDetails(
         FactUi("Tracks", "3"),
         FactUi("Total duration", "7m 5s"),
         FactUi("Genres", "Rock, Pop"),
-        FactUi("Spotify popularity", "88 / 100"),
-        FactUi("Spotify followers", "25,000,000"),
         FactUi("About", "Liverpool, 1960."),
     ),
     factsDescription = "Artist details. Albums: 2. Tracks: 3. Total duration: 7m 5s. " +
-        "Genres: Rock, Pop. Spotify popularity: 88 / 100. Spotify followers: 25,000,000. " +
-        "About: Liverpool, 1960.",
+        "Genres: Rock, Pop. About: Liverpool, 1960.",
     heroInfoDescription = "The Beatles. 2 albums, 3 tracks. Total duration: 7 minutes and 5 seconds. " +
-        "Genres: Rock, Pop. Spotify popularity 88 out of 100.",
+        "Genres: Rock, Pop.",
 )
 
 /**
