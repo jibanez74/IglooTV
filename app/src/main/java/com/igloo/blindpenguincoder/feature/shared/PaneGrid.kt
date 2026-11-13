@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridItemInfo
+import androidx.compose.foundation.lazy.grid.LazyGridLayoutInfo
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -193,6 +195,16 @@ internal fun <T> PaneGrid(
     )
 }
 
+/**
+ * The items that actually show, not every one the grid lists: an accessibility snapshot only holds
+ * nodes on screen, and after a scroll to a line the grid still lists the line above it while it
+ * sits wholly outside the viewport.
+ */
+private fun LazyGridLayoutInfo.onScreenItems(): List<LazyGridItemInfo> =
+    visibleItemsInfo.filter {
+        it.offset.y + it.size.height > viewportStartOffset && it.offset.y < viewportEndOffset
+    }
+
 /** A card's lazy key; see [PaneCardGrid]'s items for why it is a string. */
 private fun cardKey(id: Long): String = "item_$id"
 
@@ -246,7 +258,7 @@ internal fun <T> PaneCardGrid(
     // Before the first layout nothing is known to be on screen, so the memory stands.
     val entryId by remember(gridState, items, rememberedId) {
         derivedStateOf(structuralEqualityPolicy()) {
-            val onScreen = gridState.layoutInfo.visibleItemsInfo
+            val onScreen = gridState.layoutInfo.onScreenItems()
             val remembered = rememberedId?.takeIf { id -> onScreen.any { it.key == cardKey(id) } }
             val firstOnScreen = onScreen.firstNotNullOfOrNull { info ->
                 items.getOrNull(info.index)?.let(itemId)?.takeIf { cardKey(it) == info.key }
@@ -273,17 +285,7 @@ internal fun <T> PaneCardGrid(
             screenReader = { screenReaderOn },
             focusedIndex = focusedIndex,
             lastIndex = { currentItems.lastIndex },
-            // Placed with visible bounds: an accessibility snapshot only holds nodes that show
-            // on screen, and after a scroll to a line the grid still lists the line above it
-            // while it sits wholly outside the viewport.
-            isPlaced = { index ->
-                val info = gridState.layoutInfo
-                info.visibleItemsInfo.any {
-                    it.index == index &&
-                        it.offset.y + it.size.height > info.viewportStartOffset &&
-                        it.offset.y < info.viewportEndOffset
-                }
-            },
+            isPlaced = { index -> gridState.layoutInfo.onScreenItems().any { it.index == index } },
             // Half of the target row, while at least a quarter of the origin row stays.
             revealDistance = { forward ->
                 val info = gridState.layoutInfo
