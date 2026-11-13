@@ -7,14 +7,12 @@ import com.igloo.blindpenguincoder.data.model.WatchRoomEventType
 import com.igloo.blindpenguincoder.data.model.WatchRoomPlaybackState
 import com.igloo.blindpenguincoder.data.model.WatchRoomServerEvent
 import com.igloo.blindpenguincoder.playback.model.ROOM_DRIFT_TOLERANCE_SEC
+import com.igloo.blindpenguincoder.playback.model.RoomNotice
 import com.igloo.blindpenguincoder.playback.model.RoomPlayhead
 import kotlin.math.abs
 
 /** This TV's link to the room. */
 enum class RoomConnection { Connecting, Live, Reconnecting }
-
-/** One TalkBack announcement; a new [id] makes the same words a second announcement. */
-data class RoomNotice(val text: String, val id: Long)
 
 /** A command this TV sent, waiting for the server to send it back to everyone, this TV included. */
 data class PendingEcho(val command: WatchRoomClientEvent, val sentAtMs: Long)

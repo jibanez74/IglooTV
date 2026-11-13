@@ -4,14 +4,17 @@ import android.app.Activity
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -54,6 +57,8 @@ import com.igloo.blindpenguincoder.letChromeHide
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.EpisodeContext
+import com.igloo.blindpenguincoder.playback.model.RoomNotice
+import com.igloo.blindpenguincoder.playback.model.RoomPlayhead
 import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
@@ -100,6 +105,12 @@ class VideoPlayerScreenTest {
 
     /** The host contract: closing unmounts the screen, which is what fires the exit save. */
     private var open by mutableStateOf(true)
+
+    /** A watch room the screen shows, the host rebuilding it as the room moves; null for a solo showing. */
+    private var room by mutableStateOf<PlayerRoom?>(null)
+    private var roomClockMs = 0L
+    private val roomReports = mutableListOf<Pair<TransportCommand, Double>>()
+    private val roomStarts = mutableListOf<Double>()
     private var networkRecovery by mutableStateOf(0)
 
     /** The hand-off contract: the host replaces this screen with one for [advanced]'s last request. */
@@ -294,10 +305,33 @@ class VideoPlayerScreenTest {
                         },
                         prepareUpNext = prepareUpNext,
                         onAdvance = onAdvance,
+                        room = room,
+                        topBarAccessory = room?.let { { Box(Modifier.testTag("room_badge")) } },
                     )
                 }
             }
         }
+    }
+
+    /** A room at [playhead], told to follow it for the [generation]th time. */
+    private fun roomAt(playhead: RoomPlayhead?, generation: Long, notice: RoomNotice? = null, startPlaying: Boolean = true) =
+        PlayerRoom(
+            playhead = playhead,
+            followGeneration = generation,
+            notice = notice,
+            startPlaying = startPlaying,
+            clock = { roomClockMs },
+            onTransport = { command, positionSec -> roomReports += command to positionSec },
+            onPlaybackStarted = { roomStarts += it },
+        )
+
+    /** The room's player, joined where the room is: playing at 100 s unless said otherwise. */
+    private fun setRoomContent(playhead: RoomPlayhead? = RoomPlayhead(false, 100.0, atMs = 0), startPlaying: Boolean = true) {
+        roomClockMs = 0L
+        roomReports.clear()
+        roomStarts.clear()
+        room = roomAt(playhead, generation = 1, startPlaying = startPlaying)
+        setContent(playRequest(resumeAtSec = playhead?.positionSec).copy(watchRoomId = 7, promptForResume = false))
     }
 
     private fun startPlaying() {
@@ -594,6 +628,105 @@ class VideoPlayerScreenTest {
             listOf("start:null:true", "pause", "pause", "play", "play", "pause"),
             engine.playbackCommands,
         )
+    }
+
+    // --- in a watch room (section 11.10.2) ---
+
+    @Test
+    fun aRoomFixesTheTracksAndSavesNoProgress() {
+        setRoomContent()
+        startPlaying()
+        emitTracks()
+        engine.emit(VideoPlayerEvent.Time(currentSec = 400.0, durationSec = 7200.0))
+        composeRule.onNodeWithTag("movie_play_pause").performKeyInput { pressKey(Key.DirectionCenter) }
+        engine.emit(VideoPlayerEvent.PlayWhenReadyChanged(false))
+        composeRule.waitForIdle()
+
+        listOf("movie_audio", "movie_subtitles", "movie_quality", "movie_chapters").forEach { tag ->
+            composeRule.onNodeWithTag(tag).assertDoesNotExist()
+        }
+        composeRule.onNodeWithTag("room_badge").assertExists()
+        open = false
+        composeRule.waitForIdle()
+        assertEquals(emptyList<UpdateWatchProgressRequest>(), savedRequests)
+    }
+
+    @Test
+    fun everyPressIsTheViewersCommandToTheRoom() {
+        setRoomContent()
+        startPlaying()
+        engine.emit(VideoPlayerEvent.Time(currentSec = 100.0, durationSec = 7200.0))
+        composeRule.waitForIdle()
+        val playPause = composeRule.onNodeWithTag("movie_play_pause")
+
+        playPause.performKeyInput { pressKey(Key.DirectionCenter) }
+        playPause.performKeyInput { pressKey(Key.MediaFastForward) }
+        engine.emit(VideoPlayerEvent.SessionTransport(TransportCommand.Play))
+        composeRule.waitForIdle()
+
+        assertEquals(
+            listOf(
+                TransportCommand.Pause to 100.0,
+                TransportCommand.SeekTo(110.0) to 110.0,
+                TransportCommand.Play to 110.0,
+            ),
+            roomReports,
+        )
+    }
+
+    @Test
+    fun theRoomIsFollowedOnlyPastTheDriftToleranceAndNeverEchoedBack() {
+        setRoomContent()
+        startPlaying()
+        engine.emit(VideoPlayerEvent.Time(currentSec = 101.0, durationSec = 7200.0))
+        composeRule.waitForIdle()
+        val joined = engine.playbackCommands.toList()
+
+        // A second on, the room is where this player is: nothing to do.
+        roomClockMs = 1_000
+        room = roomAt(RoomPlayhead(false, 101.5, atMs = 1_000), generation = 2)
+        composeRule.waitForIdle()
+        assertEquals(joined + "play", engine.playbackCommands)
+
+        // Someone jumped to an hour in and paused there.
+        room = roomAt(RoomPlayhead(true, 3_600.0, atMs = 1_000), generation = 3)
+        composeRule.waitForIdle()
+        assertEquals(joined + listOf("play", "seek:3600.0", "pause"), engine.playbackCommands)
+        assertTrue("following must not be sent back as this viewer's", roomReports.isEmpty())
+    }
+
+    @Test
+    fun aRoomWhoseStateIsNotKnownYetIsNotFollowed() {
+        setRoomContent(playhead = null)
+        startPlaying()
+
+        assertEquals(listOf("start:null:true"), engine.playbackCommands)
+        assertEquals(listOf(0.0), roomStarts)
+    }
+
+    @Test
+    fun theFirstFrameIsReportedOnceAndTheEndPausesTheRoom() {
+        setRoomContent()
+        startPlaying()
+        engine.emit(VideoPlayerEvent.IsPlayingChanged(false))
+        engine.emit(VideoPlayerEvent.IsPlayingChanged(true))
+        engine.emit(VideoPlayerEvent.Time(currentSec = 7_200.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Ended)
+        composeRule.waitForIdle()
+
+        assertEquals(1, roomStarts.size)
+        assertEquals(TransportCommand.Pause to 7_200.0, roomReports.last())
+    }
+
+    @Test
+    fun whatAnotherMemberDidIsSpokenOverThePlayersOwnWords() {
+        setRoomContent()
+        startPlaying()
+
+        room = roomAt(RoomPlayhead(false, 100.0, atMs = 0), generation = 1, notice = RoomNotice("Maria joined the room", 1))
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithContentDescription("Maria joined the room").assertExists()
     }
 
     @Test

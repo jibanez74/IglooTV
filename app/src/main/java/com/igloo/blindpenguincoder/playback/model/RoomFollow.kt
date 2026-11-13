@@ -17,6 +17,9 @@ data class RoomPlayhead(
         if (paused) positionSec else positionSec + (nowMs - atMs).coerceAtLeast(0) / MILLIS_PER_SECOND
 }
 
+/** One TalkBack announcement of what another member did; a new [id] makes the same words a second one. */
+data class RoomNotice(val text: String, val id: Long)
+
 /** What a member's player does to match the room: seek first if [seekToSec] is set, then play or pause. */
 data class RoomFollow(
     val seekToSec: Double?,

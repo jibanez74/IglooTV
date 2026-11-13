@@ -174,6 +174,8 @@ internal fun PlayerTopBar(
     onFocused: () -> Unit = {},
     closeLabel: String = "Close player",
     subtitle: String? = null,
+    /** At the bar's far end, beside the title: a watch room's presence badge. */
+    titleAccessory: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -196,7 +198,8 @@ internal fun PlayerTopBar(
                 .pinnedSideways(down = downRequester)
                 .testTag(backTag),
         )
-        Column {
+        // With an accessory the title takes what is left and the accessory keeps its size.
+        Column(modifier = if (titleAccessory != null) Modifier.weight(1f) else Modifier) {
             IglooText(
                 text = title,
                 style = IglooTheme.typography.titleMedium.overMedia(true),
@@ -212,6 +215,7 @@ internal fun PlayerTopBar(
                 )
             }
         }
+        titleAccessory?.invoke()
     }
 }
 

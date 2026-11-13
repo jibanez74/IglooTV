@@ -75,6 +75,7 @@ import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerPhase
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerState
 import com.igloo.blindpenguincoder.playback.model.endedPositionSec
+import com.igloo.blindpenguincoder.playback.model.followRoom
 import com.igloo.blindpenguincoder.playback.model.noun
 import com.igloo.blindpenguincoder.playback.model.onEvent
 import com.igloo.blindpenguincoder.playback.model.upNextOffer
@@ -87,6 +88,11 @@ import com.igloo.blindpenguincoder.playback.model.videoPlayerAnnouncement
  * player's shape throughout; what this screen adds is the
  * resume prompt, the in-player chapter and track menus, the progress session on [viewModel], and
  * for an episode the Up Next card and the hand-off to the episode that follows.
+ *
+ * In a watch room ([room], section 11.10.2) the screen follows the room and reports this viewer's
+ * every play, pause and seek to it. The room fixes the tracks, so the menus are gone, and a shared
+ * showing is no one's own progress, so [viewModel] is left alone. [topBarAccessory] sits at the end
+ * of the top bar: the room's presence badge.
  *
  * The host owns close and focus restoration; this screen's own [BackHandler] handles chrome
  * dismissal and otherwise calls [onClose]. [engineFactory] has no default because the real
@@ -105,18 +111,28 @@ fun VideoPlayerScreen(
     prepareUpNext: suspend (UpNextEpisode) -> ApiResult<VideoPlayRequest>,
     onAdvance: (VideoPlayRequest) -> Unit,
     modifier: Modifier = Modifier,
+    room: PlayerRoom? = null,
+    topBarAccessory: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     // A title that resumes opens on the prompt, so the intent only arms once the user chooses —
-    // unless the request already carries that choice, and then it plays at once.
-    val host = rememberPlayerHostLifecycle(initialPlayWhenReady = request.resumePromptSec == null)
+    // unless the request already carries that choice, and then it plays at once. A room says for
+    // itself whether it opens playing.
+    val host = rememberPlayerHostLifecycle(
+        initialPlayWhenReady = room?.startPlaying ?: (request.resumePromptSec == null),
+    )
     val engine = remember(host.reloadKey) { engineFactory(context, request) }
     val latestRequest by rememberUpdatedState(request)
     val latestOnPlaybackModeRequested by rememberUpdatedState(onPlaybackModeRequested)
     val latestOnTrackSelectionChanged by rememberUpdatedState(onTrackSelectionChanged)
     var reconstructedMode by remember(engine) { mutableStateOf(request.mode) }
-    val progressSync by viewModel.progressSyncUiState.collectAsStateWithLifecycle()
-    val progressSyncError = (progressSync as? ProgressSyncUiState.Failed)?.message
+    // The progress session, which a room's showing does not have.
+    val progress = viewModel.takeIf { room == null }
+    val progressSyncError = progress?.progressSyncUiState?.collectAsStateWithLifecycle()
+        ?.let { (it.value as? ProgressSyncUiState.Failed)?.message }
+    // Read at the moment of use: the collector below and the transport lambdas outlive the
+    // composition that made them, and the room moves on.
+    val latestRoom by rememberUpdatedState(room)
 
     // The resume decision, playback position, and transport intent survive recreation. The
     // position prevents an hour-long movie from restarting at zero; the independent intent
@@ -191,23 +207,32 @@ fun VideoPlayerScreen(
     // The progress session: one per screen visit, and the exit save fires on *any* unmount —
     // Back, Ended, error Close, or the host tearing the overlay down — because the ViewModel
     // outlives this composable and gives the final write somewhere to land.
-    LaunchedEffect(Unit) { viewModel.startSession(request.media) }
+    LaunchedEffect(Unit) { progress?.startSession(request.media) }
     DisposableEffect(Unit) {
-        onDispose { viewModel.endSession(request.media, lastPositionSec, lastDurationSec) }
+        onDispose { progress?.endSession(request.media, lastPositionSec, lastDurationSec) }
     }
 
     // Every transport command runs through these four: the chrome, the keys, and the system's
-    // media controls, which the engine hands up as SessionTransport.
-    val play = { engine.play() }
-    val pause = { engine.pause() }
+    // media controls, which the engine hands up as SessionTransport. In a room each is the
+    // viewer's command to everyone; following the room calls the engine directly instead, so
+    // what the room did never echoes back as this viewer's.
+    val play: () -> Unit = {
+        engine.play()
+        latestRoom?.onTransport(TransportCommand.Play, state.currentTimeSec)
+    }
+    val pause: () -> Unit = {
+        engine.pause()
+        latestRoom?.onTransport(TransportCommand.Pause, state.currentTimeSec)
+    }
     val togglePlayPause = {
         if (state.playWhenReady) pause() else play()
     }
-    val seekToSec = { targetSec: Double ->
+    val seekToSec: (Double) -> Unit = { targetSec ->
         engine.seekTo(targetSec)
         state = state.onSeekApplied(targetSec)
         // The optimistic seek is what the viewer sees first; a dismissal lapses with it too.
         if (upNextOutsideLead(state)) upNextDismissed = false
+        latestRoom?.onTransport(TransportCommand.SeekTo(targetSec), targetSec)
     }
     val seekBy = { deltaSec: Double -> seekToSec(state.seekTarget(deltaSec)) }
 
@@ -216,12 +241,17 @@ fun VideoPlayerScreen(
         // switches keep the same engine, so their open menu deliberately survives.
         playerMenu = null
         if (resumeDecided) playPauseRequester.requestFocusSafely()
+        var startReported = false
         engine.events.collect { event ->
             val previous = state
             val next = previous.onEvent(event)
             state = next
             when (event) {
                 is VideoPlayerEvent.Error -> if (event.unauthorized) unauthorized = true
+                is VideoPlayerEvent.IsPlayingChanged -> if (event.playing && !startReported) {
+                    startReported = true
+                    latestRoom?.onPlaybackStarted(next.currentTimeSec)
+                }
                 // Accepted pending requests are published before HLS preflight so background
                 // reconstruction can preserve them. A terminal failure publishes the prior
                 // committed request first, while refused choices never reach this event.
@@ -240,14 +270,14 @@ fun VideoPlayerScreen(
                         !event.playWhenReady && previous.playWhenReady &&
                         previous.phase in PROGRESS_FLUSH_PHASES
                     ) {
-                        viewModel.flushProgress(lastPositionSec, lastDurationSec)
+                        progress?.flushProgress(lastPositionSec, lastDurationSec)
                     }
                 }
                 // A tick that outruns Ended must not pull the final snapshot back below the end.
                 is VideoPlayerEvent.Time -> if (next.phase != VideoPlayerPhase.Ended) {
                     lastPositionSec = event.currentSec
                     if (event.durationSec > 0.0) lastDurationSec = event.durationSec
-                    viewModel.onTick(
+                    progress?.onTick(
                         positionSec = event.currentSec,
                         durationSec = lastDurationSec,
                         isPlaying = next.phase == VideoPlayerPhase.Playing,
@@ -256,8 +286,12 @@ fun VideoPlayerScreen(
                     if (upNextOutsideLead(next)) upNextDismissed = false
                 }
                 // Finishing means full progress: the exit save must record the end, not the
-                // last tick before it.
-                is VideoPlayerEvent.Ended -> lastPositionSec = next.currentTimeSec
+                // last tick before it. A room is paused at the end for everyone, as on the web,
+                // rather than left running past the last frame.
+                is VideoPlayerEvent.Ended -> {
+                    lastPositionSec = next.currentTimeSec
+                    latestRoom?.onTransport(TransportCommand.Pause, next.currentTimeSec)
+                }
                 is VideoPlayerEvent.SessionTransport -> when (val command = event.command) {
                     TransportCommand.Play -> play()
                     TransportCommand.Pause -> pause()
@@ -287,6 +321,24 @@ fun VideoPlayerScreen(
         }
     }
 
+    // Following the room: on each new room state, and again once a new engine can take commands.
+    // Straight to the engine, never through the transport above, so the room's own moves are not
+    // sent back to it as this viewer's.
+    val followable = state.phase == VideoPlayerPhase.Playing ||
+        state.phase == VideoPlayerPhase.Paused ||
+        state.phase == VideoPlayerPhase.Buffering
+    LaunchedEffect(engine, room?.followGeneration, followable) {
+        val current = latestRoom ?: return@LaunchedEffect
+        val playhead = current.playhead ?: return@LaunchedEffect
+        if (!followable) return@LaunchedEffect
+        val follow = followRoom(state.currentTimeSec, playhead, current.clock())
+        follow.seekToSec?.let { target ->
+            engine.seekTo(target)
+            state = state.onSeekApplied(target)
+        }
+        if (follow.play) engine.play() else engine.pause()
+    }
+
     LaunchedEffect(state.phase) {
         // A menu must not survive into the error surface: it would swallow the screen while
         // entry focus lands on the Retry button hidden underneath it.
@@ -308,7 +360,7 @@ fun VideoPlayerScreen(
         if (next != null && !handedOff) {
             handedOff = true
             lastPositionSec = endedPositionSec(lastPositionSec, lastDurationSec)
-            viewModel.endSession(request.media, lastPositionSec, lastDurationSec)
+            progress?.endSession(request.media, lastPositionSec, lastDurationSec)
             releaseEngine()
             onAdvance(next)
         }
@@ -366,7 +418,7 @@ fun VideoPlayerScreen(
         onHostResumed = { engine.onHostResumed() },
         onBackgroundRelease = {
             // The trip away is the web's page hide: progress goes out before the engine does.
-            viewModel.flushProgress(lastPositionSec, lastDurationSec)
+            progress?.flushProgress(lastPositionSec, lastDurationSec)
             releaseEngine()
         },
     )
@@ -427,13 +479,15 @@ fun VideoPlayerScreen(
                 state = state,
                 visible = chrome.visible,
                 chapterCount = request.chapters.size,
+                trackMenus = room == null,
+                topBarAccessory = topBarAccessory,
                 playPauseRequester = playPauseRequester,
                 backRequester = backRequester,
                 menuButtonRequesters = menuButtonRequesters,
                 progressRetryRequester = progressRetryRequester,
                 upNextRequester = upNextRequester.takeIf { upNextOffer != null },
                 progressSyncError = progressSyncError,
-                onRetryProgressSync = viewModel::retryFailedSave,
+                onRetryProgressSync = { progress?.retryFailedSave() },
                 onProgressRetryFocusChanged = onProgressRetryFocus,
                 onAnyControlFocused = chrome::interact,
                 onBottomBlockSizeChanged = { bottomBlockHeightPx = it },
@@ -569,14 +623,17 @@ fun VideoPlayerScreen(
             }
         }
 
-        PoliteAnnouncement(
-            videoPlayerAnnouncement(
-                phase = state.phase,
-                statusMessage = state.statusMessage,
-                title = request.title,
-                mediaNoun = request.media.noun,
-            ),
+        val phaseAnnouncement = videoPlayerAnnouncement(
+            phase = state.phase,
+            statusMessage = state.statusMessage,
+            title = request.title,
+            mediaNoun = request.media.noun,
         )
+        // What another member did is the news while the picture plays or rests; loading and
+        // buffering words still win, since they say why nothing moves.
+        val roomNotice = room?.notice?.text
+            ?.takeIf { state.phase == VideoPlayerPhase.Playing || state.phase == VideoPlayerPhase.Paused }
+        PoliteAnnouncement(roomNotice ?: phaseAnnouncement)
     }
 }
 
@@ -602,6 +659,9 @@ private fun VideoPlayerChrome(
     state: VideoPlayerState,
     visible: Boolean,
     chapterCount: Int,
+    /** False in a watch room, which fixes the tracks and the quality for everyone. */
+    trackMenus: Boolean,
+    topBarAccessory: (@Composable () -> Unit)?,
     playPauseRequester: FocusRequester,
     backRequester: FocusRequester,
     menuButtonRequesters: Map<PlayerMenu, FocusRequester>,
@@ -632,7 +692,7 @@ private fun VideoPlayerChrome(
     // chapter spans the whole movie. Unlike the track buttons, the chapter button is request-
     // driven, so it exists before the engine reports anything.
     val menus = PlayerMenu.entries.filter { menu ->
-        when (menu) {
+        trackMenus && when (menu) {
             PlayerMenu.Chapters -> chapterCount >= 2
             PlayerMenu.Audio -> state.audioOptions.size >= 2
             PlayerMenu.Subtitles -> state.subtitleOptions.isNotEmpty()
@@ -656,6 +716,7 @@ private fun VideoPlayerChrome(
             backTag = "movie_back",
             onBack = onBack,
             onFocused = onAnyControlFocused,
+            titleAccessory = topBarAccessory,
         )
 
         Box(modifier = Modifier.weight(1f)) {
