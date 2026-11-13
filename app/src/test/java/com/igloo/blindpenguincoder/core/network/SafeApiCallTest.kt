@@ -11,7 +11,9 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.HttpRequestTimeoutException
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import java.io.IOException
 import java.net.SocketTimeoutException
 import javax.net.ssl.SSLHandshakeException
@@ -94,6 +96,22 @@ class SafeApiCallTest {
         }
 
         assertEquals(AppError.Api("database unavailable", 503), result.error())
+    }
+
+    @Test
+    fun `a non-2xx response keeps the server's Retry-After`() = runTest {
+        val result = message {
+            respond(
+                content = """{"error":true,"message":"the server has no room"}""",
+                status = HttpStatusCode.ServiceUnavailable,
+                headers = headersOf(
+                    HttpHeaders.ContentType to listOf("application/json"),
+                    HttpHeaders.RetryAfter to listOf("5"),
+                ),
+            )
+        }
+
+        assertEquals(AppError.Api("the server has no room", 503, retryAfterSec = 5), result.error())
     }
 
     @Test
