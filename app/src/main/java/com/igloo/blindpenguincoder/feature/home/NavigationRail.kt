@@ -53,7 +53,6 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.focusFill
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
-import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.IglooAvatar
 import com.igloo.blindpenguincoder.core.ui.IglooBrandMark
 import com.igloo.blindpenguincoder.core.ui.IglooGlyph
@@ -109,7 +108,7 @@ fun NavigationRail(
     // than the footer does, so the column -> footer boundary is hand-wired like the rail ->
     // content one; geometric search would collapse the rail mid-walk.
     val switchProfileFocus = remember { FocusRequester() }
-    val lastDestination = PrimaryIglooDestinations.last()
+    val lastDestination = IglooDestination.entries.last()
 
     Column(
         modifier = modifier
@@ -172,7 +171,7 @@ fun NavigationRail(
                     .verticalScroll(destinationScrollState),
                 verticalArrangement = Arrangement.spacedBy(destinationGap),
             ) {
-                PrimaryIglooDestinations.forEach { destination ->
+                IglooDestination.entries.forEach { destination ->
                     val selected = destination == currentDestination
                     val bringIntoView = remember { BringIntoViewRequester() }
                     // Through `destinationScroll`, so the row lands in the slot the d-pad gives it.
@@ -199,12 +198,12 @@ fun NavigationRail(
                             }
                         },
                         labelFade = labelFade,
+                        contentStartRequester = contentStartRequester,
                         onClick = { onDestinationSelected(destination) },
                         modifier = Modifier
                             .bringIntoViewRequester(bringIntoView)
                             .focusRequester(navigationRequesters.getValue(destination))
                             .focusProperties {
-                                right = contentStartRequester
                                 if (destination == lastDestination) down = switchProfileFocus
                             },
                     )
@@ -243,14 +242,12 @@ fun NavigationRail(
             label = "Switch profile",
             iconTint = { focused -> if (focused) colors.ring else colors.mutedForeground },
             labelFade = labelFade,
+            contentStartRequester = contentStartRequester,
             hiddenFromAccessibility = !expanded,
             onClick = onSwitchProfile,
             modifier = Modifier
                 .focusRequester(switchProfileFocus)
-                .focusProperties {
-                    right = contentStartRequester
-                    up = navigationRequesters.getValue(lastDestination)
-                },
+                .focusProperties { up = navigationRequesters.getValue(lastDestination) },
         )
         // The label says only "Sign out"; the dialog announces itself through its pane title, so
         // an ", opens a confirmation" suffix would be the announcement section 11.2 forbids.
@@ -259,18 +256,18 @@ fun NavigationRail(
             label = "Sign out",
             iconTint = { focused -> if (focused) colors.destructive else colors.mutedForeground },
             labelFade = labelFade,
+            contentStartRequester = contentStartRequester,
             hiddenFromAccessibility = !expanded,
             onClick = onSignOut,
-            modifier = Modifier
-                .focusRequester(signOutRequester)
-                .focusProperties { right = contentStartRequester },
+            modifier = Modifier.focusRequester(signOutRequester),
         )
     }
 }
 
 /**
- * One row recipe for every rail target, navigation and account actions alike. The caller's
- * [modifier] slots between the focus ring and the focus observers so per-row requester
+ * One row recipe for every rail target, navigation and account actions alike. Right from any
+ * row is [contentStartRequester]: the pane's anchor, never whatever lies level with the row. The
+ * caller's [modifier] slots between the focus ring and the focus observers so per-row requester
  * wiring keeps the order the focus treatment depends on.
  */
 // The label's fade, not this composable's modifier; lint's naming rule is about the latter.
@@ -281,6 +278,7 @@ private fun RailRow(
     label: String,
     iconTint: (focused: Boolean) -> Color,
     labelFade: Modifier,
+    contentStartRequester: FocusRequester,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     actionLabel: String = label,
@@ -305,6 +303,7 @@ private fun RailRow(
                 fill = fill(focused),
             )
             .then(modifier)
+            .focusProperties { right = contentStartRequester }
             .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = null,

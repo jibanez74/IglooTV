@@ -41,5 +41,3 @@ enum class IglooDestination(
         supportingText = "Server, profile, theme, and playback settings will live here.",
     ),
 }
-
-val PrimaryIglooDestinations: List<IglooDestination> = IglooDestination.entries.toList()

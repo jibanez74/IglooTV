@@ -36,7 +36,6 @@ import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.UiScale
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
-import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.findActivity
@@ -144,7 +143,7 @@ class NavigationRailBehaviorTest {
      * so the walks hold whatever the rail grows to.
      */
     private fun walkRail(from: IglooDestination, to: IglooDestination, past: Int = 0) {
-        val rows = PrimaryIglooDestinations.indexOf(to) - PrimaryIglooDestinations.indexOf(from)
+        val rows = IglooDestination.entries.indexOf(to) - IglooDestination.entries.indexOf(from)
         val key = if (rows > 0) Key.DirectionDown else Key.DirectionUp
         repeat(abs(rows) + past) { rail().performKeyInput { pressKey(key) } }
     }
@@ -377,7 +376,7 @@ class NavigationRailBehaviorTest {
     fun theDestinationTheDpadReachesNextIsAlreadyWholeOnScreen() {
         setShellContent()
         contentStartCard().performKeyInput { pressKey(Key.DirectionLeft) }
-        val destinations = PrimaryIglooDestinations
+        val destinations = IglooDestination.entries
         val home = destinations.indexOf(IglooDestination.Home)
         val walk = (home until destinations.lastIndex).map { it to it + 1 } +
             (destinations.lastIndex downTo 1).map { it to it - 1 }
@@ -405,7 +404,7 @@ class NavigationRailBehaviorTest {
     @Test
     fun theCollapsedRailLetsTalkBackHearOnlyTheCurrentDestination() {
         setShellContent()
-        val others = PrimaryIglooDestinations.map { it.label } - "Home" + accountRows
+        val others = IglooDestination.entries.map { it.label } - "Home" + accountRows
 
         railRow("Home").assert(heard)
         others.forEach { railRow(it).assert(hidden) }

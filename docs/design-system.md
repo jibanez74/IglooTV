@@ -1659,7 +1659,12 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   superseded response can never land. The one cost worth naming: a switch that lands
   while the user is still on the tab must **not** re-anchor focus on the grid (the yank every
   other replacement performs), or the strip becomes impossible to traverse; the grid still
-  scrolls to top so the next press down lands on its first card. Refresh and Sort wire their
+  scrolls to top so the next press down lands on its first card. That is also why the **entry
+  card is always one on screen**: the remembered card when it is visible, otherwise the first
+  visible card. Focus memory is one id across the three tabs, so a card remembered from Genres
+  can sit rows below the fold of the All list that just landed at the top; the lazy grid has
+  not composed it, a requester riding it attaches to nothing, and the strip's Down, the
+  spine's Movies row and its Right all went nowhere until that card scrolled back into view. Refresh and Sort wire their
   `down` to the *selected* tab for the same reason — a spatial search would land on whichever
   tab sits beneath the button and switch to it.
 
@@ -1756,7 +1761,7 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   that led away. Every tag and phrase is the Movies one with the noun swapped:
   `shows_tabs`, `shows_tab_all`, `shows_genre_{id}`, `shows_grid`, `show_card_{id}`,
   "Refresh the TV show library", "Loading shows", "Showing 2 of 2 Comedy shows", "No shows found
-  in your library.", "Comedy, 2 shows". The host gives it `PaneBranch.TvShows`, its own hoisted
+  in your library.", "Comedy, 2 shows". The host gives it its own `ContentPane` branch, its own hoisted
   grid state and focus memory, and the same START-time refresh as Movies and Music.
 - **Detail** *(movies; the show page is §11.4.3)* — full-bleed backdrop with a
   `background` gradient scrim, content pulled up over it. Poster left; title, tagline, metadata
@@ -2301,7 +2306,7 @@ the pane is what the user is looking at, so a batch landing after they left neve
 over a surface that did not ask for one. Closing the player returns focus to the exact control
 that launched it.
 
-**Host.** `PaneBranch.Music`, `DetailsOrigin.Music` (restoring only while the destination is
+**Host.** its own `ContentPane` branch, `DetailsOrigin.Music` (restoring only while the destination is
 Music, the `MoviesGrid` rule), `openAlbum` gains the origin parameter `openMovie` always had,
 and the music player's launch site is recorded beside its request so the right overlay's close
 tears it down and the right requester gets focus back.
@@ -2895,8 +2900,8 @@ Refresh when that was the last one). A background failure over a loaded list say
 two are `contentGeneration` and `reconcileGeneration` on the state, the pair
 `PaneFocusHandoffCoordinator` already takes.
 
-**Focus.** The pane's entry anchor is the remembered card if it is still in the list, otherwise
-the first; the first skeleton cell while loading; Retry on the error card. **With no rooms it is
+**Focus.** The pane's entry anchor is the remembered card if it is on screen, otherwise the
+first card on screen (§11.4); the first skeleton cell while loading; Retry on the error card. **With no rooms it is
 the Refresh button** — the empty scene offers nothing to do, so the anchor goes to the one
 control that does, and its Down is cancelled because nothing below takes focus. The left column
 and Refresh exit to the spine; the first row climbs to Refresh and Refresh returns to the entry
@@ -3019,6 +3024,16 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-11-13 — The grid's entry card is always on screen (§11.4, §11.10).**
+
+- **§11.4**: `PaneCardGrid` puts the pane's anchors on the remembered card only while the grid
+  has it on screen, otherwise on the first visible card. A Genres card remembered across a
+  switch back to All left the anchor on an uncomposed card, and the spine's Movies row stopped
+  responding to Select and Right. Every grid pane shares the rule: Movies, TV Shows, the Music
+  grids and Watch Rooms.
+- The shell's `PaneBranch` enum, a copy of the destinations, became a nullable destination,
+  and `PrimaryIglooDestinations` gave way to `IglooDestination.entries`.
 
 **2026-11-12 — Watch Rooms, a destination of its own (§8.2, §9.1, §10, §11.2, §11.3, §11.10).**
 

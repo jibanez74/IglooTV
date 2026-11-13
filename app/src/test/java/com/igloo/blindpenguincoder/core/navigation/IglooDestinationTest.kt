@@ -6,7 +6,7 @@ import org.junit.Test
 
 class IglooDestinationTest {
     @Test
-    fun primaryDestinationsKeepTvShellOrder() {
+    fun destinationsKeepTvShellOrder() {
         assertEquals(
             listOf(
                 "Search",
@@ -17,13 +17,13 @@ class IglooDestinationTest {
                 "Music",
                 "Settings",
             ),
-            PrimaryIglooDestinations.map { it.label },
+            IglooDestination.entries.map { it.label },
         )
     }
 
     @Test
     fun destinationsProvideReadableSupportingText() {
-        assertTrue(PrimaryIglooDestinations.all { it.supportingText.isNotBlank() })
+        assertTrue(IglooDestination.entries.all { it.supportingText.isNotBlank() })
     }
 }
 

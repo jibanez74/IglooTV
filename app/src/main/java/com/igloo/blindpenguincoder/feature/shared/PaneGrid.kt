@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridItemInfo
+import androidx.compose.foundation.lazy.grid.LazyGridLayoutInfo
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -18,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -192,6 +195,19 @@ internal fun <T> PaneGrid(
     )
 }
 
+/**
+ * The items that actually show, not every one the grid lists: an accessibility snapshot only holds
+ * nodes on screen, and after a scroll to a line the grid still lists the line above it while it
+ * sits wholly outside the viewport.
+ */
+private fun LazyGridLayoutInfo.onScreenItems(): List<LazyGridItemInfo> =
+    visibleItemsInfo.filter {
+        it.offset.y + it.size.height > viewportStartOffset && it.offset.y < viewportEndOffset
+    }
+
+/** A card's lazy key; see [PaneCardGrid]'s items for why it is a string. */
+private fun cardKey(id: Long): String = "item_$id"
+
 /** The remembered card's id, while that card is still loaded. */
 private fun <T> List<T>.rememberedId(lastFocusedId: Long?, itemId: (T) -> Long): Long? =
     lastFocusedId?.takeIf { id -> any { itemId(it) == id } }
@@ -201,13 +217,13 @@ private fun <T> List<T>.rememberedId(lastFocusedId: Long?, itemId: (T) -> Long):
  * Watch Rooms pane, section 11.10). [tail] draws whatever follows the last card.
  *
  * Focus: [contentStartRequester] and [returnRequester] ride the entry card — the remembered one
- * if it is still loaded, otherwise the first — so the pane always has an anchor and an overlay's
- * Back lands on the card that opened it; [rememberedItemRequester] rides the remembered card
- * only. The left column exits to [navigationRequester], the first row climbs to [upRequester],
- * the right edge is pinned, and so is the bottom while [lastRowPinsDown] holds. While a screen
- * reader runs ([screenReader]), Up and Down into a row that is not on screen yet go through
- * [AnnouncedLazyMove], so TalkBack follows them. [card] draws one item with the modifier that
- * carries all of that.
+ * if it is on screen, otherwise the first card on screen — so the pane always has an anchor a
+ * request can land on and an overlay's Back lands on the card that opened it;
+ * [rememberedItemRequester] rides the remembered card only. The left column exits to
+ * [navigationRequester], the first row climbs to [upRequester], the right edge is pinned, and so
+ * is the bottom while [lastRowPinsDown] holds. While a screen reader runs ([screenReader]), Up and
+ * Down into a row that is not on screen yet go through [AnnouncedLazyMove], so TalkBack follows
+ * them. [card] draws one item with the modifier that carries all of that.
  */
 @Composable
 internal fun <T> PaneCardGrid(
@@ -235,7 +251,21 @@ internal fun <T> PaneCardGrid(
     // The card focus memory restores to, falling back to the first so the pane always has an
     // anchor — the same contract the rails' entry key follows.
     val rememberedId = remember(items, lastFocusedId) { items.rememberedId(lastFocusedId, itemId) }
-    val entryId = rememberedId ?: itemId(items.first())
+    // ...but only a card the grid has on screen. A requester can only land on a composed node,
+    // and the lazy grid composes the visible rows alone: a remembered card that is still loaded
+    // yet scrolled away — a card from the Genres tab after the All tab lands at the top — left
+    // the anchor on nothing, and the strip's Down, the rail row and its Right all went nowhere.
+    // Before the first layout nothing is known to be on screen, so the memory stands.
+    val entryId by remember(gridState, items, rememberedId) {
+        derivedStateOf(structuralEqualityPolicy()) {
+            val onScreen = gridState.layoutInfo.onScreenItems()
+            val remembered = rememberedId?.takeIf { id -> onScreen.any { it.key == cardKey(id) } }
+            val firstOnScreen = onScreen.firstNotNullOfOrNull { info ->
+                items.getOrNull(info.index)?.let(itemId)?.takeIf { cardKey(it) == info.key }
+            }
+            remembered ?: firstOnScreen ?: rememberedId ?: itemId(items.first())
+        }
+    }
     val itemRequesters = remember(items) { items.associate { itemId(it) to FocusRequester() } }
 
     val currentItems by rememberUpdatedState(items)
@@ -255,17 +285,7 @@ internal fun <T> PaneCardGrid(
             screenReader = { screenReaderOn },
             focusedIndex = focusedIndex,
             lastIndex = { currentItems.lastIndex },
-            // Placed with visible bounds: an accessibility snapshot only holds nodes that show
-            // on screen, and after a scroll to a line the grid still lists the line above it
-            // while it sits wholly outside the viewport.
-            isPlaced = { index ->
-                val info = gridState.layoutInfo
-                info.visibleItemsInfo.any {
-                    it.index == index &&
-                        it.offset.y + it.size.height > info.viewportStartOffset &&
-                        it.offset.y < info.viewportEndOffset
-                }
-            },
+            isPlaced = { index -> gridState.layoutInfo.onScreenItems().any { it.index == index } },
             // Half of the target row, while at least a quarter of the origin row stays.
             revealDistance = { forward ->
                 val info = gridState.layoutInfo
@@ -340,7 +360,7 @@ internal fun <T> PaneCardGrid(
         // One disjoint string key space, so an item id can never collide with a placeholder's,
         // and stable across appends — which is what keeps focus pinned to the focused card when
         // a page lands underneath it.
-        itemsIndexed(items, key = { _, item -> "item_${itemId(item)}" }) { index, item ->
+        itemsIndexed(items, key = { _, item -> cardKey(itemId(item)) }) { index, item ->
             val id = itemId(item)
             card(
                 item,

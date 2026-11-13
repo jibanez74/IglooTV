@@ -53,7 +53,6 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
-import com.igloo.blindpenguincoder.core.navigation.PrimaryIglooDestinations
 import com.igloo.blindpenguincoder.core.ui.AnnouncedSection
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooConfirmDialog
@@ -272,7 +271,7 @@ fun IglooApp(
     val contentStartRequester = remember { FocusRequester() }
     val signOutRequester = remember { FocusRequester() }
     val navigationRequesters = remember {
-        PrimaryIglooDestinations.associateWith { FocusRequester() }
+        IglooDestination.entries.associateWith { FocusRequester() }
     }
     // One per rail, pinned to whichever node that rail's focus memory points at, in every rail
     // state. Back out of the details overlay lands on the card that opened it (section 6.3).
@@ -1225,7 +1224,7 @@ private fun ContentPane(
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
-            else -> PlaceholderContent(
+            IglooDestination.Settings -> PlaceholderContent(
                 currentDestination = currentDestination,
                 mutationNotice = mutationNotice,
                 contentInset = contentInset,
@@ -1258,18 +1257,12 @@ private fun ContentPane(
     }
 }
 
-/** Which of ContentPane's trees a destination renders; the focus anchor moves with the branch. */
-private enum class PaneBranch { Home, WatchRooms, Movies, TvShows, Music, Search, Placeholder }
-
-private fun paneBranchOf(destination: IglooDestination): PaneBranch = when (destination) {
-    IglooDestination.Search -> PaneBranch.Search
-    IglooDestination.Home -> PaneBranch.Home
-    IglooDestination.WatchRooms -> PaneBranch.WatchRooms
-    IglooDestination.Movies -> PaneBranch.Movies
-    IglooDestination.TvShows -> PaneBranch.TvShows
-    IglooDestination.Music -> PaneBranch.Music
-    else -> PaneBranch.Placeholder
-}
+/**
+ * Which of ContentPane's trees a destination renders: its own screen, or null for the placeholder
+ * every destination without one shares. The focus anchor moves with the tree.
+ */
+private fun paneBranchOf(destination: IglooDestination): IglooDestination? =
+    destination.takeUnless { it == IglooDestination.Settings }
 
 /** Which surface launched the music player; see `musicPlayOrigin` in [IglooApp]. */
 private enum class MusicPlayOrigin { AlbumDetails, MusicianDetails, MusicPane, SearchPane }
