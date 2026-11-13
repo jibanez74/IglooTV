@@ -66,7 +66,7 @@ internal fun PlaybackSettingsDialog(
                 modifier = Modifier
                     .rowFocus(row++)
                     // The wire id ("1080p_8mbps") is the stable tag suffix; direct play has none.
-                    .testTag("playback_mode_${option.mode.hlsProfileId ?: "direct"}"),
+                    .testTag("playback_mode_${option.mode.wireId}"),
             )
         }
 

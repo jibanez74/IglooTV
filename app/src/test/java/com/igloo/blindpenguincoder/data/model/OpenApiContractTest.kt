@@ -488,6 +488,16 @@ class OpenApiContractTest {
             Route("GET", "/api/search/tracks", envelope(SearchPageData.serializer(TrackListItem.serializer()))),
 
             Route("GET", "/api/watch-rooms", envelope(WatchRoomsData.serializer())),
+            Route(
+                "POST",
+                "/api/watch-rooms",
+                envelope(CreateWatchRoomData.serializer()),
+                CreateWatchRoomRequest.serializer(),
+            ),
+            Route("GET", "/api/watch-rooms/{id}", envelope(WatchRoomData.serializer())),
+            Route("POST", "/api/watch-rooms/{id}/join"),
+            Route("DELETE", "/api/watch-rooms/{id}"),
+            Route("GET", "/api/users", envelope(InviteUsersData.serializer())),
         )
 
         /** Models decoded outside a route's success body: `safeApiCall` reads the error body. */

@@ -13,4 +13,13 @@ enum class PlaybackMode(val hlsProfileId: String?) {
     P1080Mbps6("1080p_6mbps"),
     P1080Mbps4("1080p_4mbps"),
     P720Mbps3("720p_3mbps"),
+    ;
+
+    /** The contract's `PlaybackMode` value: the HLS profile id, or `direct`. */
+    val wireId: String get() = hlsProfileId ?: DIRECT_WIRE_ID
 }
+
+/** The mode a contract `PlaybackMode` value names, or null for one this build does not know. */
+fun playbackModeOf(wireId: String): PlaybackMode? = PlaybackMode.entries.firstOrNull { it.wireId == wireId }
+
+private const val DIRECT_WIRE_ID = "direct"

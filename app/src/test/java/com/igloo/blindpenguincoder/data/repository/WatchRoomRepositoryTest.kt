@@ -1,9 +1,20 @@
 package com.igloo.blindpenguincoder.data.repository
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.data.model.CreateWatchRoomRequest
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -57,5 +68,138 @@ class WatchRoomRepositoryTest {
         assertTrue(first.isOwner)
         assertNull(rooms.last().moviePoster)
         assertFalse(rooms.last().isOwner)
+    }
+
+    @Test
+    fun `a room's details carry its movie, mode and fixed tracks`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(watchRoomDetailJson(id = 7, movieId = 42, playbackMode = "1080p_8mbps", audioTrack = 1, subtitleTrack = 2))
+        }
+
+        val room = (http.watchRoomRepository.watchRoom(7) as ApiResult.Success).value
+
+        assertEquals("/api/watch-rooms/7", requireNotNull(request).url.encodedPath)
+        assertEquals(42L, room.movieId)
+        assertEquals("1080p_8mbps", room.playbackMode)
+        assertEquals(1L, room.audioTrack)
+        assertEquals(2L, room.subtitleTrack)
+    }
+
+    @Test
+    fun `a room without subtitles decodes a null track`() = runTest {
+        val http = TestHttp { jsonResponse(watchRoomDetailJson(subtitleTrack = null)) }
+
+        val room = (http.watchRoomRepository.watchRoom(1) as ApiResult.Success).value
+
+        assertNull(room.subtitleTrack)
+    }
+
+    @Test
+    fun `a room the caller cannot open is the server's refusal`() = runTest {
+        val http = TestHttp {
+            jsonResponse("""{"error":true,"message":"access denied"}""", HttpStatusCode.Forbidden)
+        }
+
+        val result = http.watchRoomRepository.watchRoom(9)
+
+        assertEquals(AppError.Api("access denied", 403), (result as ApiResult.Failure).error)
+    }
+
+    @Test
+    fun `create posts the room's wire body and returns the new id`() = runTest {
+        var request: HttpRequestData? = null
+        var body = ""
+        val http = TestHttp {
+            request = it
+            body = it.body.toByteArray().decodeToString()
+            jsonResponse("""{"error":false,"data":{"room_id":12}}""", HttpStatusCode.Created)
+        }
+
+        val result = http.watchRoomRepository.create(
+            CreateWatchRoomRequest(
+                movieId = 42,
+                mode = "remux",
+                audioTrack = 1,
+                subtitleTrack = null,
+                invitedUserIds = listOf(2, 3),
+            ),
+        )
+
+        val captured = requireNotNull(request)
+        assertEquals(HttpMethod.Post, captured.method)
+        assertEquals("/api/watch-rooms", captured.url.encodedPath)
+        // A null subtitle is left out, which the server reads as "no subtitles".
+        assertEquals(
+            JsonObject(
+                mapOf(
+                    "movie_id" to JsonPrimitive(42),
+                    "mode" to JsonPrimitive("remux"),
+                    "audio_track" to JsonPrimitive(1),
+                    "invited_user_ids" to Json.parseToJsonElement("[2,3]"),
+                ),
+            ),
+            Json.parseToJsonElement(body).jsonObject,
+        )
+        assertEquals(12L, (result as ApiResult.Success).value)
+    }
+
+    @Test
+    fun `a full server's refusal to create keeps its Retry-After`() = runTest {
+        val http = TestHttp {
+            respond(
+                content = """{"error":true,"message":"the server has no room to start this stream right now"}""",
+                status = HttpStatusCode.ServiceUnavailable,
+                headers = headersOf(
+                    HttpHeaders.ContentType to listOf("application/json"),
+                    HttpHeaders.RetryAfter to listOf("5"),
+                ),
+            )
+        }
+
+        val result = http.watchRoomRepository.create(
+            CreateWatchRoomRequest(42, "remux", 0, null, listOf(2)),
+        )
+
+        val error = (result as ApiResult.Failure).error as AppError.Api
+        assertEquals(503, error.status)
+        assertEquals(5, error.retryAfterSec)
+    }
+
+    @Test
+    fun `join and delete hit their routes and ignore the body`() = runTest {
+        val requests = mutableListOf<HttpRequestData>()
+        val http = TestHttp {
+            requests += it
+            jsonResponse("""{"error":false,"data":{"room_id":7,"joined":true}}""")
+        }
+
+        assertEquals(ApiResult.Success(Unit), http.watchRoomRepository.join(7))
+        assertEquals(ApiResult.Success(Unit), http.watchRoomRepository.delete(7))
+
+        assertEquals(
+            listOf(HttpMethod.Post to "/api/watch-rooms/7/join", HttpMethod.Delete to "/api/watch-rooms/7"),
+            requests.map { it.method to it.url.encodedPath },
+        )
+    }
+
+    @Test
+    fun `invite users decodes everyone the server offers`() = runTest {
+        var request: HttpRequestData? = null
+        val http = TestHttp {
+            request = it
+            jsonResponse(
+                """{"error":false,"data":{"users":[""" +
+                    """{"id":2,"name":"Jorge","email":"jorge@example.com","avatar":null},""" +
+                    """{"id":3,"name":"Ana","email":"ana@example.com","avatar":"/api/static/avatars/3.jpg"}]}}""",
+            )
+        }
+
+        val users = (http.watchRoomRepository.inviteUsers() as ApiResult.Success).value
+
+        assertEquals("/api/users", requireNotNull(request).url.encodedPath)
+        assertEquals(listOf(2L to "Jorge", 3L to "Ana"), users.map { it.id to it.name })
+        assertEquals("/api/static/avatars/3.jpg", users.last().avatar)
     }
 }

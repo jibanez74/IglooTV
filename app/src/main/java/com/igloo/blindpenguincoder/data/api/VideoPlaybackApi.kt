@@ -4,7 +4,6 @@ import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.data.model.UpdateWatchProgressRequest
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import io.ktor.client.HttpClient
-import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
@@ -28,11 +27,8 @@ class VideoPlaybackApi(
 
     /**
      * The HLS manifest, which implicitly creates or refreshes the playback session. The query
-     * pairs come pre-built (see `hlsQueryParams`) so their names are spelled in one place.
-     * A cold manifest can legitimately take about 75s on the server — a remux preflight, a wait
-     * for transcode capacity, then FFmpeg's first output — so this request gets a longer budget
-     * than the client default. It must outlast that wait: hanging up cancels the server's
-     * creation, and the retry would start it over from nothing.
+     * pairs come pre-built (see `hlsQueryParams`) so their names are spelled in one place. A cold
+     * manifest can take over a minute, so the request waits for it ([awaitMediaPreparation]).
      */
     suspend fun hlsPlaylist(
         media: PlaybackMediaRef,
@@ -41,10 +37,7 @@ class VideoPlaybackApi(
     ): HttpResponse =
         client.get("${mediaBase(media)}/hls/$profileId/playlist.m3u8") {
             query.forEach { (name, value) -> parameter(name, value) }
-            timeout {
-                requestTimeoutMillis = HLS_MANIFEST_TIMEOUT_MS
-                socketTimeoutMillis = HLS_MANIFEST_TIMEOUT_MS
-            }
+            awaitMediaPreparation()
         }
 
     /** Same manifest address as a string for Media3, which fetches on its own stack. */
@@ -88,7 +81,4 @@ class VideoPlaybackApi(
         }
     }
 
-    private companion object {
-        const val HLS_MANIFEST_TIMEOUT_MS = 90_000L
-    }
 }
