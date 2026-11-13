@@ -52,7 +52,7 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooInlineError
-import com.igloo.blindpenguincoder.core.ui.IglooRadioListDialog
+import com.igloo.blindpenguincoder.core.ui.IglooListDialog
 import com.igloo.blindpenguincoder.core.ui.IglooRadioRow
 import com.igloo.blindpenguincoder.core.ui.IglooDialogCard
 import com.igloo.blindpenguincoder.core.ui.PoliteAnnouncement
@@ -854,7 +854,7 @@ private fun ResumePrompt(
 }
 
 /**
- * One in-player track menu, on the [IglooRadioListDialog] shell. Selection is not dismissal — OK
+ * One in-player track menu, on the [IglooListDialog] shell. Selection is not dismissal — OK
  * on a row switches the track and keeps focus, so the user can hear the result and keep
  * adjusting; the engine re-emits its tracks and the `selected` marks follow.
  *
@@ -873,7 +873,7 @@ private fun TrackMenuDialog(
 ) {
     val noneSelected = options.none { it.selected }
     val noneRows = if (noneRow != null) 1 else 0
-    IglooRadioListDialog(
+    IglooListDialog(
         title = title,
         rowCount = options.size + noneRows,
         // Entry focus lands on the selected row, matching the pre-play dialog.
@@ -922,7 +922,7 @@ private fun TrackMenuDialog(
 }
 
 /**
- * The chapter menu, on the [IglooRadioListDialog] shell. Unlike a track menu, picking a row here
+ * The chapter menu, on the [IglooListDialog] shell. Unlike a track menu, picking a row here
  * is dismissal — a chapter pick is a jump, and its result is the picture hidden behind this scrim,
  * not something to keep adjusting. The `selected` mark tracks the playhead live; entry focus
  * lands on the chapter playing when the menu opened and stays put.
@@ -935,7 +935,7 @@ private fun ChapterMenuDialog(
     onDismiss: () -> Unit,
 ) {
     val activeIndex = activeChapterIndex(chapters, currentTimeSec)
-    IglooRadioListDialog(
+    IglooListDialog(
         title = "Chapters",
         rowCount = chapters.size,
         // Before the first chapter begins, no row is marked and focus falls to the first.

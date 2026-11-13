@@ -30,7 +30,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 
 internal const val NO_ROOMS_HEADING = "No watch rooms right now"
 internal const val NO_ROOMS_EXPLANATION = "Rooms you host or are invited to show up here."
-internal const val NO_ROOMS_HINT = "Start one from a movie on the web with Watch Together."
+internal const val NO_ROOMS_HINT = "Start one from a movie with Watch Together."
 
 /**
  * The empty scene as the node that speaks in its place says it. No closing full stop: TalkBack

@@ -165,6 +165,11 @@ data class VideoStream(
     val width: Long,
     val height: Long,
     @SerialName("color_transfer") val colorTransfer: SqlNullString? = null,
+    // The four the server's direct-room rule reads (WatchRoomPresetsMapping).
+    @SerialName("codec_profile") val codecProfile: SqlNullString? = null,
+    @SerialName("bit_depth") val bitDepth: SqlNullInt64? = null,
+    @SerialName("pixel_format") val pixelFormat: SqlNullString? = null,
+    @SerialName("field_order") val fieldOrder: SqlNullString? = null,
 )
 
 @Serializable

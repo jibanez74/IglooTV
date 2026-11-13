@@ -51,6 +51,7 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.EpisodePlayPreparer
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsViewModel
@@ -62,8 +63,10 @@ import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.search.SearchViewModel
 import com.igloo.blindpenguincoder.feature.search.actions
 import com.igloo.blindpenguincoder.feature.shows.showLibrarySource
+import com.igloo.blindpenguincoder.feature.watchrooms.WATCH_TOGETHER_UNAVAILABLE_NOTICE
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomViewModel
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsViewModel
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchTogetherViewModel
 import com.igloo.blindpenguincoder.feature.watchrooms.actions
 import com.igloo.blindpenguincoder.playback.media3.VideoPlaybackServices
 import com.igloo.blindpenguincoder.playback.media3.deviceCanDecodeVideoMime
@@ -323,6 +326,16 @@ fun IglooRoot(container: IglooAppContainer) {
                                 clock = SystemClock::elapsedRealtime,
                             )
                         }
+                    // A movie page's Watch Together. A creation that fails leaves its reason on the
+                    // page the dialog was over (section 9.3).
+                    val watchTogetherViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "watch-together") {
+                            WatchTogetherViewModel(
+                                container.watchRoomRepository,
+                                container.serverUrlProvider,
+                                onCreateFailed = detailsViewModel::showNotice,
+                            )
+                        }
                     // One liked-id set for every track row in the session, so no two surfaces
                     // can disagree about a heart; cleared with the rest on sign-out.
                     val trackLikesViewModel =
@@ -395,6 +408,8 @@ fun IglooRoot(container: IglooAppContainer) {
                     }
                     val watchRoom by watchRoomViewModel.uiState.collectAsStateWithLifecycle()
                     val watchRoomActions = remember(watchRoomViewModel) { watchRoomViewModel.actions() }
+                    val watchTogether by watchTogetherViewModel.uiState.collectAsStateWithLifecycle()
+                    val watchTogetherActions = remember(watchTogetherViewModel) { watchTogetherViewModel.actions() }
                     val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()
                     val theaterDetails by theaterDetailsViewModel.uiState
                         .collectAsStateWithLifecycle()
@@ -436,6 +451,19 @@ fun IglooRoot(container: IglooAppContainer) {
                         onRoomSelected = watchRoomViewModel::open,
                         onLeaveRoom = watchRoomViewModel::leave,
                         roomPlayRequests = watchRoomViewModel.playRequests,
+                        watchTogether = watchTogether,
+                        watchTogetherActions = watchTogetherActions,
+                        // The page's own settings, as its Playback Settings dialog last left them.
+                        onOpenWatchTogether = {
+                            val movie = (libraryDetails.details as? DetailsState.Loaded)?.value
+                            val presets = movie?.watchRoomPresets
+                            if (movie != null && presets != null) {
+                                watchTogetherViewModel.open(movie.id, movie.title, presets)
+                            } else {
+                                detailsViewModel.showNotice(WATCH_TOGETHER_UNAVAILABLE_NOTICE)
+                            }
+                        },
+                        createdRooms = watchTogetherViewModel.createdRooms,
                         voiceSearch = container.voiceSearch,
                         searchPlayRequests = searchViewModel.playRequests,
                         details = if (theaterOpen) theaterDetails else libraryDetails,

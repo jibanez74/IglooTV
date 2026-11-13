@@ -27,10 +27,13 @@ import com.igloo.blindpenguincoder.feature.search.VoiceSearch
 import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
+import com.igloo.blindpenguincoder.feature.watchrooms.CreatedRoom
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomActions
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomUiState
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsActions
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsUiState
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchTogetherActions
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchTogetherUiState
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
@@ -84,6 +87,10 @@ internal fun TestIglooApp(
     onRoomSelected: (Long) -> Unit = {},
     onLeaveRoom: () -> Unit = {},
     roomPlayRequests: Flow<VideoPlayRequest> = emptyFlow(),
+    watchTogether: WatchTogetherUiState = WatchTogetherUiState(),
+    watchTogetherActions: WatchTogetherActions = inertWatchTogetherActions,
+    onOpenWatchTogether: () -> Unit = {},
+    createdRooms: Flow<CreatedRoom> = emptyFlow(),
     // Available by default — the Shield and the TV emulator configuration; a suite that asserts
     // the Fire TV layout passes one that is not.
     voiceSearch: VoiceSearch = remember { FakeVoiceSearch() },
@@ -147,6 +154,10 @@ internal fun TestIglooApp(
         onRoomSelected = onRoomSelected,
         onLeaveRoom = onLeaveRoom,
         roomPlayRequests = roomPlayRequests,
+        watchTogether = watchTogether,
+        watchTogetherActions = watchTogetherActions,
+        onOpenWatchTogether = onOpenWatchTogether,
+        createdRooms = createdRooms,
         voiceSearch = voiceSearch,
         searchPlayRequests = searchPlayRequests,
         details = details,

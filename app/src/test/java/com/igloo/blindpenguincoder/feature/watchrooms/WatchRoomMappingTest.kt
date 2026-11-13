@@ -11,6 +11,7 @@ import com.igloo.blindpenguincoder.data.repository.audioStreamJson
 import com.igloo.blindpenguincoder.data.repository.subtitleJson
 import com.igloo.blindpenguincoder.data.repository.technicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.testServerAddress
+import com.igloo.blindpenguincoder.feature.movies.roomSettingsLine
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

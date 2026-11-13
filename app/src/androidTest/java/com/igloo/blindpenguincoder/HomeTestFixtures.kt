@@ -25,6 +25,7 @@ import com.igloo.blindpenguincoder.feature.library.LibraryGenre
 import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
+import com.igloo.blindpenguincoder.feature.movies.WatchRoomPresets
 import com.igloo.blindpenguincoder.feature.movies.movieAboutFacts
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
@@ -69,6 +70,8 @@ import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomUi
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomUiState
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsActions
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsUiState
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchTogetherActions
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchTogetherUiState
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
@@ -911,4 +914,33 @@ internal val inertWatchRoomActions = WatchRoomActions(
     onTransport = { _, _ -> },
     onPlaybackStarted = {},
     clock = { 0L },
+)
+
+internal val inertWatchTogetherActions = WatchTogetherActions(onToggle = {}, onCreate = {}, onRetry = {}, onDismiss = {})
+
+/** Watch Together over movie 1, Maria and Ana to invite. */
+internal fun testWatchTogetherState(
+    people: IglooRailState<RoomMemberUi> = IglooRailState.Loaded(
+        listOf(
+            RoomMemberUi(id = 2, name = "Maria", avatarUrl = null),
+            RoomMemberUi(id = 3, name = "Ana", avatarUrl = null),
+        ),
+    ),
+    selected: Set<Long> = emptySet(),
+    creating: Boolean = false,
+    hint: String? = null,
+) = WatchTogetherUiState(
+    movieId = 1,
+    shown = true,
+    title = "Heat",
+    presets = WatchRoomPresets(
+        mode = PlaybackMode.Remux,
+        audioTrack = 0,
+        subtitleTrack = null,
+        settingsLine = "Original quality — audio adjusted · English · 5.1 surround · Subtitles off",
+    ),
+    people = people,
+    selected = selected,
+    creating = creating,
+    hint = hint,
 )

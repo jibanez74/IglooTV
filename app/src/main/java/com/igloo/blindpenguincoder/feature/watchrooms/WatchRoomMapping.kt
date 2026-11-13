@@ -10,9 +10,9 @@ import com.igloo.blindpenguincoder.data.model.UserSummary
 import com.igloo.blindpenguincoder.data.model.WatchRoomDetail
 import com.igloo.blindpenguincoder.data.model.WatchRoomListItem
 import com.igloo.blindpenguincoder.data.model.playbackModeOf
-import com.igloo.blindpenguincoder.feature.movies.AUDIO_DEFAULT_LABEL
 import com.igloo.blindpenguincoder.feature.movies.audioTrackLabel
 import com.igloo.blindpenguincoder.feature.movies.primaryVideoStream
+import com.igloo.blindpenguincoder.feature.movies.roomSettingsLine
 import com.igloo.blindpenguincoder.feature.movies.subtitleTrackLabel
 import com.igloo.blindpenguincoder.images.TmdbImageSize
 import com.igloo.blindpenguincoder.images.serverImageUrl
@@ -20,7 +20,6 @@ import com.igloo.blindpenguincoder.images.tmdbImageUrl
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
-import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 
 /** How many members a room card draws and names before it counts the rest. */
 internal const val ROOM_CARD_MEMBER_LIMIT = 4
@@ -141,22 +140,11 @@ internal fun toWatchRoomPageUi(
     )
 }
 
-/**
- * The room's fixed choices in one line, the words the Playback Settings dialog uses. Shared by
- * the room screen and the Watch Together dialog, so a room reads the same before and after.
- */
-internal fun roomSettingsLine(mode: PlaybackMode?, audio: String?, subtitle: String?): String =
-    listOfNotNull(
-        mode?.let(::playbackModeLabel),
-        audio ?: AUDIO_DEFAULT_LABEL,
-        subtitle?.let { "Subtitles: $it" } ?: "Subtitles off",
-    ).joinToString(" · ")
-
 /** "Hosted by Maria", with "(you)" when the signed-in profile hosts the room. */
 private fun hostLine(owner: UserSummary, isOwner: Boolean): String =
     if (isOwner) "Hosted by ${owner.name} (you)" else "Hosted by ${owner.name}"
 
-private fun UserSummary.toRoomMemberUi(server: ServerAddress) = RoomMemberUi(
+internal fun UserSummary.toRoomMemberUi(server: ServerAddress) = RoomMemberUi(
     id = id,
     name = name,
     avatarUrl = serverImageUrl(server.origin, avatar),

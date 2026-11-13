@@ -69,7 +69,7 @@ fun IglooConfirmDialog(
         )
 
         if (pending) {
-            PendingRow(text = pendingText, focusRequester = pendingFocus)
+            IglooPendingRow(text = pendingText, focusRequester = pendingFocus)
         } else {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -114,14 +114,15 @@ fun IglooConfirmDialog(
 }
 
 /**
- * While the action is in flight the buttons are replaced by one **focusable** status line.
+ * While a modal's action is in flight its buttons are replaced by one **focusable** status line:
+ * this dialog's, and the Watch Together dialog's.
  *
  * Not disabled buttons: `clickable(enabled = false)` removes the focus target, and in an in-tree
  * modal that punches a hole in the trap — the next d-pad press would land on a card behind the
  * scrim. Keeping a pinned focusable here keeps focus inside the overlay and keeps the pins alive.
  */
 @Composable
-private fun PendingRow(
+internal fun IglooPendingRow(
     text: String,
     focusRequester: FocusRequester,
 ) {
