@@ -60,6 +60,7 @@ import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.TrackOption
+import com.igloo.blindpenguincoder.playback.model.TransportCommand
 import com.igloo.blindpenguincoder.playback.model.playbackModeLabel
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.pressBack
@@ -593,6 +594,19 @@ class VideoPlayerScreenTest {
             listOf("start:null:true", "pause", "pause", "play", "play", "pause"),
             engine.playbackCommands,
         )
+    }
+
+    @Test
+    fun systemMediaControlsRunThroughTheScreensOwnTransport() {
+        setContent()
+        startPlaying()
+
+        engine.emit(VideoPlayerEvent.SessionTransport(TransportCommand.Pause))
+        engine.emit(VideoPlayerEvent.SessionTransport(TransportCommand.SeekTo(120.0)))
+        engine.emit(VideoPlayerEvent.SessionTransport(TransportCommand.Play))
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("start:null:true", "pause", "seek:120.0", "play"), engine.playbackCommands)
     }
 
     @Test

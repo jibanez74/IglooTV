@@ -67,6 +67,7 @@ import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.PlaybackChapter
 import com.igloo.blindpenguincoder.playback.model.TrackOption
+import com.igloo.blindpenguincoder.playback.model.TransportCommand
 import com.igloo.blindpenguincoder.playback.model.UpNextEpisode
 import com.igloo.blindpenguincoder.playback.model.UpNextOffer
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
@@ -195,6 +196,21 @@ fun VideoPlayerScreen(
         onDispose { viewModel.endSession(request.media, lastPositionSec, lastDurationSec) }
     }
 
+    // Every transport command runs through these four: the chrome, the keys, and the system's
+    // media controls, which the engine hands up as SessionTransport.
+    val play = { engine.play() }
+    val pause = { engine.pause() }
+    val togglePlayPause = {
+        if (state.playWhenReady) pause() else play()
+    }
+    val seekToSec = { targetSec: Double ->
+        engine.seekTo(targetSec)
+        state = state.onSeekApplied(targetSec)
+        // The optimistic seek is what the viewer sees first; a dismissal lapses with it too.
+        if (upNextOutsideLead(state)) upNextDismissed = false
+    }
+    val seekBy = { deltaSec: Double -> seekToSec(state.seekTarget(deltaSec)) }
+
     LaunchedEffect(engine) {
         // An engine replacement is a new player surface and focus context. In-place source
         // switches keep the same engine, so their open menu deliberately survives.
@@ -242,6 +258,11 @@ fun VideoPlayerScreen(
                 // Finishing means full progress: the exit save must record the end, not the
                 // last tick before it.
                 is VideoPlayerEvent.Ended -> lastPositionSec = next.currentTimeSec
+                is VideoPlayerEvent.SessionTransport -> when (val command = event.command) {
+                    TransportCommand.Play -> play()
+                    TransportCommand.Pause -> pause()
+                    is TransportCommand.SeekTo -> seekToSec(command.seconds)
+                }
                 else -> Unit
             }
         }
@@ -305,19 +326,6 @@ fun VideoPlayerScreen(
             else -> Unit
         }
     }
-
-    val play = { engine.play() }
-    val pause = { engine.pause() }
-    val togglePlayPause = {
-        if (state.playWhenReady) pause() else play()
-    }
-    val seekToSec = { targetSec: Double ->
-        engine.seekTo(targetSec)
-        state = state.onSeekApplied(targetSec)
-        // The optimistic seek is what the viewer sees first; a dismissal lapses with it too.
-        if (upNextOutsideLead(state)) upNextDismissed = false
-    }
-    val seekBy = { deltaSec: Double -> seekToSec(state.seekTarget(deltaSec)) }
 
     // Entry focus: Play/Pause anchors the screen; the error surface moves it to its one action,
     // the Up Next card takes it the moment it appears — or the moment a menu that was up closes —

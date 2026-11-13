@@ -54,6 +54,7 @@ import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.SUBTITLES_UNAVAILABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.TrackOption
+import com.igloo.blindpenguincoder.playback.model.TransportCommand
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.hlsAudioConversionFor
 import com.igloo.blindpenguincoder.playback.model.noun
@@ -912,14 +913,16 @@ internal class ExoVideoPlayerEngine(
 
     /**
      * [IntentRoutingPlayer] shifted onto the absolute movie timeline, so the system's
-     * now-playing surface and Assistant seeks agree with the on-screen seek bar and every seek
-     * routes through the engine's rebase logic.
+     * now-playing surface and Assistant seeks agree with the on-screen seek bar. Its transport
+     * goes up to the screen as [VideoPlayerEvent.SessionTransport] instead of acting here: the
+     * screen runs it through the same controls a press does, which then come back down to
+     * [play], [pause] and [seekTo] and the rebase logic behind it.
      */
     private inner class AbsoluteTimelinePlayer(player: Player) : IntentRoutingPlayer(
         player,
         playbackIntent,
-        onPlay = { this@ExoVideoPlayerEngine.play() },
-        onPause = { this@ExoVideoPlayerEngine.pause() },
+        onPlay = { sessionTransport(TransportCommand.Play) },
+        onPause = { sessionTransport(TransportCommand.Pause) },
     ) {
         private val offsetMs: Long
             get() = (timelineOffsetSec * 1000).toLong()
@@ -934,21 +937,27 @@ internal class ExoVideoPlayerEngine(
         override fun getContentDuration(): Long = getDuration()
 
         override fun seekTo(positionMs: Long) {
-            this@ExoVideoPlayerEngine.seekTo(positionMs / 1000.0)
+            sessionTransport(TransportCommand.SeekTo(positionMs / 1000.0))
         }
 
         override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
-            this@ExoVideoPlayerEngine.seekTo(positionMs / 1000.0)
+            sessionTransport(TransportCommand.SeekTo(positionMs / 1000.0))
         }
 
         override fun seekBack() {
-            this@ExoVideoPlayerEngine.seekTo(intendedAbsoluteSec() - seekBackIncrement / 1000.0)
+            sessionTransport(TransportCommand.SeekTo(intendedAbsoluteSec() - seekBackIncrement / 1000.0))
         }
 
         override fun seekForward() {
-            this@ExoVideoPlayerEngine.seekTo(intendedAbsoluteSec() + seekForwardIncrement / 1000.0)
+            sessionTransport(TransportCommand.SeekTo(intendedAbsoluteSec() + seekForwardIncrement / 1000.0))
         }
+
     }
+
+    private fun sessionTransport(command: TransportCommand) = emit(VideoPlayerEvent.SessionTransport(command))
+
+    /** Instrumentation seam: the player the system's media controls and Assistant drive. */
+    internal val sessionPlayer: Player get() = session.player
 
     /** Instrumentation seam: the deterministic subtitle off/on contract is asserted on these. */
     internal val currentTrackSelectionParameters get() = player.trackSelectionParameters

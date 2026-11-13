@@ -26,6 +26,7 @@ import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.SUBTITLES_UNAVAILABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.TrackOption
+import com.igloo.blindpenguincoder.playback.model.TransportCommand
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import kotlinx.coroutines.CompletableDeferred
@@ -326,6 +327,36 @@ class ExoVideoPlayerEngineTest {
         onMain { engine.selectAudioTrack("audio:1") }
         instrumentation.waitForIdleSync()
         assertEquals(2, api.fetched.size)
+    }
+
+    // --- the system's media controls ---
+
+    @Test
+    fun theSystemsTransportIsHandedToTheScreenOnTheAbsoluteTimeline() {
+        val engine = engine()
+        onMain { engine.startPlayback(null, initialPlayWhenReady = true, rewindOnResume = true) }
+
+        onMain {
+            val session = (engine as ExoVideoPlayerEngine).sessionPlayer
+            session.pause()
+            session.seekTo(120_000)
+            session.play()
+        }
+
+        assertEquals(
+            listOf(
+                TransportCommand.Pause,
+                TransportCommand.SeekTo(120.0),
+                TransportCommand.Play,
+            ),
+            engine.events.replayCache.filterIsInstance<VideoPlayerEvent.SessionTransport>().map { it.command },
+        )
+        // The engine left them to the screen: its intent never dropped to paused.
+        assertEquals(
+            listOf(true),
+            engine.events.replayCache.filterIsInstance<VideoPlayerEvent.PlayWhenReadyChanged>()
+                .map { it.playWhenReady }.distinct(),
+        )
     }
 
     // --- swapping modes ---

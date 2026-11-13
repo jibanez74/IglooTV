@@ -158,7 +158,10 @@ internal fun videoPlayerAnnouncement(
     else -> null
 }
 
-/** What the engine reports upward; each maps 1:1 onto a [VideoPlayerState] transition. */
+/**
+ * What the engine reports upward. Each maps onto a [VideoPlayerState] transition, except
+ * [SessionTransport], which is a command for the screen rather than news about the player.
+ */
 sealed interface VideoPlayerEvent {
     data class Ready(val durationSec: Double) : VideoPlayerEvent
     data object Buffering : VideoPlayerEvent
@@ -188,6 +191,21 @@ sealed interface VideoPlayerEvent {
 
     /** Narration for long engine waits; null clears it. */
     data class StatusMessage(val message: String?) : VideoPlayerEvent
+
+    /**
+     * Play, pause or seek from outside the screen — the system's media controls, Assistant —
+     * handed to the screen to run as if pressed there, so every transport command passes one
+     * place: the optimistic seek bar, Up Next's lapse and a watch room's broadcast all see it.
+     */
+    data class SessionTransport(val command: TransportCommand) : VideoPlayerEvent
+}
+
+sealed interface TransportCommand {
+    data object Play : TransportCommand
+    data object Pause : TransportCommand
+
+    /** To [seconds] on the absolute timeline the seek bar shows. */
+    data class SeekTo(val seconds: Double) : TransportCommand
 }
 
 fun VideoPlayerState.onEvent(event: VideoPlayerEvent): VideoPlayerState = when (event) {
@@ -202,4 +220,5 @@ fun VideoPlayerState.onEvent(event: VideoPlayerEvent): VideoPlayerState = when (
     is VideoPlayerEvent.QualityOptionsChanged -> onQualityOptionsChanged(event.options)
     is VideoPlayerEvent.ModeRefused -> onModeRefused(event.message)
     is VideoPlayerEvent.StatusMessage -> onStatusMessage(event.message)
+    is VideoPlayerEvent.SessionTransport -> this
 }
