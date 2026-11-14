@@ -1,34 +1,18 @@
 package com.igloo.blindpenguincoder.feature.music
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
-import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.design.overMedia
-import com.igloo.blindpenguincoder.core.design.scaled
-import com.igloo.blindpenguincoder.core.ui.IglooGlyph
-import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
-import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.feature.shared.HeroGenresLine
 import com.igloo.blindpenguincoder.feature.shared.HeroReadingStop
 import com.igloo.blindpenguincoder.feature.shared.HeroTitle
 
 /**
- * The hero's prose: title, artist, metadata chips, genres, and the popularity meter — one
- * reading stop under a screen reader ([HeroReadingStop]).
+ * The hero's prose: title, artist, metadata chips and genres — one reading stop
+ * under a screen reader ([HeroReadingStop]).
  */
 @Composable
 internal fun AlbumHeroInfo(
@@ -61,63 +45,5 @@ internal fun AlbumHeroInfo(
             overMedia = overMedia,
         )
         if (album.genresLine != null) HeroGenresLine(album.genresLine, overMedia)
-        if (album.popularity != null) {
-            SpotifyPopularityMeter(score = album.popularity, overMedia = overMedia)
-        }
     }
 }
-
-/**
- * The web page's Spotify popularity meter: the glyph, the label, the bold score, and a thin
- * fill bar. The brand green is the one deliberate brand color in the app — the meter reports a
- * Spotify-owned number, and painting it in the theme's primary would claim it as ours (section
- * 11.5.1). Not a focus target: the score is folded into the hero reading stop's sentence, so
- * the meter itself is silent.
- */
-@Composable
-internal fun SpotifyPopularityMeter(
-    score: Int,
-    overMedia: Boolean,
-) {
-    val colors = IglooTheme.colors
-    Column(
-        modifier = Modifier
-            .widthIn(max = POPULARITY_METER_MAX_WIDTH.scaled())
-            .fillMaxWidth()
-            .testTag("album_popularity_meter")
-            .clearAndSetSemantics { },
-        verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IglooGlyph(icon = IglooIcons.Spotify, tint = SpotifyGreen)
-            IglooText(
-                text = "Spotify popularity",
-                style = IglooTheme.typography.label.overMedia(overMedia),
-                color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
-                maxLines = 1,
-                modifier = Modifier.weight(1f),
-            )
-            IglooText(
-                text = "$score",
-                style = IglooTheme.typography.label,
-                color = SpotifyGreen,
-                maxLines = 1,
-            )
-        }
-        ProgressTrack(
-            fraction = score / 100f,
-            ground = if (overMedia) OVER_MEDIA_TRACK else colors.muted,
-            fill = SpotifyGreen,
-            rounded = true,
-        )
-    }
-}
-
-/** The Spotify brand green — the meter's fill and glyph, and nothing else in the app. */
-internal val SpotifyGreen = Color(0xFF1DB954)
-
-/** Web parity: the meter hugs the info column but never spans the whole pane (`max-w-md`). */
-private val POPULARITY_METER_MAX_WIDTH = 360.dp

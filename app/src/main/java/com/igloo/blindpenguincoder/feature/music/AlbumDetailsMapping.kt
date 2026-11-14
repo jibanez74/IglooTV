@@ -34,15 +34,13 @@ data class AlbumDetailsUi(
     val trackCountText: String,
     val totalDurationText: String,
     val genresLine: String?,
-    /** Spotify popularity, rounded to 0..100; null when the scanner has none. */
-    val popularity: Int?,
     val artists: List<AlbumArtistUi>,
     val discs: List<AlbumDiscUi>,
     val hasMultipleDiscs: Boolean,
     val facts: List<FactUi>,
     /** The facts panel's one cleared announcement, heading folded in (section 11.4.1 rule). */
     val factsDescription: String,
-    /** The hero reading stop's one sentence (web `pageAnnouncement` parity, plus popularity). */
+    /** The hero reading stop's one sentence (web `pageAnnouncement` parity). */
     val heroInfoDescription: String,
 )
 
@@ -65,7 +63,6 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
         ?: album.year.orNull()?.toString()
     val trackCountText = countLine(data.tracks.size.toLong(), "track")
     val totalDurationText = formatAlbumDuration(data.totalDuration)
-    val popularity = spotifyPopularity(album.spotifyPopularity)
     val artists = data.artists.filter { it.name.isNotBlank() }.map { AlbumArtistUi(it.id, it.name) }
     // With no credited rows the album's own musician is the one name, and it has no id to open.
     val artistNames = artists.map { it.name }.ifEmpty { listOfNotNull(artistName) }
@@ -84,7 +81,6 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
         joinedLine(data.albumGenres, ", ")?.let { add(FactUi("Genres", it)) }
         if (hasMultipleDiscs) add(FactUi("Discs", "${discs.size}"))
         audioQuality?.let { add(FactUi("Audio quality", it)) }
-        popularity?.let { add(FactUi("Spotify popularity", "$it / 100")) }
     }
     return AlbumDetailsUi(
         id = album.id,
@@ -95,7 +91,6 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
         trackCountText = trackCountText,
         totalDurationText = totalDurationText,
         genresLine = joinedLine(data.albumGenres, " · "),
-        popularity = popularity,
         artists = artists.ifEmpty { listOfNotNull(artistName?.let { AlbumArtistUi(id = null, name = it) }) },
         discs = discs,
         hasMultipleDiscs = hasMultipleDiscs,
@@ -108,7 +103,6 @@ internal fun toAlbumDetailsUi(data: AlbumDetailsData): AlbumDetailsUi {
             trackCountText = trackCountText,
             totalDurationSpoken = formatSpokenTime(data.totalDuration / 1000.0),
             genres = data.albumGenres,
-            popularity = popularity,
         ),
     )
 }
@@ -209,7 +203,6 @@ private fun heroInfoDescription(
     trackCountText: String,
     totalDurationSpoken: String,
     genres: List<String>,
-    popularity: Int?,
 ): String {
     val creditedArtists = joinedLine(artistNames, ", ")
         ?.takeUnless {
@@ -223,6 +216,5 @@ private fun heroInfoDescription(
         trackCountText,
         "Total duration: $totalDurationSpoken",
         joinedLine(genres, ", ")?.let { "Genres: $it" },
-        popularity?.let { "Spotify popularity $it out of 100" },
     ).joinToString(". ") + "."
 }

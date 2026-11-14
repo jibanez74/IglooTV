@@ -3,12 +3,10 @@ package com.igloo.blindpenguincoder.feature.music
 import com.igloo.blindpenguincoder.core.ui.countNoun
 import com.igloo.blindpenguincoder.core.ui.formatTimecode
 import com.igloo.blindpenguincoder.core.ui.hms
-import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
 import com.igloo.blindpenguincoder.feature.shared.FactUi
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
 import com.igloo.blindpenguincoder.feature.shared.trackSpokenInfo
 import com.igloo.blindpenguincoder.playback.model.millisToSeconds
-import kotlin.math.roundToInt
 
 /**
  * The formatting rules every music mapping shares. Wire durations on the music routes are
@@ -31,10 +29,6 @@ internal fun formatTrackDuration(ms: Long): String =
  */
 internal const val UNTITLED_ALBUM = "Untitled album"
 internal const val UNKNOWN_ARTIST = "Unknown artist"
-
-/** Spotify's popularity score rounded into 0..100; null when the scanner has none. */
-internal fun spotifyPopularity(score: SqlNullFloat64): Int? =
-    score.orNull()?.roundToInt()?.coerceIn(0, 100)
 
 /**
  * A track row from any music route: [durationMs] is the wire's milliseconds, and the Play

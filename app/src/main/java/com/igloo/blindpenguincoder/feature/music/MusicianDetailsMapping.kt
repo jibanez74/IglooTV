@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.feature.music
 
-import com.igloo.blindpenguincoder.core.ui.formatCount
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.data.model.MusicianDetailsData
@@ -25,8 +24,6 @@ data class MusicianDetailsUi(
     val trackCountText: String,
     val totalDurationText: String,
     val genresLine: String?,
-    /** Spotify popularity, rounded to 0..100; null when the scanner has none. */
-    val popularity: Int?,
     val albums: List<AlbumCardUi>,
     /** Every track across the discography; each row carries its album for More to open. */
     val tracks: List<TrackRowUi>,
@@ -41,16 +38,12 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
     val albumCountText = countLine(data.albums.size.toLong(), "album")
     val trackCountText = countLine(data.tracks.size.toLong(), "track")
     val totalDurationText = formatAlbumDuration(data.totalDuration)
-    val popularity = spotifyPopularity(musician.spotifyPopularity)
-    val followers = musician.spotifyFollowers.orNull()?.takeIf { it > 0 }
     val genresSpoken = joinedLine(data.genres, ", ")
     val facts = buildList {
         add(FactUi("Albums", "${data.albums.size}"))
         add(FactUi("Tracks", "${data.tracks.size}"))
         add(FactUi("Total duration", totalDurationText))
         genresSpoken?.let { add(FactUi("Genres", it)) }
-        popularity?.let { add(FactUi("Spotify popularity", "$it / 100")) }
-        followers?.let { add(FactUi("Spotify followers", formatCount(it))) }
         musician.summary.orNullIfBlank()?.let { add(FactUi("About", it)) }
     }
     return MusicianDetailsUi(
@@ -61,7 +54,6 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
         trackCountText = trackCountText,
         totalDurationText = totalDurationText,
         genresLine = joinedLine(data.genres, " · "),
-        popularity = popularity,
         albums = data.albums.map {
             AlbumCardUi(
                 id = it.id,
@@ -78,7 +70,6 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
             "$albumCountText, $trackCountText",
             "Total duration: ${formatSpokenTime(data.totalDuration / 1000.0)}",
             genresSpoken?.let { "Genres: $it" },
-            popularity?.let { "Spotify popularity $it out of 100" },
         ).joinToString(". ") + ".",
     )
 }

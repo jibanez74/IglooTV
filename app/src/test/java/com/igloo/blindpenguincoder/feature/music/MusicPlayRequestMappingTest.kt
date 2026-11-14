@@ -3,7 +3,6 @@ package com.igloo.blindpenguincoder.feature.music
 import com.igloo.blindpenguincoder.data.model.Album
 import com.igloo.blindpenguincoder.data.model.AlbumDetailsData
 import com.igloo.blindpenguincoder.data.model.AlbumTrack
-import com.igloo.blindpenguincoder.data.model.SqlNullFloat64
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
@@ -22,7 +21,6 @@ class MusicPlayRequestMappingTest {
     ) = Album(
         id = 7L,
         title = "Test Album",
-        spotifyPopularity = SqlNullFloat64(0.0, false),
         musician = SqlNullString(musician.orEmpty(), musician != null),
         releaseDate = SqlNullString("", false),
         year = SqlNullInt64(0, false),

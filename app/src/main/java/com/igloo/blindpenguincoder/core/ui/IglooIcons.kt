@@ -409,19 +409,6 @@ object IglooIcons {
         }
     }
 
-    val Spotify: ImageVector by lazy {
-        icon("Spotify") {
-            // A filled disc with the three sound-wave bands cut out; call sites tint it with
-            // the Spotify brand green, the one deliberate brand color in the app (section 11.5.1).
-            path(fill = SolidColor(Color.White), pathFillType = PathFillType.EvenOdd) {
-                circle(12f, 12f, 10f)
-                wave(y = 8.0f, halfWidth = 6.4f, bow = 1.7f, thickness = 1.9f)
-                wave(y = 11.6f, halfWidth = 5.4f, bow = 1.4f, thickness = 1.7f)
-                wave(y = 14.9f, halfWidth = 4.4f, bow = 1.1f, thickness = 1.5f)
-            }
-        }
-    }
-
     val Person: ImageVector by lazy {
         icon("Person") {
             path(fill = SolidColor(Color.White)) {
@@ -445,19 +432,6 @@ object IglooIcons {
             viewportWidth = 24f,
             viewportHeight = 24f,
         ).apply(block).build()
-
-    /** One sound-wave band: a stripe of [thickness] bowing upward by [bow], centred on x=12. */
-    private fun PathBuilder.wave(y: Float, halfWidth: Float, bow: Float, thickness: Float) {
-        moveTo(12f - halfWidth, y)
-        curveTo(12f - halfWidth * 0.4f, y - bow, 12f + halfWidth * 0.4f, y - bow, 12f + halfWidth, y)
-        lineTo(12f + halfWidth, y + thickness)
-        curveTo(
-            12f + halfWidth * 0.4f, y + thickness - bow,
-            12f - halfWidth * 0.4f, y + thickness - bow,
-            12f - halfWidth, y + thickness,
-        )
-        close()
-    }
 
     /** One head and shoulders seen from behind, centred on [cx] along the glyph's bottom edge. */
     private fun PathBuilder.viewer(cx: Float) {

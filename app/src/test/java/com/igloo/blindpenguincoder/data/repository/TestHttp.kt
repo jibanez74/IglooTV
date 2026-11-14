@@ -438,10 +438,8 @@ fun albumJson(
     releaseDate: String? = "1965-08-06",
     year: Long? = 1965,
     totalTracks: Long? = 14,
-    spotifyPopularity: Double? = 73.0,
 ): String = """{"id":$id,"title":"$title","sort_title":"${title.lowercase()}",""" +
     """"spotify_id":${sqlNullStringJson("spot-$id")},""" +
-    """"spotify_popularity":${sqlNullFloat64Json(spotifyPopularity)},""" +
     """"musician":${sqlNullStringJson(musician)},""" +
     """"release_date":${sqlNullStringJson(releaseDate)},""" +
     """"year":${sqlNullInt64Json(year)},""" +
@@ -527,13 +525,9 @@ fun musicianJson(
     id: Long = 4,
     name: String = "The Beatles",
     summary: String? = "Liverpool, 1960.",
-    spotifyPopularity: Double? = 88.0,
-    spotifyFollowers: Long? = 25_000_000,
     thumb: String? = "https://i.scdn.co/image/beatles.jpg",
 ): String = """{"id":$id,"name":"$name","sort_name":"${name.lowercase()}",""" +
     """"summary":${sqlNullStringJson(summary)},"spotify_id":${sqlNullStringJson("artist-$id")},""" +
-    """"spotify_popularity":${sqlNullFloat64Json(spotifyPopularity)},""" +
-    """"spotify_followers":${sqlNullInt64Json(spotifyFollowers)},""" +
     """"thumb":${sqlNullStringJson(thumb)},""" +
     """"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}"""
 

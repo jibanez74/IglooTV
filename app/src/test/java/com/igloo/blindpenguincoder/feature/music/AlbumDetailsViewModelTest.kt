@@ -87,7 +87,6 @@ class AlbumDetailsViewModelTest {
                         musician = "Aurora Pines",
                         releaseDate = "2026-02-13",
                         year = 2026,
-                        spotifyPopularity = 73.4,
                     ),
                     tracks = listOf(
                         albumTrackJson(id = 900, title = "Northern Drift", trackIndex = 1, durationMs = 214_000),
@@ -121,7 +120,6 @@ class AlbumDetailsViewModelTest {
         // 412,000 ms — the millisecond wire unit must land as 6m 52s, not weeks.
         assertEquals("6m 52s", album.totalDurationText)
         assertEquals("Ambient · Electronic", album.genresLine)
-        assertEquals(73, album.popularity)
         assertEquals(listOf("Aurora Pines"), album.artists.map { it.name })
         assertEquals(false, album.hasMultipleDiscs)
 
@@ -143,18 +141,16 @@ class AlbumDetailsViewModelTest {
                 "Artist" to "Aurora Pines",
                 "Genres" to "Ambient, Electronic",
                 "Audio quality" to "FLAC · 900 kbps · stereo",
-                "Spotify popularity" to "73 / 100",
             ),
             album.facts.map { it.label to it.value },
         )
         assertEquals(
             "Glacier Sessions by Aurora Pines. 2 tracks. " +
-                "Total duration: 6 minutes and 52 seconds. Genres: Ambient, Electronic. " +
-                "Spotify popularity 73 out of 100.",
+                "Total duration: 6 minutes and 52 seconds. Genres: Ambient, Electronic.",
             album.heroInfoDescription,
         )
         assertTrue(album.factsDescription.startsWith("Album details. Release date: February 13, 2026."))
-        assertTrue(album.factsDescription.endsWith("Spotify popularity: 73 / 100."))
+        assertTrue(album.factsDescription.endsWith("Audio quality: FLAC · 900 kbps · stereo."))
     }
 
     @Test
@@ -170,7 +166,6 @@ class AlbumDetailsViewModelTest {
                             releaseDate = null,
                             year = null,
                             totalTracks = null,
-                            spotifyPopularity = null,
                         ),
                         tracks = listOf(
                             albumTrackJson(durationMs = 0, codec = "", bitRate = 0, channelLayout = ""),
@@ -193,7 +188,6 @@ class AlbumDetailsViewModelTest {
         assertNull(album.coverUrl)
         assertNull(album.releaseDateText)
         assertNull(album.genresLine)
-        assertNull(album.popularity)
         assertEquals(emptyList<AlbumArtistUi>(), album.artists)
         val track = album.discs.single().tracks.single()
         // Web parity: a missing duration renders nothing, and the sentence skips it too.
@@ -303,7 +297,7 @@ class AlbumDetailsViewModelTest {
         assertEquals(listOf("Various Artists"), album.artists.map { it.name })
         assertEquals(
             "Help! by Various Artists. 1 track. Total duration: 2 minutes and 5 seconds. " +
-                "Genres: Rock. Spotify popularity 73 out of 100.",
+                "Genres: Rock.",
             album.heroInfoDescription,
         )
     }
@@ -334,8 +328,7 @@ class AlbumDetailsViewModelTest {
         )
         assertEquals(
             "Shared Record by Various Artists. Artists: Aurora Pines, North Harbor Choir. " +
-                "1 track. Total duration: 2 minutes and 5 seconds. Genres: Rock. " +
-                "Spotify popularity 73 out of 100.",
+                "1 track. Total duration: 2 minutes and 5 seconds. Genres: Rock.",
             album.heroInfoDescription,
         )
         assertTrue(
@@ -369,8 +362,7 @@ class AlbumDetailsViewModelTest {
         )
         assertEquals(
             "Joint Record. Artists: Mara Vale, The Winter Quartet. 1 track. " +
-                "Total duration: 2 minutes and 5 seconds. Genres: Rock. " +
-                "Spotify popularity 73 out of 100.",
+                "Total duration: 2 minutes and 5 seconds. Genres: Rock.",
             album.heroInfoDescription,
         )
     }

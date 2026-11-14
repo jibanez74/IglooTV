@@ -179,9 +179,6 @@ private fun MusicianDetailsContent(
                             overMedia = overMedia,
                         )
                         if (musician.genresLine != null) HeroGenresLine(musician.genresLine, overMedia)
-                        if (musician.popularity != null) {
-                            SpotifyPopularityMeter(score = musician.popularity, overMedia = overMedia)
-                        }
                     }
                 }
             }

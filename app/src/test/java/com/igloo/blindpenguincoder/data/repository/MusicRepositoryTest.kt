@@ -75,7 +75,7 @@ class MusicRepositoryTest {
                 request = it
                 jsonResponse(
                     albumDetailsJson(
-                        album = albumJson(id = 7, title = "Help!", spotifyPopularity = 73.4),
+                        album = albumJson(id = 7, title = "Help!"),
                         tracks = listOf(
                             albumTrackJson(id = 900, trackIndex = 1, durationMs = 214_000, disc = 1),
                             albumTrackJson(id = 901, trackIndex = 1, durationMs = 245_000, disc = 2),
@@ -95,7 +95,6 @@ class MusicRepositoryTest {
             assertEquals("Bearer igd_test", captured.headers[HttpHeaders.Authorization])
             val data = (result as ApiResult.Success).value
             assertEquals("Help!", data.album.title)
-            assertEquals(73.4, data.album.spotifyPopularity.orNull())
             assertEquals("The Beatles", data.album.musician.orNull())
             assertEquals("1965-08-06", data.album.releaseDate.orNull())
             assertEquals("https://i.scdn.co/image/help.jpg", data.album.cover.orNull())
@@ -205,8 +204,6 @@ class MusicRepositoryTest {
                     musician = musicianJson(
                         id = 4,
                         summary = "Liverpool, 1960.",
-                        spotifyPopularity = 88.0,
-                        spotifyFollowers = 25_000_000,
                         thumb = null,
                     ),
                     albums = listOf(musicianAlbumJson(id = 1, trackCount = 14)),
@@ -226,8 +223,6 @@ class MusicRepositoryTest {
         val data = (result as ApiResult.Success).value
         assertEquals("The Beatles", data.musician.name)
         assertEquals("Liverpool, 1960.", data.musician.summary.orNull())
-        assertEquals(88.0, data.musician.spotifyPopularity.orNull())
-        assertEquals(25_000_000L, data.musician.spotifyFollowers.orNull())
         assertNull(data.musician.thumb.orNull())
         assertEquals(listOf(125_000L, 125_000L), data.tracks.map { it.duration })
         assertEquals(1L, data.tracks[0].albumId.orNull())
