@@ -377,7 +377,9 @@ class WatchRoomViewModel(
                                         return@collect
                                     }
                                     WatchRoomEventType.RoomAccessRevoked -> {
-                                        roomGone(roomId, removedNotice())
+                                        // The server tells the leaver's own sockets before it
+                                        // answers the leave: this viewer's leave, not a removal.
+                                        roomGone(roomId, if (room.value.leaving) leftNotice() else removedNotice())
                                         return@collect
                                     }
                                     // The page re-reads itself: who is in the room, and the host's

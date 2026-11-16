@@ -21,6 +21,7 @@ import com.igloo.blindpenguincoder.playback.model.RoomPlayhead
 import com.igloo.blindpenguincoder.playback.model.TransportCommand
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import java.io.EOFException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -55,6 +56,8 @@ class WatchRoomViewModelTest {
         val joinAnswers = ArrayDeque<ApiResult<Unit>>()
         var delete: ApiResult<Unit> = ApiResult.Success(Unit)
         var leave: ApiResult<Unit> = ApiResult.Success(Unit)
+        /** Holds the leave's answer until completed, as a server that tells the sockets first. */
+        var leaveGate: CompletableDeferred<Unit>? = null
         var update: ApiResult<Unit> = ApiResult.Success(Unit)
         var invite: ApiResult<List<UserSummary>> = ApiResult.Success(emptyList())
         var failSends = false
@@ -85,6 +88,7 @@ class WatchRoomViewModelTest {
 
         override suspend fun leave(id: Long): ApiResult<Unit> {
             leaves += 1
+            leaveGate?.await()
             return leave
         }
 
@@ -452,6 +456,23 @@ class WatchRoomViewModelTest {
         runCurrent()
 
         assertEquals(1, link.leaves)
+        assertEquals(listOf(7L to "You left the watch room for Heat."), gone)
+    }
+
+    @Test
+    fun `the leaver's own revoked event reads as leaving, not as a removal`() = test(
+        FakeRoomLink(detail(isOwner = false)).apply { leaveGate = CompletableDeferred() },
+    ) { viewModel, link ->
+        viewModel.requestLeave()
+        viewModel.confirmLeave()
+        runCurrent()
+
+        // The server revokes the leaver's sockets before it answers the leave.
+        link.emit(WatchRoomServerEvent(type = WatchRoomEventType.RoomAccessRevoked))
+        runCurrent()
+        link.leaveGate!!.complete(Unit)
+        runCurrent()
+
         assertEquals(listOf(7L to "You left the watch room for Heat."), gone)
     }
 
