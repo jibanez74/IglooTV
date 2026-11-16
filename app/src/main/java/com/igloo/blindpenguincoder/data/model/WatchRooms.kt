@@ -70,6 +70,15 @@ data class CreateWatchRoomRequest(
     @SerialName("invited_user_ids") val invitedUserIds: List<Long>,
 )
 
+/**
+ * Body of `PUT /watch-rooms/{id}/members`: everyone the room should invite besides its owner. The
+ * owner's own id and duplicates are dropped by the server.
+ */
+@Serializable
+data class UpdateWatchRoomMembersRequest(
+    @SerialName("invited_user_ids") val invitedUserIds: List<Long>,
+)
+
 /** Payload of `POST /watch-rooms`: the new room, which the creator joins at once. */
 @Serializable
 data class CreateWatchRoomData(
@@ -104,6 +113,8 @@ data class WatchRoomServerEvent(
     val type: WatchRoomEventType,
     val playback: WatchRoomPlaybackState? = null,
     val member: UserSummary? = null,
+    /** The room's members after a [WatchRoomEventType.MembersChanged], the owner included. */
+    val members: List<UserSummary>? = null,
     /** Users with at least one open connection after the event, ascending. */
     @SerialName("connected_user_ids") val connectedUserIds: List<Long>? = null,
 )
@@ -125,8 +136,17 @@ enum class WatchRoomEventType {
     /** A user's last connection closed. */
     @SerialName("member_left") MemberLeft,
 
+    /** The owner changed who is invited, or a member left: [WatchRoomServerEvent.members]. */
+    @SerialName("members_changed") MembersChanged,
+
     /** The owner closed the room, or its movie or owner is gone; the socket closes next. */
     @SerialName("room_deleted") RoomDeleted,
+
+    /**
+     * This user is no longer in the room: the owner removed them, or they left on another device.
+     * The socket closes next.
+     */
+    @SerialName("room_access_revoked") RoomAccessRevoked,
 
     /** The answer to a JSON `ping`, which the TV never sends: OkHttp's own pings keep it alive. */
     @SerialName("pong") Pong,

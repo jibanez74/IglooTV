@@ -2,12 +2,14 @@ package com.igloo.blindpenguincoder.data.api
 
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.data.model.CreateWatchRoomRequest
+import com.igloo.blindpenguincoder.data.model.UpdateWatchRoomMembersRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.statement.HttpResponse
 
 class WatchRoomApi(
@@ -34,10 +36,21 @@ class WatchRoomApi(
 
     /**
      * Confirms the caller is still a member before each connection to the room's socket. It adds
-     * no one — membership is fixed when the room is created — and its body says nothing more.
+     * no one — the owner changes the members with [updateMembers] — and its body says nothing more.
      */
     suspend fun join(id: Long): HttpResponse =
         client.post(serverUrl.api("/watch-rooms/$id/join"))
+
+    /**
+     * Replaces the room's invitees; only its owner may, and the owner always stays. Answers with
+     * the room as the owner now sees it. Anyone removed loses the room at once, on every device.
+     */
+    suspend fun updateMembers(id: Long, body: UpdateWatchRoomMembersRequest): HttpResponse =
+        client.put(serverUrl.api("/watch-rooms/$id/members")) { jsonBody(body) }
+
+    /** The caller leaves a room they were invited to; the owner gets 409 and closes it instead. */
+    suspend fun leave(id: Long): HttpResponse =
+        client.post(serverUrl.api("/watch-rooms/$id/leave"))
 
     /** Closes a room for everyone in it; only its owner may. */
     suspend fun delete(id: Long): HttpResponse =

@@ -157,9 +157,12 @@ fun WatchTogetherDialog(state: WatchTogetherUiState, actions: WatchTogetherActio
     }
 }
 
-/** Prose the user reads to decide: cardForeground, as the confirm dialog's body (section 9.3). */
+/**
+ * Prose the user reads to decide: cardForeground, as the confirm dialog's body (section 9.3).
+ * Edit invitees shares it.
+ */
 @Composable
-private fun DialogProse(text: String) {
+internal fun DialogProse(text: String) {
     IglooText(
         text = text,
         style = IglooTheme.typography.bodyMedium,

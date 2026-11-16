@@ -458,7 +458,7 @@ fun IglooApp(
     }
     // The room's Watch: accepted only while the room is what the user is looking at.
     val roomCanPlay by rememberUpdatedState(
-        roomOpen && !playerOpen && !watchRoom.confirmingClose && !signOut.confirming,
+        roomOpen && !playerOpen && !watchRoom.dialogOpen && !signOut.confirming,
     )
     LaunchedEffect(roomPlayRequests) {
         roomPlayRequests.collect { request ->
@@ -689,7 +689,7 @@ fun IglooApp(
     // Back from a room leaves it: its socket closes, which is how the others learn this viewer
     // left. Its player and its Close room confirmation each answer Back first.
     BackHandler(
-        enabled = roomOpen && !playerOpen && !watchRoom.confirmingClose && !signOut.confirming,
+        enabled = roomOpen && !playerOpen && !watchRoom.dialogOpen && !signOut.confirming,
     ) {
         val origin = roomOrigin
         roomOrigin = null

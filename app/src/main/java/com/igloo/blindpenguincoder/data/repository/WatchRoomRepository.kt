@@ -8,6 +8,7 @@ import com.igloo.blindpenguincoder.data.api.WatchRoomApi
 import com.igloo.blindpenguincoder.data.model.CreateWatchRoomData
 import com.igloo.blindpenguincoder.data.model.CreateWatchRoomRequest
 import com.igloo.blindpenguincoder.data.model.InviteUsersData
+import com.igloo.blindpenguincoder.data.model.UpdateWatchRoomMembersRequest
 import com.igloo.blindpenguincoder.data.model.UserSummary
 import com.igloo.blindpenguincoder.data.model.WatchRoomClientEvent
 import com.igloo.blindpenguincoder.data.model.WatchRoomData
@@ -34,6 +35,15 @@ interface WatchRoomLink {
     suspend fun join(id: Long): ApiResult<Unit>
 
     suspend fun delete(id: Long): ApiResult<Unit>
+
+    /** Everyone the room can invite: every user but the caller. */
+    suspend fun inviteUsers(): ApiResult<List<UserSummary>>
+
+    /** The owner replaces the room's invitees. */
+    suspend fun updateMembers(id: Long, invitedUserIds: List<Long>): ApiResult<Unit>
+
+    /** An invitee leaves the room. */
+    suspend fun leave(id: Long): ApiResult<Unit>
 
     /**
      * Runs [session] on the room's socket and returns when [session] does. A connection the
@@ -69,6 +79,12 @@ class WatchRoomRepository(
     override suspend fun delete(id: Long): ApiResult<Unit> =
         safeApiCall(request = { api.delete(id) }, decode = { })
 
+    override suspend fun updateMembers(id: Long, invitedUserIds: List<Long>): ApiResult<Unit> =
+        safeApiCall(request = { api.updateMembers(id, UpdateWatchRoomMembersRequest(invitedUserIds)) }, decode = { })
+
+    override suspend fun leave(id: Long): ApiResult<Unit> =
+        safeApiCall(request = { api.leave(id) }, decode = { })
+
     override suspend fun connect(id: Long, session: suspend (RoomSocket) -> Unit) {
         api.socket(id) {
             val socket = this
@@ -90,7 +106,7 @@ class WatchRoomRepository(
     /** Room [id]'s shared HLS session; [movies] serves the subtitles, which stay the movie's. */
     fun hlsSession(id: Long, movies: HlsSessionApi): HlsSessionApi = WatchRoomHlsSession(id, api, movies)
 
-    suspend fun inviteUsers(): ApiResult<List<UserSummary>> =
+    override suspend fun inviteUsers(): ApiResult<List<UserSummary>> =
         envelopeData<InviteUsersData>("invite users") { api.inviteUsers() }.map { it.users }
 }
 

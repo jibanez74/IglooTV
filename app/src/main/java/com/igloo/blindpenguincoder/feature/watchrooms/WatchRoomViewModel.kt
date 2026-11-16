@@ -6,6 +6,7 @@ import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
 import com.igloo.blindpenguincoder.core.network.withServerAddress
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.WatchRoomClientEvent
 import com.igloo.blindpenguincoder.data.model.WatchRoomCommandType
 import com.igloo.blindpenguincoder.data.model.WatchRoomEventType
@@ -13,6 +14,7 @@ import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.RoomSocket
 import com.igloo.blindpenguincoder.data.repository.WatchRoomLink
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
+import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.player.PlayerRoom
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ReadOnlyDetailsLoader
@@ -53,9 +55,30 @@ data class WatchRoomUiState(
     val confirmingClose: Boolean = false,
     /** The close request is out. */
     val closing: Boolean = false,
-    /** A close that failed, said on the page. */
+    /** An invitee's Leave room confirmation is up. */
+    val confirmingLeave: Boolean = false,
+    /** The leave request is out. */
+    val leaving: Boolean = false,
+    /** The owner's Edit invitees dialog, while it is up. */
+    val editing: EditInviteesUi? = null,
+    /** A close, leave or edit that failed, said on the page. */
     val notice: String? = null,
-)
+) {
+    /** A dialog covers the room: its own Back answers first. */
+    val dialogOpen: Boolean get() = confirmingClose || confirmingLeave || editing != null
+}
+
+/** The owner's Edit invitees dialog: who can be invited, and who is checked. */
+data class EditInviteesUi(
+    val people: IglooRailState<RoomMemberUi> = IglooRailState.Loading,
+    val selected: Set<Long>,
+    /** The invitees the room has now: Save is inert until the checks differ. */
+    val initial: Set<Long>,
+    /** The save request is out. */
+    val saving: Boolean = false,
+) {
+    val changed: Boolean get() = selected != initial
+}
 
 /** What the room screen and the player in it need from the room's view model. */
 data class WatchRoomActions(
@@ -64,6 +87,14 @@ data class WatchRoomActions(
     val onRequestClose: () -> Unit,
     val onDismissClose: () -> Unit,
     val onConfirmClose: () -> Unit,
+    val onRequestLeave: () -> Unit = {},
+    val onDismissLeave: () -> Unit = {},
+    val onConfirmLeave: () -> Unit = {},
+    val onEditInvitees: () -> Unit = {},
+    val onToggleInvitee: (userId: Long) -> Unit = {},
+    val onSaveInvitees: () -> Unit = {},
+    val onRetryInvitees: () -> Unit = {},
+    val onDismissEdit: () -> Unit = {},
     /** The screen came on screen with the app, or went off it with the app. */
     val onForeground: () -> Unit,
     val onBackground: () -> Unit,
@@ -115,6 +146,7 @@ class WatchRoomViewModel(
     val playRequests: Flow<VideoPlayRequest> = playRequestChannel.receiveAsFlow()
 
     private var connectJob: Job? = null
+    private var inviteesJob: Job? = null
     private var socket: RoomSocket? = null
     private val sendLock = Mutex()
     private var heldSeekJob: Job? = null
@@ -206,6 +238,8 @@ class WatchRoomViewModel(
         viewModelScope.launch {
             when (val result = link.delete(id)) {
                 is ApiResult.Success -> roomGone(id, closedNotice())
+                // Already gone — its movie deleted, or closed on another device: the same end.
+                is ApiResult.Failure if result.error.isNotFound() -> roomGone(id, closedNotice())
                 is ApiResult.Failure -> room.update {
                     it.copy(
                         closing = false,
@@ -214,6 +248,106 @@ class WatchRoomViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun requestLeave() {
+        if (room.value.leaving) return
+        room.update { it.copy(confirmingLeave = true, notice = null) }
+    }
+
+    fun dismissLeave() {
+        if (room.value.leaving) return
+        room.update { it.copy(confirmingLeave = false) }
+    }
+
+    /** An invitee leaves for good: the room drops off their list on every device. */
+    fun confirmLeave() {
+        val id = loader.uiState.value.id ?: return
+        if (room.value.leaving) return
+        room.update { it.copy(leaving = true) }
+        viewModelScope.launch {
+            when (val result = link.leave(id)) {
+                is ApiResult.Success -> roomGone(id, leftNotice())
+                // No longer a member, or the room is gone: either way there is nothing to leave.
+                is ApiResult.Failure if result.error.isRoomGone() -> roomGone(id, leftNotice())
+                is ApiResult.Failure -> room.update {
+                    it.copy(
+                        leaving = false,
+                        confirmingLeave = false,
+                        notice = result.error.toFailureNotice("leave the room"),
+                    )
+                }
+            }
+        }
+    }
+
+    /** The owner's Edit invitees: the room's invitees checked, everyone else on the server listed. */
+    fun editInvitees() {
+        val page = (loader.uiState.value.details as? DetailsState.Loaded)?.value ?: return
+        if (!page.isOwner || room.value.editing != null) return
+        val invitees = page.members.map { it.id }.filter { it != page.ownerId }.toSet()
+        room.update { it.copy(editing = EditInviteesUi(selected = invitees, initial = invitees), notice = null) }
+        loadInvitees()
+    }
+
+    fun retryInvitees() = loadInvitees()
+
+    fun toggleInvitee(userId: Long) {
+        room.update { state ->
+            val editing = state.editing?.takeUnless { it.saving } ?: return@update state
+            val selected = if (userId in editing.selected) editing.selected - userId else editing.selected + userId
+            state.copy(editing = editing.copy(selected = selected))
+        }
+    }
+
+    fun dismissEdit() {
+        if (room.value.editing?.saving == true) return
+        inviteesJob?.cancel()
+        room.update { it.copy(editing = null) }
+    }
+
+    /**
+     * Saves the checked people as the room's invitees. A failure closes the dialog and says why on
+     * the page: a dialog never carries an inline error (section 9.3).
+     */
+    fun saveInvitees() {
+        val id = loader.uiState.value.id ?: return
+        val editing = room.value.editing ?: return
+        if (editing.saving || !editing.changed) return
+        // In the order the list shows them, so the request reads the way the screen does.
+        val listed = (editing.people as? IglooRailState.Loaded)?.items.orEmpty().map { it.id }
+        val invited = listed.filter { it in editing.selected } + (editing.selected - listed.toSet())
+        room.update { it.copy(editing = editing.copy(saving = true)) }
+        viewModelScope.launch {
+            val result = link.updateMembers(id, invited)
+            if (loader.uiState.value.id != id) return@launch
+            when (result) {
+                is ApiResult.Success -> {
+                    room.update { it.copy(editing = null) }
+                    loader.refresh()
+                }
+                is ApiResult.Failure if result.error.isNotFound() -> roomGone(id, closedNotice())
+                is ApiResult.Failure -> room.update {
+                    it.copy(editing = null, notice = result.error.toFailureNotice("update the invitees"))
+                }
+            }
+        }
+    }
+
+    private fun loadInvitees() {
+        inviteesJob?.cancel()
+        room.update { state -> state.copy(editing = state.editing?.copy(people = IglooRailState.Loading)) }
+        inviteesJob = viewModelScope.launch {
+            val result = link.inviteUsers().withServerAddress(serverUrl)
+            val people = when (result) {
+                is ApiResult.Success -> {
+                    val (users, server) = result.value
+                    IglooRailState.Loaded(users.map { it.toRoomMemberUi(server) })
+                }
+                is ApiResult.Failure -> IglooRailState.Error(result.error.toLibraryDisplayMessage())
+            }
+            room.update { state -> state.copy(editing = state.editing?.copy(people = people)) }
         }
     }
 
@@ -236,10 +370,20 @@ class WatchRoomViewModel(
                         link.connect(roomId) { connected ->
                             socket = connected
                             connected.events.collect { event ->
-                                if (event.type == WatchRoomEventType.RoomDeleted) {
-                                    // Before the hang-up that follows reads as a dropped link.
-                                    roomGone(roomId, closedNotice())
-                                    return@collect
+                                when (event.type) {
+                                    WatchRoomEventType.RoomDeleted -> {
+                                        // Before the hang-up that follows reads as a dropped link.
+                                        roomGone(roomId, closedNotice())
+                                        return@collect
+                                    }
+                                    WatchRoomEventType.RoomAccessRevoked -> {
+                                        roomGone(roomId, removedNotice())
+                                        return@collect
+                                    }
+                                    // The page re-reads itself: who is in the room, and the host's
+                                    // line, come from the room's details.
+                                    WatchRoomEventType.MembersChanged -> loader.refresh()
+                                    else -> Unit
                                 }
                                 if (event.type == WatchRoomEventType.RoomSnapshot) attempt = 0
                                 val step = room.value.sync.onEvent(event, clock())
@@ -270,6 +414,7 @@ class WatchRoomViewModel(
     }
 
     private fun disconnect() {
+        inviteesJob?.cancel()
         heldSeekJob?.cancel()
         heldSeekJob = null
         heldSeekSec = null
@@ -315,10 +460,17 @@ class WatchRoomViewModel(
         onRoomGone(roomId, notice)
     }
 
-    private fun closedNotice(): String {
-        val title = (loader.uiState.value.details as? DetailsState.Loaded)?.value?.title
-        return if (title != null) "The watch room for $title was closed." else "The watch room was closed."
-    }
+    private fun closedNotice(): String = roomTitle()
+        ?.let { "The watch room for $it was closed." } ?: "The watch room was closed."
+
+    private fun leftNotice(): String = roomTitle()
+        ?.let { "You left the watch room for $it." } ?: "You left the watch room."
+
+    /** The owner removed this user, or they left on another device: the server does not say which. */
+    private fun removedNotice(): String = roomTitle()
+        ?.let { "You're no longer in the watch room for $it." } ?: "You're no longer in this watch room."
+
+    private fun roomTitle(): String? = (loader.uiState.value.details as? DetailsState.Loaded)?.value?.title
 
     private suspend fun fetchPage(id: Long): ApiResult<WatchRoomPageUi> = coroutineScope {
         when (val detail = link.watchRoom(id)) {
@@ -352,6 +504,14 @@ fun WatchRoomViewModel.actions() = WatchRoomActions(
     onRequestClose = ::requestClose,
     onDismissClose = ::dismissClose,
     onConfirmClose = ::confirmClose,
+    onRequestLeave = ::requestLeave,
+    onDismissLeave = ::dismissLeave,
+    onConfirmLeave = ::confirmLeave,
+    onEditInvitees = ::editInvitees,
+    onToggleInvitee = ::toggleInvitee,
+    onSaveInvitees = ::saveInvitees,
+    onRetryInvitees = ::retryInvitees,
+    onDismissEdit = ::dismissEdit,
     onForeground = ::onForeground,
     onBackground = ::onBackground,
     onTransport = ::onTransport,
@@ -361,6 +521,9 @@ fun WatchRoomViewModel.actions() = WatchRoomActions(
 
 /** 403 is the server's word for both a room that does not exist and one this user is not in. */
 private fun AppError.isRoomGone() = this is AppError.Api && (status == 403 || status == 404)
+
+/** The owner's own routes answer 404 for a room that is no longer there. */
+private fun AppError.isNotFound() = this is AppError.Api && status == 404
 
 /** The web's words for a room that is gone or was never this user's. */
 internal const val ROOM_UNAVAILABLE_NOTICE = "This room no longer exists or you were not invited."

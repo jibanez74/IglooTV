@@ -69,13 +69,10 @@ Audit screen by screen with the virtual remote before changing code.
 ## A watch room cannot be edited
 
 **Found:** 2026-11-13, building the room screen (design-system §11.10.1).
-**Status:** open, waiting on the server.
-
-The server fixes a room's members, mode, audio and subtitles when it is created: there is no
-route to change them, and none to add or remove a member. The owner's **Edit room** button stands
-in its final place with no press until there is. The fix starts in the Igloo server (a `PATCH
-/api/watch-rooms/{id}`, and a way for the room's socket to tell the others what changed); the TV
-then opens the Watch Together dialog (§11.10.3) filled in with the room's settings.
+**Status:** partly fixed 2026-11-16. The owner can now change who is invited (**Edit invitees**,
+`PUT /api/watch-rooms/{id}/members`), and an invitee can leave (`POST /api/watch-rooms/{id}/leave`).
+The room's mode, audio and subtitles are still fixed when it is created; the server has no route to
+change them.
 
 ## An empty watch room forgets where it was
 

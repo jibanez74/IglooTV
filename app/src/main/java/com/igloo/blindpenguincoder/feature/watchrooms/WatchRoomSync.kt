@@ -54,8 +54,13 @@ data class WatchRoomSync(
         WatchRoomEventType.MemberLeft -> RoomSyncStep(
             onPresence(event, "left the room"),
         )
-        // The view model ends the room on a deletion; a pong answers a ping the TV never sends.
-        WatchRoomEventType.RoomDeleted, WatchRoomEventType.Pong -> RoomSyncStep(this)
+        // The view model ends the room on a deletion or a revoked membership, and re-reads the
+        // page on a member change; a pong answers a ping the TV never sends.
+        WatchRoomEventType.RoomDeleted,
+        WatchRoomEventType.RoomAccessRevoked,
+        WatchRoomEventType.MembersChanged,
+        WatchRoomEventType.Pong,
+        -> RoomSyncStep(this)
     }
 
     /**

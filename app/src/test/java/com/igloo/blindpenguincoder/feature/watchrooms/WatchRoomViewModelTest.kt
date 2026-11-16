@@ -2,6 +2,7 @@ package com.igloo.blindpenguincoder.feature.watchrooms
 
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.UserSummary
 import com.igloo.blindpenguincoder.data.model.WatchRoomClientEvent
 import com.igloo.blindpenguincoder.data.model.WatchRoomCommandType
@@ -50,17 +51,41 @@ class WatchRoomViewModelTest {
      */
     private class FakeRoomLink(var room: WatchRoomDetail) : WatchRoomLink {
         var join: ApiResult<Unit> = ApiResult.Success(Unit)
+        /** Answers the joins in order; [join] once it runs out. */
+        val joinAnswers = ArrayDeque<ApiResult<Unit>>()
         var delete: ApiResult<Unit> = ApiResult.Success(Unit)
+        var leave: ApiResult<Unit> = ApiResult.Success(Unit)
+        var update: ApiResult<Unit> = ApiResult.Success(Unit)
+        var invite: ApiResult<List<UserSummary>> = ApiResult.Success(emptyList())
+        var failSends = false
         var joins = 0
         var deletes = 0
+        var leaves = 0
+        var roomReads = 0
+        val updates = mutableListOf<List<Long>>()
         val sent = mutableListOf<WatchRoomClientEvent>()
         var server: Channel<WatchRoomServerEvent>? = null
 
-        override suspend fun watchRoom(id: Long) = ApiResult.Success(room)
+        override suspend fun watchRoom(id: Long): ApiResult<WatchRoomDetail> {
+            roomReads += 1
+            return ApiResult.Success(room)
+        }
 
         override suspend fun join(id: Long): ApiResult<Unit> {
             joins += 1
-            return join
+            return joinAnswers.removeFirstOrNull() ?: join
+        }
+
+        override suspend fun inviteUsers() = invite
+
+        override suspend fun updateMembers(id: Long, invitedUserIds: List<Long>): ApiResult<Unit> {
+            updates += invitedUserIds
+            return update
+        }
+
+        override suspend fun leave(id: Long): ApiResult<Unit> {
+            leaves += 1
+            return leave
         }
 
         override suspend fun delete(id: Long): ApiResult<Unit> {
@@ -75,6 +100,7 @@ class WatchRoomViewModelTest {
                     override val events = channel.receiveAsFlow()
 
                     override suspend fun send(command: WatchRoomClientEvent) {
+                        if (failSends) throw EOFException()
                         sent += command
                     }
                 },
@@ -301,5 +327,230 @@ class WatchRoomViewModelTest {
         viewModel.onForeground()
         runCurrent()
         assertEquals(2, link.joins)
+    }
+
+    private val ana = UserSummary(id = 3, name = "Ana", avatar = null)
+
+    @Test
+    fun `a 401 on join stops the reconnect loop`() = test(
+        FakeRoomLink(detail()).apply { join = ApiResult.Failure(AppError.Unauthorized) },
+    ) { viewModel, link ->
+        advanceTimeBy(60_000)
+
+        assertEquals("the sign-in gate takes over", 1, link.joins)
+        assertTrue(gone.isEmpty())
+        assertEquals(7L, viewModel.uiState.value.openRoomId)
+    }
+
+    @Test
+    fun `a join that fails for a moment is tried again, with the delay growing until a snapshot`() = test(
+        FakeRoomLink(detail()).apply {
+            joinAnswers += ApiResult.Failure(AppError.Network)
+            joinAnswers += ApiResult.Failure(AppError.Api("bad gateway", 502))
+        },
+    ) { viewModel, link ->
+        assertEquals(1, link.joins)
+        advanceTimeBy(1_001)
+        assertEquals(2, link.joins)
+        // The second wait is twice the first.
+        advanceTimeBy(1_500)
+        assertEquals(2, link.joins)
+        advanceTimeBy(501)
+        assertEquals(3, link.joins)
+
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
+        runCurrent()
+        assertEquals(RoomConnection.Live, viewModel.uiState.value.sync.connection)
+        // A snapshot resets the schedule: the next drop waits one second again.
+        link.hangUp()
+        runCurrent()
+        advanceTimeBy(1_001)
+        assertEquals(4, link.joins)
+    }
+
+    @Test
+    fun `another member's play takes over from a viewer starting the room alone`() = test { viewModel, link ->
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
+        runCurrent()
+        watched(viewModel)
+        assertTrue(viewModel.uiState.value.startingAlone)
+
+        link.emit(
+            WatchRoomServerEvent(
+                type = WatchRoomEventType.PlaybackChanged,
+                playback = WatchRoomPlaybackState(paused = false, positionSec = 30.0),
+            ),
+        )
+        runCurrent()
+
+        assertFalse(viewModel.uiState.value.startingAlone)
+        viewModel.onPlaybackStarted(0.4)
+        runCurrent()
+        assertTrue("the first frame no longer starts the room", link.sent.isEmpty())
+    }
+
+    @Test
+    fun `a send that fails on a dropping link is swallowed`() = test { viewModel, link ->
+        link.emit(snapshot(paused = false, position = 100.0, connected = listOf(1, 2)))
+        runCurrent()
+        link.failSends = true
+
+        viewModel.onTransport(TransportCommand.Pause, 100.0)
+        runCurrent()
+
+        assertTrue(link.sent.isEmpty())
+        assertEquals(7L, viewModel.uiState.value.openRoomId)
+    }
+
+    @Test
+    fun `a close that finds the room already gone leaves it`() = test(
+        FakeRoomLink(detail()).apply { delete = ApiResult.Failure(AppError.Api("room not found", 404)) },
+    ) { viewModel, _ ->
+        viewModel.requestClose()
+        viewModel.confirmClose()
+        runCurrent()
+
+        assertEquals(listOf(7L to "The watch room for Heat was closed."), gone)
+        assertNull(viewModel.uiState.value.openRoomId)
+    }
+
+    @Test
+    fun `a member change re-reads the page`() = test { viewModel, link ->
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1, 2)))
+        runCurrent()
+        val reads = link.roomReads
+        link.room = detail().copy(members = listOf(me, ana))
+
+        link.emit(WatchRoomServerEvent(type = WatchRoomEventType.MembersChanged, members = listOf(me, ana)))
+        runCurrent()
+
+        assertEquals(reads + 1, link.roomReads)
+        val page = (viewModel.uiState.value.details as DetailsState.Loaded).value
+        assertEquals(listOf(1L, 3L), page.members.map { it.id })
+    }
+
+    @Test
+    fun `a revoked membership leaves the room without reconnecting`() = test(
+        FakeRoomLink(detail(isOwner = false)),
+    ) { viewModel, link ->
+        link.emit(WatchRoomServerEvent(type = WatchRoomEventType.RoomAccessRevoked))
+        runCurrent()
+
+        assertEquals(listOf(7L to "You're no longer in the watch room for Heat."), gone)
+        assertNull(viewModel.uiState.value.openRoomId)
+        advanceTimeBy(20_000)
+        assertEquals(1, link.joins)
+    }
+
+    @Test
+    fun `an invitee leaves after confirming`() = test(FakeRoomLink(detail(isOwner = false))) { viewModel, link ->
+        viewModel.requestLeave()
+        assertTrue(viewModel.uiState.value.confirmingLeave)
+        assertTrue(viewModel.uiState.value.dialogOpen)
+
+        viewModel.confirmLeave()
+        runCurrent()
+
+        assertEquals(1, link.leaves)
+        assertEquals(listOf(7L to "You left the watch room for Heat."), gone)
+    }
+
+    @Test
+    fun `a leave that fails stays in the room and says why`() = test(
+        FakeRoomLink(detail(isOwner = false)).apply { leave = ApiResult.Failure(AppError.Network) },
+    ) { viewModel, _ ->
+        viewModel.requestLeave()
+        viewModel.confirmLeave()
+        runCurrent()
+
+        val state = viewModel.uiState.value
+        assertTrue(gone.isEmpty())
+        assertFalse(state.confirmingLeave)
+        assertFalse(state.leaving)
+        assertTrue(state.notice!!.startsWith("Couldn't leave the room"))
+    }
+
+    @Test
+    fun `a leave answered 403 means the room was already not this user's`() = test(
+        FakeRoomLink(detail(isOwner = false)).apply { leave = ApiResult.Failure(AppError.Api("access denied", 403)) },
+    ) { viewModel, link ->
+        viewModel.requestLeave()
+        viewModel.confirmLeave()
+        runCurrent()
+
+        assertEquals(1, link.leaves)
+        assertEquals(listOf(7L to "You left the watch room for Heat."), gone)
+        assertNull(viewModel.uiState.value.openRoomId)
+    }
+
+    @Test
+    fun `the owner edits invitees from the room's current ones`() = test(
+        FakeRoomLink(detail()).apply { invite = ApiResult.Success(listOf(maria, ana)) },
+    ) { viewModel, link ->
+        viewModel.editInvitees()
+        runCurrent()
+        val editing = viewModel.uiState.value.editing!!
+        assertEquals(setOf(2L), editing.selected)
+        assertEquals(listOf(2L, 3L), (editing.people as IglooRailState.Loaded).items.map { it.id })
+        assertFalse(editing.changed)
+
+        // Unchanged, Save sends nothing.
+        viewModel.saveInvitees()
+        runCurrent()
+        assertTrue(link.updates.isEmpty())
+
+        viewModel.toggleInvitee(2)
+        viewModel.toggleInvitee(3)
+        link.room = detail().copy(members = listOf(me, ana))
+        val reads = link.roomReads
+        viewModel.saveInvitees()
+        runCurrent()
+
+        assertEquals(listOf(listOf(3L)), link.updates)
+        assertNull(viewModel.uiState.value.editing)
+        assertEquals(reads + 1, link.roomReads)
+        val page = (viewModel.uiState.value.details as DetailsState.Loaded).value
+        assertEquals(listOf(1L, 3L), page.members.map { it.id })
+    }
+
+    @Test
+    fun `an edit that fails closes the dialog and says why on the page`() = test(
+        FakeRoomLink(detail()).apply {
+            invite = ApiResult.Success(listOf(maria, ana))
+            update = ApiResult.Failure(AppError.Network)
+        },
+    ) { viewModel, _ ->
+        viewModel.editInvitees()
+        runCurrent()
+        viewModel.toggleInvitee(3)
+        viewModel.saveInvitees()
+        runCurrent()
+
+        val state = viewModel.uiState.value
+        assertNull(state.editing)
+        assertTrue(state.notice!!.startsWith("Couldn't update the invitees"))
+    }
+
+    @Test
+    fun `people that fail to load can be retried, and only the owner can edit`() = test(
+        FakeRoomLink(detail()).apply { invite = ApiResult.Failure(AppError.Network) },
+    ) { viewModel, link ->
+        viewModel.editInvitees()
+        runCurrent()
+        assertTrue(viewModel.uiState.value.editing!!.people is IglooRailState.Error)
+
+        link.invite = ApiResult.Success(listOf(maria))
+        viewModel.retryInvitees()
+        runCurrent()
+        assertTrue(viewModel.uiState.value.editing!!.people is IglooRailState.Loaded)
+
+        viewModel.dismissEdit()
+        assertNull(viewModel.uiState.value.editing)
+    }
+
+    @Test
+    fun `an invitee cannot open Edit invitees`() = test(FakeRoomLink(detail(isOwner = false))) { viewModel, _ ->
+        viewModel.editInvitees()
+        assertNull(viewModel.uiState.value.editing)
     }
 }

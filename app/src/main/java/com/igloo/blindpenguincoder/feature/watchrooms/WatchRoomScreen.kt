@@ -68,14 +68,15 @@ import kotlinx.coroutines.delay
 
 /**
  * One watch room (docs/design-system.md section 11.10.1): the movie over its backdrop, who hosts
- * the room and what it fixed, where it is now, the Watch action — and for the owner Edit room and
- * Close room — over the people in it, each Watching or Away.
+ * the room and what it fixed, where it is now, the Watch action — for the owner Edit invitees and
+ * Close room, for an invitee Leave room — over the people in it, each Watching or Away.
  *
  * Being on this screen is being in the room: its view model connects as it opens, and the start
  * effect here takes the link down with the app and back up with it. The host owns the room's
  * existence, Back and the player Watch opens; [watchReturnRequester] rides Watch so closing the
- * player lands back on it. Close room's confirmation is drawn here, and the host gates its own
- * Back while [WatchRoomUiState.confirmingClose] is up (section 9.3).
+ * player lands back on it. Close room's and Leave room's confirmations and the Edit invitees
+ * dialog are drawn here, and the host gates its own Back while [WatchRoomUiState.dialogOpen]
+ * (section 9.3).
  */
 @Composable
 fun WatchRoomScreen(
@@ -88,16 +89,16 @@ fun WatchRoomScreen(
 ) {
     val entryRequester = remember { FocusRequester() }
     val closeRequester = remember { FocusRequester() }
+    val leaveRequester = remember { FocusRequester() }
+    val editRequester = remember { FocusRequester() }
     val page = (state.details as? DetailsState.Loaded)?.value
-    // The confirmation gone with the room still here — Cancel, Back, or a close that failed —
-    // hands focus back to Close room, the control that asked (section 9.3). An effect, not the
-    // dismiss callback, because a failure ends it from the view model; Close room stays composed
-    // either way, so the request cannot land on a detached node.
-    var wasConfirming by remember { mutableStateOf(false) }
-    LaunchedEffect(state.confirmingClose) {
-        if (wasConfirming && !state.confirmingClose) closeRequester.requestFocusSafely()
-        wasConfirming = state.confirmingClose
-    }
+    // A dialog gone with the room still here — Cancel, Back, a save, or a request that failed —
+    // hands focus back to the control that opened it (section 9.3). An effect, not the dismiss
+    // callback, because the view model ends some of them; the opener stays composed either way,
+    // so the request cannot land on a detached node.
+    ReturnFocusWhenClosed(state.confirmingClose, closeRequester)
+    ReturnFocusWhenClosed(state.confirmingLeave, leaveRequester)
+    ReturnFocusWhenClosed(state.editing != null, editRequester)
 
     LifecycleStartEffect(actions) {
         actions.onForeground()
@@ -122,7 +123,7 @@ fun WatchRoomScreen(
             .testTag("watch_room"),
     ) {
         // The confirmation is a modal: what it covers leaves the semantics tree (section 9.3).
-        Box(modifier = Modifier.clearedSemanticsIf(state.confirmingClose)) {
+        Box(modifier = Modifier.clearedSemanticsIf(state.dialogOpen)) {
             when (val details = state.details) {
                 is DetailsState.Loading -> DetailsHeroSkeleton(
                     artworkAspect = IglooTheme.layout.posterAspect,
@@ -147,6 +148,8 @@ fun WatchRoomScreen(
                     actions = actions,
                     entryRequester = entryRequester,
                     closeRequester = closeRequester,
+                    leaveRequester = leaveRequester,
+                    editRequester = editRequester,
                     watchReturnRequester = watchReturnRequester,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
@@ -169,6 +172,34 @@ fun WatchRoomScreen(
                 pendingText = "Closing room…",
             )
         }
+        if (state.confirmingLeave && page != null) {
+            IglooConfirmDialog(
+                title = "Leave this watch room?",
+                body = "You'll leave the room for ${page.title} and it drops off your list. " +
+                    "Only ${page.members.firstOrNull { it.id == page.ownerId }?.name ?: "the host"} " +
+                    "can invite you back.",
+                confirmText = "Leave room",
+                dismissText = "Cancel",
+                onConfirm = actions.onConfirmLeave,
+                onDismiss = actions.onDismissLeave,
+                confirmVariant = IglooButtonVariant.Destructive,
+                pending = state.leaving,
+                pendingText = "Leaving room…",
+            )
+        }
+        val editing = state.editing
+        if (editing != null && page != null) {
+            EditInviteesDialog(title = page.title, editing = editing, actions = actions)
+        }
+    }
+}
+
+@Composable
+private fun ReturnFocusWhenClosed(open: Boolean, opener: FocusRequester) {
+    var wasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(open) {
+        if (wasOpen && !open) opener.requestFocusSafely()
+        wasOpen = open
     }
 }
 
@@ -179,6 +210,8 @@ private fun RoomContent(
     actions: WatchRoomActions,
     entryRequester: FocusRequester,
     closeRequester: FocusRequester,
+    leaveRequester: FocusRequester,
+    editRequester: FocusRequester,
     watchReturnRequester: FocusRequester,
     spokenAccessibilityEnabled: Boolean,
 ) {
@@ -237,6 +270,8 @@ private fun RoomContent(
                             overMedia = overMedia,
                             watchRequester = watchRequester,
                             closeRequester = closeRequester,
+                            leaveRequester = leaveRequester,
+                            editRequester = editRequester,
                             watchReturnRequester = watchReturnRequester,
                             upRequester = if (stops) infoRequester else Cancel,
                             downRequester = peopleRequester,
@@ -264,9 +299,9 @@ private fun RoomContent(
 }
 
 /**
- * Watch, then the owner's two: Edit room, which does nothing until the server can change a room,
- * and Close room. Watch is inert until the room's state is known — the player has to know where
- * to open. Every edge out of the row is pinned but down, to the people.
+ * Watch, then the owner's Edit invitees and Close room, or an invitee's Leave room. Watch is inert
+ * until the room's state is known — the player has to know where to open. Every edge out of the
+ * row is pinned but down, to the people.
  */
 @Composable
 private fun RoomActionRow(
@@ -276,17 +311,20 @@ private fun RoomActionRow(
     overMedia: Boolean,
     watchRequester: FocusRequester,
     closeRequester: FocusRequester,
+    leaveRequester: FocusRequester,
+    editRequester: FocusRequester,
     watchReturnRequester: FocusRequester,
     upRequester: FocusRequester,
     downRequester: FocusRequester,
     onActionFocused: (FocusRequester) -> Unit,
 ) {
-    val editRequester = remember { FocusRequester() }
     val buttons = buildList {
         add(watchRequester)
         if (page.isOwner) {
             add(editRequester)
             add(closeRequester)
+        } else {
+            add(leaveRequester)
         }
     }
     fun Modifier.inRow(requester: FocusRequester): Modifier {
@@ -318,9 +356,8 @@ private fun RoomActionRow(
         )
         if (page.isOwner) {
             IglooButton(
-                text = "Edit room",
-                // Not yet: the server cannot change a room once it is made (known-issues.md).
-                onClick = null,
+                text = "Edit invitees",
+                onClick = actions.onEditInvitees,
                 variant = IglooButtonVariant.Ghost,
                 overMedia = overMedia,
                 modifier = Modifier
@@ -334,6 +371,16 @@ private fun RoomActionRow(
                 modifier = Modifier
                     .testTag("watch_room_close")
                     .inRow(closeRequester),
+            )
+        } else {
+            IglooButton(
+                text = "Leave room",
+                onClick = actions.onRequestLeave,
+                variant = IglooButtonVariant.Ghost,
+                overMedia = overMedia,
+                modifier = Modifier
+                    .testTag("watch_room_leave")
+                    .inRow(leaveRequester),
             )
         }
     }

@@ -195,6 +195,58 @@ class WatchRoomRepositoryTest {
     }
 
     @Test
+    fun `update members puts the invitee list and leave posts to its route`() = runTest {
+        val requests = mutableListOf<HttpRequestData>()
+        val bodies = mutableListOf<String>()
+        val http = TestHttp {
+            requests += it
+            bodies += String(it.body.toByteArray())
+            jsonResponse("""{"error":false,"data":{"left":true}}""")
+        }
+
+        assertEquals(ApiResult.Success(Unit), http.watchRoomRepository.updateMembers(7, listOf(3, 2)))
+        assertEquals(ApiResult.Success(Unit), http.watchRoomRepository.leave(7))
+
+        assertEquals(
+            listOf(HttpMethod.Put to "/api/watch-rooms/7/members", HttpMethod.Post to "/api/watch-rooms/7/leave"),
+            requests.map { it.method to it.url.encodedPath },
+        )
+        assertEquals("""{"invited_user_ids":[3,2]}""", bodies.first())
+    }
+
+    @Test
+    fun `an owner leaving is the server's conflict`() = runTest {
+        val http = TestHttp {
+            respond(
+                """{"error":true,"message":"the room owner cannot leave; close the room instead"}""",
+                HttpStatusCode.Conflict,
+                headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+
+        val result = http.watchRoomRepository.leave(7)
+
+        assertEquals(409, ((result as ApiResult.Failure).error as AppError.Api).status)
+    }
+
+    @Test
+    fun `member list and revoked access frames decode`() {
+        assertEquals(
+            WatchRoomServerEvent(
+                type = WatchRoomEventType.MembersChanged,
+                members = listOf(UserSummary(id = 1, name = "Jose", avatar = null)),
+            ),
+            decodeRoomEvent(
+                """{"type":"members_changed","room_id":7,"members":[{"id":1,"name":"Jose","avatar":null}]}""",
+            ),
+        )
+        assertEquals(
+            WatchRoomServerEvent(type = WatchRoomEventType.RoomAccessRevoked),
+            decodeRoomEvent("""{"type":"room_access_revoked","room_id":7}"""),
+        )
+    }
+
+    @Test
     fun `invite users decodes everyone the server offers`() = runTest {
         var request: HttpRequestData? = null
         val http = TestHttp {

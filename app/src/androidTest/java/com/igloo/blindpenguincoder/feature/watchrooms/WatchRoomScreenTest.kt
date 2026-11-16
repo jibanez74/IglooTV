@@ -11,6 +11,8 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -21,6 +23,7 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.closedWatchRoomState
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.focusAndPress
 import com.igloo.blindpenguincoder.inertWatchRoomActions
@@ -57,6 +60,11 @@ class WatchRoomScreenTest {
     private var watches = 0
     private var closeRequests = 0
     private var closeDismissals = 0
+    private var leaveRequests = 0
+    private var leaveDismissals = 0
+    private var editDismissals = 0
+    private val toggled = mutableListOf<Long>()
+    private var saves = 0
     private val roomPlayRequests = MutableSharedFlow<VideoPlayRequest>(extraBufferCapacity = 1)
 
     /** The Watch Rooms pane, with room 1 opening over it the way the view model opens it. */
@@ -74,6 +82,41 @@ class WatchRoomScreenTest {
                         onDismissClose = {
                             closeDismissals += 1
                             room = room.copy(confirmingClose = false)
+                        },
+                        onRequestLeave = {
+                            leaveRequests += 1
+                            room = room.copy(confirmingLeave = true)
+                        },
+                        onDismissLeave = {
+                            leaveDismissals += 1
+                            room = room.copy(confirmingLeave = false)
+                        },
+                        onEditInvitees = {
+                            room = room.copy(
+                                editing = EditInviteesUi(
+                                    people = IglooRailState.Loaded(
+                                        listOf(
+                                            RoomMemberUi(id = 2, name = "Maria", avatarUrl = null),
+                                            RoomMemberUi(id = 3, name = "Ana", avatarUrl = null),
+                                        ),
+                                    ),
+                                    selected = setOf(2),
+                                    initial = setOf(2),
+                                ),
+                            )
+                        },
+                        onToggleInvitee = { id ->
+                            toggled += id
+                            room = room.copy(
+                                editing = room.editing?.let {
+                                    it.copy(selected = if (id in it.selected) it.selected - id else it.selected + id)
+                                },
+                            )
+                        },
+                        onSaveInvitees = { saves += 1 },
+                        onDismissEdit = {
+                            editDismissals += 1
+                            room = room.copy(editing = null)
                         },
                     ),
                     onRoomSelected = { id ->
@@ -107,12 +150,13 @@ class WatchRoomScreenTest {
     }
 
     @Test
-    fun theOwnerHasAnInertEditAndAClose() {
+    fun theOwnerHasEditInviteesAndClose() {
         openRoom()
 
-        composeRule.onNodeWithTag("watch_room_edit")
-            .assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+        composeRule.onNodeWithTag("watch_room_edit").assertHasClickAction()
+        composeRule.onNodeWithText("Edit invitees", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithTag("watch_room_close").assertHasClickAction()
+        composeRule.onNodeWithTag("watch_room_leave").assertDoesNotExist()
         composeRule.onNodeWithTag("watch_room_watch").performKeyInput { pressKey(Key.DirectionRight) }
         composeRule.onNodeWithTag("watch_room_edit").assertIsFocused()
         composeRule.onNodeWithTag("watch_room_edit").performKeyInput { pressKey(Key.DirectionRight) }
@@ -120,11 +164,54 @@ class WatchRoomScreenTest {
     }
 
     @Test
-    fun aGuestHasOnlyWatch() {
+    fun aGuestHasWatchAndLeave() {
         openRoom(testWatchRoomState(page = testWatchRoomPage(isOwner = false)))
 
         composeRule.onNodeWithTag("watch_room_edit").assertDoesNotExist()
         composeRule.onNodeWithTag("watch_room_close").assertDoesNotExist()
+        composeRule.onNodeWithTag("watch_room_watch").performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.onNodeWithTag("watch_room_leave").assertIsFocused().assertHasClickAction()
+    }
+
+    @Test
+    fun leaveAsksFirstAndBackOnlyDismissesTheQuestion() {
+        openRoom(testWatchRoomState(page = testWatchRoomPage(isOwner = false)))
+
+        composeRule.focusAndPress("watch_room_leave")
+        assertEquals(1, leaveRequests)
+        composeRule.onNodeWithText("Leave this watch room?").assertExists()
+        composeRule.onNodeWithText(
+            "You'll leave the room for Movie 1 and it drops off your list. Only Maria can invite you back.",
+        ).assertExists()
+        composeRule.pressBack()
+
+        assertEquals(1, leaveDismissals)
+        assertEquals("Back answers the question, not the room", 0, leaves)
+        composeRule.onNodeWithTag("watch_room_leave").assertIsFocused()
+    }
+
+    @Test
+    fun editInviteesChecksTheRoomsInviteesAndSavesOnlyAChange() {
+        openRoom()
+
+        composeRule.focusAndPress("watch_room_edit")
+        composeRule.onNodeWithTag("edit_invitees_dialog").assertExists()
+        composeRule.onNodeWithTag("edit_invitees_person_2").assertIsOn()
+        composeRule.onNodeWithTag("edit_invitees_person_3").assertIsOff()
+        composeRule.onNodeWithTag("edit_invitees_save")
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+
+        composeRule.focusAndPress("edit_invitees_person_3")
+        assertEquals(listOf(3L), toggled)
+        composeRule.onNodeWithTag("edit_invitees_person_3").assertIsOn()
+        composeRule.focusAndPress("edit_invitees_save")
+        assertEquals(1, saves)
+
+        composeRule.pressBack()
+        assertEquals(1, editDismissals)
+        assertEquals(0, leaves)
+        composeRule.onNodeWithTag("edit_invitees_dialog").assertDoesNotExist()
+        composeRule.onNodeWithTag("watch_room_edit").assertIsFocused()
     }
 
     @Test

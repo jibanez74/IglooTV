@@ -496,6 +496,13 @@ class OpenApiContractTest {
             ),
             Route("GET", "/api/watch-rooms/{id}", envelope(WatchRoomData.serializer())),
             Route("POST", "/api/watch-rooms/{id}/join"),
+            Route("POST", "/api/watch-rooms/{id}/leave"),
+            // The TV re-reads the room after a save, so the answer's body is not decoded.
+            Route(
+                "PUT",
+                "/api/watch-rooms/{id}/members",
+                body = UpdateWatchRoomMembersRequest.serializer(),
+            ),
             Route("DELETE", "/api/watch-rooms/{id}"),
             Route("GET", "/api/watch-rooms/{id}/ws"),
             Route("GET", "/api/watch-rooms/{id}/stream"),

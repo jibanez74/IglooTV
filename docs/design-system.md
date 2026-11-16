@@ -2940,15 +2940,25 @@ poster and a prose column — the title, "Hosted by {name}" with "(you)", the ro
 in the Playback Settings dialog's words ("Original quality — audio adjusted · English · 5.1
 surround · Subtitles off", `roomSettingsLine`, shared with §11.10.3), and where the room is now:
 "● Playing · 1:02:10" moving each second, "Paused at 0:00", "Connecting…" or "Reconnecting…".
-Under it the action row: **Watch** (Primary, play glyph), and for the owner **Edit room** (Ghost)
-and **Close room** (Destructive). Below the hero, **People in this room**: everyone, the host
+Under it the action row: **Watch** (Primary, play glyph), for the owner **Edit invitees**
+(Ghost) and **Close room** (Destructive), and for an invitee **Leave room** (Ghost). Below the hero, **People in this room**: everyone, the host
 first, each with an avatar at `icons.lg`, "(you)" on this viewer, a "Host" tag and a status dot —
 `primary` and "Watching" while connected (on this screen or in the player), `muted` and "Away"
 otherwise.
 
-**Edit room does nothing yet.** The server fixes a room's members and playback when it is created
-and has no way to change them; the button stands in its final place with no press (the
-`IglooButton` inert contract) until it does (docs/known-issues.md).
+**Edit invitees** opens a §9.3 list dialog over the room, the Watch Together dialog's shell
+(§11.10.3): everyone on the server as `IglooCheckRow`s with the room's invitees checked, then
+Cancel and **Save invitees**, inert (state "No changes") until a check differs. A save re-reads the
+room; a failure closes the dialog and says why on the page, as a dialog carries no inline error.
+Anyone unchecked leaves the room at once on every device: the server sends their sockets
+`room_access_revoked`, which leaves the room with "You're no longer in the watch room for {title}.",
+and the others `members_changed`, which re-reads the page. The room's mode and tracks stay fixed
+(docs/known-issues.md).
+
+**Leave room** asks first (§9.3 confirm, "Leave this watch room?", Destructive confirm "Leave
+room") and then leaves the room for good: it drops off the list on every device, and only the host
+can invite the viewer back. Back on either dialog answers the dialog, not the room, and focus returns
+to the button that opened it.
 
 **Watch** opens the player (§11.10.2) where the room is now. It is inert, its state "Connecting to
 the room", until the room's first snapshot says where that is. A **playing** room is joined
@@ -3185,6 +3195,16 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-11-16 — Watch rooms: edit invitees and leave; the Spotify meter goes (§11.5.1, §11.5.2, §11.10.1).**
+
+- **§11.10.1** — the owner's Edit invitees works (it was inert), an invitee gets Leave room, and
+  the room follows the server's `members_changed` and `room_access_revoked` events. A close
+  answered 404 counts as the room being gone.
+- **§11.5.1, §11.5.2** — the Spotify popularity meter and the popularity and followers facts are
+  gone: the server dropped the fields (Spotify stopped reporting them to Development Mode apps),
+  and the album and musician pages could no longer decode its answer. The Spotify glyph and
+  brand green went with them.
 
 **2026-11-13 — Watch Together: joining, following and making a watch room (§9.1, §9.3, §11.8, §11.10).**
 
