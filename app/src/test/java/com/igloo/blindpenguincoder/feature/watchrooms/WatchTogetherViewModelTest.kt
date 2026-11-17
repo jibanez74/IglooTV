@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -42,6 +43,7 @@ class WatchTogetherViewModelTest {
         settingsLine = "Original quality — audio adjusted · Spanish · Stereo · Subtitles off",
     )
     private val failures = mutableListOf<String>()
+    private val failureMovies = mutableListOf<Long>()
     private val createBodies = mutableListOf<String>()
 
     /** The server's answers to a create, in order; the last repeats. */
@@ -74,7 +76,10 @@ class WatchTogetherViewModelTest {
                 else -> error("unexpected request to ${request.url.encodedPath}")
             }
         }
-        val viewModel = WatchTogetherViewModel(http.watchRoomRepository, http.serverUrl) { failures += it }
+        val viewModel = WatchTogetherViewModel(http.watchRoomRepository, http.serverUrl) { movieId, notice ->
+            failureMovies += movieId
+            failures += notice
+        }
         try {
             viewModel.open(movieId = 42, title = "Heat", presets = presets)
             runCurrent()
@@ -161,6 +166,7 @@ class WatchTogetherViewModelTest {
             listOf("Couldn't create the watch room: direct playback is only available for MP4 movies"),
             failures,
         )
+        assertEquals("the reason goes to the page the room was made from", listOf(42L), failureMovies)
         assertFalse(viewModel.uiState.value.shown)
         assertFalse(viewModel.uiState.value.creating)
     }
@@ -184,4 +190,35 @@ class WatchTogetherViewModelTest {
         val rooms = created(viewModel) { advanceTimeBy(5_001) }
         assertEquals(listOf(CreatedRoom(42, 12)), rooms)
     }
+
+    @Test
+    fun `Watch Together on another movie while a room is being made says so and stays shut`() = test { viewModel ->
+        createAnswers = listOf(
+            HttpStatusCode.ServiceUnavailable to """{"error":true,"message":"busy"}""",
+        )
+        viewModel.toggle(2)
+        viewModel.create()
+        runCurrent()
+        assertTrue(viewModel.uiState.value.creating)
+        viewModel.dismiss()
+
+        viewModel.open(movieId = 7, title = "Ronin", presets = presets)
+
+        val state = viewModel.uiState.value
+        assertFalse(state.shown)
+        assertEquals(42L, state.movieId)
+        assertEquals(listOf(7L), failureMovies)
+        assertEquals(listOf(creationUnderWayNotice("Heat")), failures)
+
+        // On its own movie the running creation comes back as it was.
+        viewModel.open(movieId = 42, title = "Heat", presets = presets)
+        assertTrue(viewModel.uiState.value.shown)
+        assertTrue(viewModel.uiState.value.creating)
+
+        // Let the server make room so the creation ends inside the test.
+        createAnswers = listOf(HttpStatusCode.Created to """{"error":false,"data":{"room_id":12}}""")
+        advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.creating)
+    }
 }
+

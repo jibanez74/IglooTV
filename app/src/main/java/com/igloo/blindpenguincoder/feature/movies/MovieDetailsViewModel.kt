@@ -264,16 +264,17 @@ class MovieDetailsViewModel(
         loadAll(movieId, userInitiated = false)
     }
 
-    /** Optimistic: the button flips now and flips back if the server disagrees. */
     /**
      * Something another surface over this page has to say on it: a Watch Together that failed
-     * closes its dialog, and its reason lands here (section 9.3).
+     * closes its dialog, and its reason lands here (section 9.3). Dropped unless [movieId]'s page
+     * is the one open: a creation that fails after the user moved on is not this page's news.
      */
-    fun showNotice(message: String) {
-        if (_uiState.value.openMovieId == null) return
+    fun showNotice(movieId: Long, message: String) {
+        if (_uiState.value.openMovieId != movieId) return
         _uiState.update { it.copy(mutationNotice = message) }
     }
 
+    /** Optimistic: the button flips now and flips back if the server disagrees. */
     fun toggleWatched() {
         val movieId = _uiState.value.openMovieId ?: return
         val previous = mutationState(MutationType.Watched, movieId).displayed ?: false

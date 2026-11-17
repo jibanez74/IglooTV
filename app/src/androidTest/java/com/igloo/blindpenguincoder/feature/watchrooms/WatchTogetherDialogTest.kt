@@ -60,6 +60,7 @@ class WatchTogetherDialogTest {
     private var retries = 0
     private val selectedRooms = mutableListOf<Long>()
     private var leaves = 0
+    private var detailsCloses = 0
     private val createdRooms = MutableSharedFlow<CreatedRoom>(extraBufferCapacity = 1)
 
     /** Movie 1's page, with Watch Together opening as [opened] when the menu asks. */
@@ -97,6 +98,7 @@ class WatchTogetherDialogTest {
                         leaves += 1
                         room = closedWatchRoomState
                     },
+                    onCloseDetails = { detailsCloses += 1 },
                 )
             }
         }
@@ -224,4 +226,35 @@ class WatchTogetherDialogTest {
 
         assertEquals(emptyList<Long>(), selectedRooms)
     }
+
+    // A room that finishes creating while the page's More menu is up would open over it, and the
+    // menu, still composed underneath, would take the room's first Back. It stays in the list.
+    @Test
+    fun aRoomFinishedWhileMoreIsOpenDoesNotOpenOverIt() {
+        setContent()
+        composeRule.onNodeWithTag("details_more").requestFocus()
+        composeRule.onNodeWithTag("details_more").performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.onNodeWithTag("more_menu_item_0").assertIsFocused()
+
+        createdRooms.tryEmit(CreatedRoom(movieId = 1, roomId = 1))
+        composeRule.waitForIdle()
+
+        assertEquals(emptyList<Long>(), selectedRooms)
+        composeRule.onNodeWithTag("watch_room_layer").assertDoesNotExist()
+        composeRule.onNodeWithTag("more_menu_item_0").assertIsFocused()
+    }
+
+    // A creation still running for another movie keeps its dialog `shown`, but it is drawn only
+    // over its own movie: this page's Back must still close the page, not fall through.
+    @Test
+    fun aCreationForAnotherMovieLeavesThisPagesBackAlone() {
+        together = testWatchTogetherState().copy(movieId = 2, shown = true, creating = true)
+        setContent()
+        composeRule.onNodeWithTag("watch_together_dialog").assertDoesNotExist()
+
+        composeRule.pressBack()
+
+        assertEquals(1, detailsCloses)
+    }
 }
+

@@ -333,7 +333,7 @@ fun IglooRoot(container: IglooAppContainer) {
                             WatchTogetherViewModel(
                                 container.watchRoomRepository,
                                 container.serverUrlProvider,
-                                onCreateFailed = detailsViewModel::showNotice,
+                                onNotice = detailsViewModel::showNotice,
                             )
                         }
                     // One liked-id set for every track row in the session, so no two surfaces
@@ -460,7 +460,9 @@ fun IglooRoot(container: IglooAppContainer) {
                             if (movie != null && presets != null) {
                                 watchTogetherViewModel.open(movie.id, movie.title, presets)
                             } else {
-                                detailsViewModel.showNotice(WATCH_TOGETHER_UNAVAILABLE_NOTICE)
+                                libraryDetails.openMovieId?.let {
+                                    detailsViewModel.showNotice(it, WATCH_TOGETHER_UNAVAILABLE_NOTICE)
+                                }
                             }
                         },
                         createdRooms = watchTogetherViewModel.createdRooms,

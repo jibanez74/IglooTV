@@ -397,6 +397,10 @@ fun IglooApp(
     var playbackSettingsOpen by remember { mutableStateOf(false) }
     // Ephemeral by design: activity recreation must never finish a Play press made in the old
     // activity. Only an explicit Play activation arms it, and each emitted request consumes it.
+    // The Watch Together dialog is drawn only over its own movie: every gate that defers to it
+    // asks this, not `shown` alone, or a creation running for another movie would switch off
+    // Back and Play on this page with nothing on screen to answer them.
+    val watchTogetherOpen = watchTogether.shown && watchTogether.movieId == details.openMovieId
     var deferredPlayArmed by remember { mutableStateOf(false) }
     val deferredPlayContext by rememberUpdatedState(
         DeferredPlayContext(
@@ -404,7 +408,7 @@ fun IglooApp(
             libraryDetails = detailsActions is MovieDetailsActions.Library,
             moreMenuOpen = moreMenuOpen,
             playbackSettingsOpen = playbackSettingsOpen,
-            watchTogetherOpen = watchTogether.shown,
+            watchTogetherOpen = watchTogetherOpen,
             roomOpen = roomOpen,
             trailerOpen = trailerOpen,
             playerOpen = playerOpen,
@@ -595,10 +599,13 @@ fun IglooApp(
         null -> null
     }
     // A room made from a movie's page opens over that page — if the page is still what the user
-    // is looking at. Otherwise it is simply in the list, as an invitation would be.
+    // is looking at, with nothing of its own up (its More menu or Playback Settings would stay
+    // composed under the room and take its first Back). Otherwise it is simply in the list, as an
+    // invitation would be.
     val createdRoomCanOpen by rememberUpdatedState(
         { movieId: Long ->
-            details.openMovieId == movieId && !roomOpen && !playerOpen && !trailerOpen && !signOut.confirming
+            details.openMovieId == movieId && !roomOpen && !playerOpen && !trailerOpen && !signOut.confirming &&
+                !moreMenuOpen && !playbackSettingsOpen
         },
     )
     LaunchedEffect(createdRooms) {
@@ -662,7 +669,7 @@ fun IglooApp(
     BackHandler(
         enabled = anyDetailsOpen && !roomOpen && !signOut.confirming && !trailerOpen &&
             !playerOpen && !musicPlayerOpen && !moreMenuOpen && !playbackSettingsOpen &&
-            !watchTogether.shown,
+            !watchTogetherOpen,
     ) {
         val origin = detailsOrigin
         detailsOrigin = null
@@ -923,7 +930,7 @@ fun IglooApp(
                         deferredPlayArmed = false
                         onOpenWatchTogether()
                     },
-                    watchTogetherDialog = if (watchTogether.shown && watchTogether.movieId == details.openMovieId) {
+                    watchTogetherDialog = if (watchTogetherOpen) {
                         { WatchTogetherDialog(watchTogether, watchTogetherActions) }
                     } else {
                         null

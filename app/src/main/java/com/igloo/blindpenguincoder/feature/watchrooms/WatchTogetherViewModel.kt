@@ -58,13 +58,14 @@ data class CreatedRoom(val movieId: Long, val roomId: Long)
  * room with the page's current Playback Settings. The server can take half a minute to start a
  * room's stream, and refuses with 503 and a Retry-After while its transcode pool is full, which
  * is waited out on the HLS manifest's own budget. A creation that fails closes the dialog and
- * hands its reason to [onCreateFailed], for the page underneath: a dialog never carries an inline
- * error (section 9.3).
+ * hands its reason to [onNotice] for that movie's page: a dialog never carries an inline error
+ * (section 9.3). One creation runs at a time.
  */
 class WatchTogetherViewModel(
     private val rooms: WatchRoomRepository,
     private val serverUrl: ServerUrlProvider,
-    private val onCreateFailed: (notice: String) -> Unit,
+    /** Something to say on movie [movieId]'s page, if that page is still the one open. */
+    private val onNotice: (movieId: Long, notice: String) -> Unit,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WatchTogetherUiState())
@@ -75,10 +76,19 @@ class WatchTogetherViewModel(
 
     private var peopleJob: Job? = null
 
-    /** Opens the dialog for [movieId]; one already creating comes back as it was. */
+    /**
+     * Opens the dialog for [movieId]. A creation still running comes back as it was on its own
+     * movie's page; on another movie's page the dialog stays shut and the page says why, since
+     * the host only draws the dialog over its own movie.
+     */
     fun open(movieId: Long, title: String, presets: WatchRoomPresets) {
-        if (_uiState.value.creating) {
-            _uiState.update { it.copy(shown = true) }
+        val state = _uiState.value
+        if (state.creating) {
+            if (state.movieId == movieId) {
+                _uiState.update { it.copy(shown = true) }
+            } else {
+                onNotice(movieId, creationUnderWayNotice(state.title))
+            }
             return
         }
         _uiState.value = WatchTogetherUiState(movieId = movieId, shown = true, title = title, presets = presets)
@@ -141,7 +151,7 @@ class WatchTogetherViewModel(
                         val wait = busy?.let { capacityRetryDelayMs(++capacityWaits, it.retryAfterSec) }
                         if (wait == null) {
                             _uiState.value = WatchTogetherUiState()
-                            onCreateFailed(result.error.toFailureNotice("create the watch room"))
+                            onNotice(movieId, result.error.toFailureNotice("create the watch room"))
                             return@launch
                         }
                         _uiState.update { it.copy(pendingText = HLS_WAITING_FOR_CAPACITY_MESSAGE) }
@@ -183,6 +193,10 @@ fun WatchTogetherViewModel.actions() = WatchTogetherActions(
 /** Watch Together pressed before the page knows what the movie's file holds. */
 internal const val WATCH_TOGETHER_UNAVAILABLE_NOTICE =
     "Watch Together needs this movie's track details, which haven't loaded. Try again in a moment."
+
+/** Watch Together on another movie while a room for [title] is still being made. */
+internal fun creationUnderWayNotice(title: String) =
+    "A watch room for $title is still being created. Try again once it's ready."
 
 /** The web's words, on the same press: Create with nobody chosen. */
 internal const val NOBODY_INVITED_HINT = "Select at least one person to invite."
