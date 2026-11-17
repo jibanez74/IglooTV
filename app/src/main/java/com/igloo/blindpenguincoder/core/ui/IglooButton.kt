@@ -257,8 +257,8 @@ internal class LiveSwapFocus(
 @Composable
 internal fun rememberFocusAcrossLiveSwap(live: Boolean): LiveSwapFocus {
     val requester = remember { FocusRequester() }
-    // No wait for a screen reader: the control keeps the focus it had, so there is nothing new
-    // to announce.
-    val track = rememberRefocusAfterSwap(live, screenReader = false) { requester.requestFocusSafely() }
+    // The swap is a new focus node; under TalkBack the request waits for the accessibility
+    // snapshot like any other swapped anchor, or TV TalkBack can drop it (§9 swap rule).
+    val track = rememberRefocusAfterSwap(live) { requester.requestFocusSafely() }
     return remember(requester, track) { LiveSwapFocus(requester, track) }
 }

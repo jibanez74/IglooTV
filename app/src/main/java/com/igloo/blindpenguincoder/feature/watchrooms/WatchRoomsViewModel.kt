@@ -60,6 +60,8 @@ class WatchRoomsViewModel(
     val uiState: StateFlow<WatchRoomsUiState> = _uiState.asStateFlow()
 
     private var loadJob: Job? = null
+    /** Rooms gone while a list read was out: that read predates their removal. */
+    private val goneDuringLoad = mutableSetOf<Long>()
 
     /**
      * The pane came on screen. A list already loaded stays put and is reconciled in place, and
@@ -88,6 +90,7 @@ class WatchRoomsViewModel(
      * A reconcile, not a replace: focus stays where the user is unless it was on that card.
      */
     fun onRoomGone(roomId: Long, notice: String?) {
+        if (loadJob?.isActive == true) goneDuringLoad += roomId
         _uiState.update { state ->
             val rooms = state.rooms as? IglooRailState.Loaded ?: return@update state.copy(notice = notice)
             state.copy(
@@ -100,6 +103,7 @@ class WatchRoomsViewModel(
 
     private fun load(userInitiated: Boolean) {
         loadJob?.cancel()
+        goneDuringLoad.clear()
         if (userInitiated) _uiState.update { it.copy(refreshing = true, notice = null) }
         loadJob = viewModelScope.launch {
             val result = rooms.watchRooms().withServerAddress(serverUrl)
@@ -109,10 +113,14 @@ class WatchRoomsViewModel(
                     is ApiResult.Success -> {
                         val (list, server) = result.value
                         val replaces = userInitiated || !hadRooms
+                        // A room that went while this read was out stays gone, its reason with it.
+                        val current = list.filterNot { it.id in goneDuringLoad }
+                        val keepNotice = current.size != list.size
+                        goneDuringLoad.clear()
                         state.copy(
-                            rooms = IglooRailState.Loaded(list.map { it.toWatchRoomUi(server) }),
+                            rooms = IglooRailState.Loaded(current.map { it.toWatchRoomUi(server) }),
                             refreshing = false,
-                            notice = null,
+                            notice = if (keepNotice) state.notice else null,
                             contentGeneration = state.contentGeneration + if (replaces) 1 else 0,
                             reconcileGeneration = state.reconcileGeneration + if (replaces) 0 else 1,
                         )

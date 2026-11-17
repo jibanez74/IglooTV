@@ -2089,4 +2089,41 @@ class VideoPlayerScreenTest {
         assertEquals(listOf(true), engine.startRewinds)
         composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
     }
+
+    // The keys are disabled on the error surface; the system's media controls must be too, or
+    // a remote's Play would move the whole room while this TV shows Retry.
+    @Test
+    fun theSystemsControlsDoNothingOnTheErrorSurface() {
+        setRoomContent()
+        startPlaying()
+        engine.emit(VideoPlayerEvent.Error("The movie stream stopped unexpectedly."))
+        composeRule.waitForIdle()
+        val before = engine.playbackCommands.toList()
+
+        engine.emit(VideoPlayerEvent.SessionTransport(TransportCommand.Play))
+        engine.emit(VideoPlayerEvent.SessionTransport(TransportCommand.SeekTo(500.0)))
+        composeRule.waitForIdle()
+
+        assertEquals(before, engine.playbackCommands)
+        assertTrue(roomReports.isEmpty())
+    }
+
+    // A recovery prepared at the room's position from when it began; half a minute later the
+    // room is further on. Leaving Buffering catches up instead of waiting for the next event.
+    @Test
+    fun aPlayerLeavingBufferingCatchesUpWithTheRoom() {
+        setRoomContent()
+        startPlaying()
+        engine.emit(VideoPlayerEvent.Time(currentSec = 100.0, durationSec = 7200.0))
+        engine.emit(VideoPlayerEvent.Buffering)
+        composeRule.waitForIdle()
+        val before = engine.playbackCommands.toList()
+
+        roomClockMs = 30_000
+        engine.emit(VideoPlayerEvent.IsPlayingChanged(true))
+        composeRule.waitForIdle()
+
+        assertEquals(before + listOf("seek:130.0", "play"), engine.playbackCommands)
+        assertTrue("catching up is not this viewer's command", roomReports.isEmpty())
+    }
 }

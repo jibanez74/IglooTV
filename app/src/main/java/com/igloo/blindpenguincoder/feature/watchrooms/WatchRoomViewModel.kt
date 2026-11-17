@@ -158,6 +158,8 @@ class WatchRoomViewModel(
 
     private var connectJob: Job? = null
     private var inviteesJob: Job? = null
+    /** A save of the invitees is out; Edit invitees waits for its answer before opening again. */
+    private var savingInvitees = false
     /**
      * The open room has had a snapshot: the next one, after a drop or a return from the
      * background, is a reconnect, and the page re-reads the room.
@@ -244,8 +246,11 @@ class WatchRoomViewModel(
         room.update { it.copy(confirmingClose = true, notice = null) }
     }
 
+    /**
+     * Cancel or Back. While the close is out, Back still hides the question (§9.3: pending
+     * outlives the modal); the request runs on, and Close room cannot ask again until it ends.
+     */
     fun dismissClose() {
-        if (room.value.closing) return
         room.update { it.copy(confirmingClose = false) }
     }
 
@@ -258,12 +263,15 @@ class WatchRoomViewModel(
                 is ApiResult.Success -> roomGone(id, closedNotice())
                 // Already gone — its movie deleted, or closed on another device: the same end.
                 is ApiResult.Failure if result.error.isNotFound() -> roomGone(id, closedNotice())
-                is ApiResult.Failure -> room.update {
-                    it.copy(
-                        closing = false,
-                        confirmingClose = false,
-                        notice = result.error.toFailureNotice("close the room"),
-                    )
+                // A failure for a room already left (and another opened) is not this page's news.
+                is ApiResult.Failure -> if (loader.uiState.value.id == id) {
+                    room.update {
+                        it.copy(
+                            closing = false,
+                            confirmingClose = false,
+                            notice = result.error.toFailureNotice("close the room"),
+                        )
+                    }
                 }
             }
         }
@@ -274,8 +282,8 @@ class WatchRoomViewModel(
         room.update { it.copy(confirmingLeave = true, notice = null) }
     }
 
+    /** Cancel or Back; as [dismissClose], a leave already out runs on. */
     fun dismissLeave() {
-        if (room.value.leaving) return
         room.update { it.copy(confirmingLeave = false) }
     }
 
@@ -291,12 +299,14 @@ class WatchRoomViewModel(
                 is ApiResult.Failure if result.error.isNotFound() -> roomGone(id, closedNotice())
                 // Already not a member (left on another device): there is nothing left to leave.
                 is ApiResult.Failure if result.error.isRoomGone() -> roomGone(id, leftNotice())
-                is ApiResult.Failure -> room.update {
-                    it.copy(
-                        leaving = false,
-                        confirmingLeave = false,
-                        notice = result.error.toFailureNotice("leave the room"),
-                    )
+                is ApiResult.Failure -> if (loader.uiState.value.id == id) {
+                    room.update {
+                        it.copy(
+                            leaving = false,
+                            confirmingLeave = false,
+                            notice = result.error.toFailureNotice("leave the room"),
+                        )
+                    }
                 }
             }
         }
@@ -305,7 +315,8 @@ class WatchRoomViewModel(
     /** The owner's Edit invitees: the room's invitees checked, everyone else on the server listed. */
     fun editInvitees() {
         val page = (loader.uiState.value.details as? DetailsState.Loaded)?.value ?: return
-        if (!page.isOwner || room.value.editing != null) return
+        // A save still out answers first: reopening now would start from the old list.
+        if (!page.isOwner || room.value.editing != null || savingInvitees) return
         val invitees = page.members.map { it.id }.filter { it != page.ownerId }.toSet()
         room.update { it.copy(editing = EditInviteesUi(selected = invitees, initial = invitees), notice = null) }
         loadInvitees()
@@ -321,8 +332,8 @@ class WatchRoomViewModel(
         }
     }
 
+    /** Cancel or Back. A save already out runs on (§9.3); its answer still lands on the page. */
     fun dismissEdit() {
-        if (room.value.editing?.saving == true) return
         inviteesJob?.cancel()
         room.update { it.copy(editing = null) }
     }
@@ -339,8 +350,10 @@ class WatchRoomViewModel(
         val listed = (editing.people as? IglooRailState.Loaded)?.items.orEmpty().map { it.id }
         val invited = listed.filter { it in editing.selected } + (editing.selected - listed.toSet())
         room.update { it.copy(editing = editing.copy(saving = true)) }
+        savingInvitees = true
         viewModelScope.launch {
             val result = link.updateMembers(id, invited)
+            savingInvitees = false
             if (loader.uiState.value.id != id) return@launch
             when (result) {
                 is ApiResult.Success -> {
@@ -449,9 +462,15 @@ class WatchRoomViewModel(
                                 room.update { state ->
                                     state.copy(
                                         sync = step.sync,
-                                        // Someone else moved the room first: it is theirs to follow.
-                                        startingAlone = state.startingAlone &&
-                                            event.type != WatchRoomEventType.PlaybackChanged,
+                                        // Someone else moved the room first, or a reconnect found it
+                                        // playing or no longer this viewer's alone: it is theirs to
+                                        // follow, and this player's first frame must not drag it back.
+                                        startingAlone = state.startingAlone && when (event.type) {
+                                            WatchRoomEventType.PlaybackChanged -> false
+                                            WatchRoomEventType.RoomSnapshot ->
+                                                step.sync.playhead?.paused == true && step.sync.alone
+                                            else -> true
+                                        },
                                     )
                                 }
                                 step.send?.let { deliver(connected, it) }

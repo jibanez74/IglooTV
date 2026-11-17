@@ -293,10 +293,19 @@ fun VideoPlayerScreen(
                     lastPositionSec = next.currentTimeSec
                     latestRoom?.onTransport(TransportCommand.Pause, next.currentTimeSec)
                 }
-                is VideoPlayerEvent.SessionTransport -> when (val command = event.command) {
-                    TransportCommand.Play -> play()
-                    TransportCommand.Pause -> pause()
-                    is TransportCommand.SeekTo -> seekToSec(command.seconds)
+                // The system's media controls obey the same gate as the keys: on the error surface,
+                // the resume question or an open menu they do nothing (in a room they would move
+                // everyone while this screen shows Retry).
+                is VideoPlayerEvent.SessionTransport -> if (
+                    next.phase != VideoPlayerPhase.Error &&
+                    next.phase != VideoPlayerPhase.AwaitingResume &&
+                    playerMenu == null
+                ) {
+                    when (val command = event.command) {
+                        TransportCommand.Play -> play()
+                        TransportCommand.Pause -> pause()
+                        is TransportCommand.SeekTo -> seekToSec(command.seconds)
+                    }
                 }
                 else -> Unit
             }
@@ -328,7 +337,11 @@ fun VideoPlayerScreen(
     val followable = state.phase == VideoPlayerPhase.Playing ||
         state.phase == VideoPlayerPhase.Paused ||
         state.phase == VideoPlayerPhase.Buffering
-    LaunchedEffect(engine, room?.followGeneration, followable) {
+    // Leaving Buffering checks the room again: a rebuild that prepared at the target the room
+    // had when it began (a recovery's preflight can take half a minute) would otherwise stay
+    // that far behind until the next room event. Within the drift tolerance this is a no-op.
+    val settled = state.phase == VideoPlayerPhase.Playing || state.phase == VideoPlayerPhase.Paused
+    LaunchedEffect(engine, room?.followGeneration, followable, settled) {
         val current = latestRoom ?: return@LaunchedEffect
         val playhead = current.playhead ?: return@LaunchedEffect
         if (!followable) return@LaunchedEffect

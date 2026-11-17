@@ -1135,4 +1135,25 @@ class ExoVideoPlayerEngineTest {
         assertEquals(1, engine.currentSubtitleTypeIndex)
         assertFalse(engine.statusMessages().contains(SUBTITLES_UNAVAILABLE_MESSAGE))
     }
+
+    // Two quick Forward presses from the system add up, though the screen has applied neither.
+    @Test
+    fun theSystemsRelativeSeeksAddUpBeforeTheScreenAppliesThem() {
+        val engine = engine()
+        onMain { engine.startPlayback(null, initialPlayWhenReady = true, rewindOnResume = true) }
+
+        var incrementSec = 0.0
+        onMain {
+            val session = (engine as ExoVideoPlayerEngine).sessionPlayer
+            incrementSec = session.seekForwardIncrement / 1000.0
+            session.seekForward()
+            session.seekForward()
+        }
+
+        val targets = engine.events.replayCache.filterIsInstance<VideoPlayerEvent.SessionTransport>()
+            .map { (it.command as TransportCommand.SeekTo).seconds }
+        assertEquals(2, targets.size)
+        assertTrue(incrementSec > 0.0)
+        assertEquals("the second press starts from the first's target", targets[0] + incrementSec, targets[1], 0.001)
+    }
 }

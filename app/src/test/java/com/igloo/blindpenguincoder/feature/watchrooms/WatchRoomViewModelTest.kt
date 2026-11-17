@@ -56,6 +56,9 @@ class WatchRoomViewModelTest {
         val joinAnswers = ArrayDeque<ApiResult<Unit>>()
         var delete: ApiResult<Unit> = ApiResult.Success(Unit)
         var leave: ApiResult<Unit> = ApiResult.Success(Unit)
+        /** Hold the close's and the save's answers until completed. */
+        var deleteGate: CompletableDeferred<Unit>? = null
+        var updateGate: CompletableDeferred<Unit>? = null
         /** Holds the leave's answer until completed, as a server that tells the sockets first. */
         var leaveGate: CompletableDeferred<Unit>? = null
         var update: ApiResult<Unit> = ApiResult.Success(Unit)
@@ -88,6 +91,7 @@ class WatchRoomViewModelTest {
 
         override suspend fun updateMembers(id: Long, invitedUserIds: List<Long>): ApiResult<Unit> {
             updates += invitedUserIds
+            updateGate?.await()
             return update
         }
 
@@ -99,6 +103,7 @@ class WatchRoomViewModelTest {
 
         override suspend fun delete(id: Long): ApiResult<Unit> {
             deletes += 1
+            deleteGate?.await()
             return delete
         }
 
@@ -736,5 +741,111 @@ class WatchRoomViewModelTest {
         // The owner's own uncheck of Ana stands; Maria is no longer there to invite back.
         assertEquals(emptySet<Long>(), editing.selected)
     }
-}
 
+    // §9.3: Back stays live while the request is out; it hides the question, the work runs on.
+    @Test
+    fun `Back hides a close in flight, which still ends the room`() = test(
+        FakeRoomLink(detail()).apply { deleteGate = CompletableDeferred() },
+    ) { viewModel, link ->
+        viewModel.requestClose()
+        viewModel.confirmClose()
+        runCurrent()
+
+        viewModel.dismissClose()
+        assertFalse(viewModel.uiState.value.dialogOpen)
+        assertTrue(viewModel.uiState.value.closing)
+        viewModel.requestClose()
+        assertFalse("Close room cannot ask again while one is out", viewModel.uiState.value.confirmingClose)
+
+        link.deleteGate!!.complete(Unit)
+        runCurrent()
+        assertEquals(listOf(7L to "The watch room for Heat was closed."), gone)
+    }
+
+    @Test
+    fun `Back hides a save in flight, and Edit invitees waits for its answer`() = test(
+        FakeRoomLink(detail()).apply {
+            invite = ApiResult.Success(listOf(maria, ana))
+            updateGate = CompletableDeferred()
+        },
+    ) { viewModel, link ->
+        viewModel.editInvitees()
+        runCurrent()
+        viewModel.toggleInvitee(3)
+        viewModel.saveInvitees()
+        runCurrent()
+
+        viewModel.dismissEdit()
+        assertNull(viewModel.uiState.value.editing)
+        viewModel.editInvitees()
+        assertNull("no new dialog from the old list", viewModel.uiState.value.editing)
+
+        link.updateGate!!.complete(Unit)
+        runCurrent()
+        assertEquals(listOf(listOf(2L, 3L)), link.updates)
+        viewModel.editInvitees()
+        runCurrent()
+        assertTrue(viewModel.uiState.value.editing != null)
+    }
+
+    // Room A's close fails after a socket event already took this viewer to room B.
+    @Test
+    fun `a close failure for a room already left does not touch the next one`() = test(
+        FakeRoomLink(detail()).apply {
+            delete = ApiResult.Failure(AppError.Network)
+            deleteGate = CompletableDeferred()
+        },
+    ) { viewModel, link ->
+        viewModel.requestClose()
+        viewModel.confirmClose()
+        runCurrent()
+        link.emit(WatchRoomServerEvent(type = WatchRoomEventType.RoomAccessRevoked))
+        runCurrent()
+
+        link.room = detail().copy(id = 8)
+        viewModel.open(8)
+        runCurrent()
+        link.deleteGate!!.complete(Unit)
+        runCurrent()
+
+        val state = viewModel.uiState.value
+        assertEquals(8L, state.openRoomId)
+        assertNull(state.notice)
+        assertFalse(state.closing)
+    }
+
+    // The TV went to the background before its first frame; someone else started the room meanwhile.
+    @Test
+    fun `a reconnect that finds the room playing ends a lone start`() = test { viewModel, link ->
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
+        runCurrent()
+        watched(viewModel)
+        assertTrue(viewModel.uiState.value.startingAlone)
+
+        link.hangUp()
+        runCurrent()
+        advanceTimeBy(1_001)
+        link.emit(snapshot(paused = false, position = 300.0, connected = listOf(1, 2)))
+        runCurrent()
+
+        assertFalse(viewModel.uiState.value.startingAlone)
+        viewModel.onPlaybackStarted(0.4)
+        runCurrent()
+        assertTrue("the first frame must not pull the room back", link.sent.isEmpty())
+    }
+
+    @Test
+    fun `a reconnect to a room still paused and empty keeps the lone start`() = test { viewModel, link ->
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
+        runCurrent()
+        watched(viewModel)
+
+        link.hangUp()
+        runCurrent()
+        advanceTimeBy(1_001)
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.startingAlone)
+    }
+}

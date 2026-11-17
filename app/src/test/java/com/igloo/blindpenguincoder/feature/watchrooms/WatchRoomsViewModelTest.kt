@@ -316,4 +316,31 @@ class WatchRoomsViewModelTest {
 
     private fun loadedRooms(model: WatchRoomsViewModel): List<WatchRoomUi> =
         (model.uiState.value.rooms as IglooRailState.Loaded).items
+
+    // A read already out when a room goes predates its removal: its answer must not put the card
+    // back, nor clear the reason the header gives.
+    @Test
+    fun `a read out when a room went away does not bring it back`() = runTest {
+        val answer = CompletableDeferred<Unit>()
+        var first = true
+        val http = roomsHttp {
+            if (first) {
+                first = false
+                jsonResponse(rooms(1, 2))
+            } else {
+                answer.await()
+                jsonResponse(rooms(1, 2))
+            }
+        }
+        val model = model(http)
+        model.refresh()
+        model.reload()
+
+        model.onRoomGone(2, "The watch room for Movie 2 was closed.")
+        answer.complete(Unit)
+
+        val state = model.uiState.value
+        assertEquals(listOf(1L), state.roomIds())
+        assertEquals("The watch room for Movie 2 was closed.", state.notice)
+    }
 }
