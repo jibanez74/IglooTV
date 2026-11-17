@@ -15,6 +15,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -76,6 +78,7 @@ fun IglooButton(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
+    val trackFocus = rememberFocusAcrossLiveSwap(live = onClick != null)
     val background = when (variant) {
         IglooButtonVariant.Primary -> when {
             !enabled -> colors.primary.copy(alpha = 0.4f)
@@ -105,7 +108,11 @@ fun IglooButton(
                 radius = IglooTheme.radius.lg,
                 fill = background,
             )
-            .onFocusChanged { focused = it.isFocused }
+            .focusRequester(trackFocus.requester)
+            .onFocusChanged {
+                focused = it.isFocused
+                trackFocus.onFocusChanged(it.isFocused)
+            }
             .then(
                 when {
                     !enabled -> Modifier
@@ -184,6 +191,7 @@ fun IglooIconButton(
 ) {
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
+    val trackFocus = rememberFocusAcrossLiveSwap(live = onClick != null)
     val background = when {
         overMedia -> OVER_MEDIA_CONTROL_FILL
         focused -> colors.focusFill()
@@ -200,7 +208,11 @@ fun IglooIconButton(
                 radius = IglooTheme.radius.lg,
                 fill = background,
             )
-            .onFocusChanged { focused = it.isFocused }
+            .focusRequester(trackFocus.requester)
+            .onFocusChanged {
+                focused = it.isFocused
+                trackFocus.onFocusChanged(it.isFocused)
+            }
             .then(
                 if (onClick != null) {
                     Modifier.clickable(
@@ -227,4 +239,26 @@ fun IglooIconButton(
     ) {
         IglooGlyph(icon = icon, tint = iconTint ?: foreground)
     }
+}
+
+/** What [rememberFocusAcrossLiveSwap] puts on a control. */
+internal class LiveSwapFocus(
+    val requester: FocusRequester,
+    val onFocusChanged: (Boolean) -> Unit,
+)
+
+/**
+ * Keeps focus on a control whose action comes and goes. An inert control is `focusable()` and a
+ * live one `clickable`, and those are two different focus nodes: swapping one for the other
+ * drops focus from a control that holds it, and nothing would put it back. A watch room's Watch
+ * did exactly that when the room's state arrived after the page — focus on Watch, then on
+ * nothing. The control is refocused right after the swap if it held focus just before.
+ */
+@Composable
+internal fun rememberFocusAcrossLiveSwap(live: Boolean): LiveSwapFocus {
+    val requester = remember { FocusRequester() }
+    // The swap is a new focus node; under TalkBack the request waits for the accessibility
+    // snapshot like any other swapped anchor, or TV TalkBack can drop it (§9 swap rule).
+    val track = rememberRefocusAfterSwap(live) { requester.requestFocusSafely() }
+    return remember(requester, track) { LiveSwapFocus(requester, track) }
 }

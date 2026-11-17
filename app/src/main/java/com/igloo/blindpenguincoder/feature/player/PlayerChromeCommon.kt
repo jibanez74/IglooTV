@@ -36,14 +36,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
@@ -174,6 +171,8 @@ internal fun PlayerTopBar(
     onFocused: () -> Unit = {},
     closeLabel: String = "Close player",
     subtitle: String? = null,
+    /** At the bar's far end, beside the title: a watch room's presence badge. */
+    titleAccessory: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -196,7 +195,8 @@ internal fun PlayerTopBar(
                 .pinnedSideways(down = downRequester)
                 .testTag(backTag),
         )
-        Column {
+        // With an accessory the title takes what is left and the accessory keeps its size.
+        Column(modifier = if (titleAccessory != null) Modifier.weight(1f) else Modifier) {
             IglooText(
                 text = title,
                 style = IglooTheme.typography.titleMedium.overMedia(true),
@@ -212,6 +212,7 @@ internal fun PlayerTopBar(
                 )
             }
         }
+        titleAccessory?.invoke()
     }
 }
 
@@ -321,24 +322,6 @@ internal fun Modifier.transportFocus(
         this.up = up
         down = FocusRequester.Cancel
     }
-
-/**
- * The transport announcement for a TalkBack focus parked anywhere: play-state flips driven by
- * media keys are otherwise silent. Polite — it narrates, it never interrupts. A null [text]
- * composes nothing, which is how a phase with nothing to say stays quiet.
- */
-@Composable
-internal fun PoliteAnnouncement(text: String?) {
-    if (text == null) return
-    Box(
-        modifier = Modifier
-            .size(1.dp)
-            .clearAndSetSemantics {
-                liveRegion = LiveRegionMode.Polite
-                contentDescription = text
-            },
-    )
-}
 
 /**
  * The global key map (section 11.8). While the chrome is hidden every handled key is swallowed

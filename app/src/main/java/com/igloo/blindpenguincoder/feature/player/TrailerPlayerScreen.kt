@@ -38,6 +38,7 @@ import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.iglooSafeArea
 import com.igloo.blindpenguincoder.core.design.iglooTween
+import com.igloo.blindpenguincoder.core.ui.PoliteAnnouncement
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPhase
 import com.igloo.blindpenguincoder.playback.youtube.TrailerPlayerEngine
@@ -250,7 +251,8 @@ private fun PlayerChrome(
             closeLabel = "Close trailer",
         )
 
-        Box(modifier = Modifier.weight(1f)) {
+        // The full width, so the hold message's centring is the picture's, not the left edge's.
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (state.phase == TrailerPhase.Loading) {
                 PlayerHoldMessage(text = "Loading trailer…", tag = "trailer_loading")
             }

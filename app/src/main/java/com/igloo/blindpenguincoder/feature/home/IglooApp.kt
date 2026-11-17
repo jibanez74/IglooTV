@@ -116,9 +116,18 @@ import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsScreen
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
+import com.igloo.blindpenguincoder.feature.watchrooms.CreatedRoom
+import com.igloo.blindpenguincoder.feature.watchrooms.RoomPresenceBadge
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomActions
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomScreen
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomUiState
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsActions
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsScreen
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsUiState
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchTogetherActions
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchTogetherDialog
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchTogetherUiState
+import com.igloo.blindpenguincoder.feature.watchrooms.toPlayerRoom
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
@@ -186,14 +195,16 @@ private data class DeferredPlayContext(
     val libraryDetails: Boolean,
     val moreMenuOpen: Boolean,
     val playbackSettingsOpen: Boolean,
+    val watchTogetherOpen: Boolean,
+    val roomOpen: Boolean,
     val trailerOpen: Boolean,
     val playerOpen: Boolean,
     val signOutConfirming: Boolean,
 ) {
     fun accepts(request: VideoPlayRequest): Boolean =
         libraryDetails && request.media == openMovieId?.let(PlaybackMediaRef::Movie) &&
-            !moreMenuOpen &&
-            !playbackSettingsOpen && !trailerOpen && !playerOpen && !signOutConfirming
+            !moreMenuOpen && !playbackSettingsOpen && !watchTogetherOpen && !roomOpen &&
+            !trailerOpen && !playerOpen && !signOutConfirming
 }
 
 @Composable
@@ -212,6 +223,18 @@ fun IglooApp(
     searchActions: SearchActions,
     watchRooms: WatchRoomsUiState,
     watchRoomsActions: WatchRoomsActions,
+    /** The open watch room's screen, and the player Watch opens over it. */
+    watchRoom: WatchRoomUiState,
+    watchRoomActions: WatchRoomActions,
+    onRoomSelected: (Long) -> Unit,
+    onLeaveRoom: () -> Unit,
+    /** The room's Watch press: where the room is, read at the press. */
+    roomPlayRequests: Flow<VideoPlayRequest> = emptyFlow(),
+    /** A movie page's Watch Together: its dialog, and the rooms it makes. */
+    watchTogether: WatchTogetherUiState,
+    watchTogetherActions: WatchTogetherActions,
+    onOpenWatchTogether: () -> Unit,
+    createdRooms: Flow<CreatedRoom> = emptyFlow(),
     /** The platform's speech recogniser, or a fake under instrumentation. */
     voiceSearch: VoiceSearch,
     details: MovieDetailsUiState,
@@ -306,6 +329,15 @@ fun IglooApp(
     // The fourth occupant, under the same exclusivity.
     val musicianOpen = musicianDetails.openMusicianId != null
     val anyDetailsOpen = detailsOpen || showOpen || albumOpen || musicianOpen
+    // A watch room is a layer of its own over the details slot (shell -> details -> room ->
+    // player), so the page it was opened from stays under it for Back to return to.
+    val roomOpen = watchRoom.openRoomId != null
+    // Where the room was opened from, for Back and for a room that goes away on its own.
+    var roomOrigin by rememberSaveable { mutableStateOf<RoomOrigin?>(null) }
+    // Parked on the Watch Rooms grid's entry card, so leaving a room lands on the card that
+    // opened it, and on the room's Watch, so closing its player lands there.
+    val watchRoomsReturnRequester = remember { FocusRequester() }
+    val roomWatchReturnRequester = remember { FocusRequester() }
     // The trailer player is the third overlay layer (shell -> details -> player); the host owns
     // its existence and its focus restore, the same contract the details overlay lives under.
     var trailerRequest by rememberSaveable(stateSaver = TrailerRequestSaver) {
@@ -337,8 +369,8 @@ fun IglooApp(
     // Which surface launched the music player, like videoPlayOrigin.
     var musicPlayOrigin by rememberSaveable { mutableStateOf<MusicPlayOrigin?>(null) }
     val musicPlayerOpen = musicPlayRequest != null
-    // Anything drawn over the shell: a details page or either player.
-    val shellCovered = anyDetailsOpen || trailerOpen || playerOpen || musicPlayerOpen
+    // Anything drawn over the shell: a details page, a watch room or either player.
+    val shellCovered = anyDetailsOpen || roomOpen || trailerOpen || playerOpen || musicPlayerOpen
     // Parked on the album page's launching action — Play Album, Shuffle, or a row's Play — so
     // closing the player restores focus to the control that launched it (section 6.3).
     val albumPlayReturnRequester = remember { FocusRequester() }
@@ -365,6 +397,10 @@ fun IglooApp(
     var playbackSettingsOpen by remember { mutableStateOf(false) }
     // Ephemeral by design: activity recreation must never finish a Play press made in the old
     // activity. Only an explicit Play activation arms it, and each emitted request consumes it.
+    // The Watch Together dialog is drawn only over its own movie: every gate that defers to it
+    // asks this, not `shown` alone, or a creation running for another movie would switch off
+    // Back and Play on this page with nothing on screen to answer them.
+    val watchTogetherOpen = watchTogether.shown && watchTogether.movieId == details.openMovieId
     var deferredPlayArmed by remember { mutableStateOf(false) }
     val deferredPlayContext by rememberUpdatedState(
         DeferredPlayContext(
@@ -372,6 +408,8 @@ fun IglooApp(
             libraryDetails = detailsActions is MovieDetailsActions.Library,
             moreMenuOpen = moreMenuOpen,
             playbackSettingsOpen = playbackSettingsOpen,
+            watchTogetherOpen = watchTogetherOpen,
+            roomOpen = roomOpen,
             trailerOpen = trailerOpen,
             playerOpen = playerOpen,
             signOutConfirming = signOut.confirming,
@@ -422,6 +460,18 @@ fun IglooApp(
             }
         }
     }
+    // The room's Watch: accepted only while the room is what the user is looking at.
+    val roomCanPlay by rememberUpdatedState(
+        roomOpen && !playerOpen && !watchRoom.dialogOpen && !signOut.confirming,
+    )
+    LaunchedEffect(roomPlayRequests) {
+        roomPlayRequests.collect { request ->
+            if (roomCanPlay) {
+                videoPlayRequest = request
+                videoPlayOrigin = VideoPlayOrigin.WatchRoom
+            }
+        }
+    }
     LaunchedEffect(showDetails.openShowId) {
         showPlayArmedSite = null
         // The player must not outlive the show page it launched from — a profile switch or
@@ -436,6 +486,7 @@ fun IglooApp(
             deferredPlayArmed = false
             moreMenuOpen = false
             playbackSettingsOpen = false
+            if (watchTogether.shown) watchTogetherActions.onDismiss()
             // The player must not outlive the details page it launched from — a profile switch
             // or session revalidation that closes the overlay takes the movie with it.
             if (videoPlayOrigin == VideoPlayOrigin.MovieDetails) videoPlayRequest = null
@@ -534,9 +585,61 @@ fun IglooApp(
             VideoPlayOrigin.ContinueWatchingRail ->
                 railReturnRequesters.getValue(HomeRail.ContinueWatching)
                     .takeIf { currentDestination == IglooDestination.Home }
+            VideoPlayOrigin.WatchRoom -> roomWatchReturnRequester
             null -> null
         }
         restoreFocus(returnRequester)
+    }
+    // Where a room's origin puts focus back once the room is gone.
+    fun roomReturnRequester(origin: RoomOrigin?): FocusRequester? = when (origin) {
+        RoomOrigin.WatchRoomsPane -> watchRoomsReturnRequester
+            .takeIf { currentDestination == IglooDestination.WatchRooms }
+        // The More trigger that led to Watch Together, on the movie page still under the room.
+        RoomOrigin.MovieDetails -> moreReturnRequester.takeIf { detailsOpen }
+        null -> null
+    }
+    // A room made from a movie's page opens over that page — if the page is still what the user
+    // is looking at, with nothing of its own up (its More menu or Playback Settings would stay
+    // composed under the room and take its first Back). Otherwise it is simply in the list, as an
+    // invitation would be.
+    val createdRoomCanOpen by rememberUpdatedState(
+        { movieId: Long ->
+            details.openMovieId == movieId && !roomOpen && !playerOpen && !trailerOpen && !signOut.confirming &&
+                !moreMenuOpen && !playbackSettingsOpen
+        },
+    )
+    LaunchedEffect(createdRooms) {
+        createdRooms.collect { created ->
+            if (createdRoomCanOpen(created.movieId)) {
+                roomOrigin = RoomOrigin.MovieDetails
+                onRoomSelected(created.roomId)
+            }
+        }
+    }
+    // The Watch Together dialog gone with its page still here — Cancel, Back, or a creation that
+    // failed and left its reason on the page — hands focus back to the More trigger (section 9.3).
+    // An effect, because a failure ends the dialog from its view model; the trigger stays
+    // composed under it, so the request never meets a detached node.
+    var watchTogetherWasShown by remember { mutableStateOf(false) }
+    LaunchedEffect(watchTogether.shown) {
+        if (watchTogetherWasShown && !watchTogether.shown && detailsOpen && !roomOpen) {
+            restoreFocus(moreReturnRequester)
+        }
+        watchTogetherWasShown = watchTogether.shown
+    }
+    val openRoom: (Long) -> Unit = { roomId ->
+        roomOrigin = RoomOrigin.WatchRoomsPane
+        onRoomSelected(roomId)
+    }
+    // A room that went away on its own — closed by its owner, its movie deleted, no longer this
+    // user's — takes its player with it, and focus goes back where the room was opened from.
+    // Back clears the origin before leaving, so this only answers the room's own exits.
+    LaunchedEffect(roomOpen) {
+        if (roomOpen) return@LaunchedEffect
+        if (videoPlayOrigin == VideoPlayOrigin.WatchRoom) videoPlayRequest = null
+        val origin = roomOrigin ?: return@LaunchedEffect
+        roomOrigin = null
+        restoreFocus(roomReturnRequester(origin))
     }
     val closeTrailer = {
         val origin = trailerRequest?.origin
@@ -564,8 +667,9 @@ fun IglooApp(
     // design-system.md section 9.3 requires the host to be deliberate about Back. While either
     // player is up, Back belongs to its own screen (chrome dismissal, then close).
     BackHandler(
-        enabled = anyDetailsOpen && !signOut.confirming && !trailerOpen &&
-            !playerOpen && !musicPlayerOpen && !moreMenuOpen && !playbackSettingsOpen,
+        enabled = anyDetailsOpen && !roomOpen && !signOut.confirming && !trailerOpen &&
+            !playerOpen && !musicPlayerOpen && !moreMenuOpen && !playbackSettingsOpen &&
+            !watchTogetherOpen,
     ) {
         val origin = detailsOrigin
         detailsOrigin = null
@@ -589,6 +693,16 @@ fun IglooApp(
         // movie — can leave its anchor uncomposed.
         restoreFocus(returnRequester)
     }
+    // Back from a room leaves it: its socket closes, which is how the others learn this viewer
+    // left. Its player and its dialogs (Close room, Leave room, Edit invitees) each answer Back first.
+    BackHandler(
+        enabled = roomOpen && !playerOpen && !watchRoom.dialogOpen && !signOut.confirming,
+    ) {
+        val origin = roomOrigin
+        roomOrigin = null
+        onLeaveRoom()
+        restoreFocus(roomReturnRequester(origin))
+    }
     BackHandler(enabled = !shellCovered && !signOut.confirming && !railHasFocus) {
         railOpenedByBack = true
         navigationRequesters.getValue(currentDestination).requestFocus()
@@ -607,7 +721,7 @@ fun IglooApp(
     // An overlay covers the shell completely, so the whole thing leaves TalkBack's traversal
     // while it is up — the same treatment the confirm dialog gets. Either player can sit
     // directly over the pane, with no overlay between.
-    val shellHidden = signOut.confirming || anyDetailsOpen || musicPlayerOpen || playerOpen
+    val shellHidden = signOut.confirming || anyDetailsOpen || roomOpen || musicPlayerOpen || playerOpen
     Box(modifier = Modifier.fillMaxSize().onFocusChanged { appHasFocus = it.hasFocus }) {
         IglooShell(
             user = user,
@@ -652,6 +766,8 @@ fun IglooApp(
                 searchActions = searchActions,
                 watchRooms = watchRooms,
                 watchRoomsActions = watchRoomsActions,
+                openRoom = openRoom,
+                watchRoomsReturnRequester = watchRoomsReturnRequester,
                 voiceSearch = voiceSearch,
                 trackLikes = trackLikes,
                 // The details header owns the notice while the overlay is up; rendering it here too
@@ -757,7 +873,7 @@ fun IglooApp(
                 )
             }
         } else if (detailsOpen) {
-            DetailsLayer(hiddenFromAccessibility = trailerOpen || playerOpen) {
+            DetailsLayer(hiddenFromAccessibility = trailerOpen || playerOpen || roomOpen) {
                 MovieDetailsScreen(
                     state = details.details,
                     actions = detailsActions,
@@ -810,12 +926,32 @@ fun IglooApp(
                         playbackSettingsOpen = false
                         restoreFocus(moreReturnRequester)
                     },
+                    onOpenWatchTogether = {
+                        deferredPlayArmed = false
+                        onOpenWatchTogether()
+                    },
+                    watchTogetherDialog = if (watchTogetherOpen) {
+                        { WatchTogetherDialog(watchTogether, watchTogetherActions) }
+                    } else {
+                        null
+                    },
                     mutationNotice = details.mutationNotice,
                     progressSyncError = progressSyncError.takeIf {
                         detailsActions is MovieDetailsActions.Library &&
                             videoPlayOrigin == VideoPlayOrigin.MovieDetails
                     },
                     onRetryProgressSync = videoPlayerViewModel::retryFailedSave,
+                    spokenAccessibilityEnabled = spokenAccessibilityEnabled,
+                )
+            }
+        }
+
+        if (roomOpen) {
+            DetailsLayer(hiddenFromAccessibility = playerOpen, tag = "watch_room_layer") {
+                WatchRoomScreen(
+                    state = watchRoom,
+                    actions = watchRoomActions,
+                    watchReturnRequester = roomWatchReturnRequester,
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
@@ -874,6 +1010,12 @@ fun IglooApp(
                     onAdvance = { next ->
                         videoPlayRequest = next
                         handedOffEpisode = true
+                    },
+                    room = watchRoom.toPlayerRoom(watchRoomActions).takeIf { request.watchRoomId != null },
+                    topBarAccessory = if (request.watchRoomId != null) {
+                        { RoomPresenceBadge(watchRoom) }
+                    } else {
+                        null
                     },
                 )
             }
@@ -1027,6 +1169,8 @@ private fun ContentPane(
     searchActions: SearchActions,
     watchRooms: WatchRoomsUiState,
     watchRoomsActions: WatchRoomsActions,
+    openRoom: (Long) -> Unit,
+    watchRoomsReturnRequester: FocusRequester,
     voiceSearch: VoiceSearch,
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
@@ -1147,8 +1291,10 @@ private fun ContentPane(
                 gridState = watchRoomsGridState,
                 contentStartRequester = contentStartRequester,
                 navigationRequester = navigationRequesters.getValue(IglooDestination.WatchRooms),
+                returnRequester = watchRoomsReturnRequester,
                 lastFocusedId = lastFocusedRoomId,
                 onItemFocused = { lastFocusedRoomId = it },
+                onRoomSelected = openRoom,
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
             )
 
@@ -1268,7 +1414,16 @@ private fun paneBranchOf(destination: IglooDestination): IglooDestination? =
 private enum class MusicPlayOrigin { AlbumDetails, MusicianDetails, MusicPane, SearchPane }
 
 /** Which surface launched the video player; see `videoPlayOrigin` in [IglooApp]. */
-private enum class VideoPlayOrigin { MovieDetails, ContinueWatchingRail, ShowDetailsHero, ShowDetailsEpisode }
+private enum class VideoPlayOrigin {
+    MovieDetails,
+    ContinueWatchingRail,
+    ShowDetailsHero,
+    ShowDetailsEpisode,
+    WatchRoom,
+}
+
+/** Which surface opened the watch room, so Back from it can put focus back there. */
+private enum class RoomOrigin { WatchRoomsPane, MovieDetails }
 
 /**
  * The origin a show-page launch takes: one per launching control, because the close restores
@@ -1692,10 +1847,14 @@ private val PLACEHOLDER_TEXT_MAX_WIDTH = 520.dp
  * stay in the tree, so a test can still assert what is not traversable.
  */
 @Composable
-private fun DetailsLayer(hiddenFromAccessibility: Boolean, content: @Composable () -> Unit) {
+private fun DetailsLayer(
+    hiddenFromAccessibility: Boolean,
+    tag: String = "details_layer",
+    content: @Composable () -> Unit,
+) {
     Box(
         modifier = Modifier
-            .testTag("details_layer")
+            .testTag(tag)
             .hiddenFromAccessibilityIf(hiddenFromAccessibility),
     ) {
         content()

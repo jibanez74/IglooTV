@@ -12,6 +12,7 @@ import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_BUSY_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SESSION_LOST_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_UNAUTHORIZED_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.WATCH_ROOM_TRACKS_CHANGED_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.playbackServerRefusedMessage
 
 /** The first HTTP status failure in [error]'s cause chain; null for non-HTTP failures. */
@@ -66,6 +67,8 @@ internal fun playerFailure(
         PlaybackFailure(PLAYBACK_SESSION_LOST_MESSAGE)
     httpResponseCode == 503 && isVideoHlsRequestPath(httpRequestPath) ->
         PlaybackFailure(PLAYBACK_SERVER_BUSY_MESSAGE)
+    httpResponseCode == 409 && httpRequestPath?.startsWith(WATCH_ROOM_PATH_PREFIX) == true ->
+        PlaybackFailure(WATCH_ROOM_TRACKS_CHANGED_MESSAGE)
     httpResponseCode != null -> PlaybackFailure(
         playbackServerRefusedMessage(httpResponseCode),
     )
@@ -81,6 +84,9 @@ internal fun playerFailure(
     )
     else -> PlaybackFailure("Playback failed ($errorCodeName).")
 }
+
+/** A room's direct stream and HLS assets both live under it, and both answer the 409. */
+private const val WATCH_ROOM_PATH_PREFIX = "/api/watch-rooms/"
 
 private val DECODING_ERROR_CODES = setOf(
     PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,

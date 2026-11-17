@@ -282,6 +282,23 @@ class WatchRoomsViewModelTest {
     }
 
     @Test
+    fun `a room that went away leaves the list at once and says why`() = runTest {
+        val http = roomsHttp { jsonResponse(rooms(1, 2, 3)) }
+        val model = model(http)
+        model.refresh()
+
+        model.onRoomGone(2, "The watch room for Movie 2 was closed.")
+
+        val state = model.uiState.value
+        assertEquals(listOf(1L, 3L), state.roomIds())
+        assertEquals("The watch room for Movie 2 was closed.", state.notice)
+        // A reconcile, so focus stays put unless it was on that card.
+        assertEquals(1, state.contentGeneration)
+        assertEquals(1, state.reconcileGeneration)
+        assertEquals("no re-read for it", 1, http.requests)
+    }
+
+    @Test
     fun `a sign-out clearing the address mid-load reads as a failed load`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val http = roomsHttp {
@@ -299,4 +316,31 @@ class WatchRoomsViewModelTest {
 
     private fun loadedRooms(model: WatchRoomsViewModel): List<WatchRoomUi> =
         (model.uiState.value.rooms as IglooRailState.Loaded).items
+
+    // A read already out when a room goes predates its removal: its answer must not put the card
+    // back, nor clear the reason the header gives.
+    @Test
+    fun `a read out when a room went away does not bring it back`() = runTest {
+        val answer = CompletableDeferred<Unit>()
+        var first = true
+        val http = roomsHttp {
+            if (first) {
+                first = false
+                jsonResponse(rooms(1, 2))
+            } else {
+                answer.await()
+                jsonResponse(rooms(1, 2))
+            }
+        }
+        val model = model(http)
+        model.refresh()
+        model.reload()
+
+        model.onRoomGone(2, "The watch room for Movie 2 was closed.")
+        answer.complete(Unit)
+
+        val state = model.uiState.value
+        assertEquals(listOf(1L), state.roomIds())
+        assertEquals("The watch room for Movie 2 was closed.", state.notice)
+    }
 }

@@ -117,7 +117,9 @@ enum class VideoLaunchSite { ExtrasRail, Hero }
  *
  * The Playback Settings dialog repeats the pattern once more: [playbackSettingsOpen] and both
  * transitions are the host's (its Back gating and focus hand-off live beside the menu's), while
- * the selection callbacks in [MovieDetailsActions.Library] are the page's contract.
+ * the selection callbacks in [MovieDetailsActions.Library] are the page's contract. Watch
+ * Together's dialog belongs to another feature, so the host hands it in whole as
+ * [watchTogetherDialog]; the menu item only asks for it ([onOpenWatchTogether]).
  */
 @Composable
 fun MovieDetailsScreen(
@@ -137,6 +139,8 @@ fun MovieDetailsScreen(
     onOpenPlaybackSettings: () -> Unit,
     onDismissPlaybackSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenWatchTogether: () -> Unit = {},
+    watchTogetherDialog: (@Composable () -> Unit)? = null,
     mutationNotice: String? = null,
     progressSyncError: String? = null,
     onRetryProgressSync: () -> Unit = {},
@@ -193,7 +197,7 @@ fun MovieDetailsScreen(
         Box(
             modifier = Modifier
                 .testTag("details_body")
-                .clearedSemanticsIf(moreMenuOpen || playbackSettingsOpen),
+                .clearedSemanticsIf(moreMenuOpen || playbackSettingsOpen || watchTogetherDialog != null),
         ) {
             DetailsBody(
                 state = state,
@@ -223,7 +227,7 @@ fun MovieDetailsScreen(
                 title = "More options",
                 items = buildList {
                     add(menuItem("Playback Settings", onOpenPlaybackSettings, onDismissMoreMenu))
-                    add(menuItem("Watch Together", {}, onDismissMoreMenu))
+                    add(menuItem("Watch Together", onOpenWatchTogether, onDismissMoreMenu))
                     add(menuItem("Technical Details", {}, onDismissMoreMenu))
                     if (isAdmin) {
                         add(menuItem("Identify Movie", {}, onDismissMoreMenu))
@@ -258,6 +262,8 @@ fun MovieDetailsScreen(
                 )
             }
         }
+
+        watchTogetherDialog?.invoke()
     }
 }
 

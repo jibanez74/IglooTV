@@ -67,4 +67,38 @@ class ReadOnlyDetailsLoaderTest {
             loader.close()
         }
     }
+
+    // Two re-reads of the same page (a watch room's member change, then a reconnect): the older
+    // answer arriving last must not replace the newer one.
+    @Test
+    fun `an older read of the same page cannot land over a newer refresh`() = runTest {
+        val pending = mutableListOf<Continuation<ApiResult<String>>>()
+        val loader = ReadOnlyDetailsLoader(
+            scope = backgroundScope,
+            createState = { ScreenState(id = it) },
+            openId = ScreenState::id,
+            details = ScreenState::details,
+            withDetails = { state, details -> state.copy(details = details) },
+            // Ignores cancellation, so the generation guard is what is tested.
+            fetch = { _: Long -> suspendCoroutine { pending += it } },
+            toUi = { it: String -> it },
+        )
+        loader.open(1)
+        runCurrent()
+        pending.removeAt(0).resume(ApiResult.Success("v1"))
+        runCurrent()
+
+        loader.refresh()
+        runCurrent()
+        loader.refresh()
+        runCurrent()
+        val (older, newer) = pending
+        newer.resume(ApiResult.Success("v3"))
+        runCurrent()
+        older.resume(ApiResult.Success("v2"))
+        runCurrent()
+
+        assertEquals(ScreenState(1, DetailsState.Loaded("v3")), loader.uiState.value)
+        loader.close()
+    }
 }

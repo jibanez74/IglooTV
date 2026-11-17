@@ -91,8 +91,8 @@ class OpenApiContractTest {
                 walker.root(route.label, serializer, spec.requestSchema(operation), Direction.Encode)
             }
         }
-        schemaRoots.forEach { (name, serializer) ->
-            walker.root(name, serializer, spec.schema(name), Direction.Decode)
+        schemaRoots.forEach { (name, serializer, direction) ->
+            walker.root(name, serializer, spec.schema(name), direction)
         }
         return walker
     }
@@ -488,10 +488,37 @@ class OpenApiContractTest {
             Route("GET", "/api/search/tracks", envelope(SearchPageData.serializer(TrackListItem.serializer()))),
 
             Route("GET", "/api/watch-rooms", envelope(WatchRoomsData.serializer())),
+            Route(
+                "POST",
+                "/api/watch-rooms",
+                envelope(CreateWatchRoomData.serializer()),
+                CreateWatchRoomRequest.serializer(),
+            ),
+            Route("GET", "/api/watch-rooms/{id}", envelope(WatchRoomData.serializer())),
+            Route("POST", "/api/watch-rooms/{id}/join"),
+            Route("POST", "/api/watch-rooms/{id}/leave"),
+            // The TV re-reads the room after a save, so the answer's body is not decoded.
+            Route(
+                "PUT",
+                "/api/watch-rooms/{id}/members",
+                body = UpdateWatchRoomMembersRequest.serializer(),
+            ),
+            Route("DELETE", "/api/watch-rooms/{id}"),
+            Route("GET", "/api/watch-rooms/{id}/ws"),
+            Route("GET", "/api/watch-rooms/{id}/stream"),
+            Route("GET", "/api/watch-rooms/{id}/hls/playlist.m3u8"),
+            Route("GET", "/api/users", envelope(InviteUsersData.serializer())),
         )
 
-        /** Models decoded outside a route's success body: `safeApiCall` reads the error body. */
-        val schemaRoots = mapOf("ErrorResponse" to MessageResponse.serializer())
+        /**
+         * Models read or written outside a route's JSON body: `safeApiCall` reads the error body,
+         * and a watch room's WebSocket carries the two event schemas the spec names on its route.
+         */
+        val schemaRoots = listOf(
+            Triple("ErrorResponse", MessageResponse.serializer(), Direction.Decode),
+            Triple("WatchRoomServerEvent", WatchRoomServerEvent.serializer(), Direction.Decode),
+            Triple("WatchRoomClientEvent", WatchRoomClientEvent.serializer(), Direction.Encode),
+        )
 
         /**
          * `Class.wire_field` to why the model is right and the spec is not, confirmed against

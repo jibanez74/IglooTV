@@ -54,6 +54,7 @@ import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import com.igloo.blindpenguincoder.playback.model.PlaybackGateResult
 import com.igloo.blindpenguincoder.playback.model.SUBTITLES_UNAVAILABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.TrackOption
+import com.igloo.blindpenguincoder.playback.model.TransportCommand
 import com.igloo.blindpenguincoder.playback.model.evaluatePlaybackGate
 import com.igloo.blindpenguincoder.playback.model.hlsAudioConversionFor
 import com.igloo.blindpenguincoder.playback.model.noun
@@ -145,6 +146,13 @@ internal class ExoVideoPlayerEngine(
     private var lastSessionLostRecoveryAtMs = 0L
     private var initialSelectionApplied = false
     private val playbackIntent = PlaybackIntent()
+
+    /**
+     * A watch room's shared session covers the whole movie from 0 and is everyone's, so this
+     * player never starts a session of its own elsewhere: no seek rebases and no resume rewinds.
+     * A far seek waits on the room's encoder instead (docs/known-issues.md).
+     */
+    private val roomSession = request.watchRoomId != null
 
     private val player: ExoPlayer = ExoPlayer.Builder(context)
         .setAudioAttributes(videoPlaybackAudioAttributes, /* handleAudioFocus= */ true)
@@ -281,7 +289,7 @@ internal class ExoVideoPlayerEngine(
             // Resuming over HLS rewinds a little; the session then starts right at the target.
             // Only a genuine resume earns it — a reconstruction already knows this visit's own
             // playhead, and rewinding again on every one walks the movie backwards.
-            startPositionSec != null && rewindOnResume ->
+            startPositionSec != null && rewindOnResume && !roomSession ->
                 hlsResumeStartSec(startPositionSec).toDouble()
             startPositionSec != null -> startPositionSec
             else -> 0.0
@@ -305,19 +313,22 @@ internal class ExoVideoPlayerEngine(
     }
 
     override fun seekTo(seconds: Double) {
+        // A relative seek is applied once the screen seeks there; any other seek supersedes it.
+        pendingSessionSeekSec = null
         if (!playbackIntent.acceptsCommands) return
         val pending = pendingRestart
         when {
             // The frozen source is about to be replaced, so it is no measure: a seek the new
             // session covers only moves where its source will be prepared.
-            pending != null -> if (shouldRebasePendingHlsSeek(seconds, pending.startSec)) {
+            pending != null -> if (!roomSession && shouldRebasePendingHlsSeek(seconds, pending.startSec)) {
                 holdRebase(seconds)
             } else {
                 dropHeldRebase()
                 pendingRestart = pending.copy(targetSec = seconds)
             }
             !isHls -> player.seekTo((seconds * 1000).toLong())
-            shouldRebaseHlsSeek(seconds, timelineOffsetSec, settledAbsoluteSec) -> holdRebase(seconds)
+            !roomSession && shouldRebaseHlsSeek(seconds, timelineOffsetSec, settledAbsoluteSec) ->
+                holdRebase(seconds)
             else -> {
                 // Back in range: a far target the same run passed through is dropped.
                 dropHeldRebase()
@@ -912,14 +923,16 @@ internal class ExoVideoPlayerEngine(
 
     /**
      * [IntentRoutingPlayer] shifted onto the absolute movie timeline, so the system's
-     * now-playing surface and Assistant seeks agree with the on-screen seek bar and every seek
-     * routes through the engine's rebase logic.
+     * now-playing surface and Assistant seeks agree with the on-screen seek bar. Its transport
+     * goes up to the screen as [VideoPlayerEvent.SessionTransport] instead of acting here: the
+     * screen runs it through the same controls a press does, which then come back down to
+     * [play], [pause] and [seekTo] and the rebase logic behind it.
      */
     private inner class AbsoluteTimelinePlayer(player: Player) : IntentRoutingPlayer(
         player,
         playbackIntent,
-        onPlay = { this@ExoVideoPlayerEngine.play() },
-        onPause = { this@ExoVideoPlayerEngine.pause() },
+        onPlay = { sessionTransport(TransportCommand.Play) },
+        onPause = { sessionTransport(TransportCommand.Pause) },
     ) {
         private val offsetMs: Long
             get() = (timelineOffsetSec * 1000).toLong()
@@ -934,21 +947,35 @@ internal class ExoVideoPlayerEngine(
         override fun getContentDuration(): Long = getDuration()
 
         override fun seekTo(positionMs: Long) {
-            this@ExoVideoPlayerEngine.seekTo(positionMs / 1000.0)
+            sessionTransport(TransportCommand.SeekTo(positionMs / 1000.0))
         }
 
         override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
-            this@ExoVideoPlayerEngine.seekTo(positionMs / 1000.0)
+            sessionTransport(TransportCommand.SeekTo(positionMs / 1000.0))
         }
 
-        override fun seekBack() {
-            this@ExoVideoPlayerEngine.seekTo(intendedAbsoluteSec() - seekBackIncrement / 1000.0)
-        }
+        override fun seekBack() = sessionSeekBy(-seekBackIncrement / 1000.0)
 
-        override fun seekForward() {
-            this@ExoVideoPlayerEngine.seekTo(intendedAbsoluteSec() + seekForwardIncrement / 1000.0)
-        }
+        override fun seekForward() = sessionSeekBy(seekForwardIncrement / 1000.0)
+
     }
+
+    private fun sessionTransport(command: TransportCommand) = emit(VideoPlayerEvent.SessionTransport(command))
+
+    /**
+     * The last relative seek handed to the screen and not yet applied: two quick presses must
+     * add up (100 s, +10, +10 = 120), not both start from where the player still is.
+     */
+    private var pendingSessionSeekSec: Double? = null
+
+    private fun sessionSeekBy(deltaSec: Double) {
+        val target = (pendingSessionSeekSec ?: intendedAbsoluteSec()) + deltaSec
+        pendingSessionSeekSec = target
+        sessionTransport(TransportCommand.SeekTo(target))
+    }
+
+    /** Instrumentation seam: the player the system's media controls and Assistant drive. */
+    internal val sessionPlayer: Player get() = session.player
 
     /** Instrumentation seam: the deterministic subtitle off/on contract is asserted on these. */
     internal val currentTrackSelectionParameters get() = player.trackSelectionParameters

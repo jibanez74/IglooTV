@@ -5,6 +5,7 @@ import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_BUSY_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SERVER_UNREACHABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_SESSION_LOST_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.PLAYBACK_UNAUTHORIZED_MESSAGE
+import com.igloo.blindpenguincoder.playback.model.WATCH_ROOM_TRACKS_CHANGED_MESSAGE
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -54,6 +55,23 @@ class PlayerErrorMappingTest {
         assertEquals(
             PLAYBACK_SERVER_BUSY_MESSAGE,
             event(httpResponseCode = 503, isHls = true, httpRequestPath = path).message,
+        )
+    }
+
+    @Test
+    fun `a watch room's 409 says its movie's file changed, over either stream`() {
+        listOf(
+            "/api/watch-rooms/7/stream" to false,
+            "/api/watch-rooms/7/hls/segment_1.m4s" to true,
+        ).forEach { (path, isHls) ->
+            assertEquals(
+                WATCH_ROOM_TRACKS_CHANGED_MESSAGE,
+                event(httpResponseCode = 409, isHls = isHls, httpRequestPath = path).message,
+            )
+        }
+        assertEquals(
+            "The server refused the stream (HTTP 409).",
+            event(httpResponseCode = 409, httpRequestPath = "/api/movies/7/stream").message,
         )
     }
 

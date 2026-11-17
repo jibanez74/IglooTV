@@ -26,6 +26,7 @@ import com.igloo.blindpenguincoder.playback.model.PlayableSubtitleTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.model.SUBTITLES_UNAVAILABLE_MESSAGE
 import com.igloo.blindpenguincoder.playback.model.TrackOption
+import com.igloo.blindpenguincoder.playback.model.TransportCommand
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import com.igloo.blindpenguincoder.playback.model.VideoPlayerEvent
 import kotlinx.coroutines.CompletableDeferred
@@ -233,6 +234,26 @@ class ExoVideoPlayerEngineTest {
     }
 
     @Test
+    fun aWatchRoomsSessionIsNeverRebasedOrRewound() {
+        val api = FakeHlsApi()
+        val engine = engine(playRequest(mode = PlaybackMode.Remux).copy(watchRoomId = 7), api)
+
+        // Joining a room mid-movie starts exactly where the room is.
+        onMain { engine.startPlayback(600.0, initialPlayWhenReady = false, rewindOnResume = true) }
+        waitFor("the room's manifest") { api.fetched.size == 1 }
+        assertEquals(600, api.fetched.single().startSec)
+
+        // The room's one session covers the movie from 0: far either way rides the player.
+        onMain {
+            engine.seekTo(20.0)
+            engine.seekTo(5_000.0)
+        }
+        SystemClock.sleep(HLS_SEEK_SETTLE_MS * 2)
+        instrumentation.waitForIdleSync()
+        assertEquals(1, api.fetched.size)
+    }
+
+    @Test
     fun aRunOfStepsPastTheWindowRebasesOnceAtItsFinalTarget() {
         val api = FakeHlsApi()
         val engine = engine(playRequest(mode = PlaybackMode.Remux), api)
@@ -326,6 +347,36 @@ class ExoVideoPlayerEngineTest {
         onMain { engine.selectAudioTrack("audio:1") }
         instrumentation.waitForIdleSync()
         assertEquals(2, api.fetched.size)
+    }
+
+    // --- the system's media controls ---
+
+    @Test
+    fun theSystemsTransportIsHandedToTheScreenOnTheAbsoluteTimeline() {
+        val engine = engine()
+        onMain { engine.startPlayback(null, initialPlayWhenReady = true, rewindOnResume = true) }
+
+        onMain {
+            val session = (engine as ExoVideoPlayerEngine).sessionPlayer
+            session.pause()
+            session.seekTo(120_000)
+            session.play()
+        }
+
+        assertEquals(
+            listOf(
+                TransportCommand.Pause,
+                TransportCommand.SeekTo(120.0),
+                TransportCommand.Play,
+            ),
+            engine.events.replayCache.filterIsInstance<VideoPlayerEvent.SessionTransport>().map { it.command },
+        )
+        // The engine left them to the screen: its intent never dropped to paused.
+        assertEquals(
+            listOf(true),
+            engine.events.replayCache.filterIsInstance<VideoPlayerEvent.PlayWhenReadyChanged>()
+                .map { it.playWhenReady }.distinct(),
+        )
     }
 
     // --- swapping modes ---
@@ -1083,5 +1134,26 @@ class ExoVideoPlayerEngineTest {
 
         assertEquals(1, engine.currentSubtitleTypeIndex)
         assertFalse(engine.statusMessages().contains(SUBTITLES_UNAVAILABLE_MESSAGE))
+    }
+
+    // Two quick Forward presses from the system add up, though the screen has applied neither.
+    @Test
+    fun theSystemsRelativeSeeksAddUpBeforeTheScreenAppliesThem() {
+        val engine = engine()
+        onMain { engine.startPlayback(null, initialPlayWhenReady = true, rewindOnResume = true) }
+
+        var incrementSec = 0.0
+        onMain {
+            val session = (engine as ExoVideoPlayerEngine).sessionPlayer
+            incrementSec = session.seekForwardIncrement / 1000.0
+            session.seekForward()
+            session.seekForward()
+        }
+
+        val targets = engine.events.replayCache.filterIsInstance<VideoPlayerEvent.SessionTransport>()
+            .map { (it.command as TransportCommand.SeekTo).seconds }
+        assertEquals(2, targets.size)
+        assertTrue(incrementSec > 0.0)
+        assertEquals("the second press starts from the first's target", targets[0] + incrementSec, targets[1], 0.001)
     }
 }

@@ -3,7 +3,7 @@
   "info": {
     "title": "Igloo API",
     "version": "0.1.0",
-    "description": "HTTP API for the Igloo self-hosted media center. Most JSON endpoints return a shared envelope with error, optional message, and optional data fields. Device bearer tokens issued via Quick Connect or device login (Authorization: Bearer igd_...) are accepted on most routes that accept cookieAuth, except device-management, Quick Connect lookup/approval, PIN retrieval, account deletion, and email and password changes, which require a cookie session. See each operation's security block for route-specific requirements. Authentication and session middleware failures return sanitized JSON error envelopes even on media, static-file, subtitle, image-proxy, HLS, and WebSocket routes. HEAD responses never include a body, including errors; their Content-Type describes the corresponding GET representation. Movie, show, season and episode images, cast and crew photos, and network logos hold TMDB image paths such as /abc.jpg, which clients request through /api/tmdb/images/{size}/{file}; album covers and musician photos hold the Spotify or Apple image URL. While the download_images setting is on, the server downloads these images into the static directory, and a field whose image it has downloaded holds that copy's URL under /api/static/ instead, with a ?v= version; clients request it as it is, with the same authentication as the API."
+    "description": "HTTP API for the Igloo self-hosted media center. Most JSON endpoints return a shared envelope with error, optional message, and optional data fields. Except for the optional movie-deletion body, JSON request bodies must contain a single value without unknown fields and are limited to 1 MiB; malformed or oversized bodies return 400. The shared decoder applies a 15-second read deadline when the response transport supports it. Device bearer tokens issued via Quick Connect or device login (Authorization: Bearer igd_...) are accepted on most routes that accept cookieAuth, except admin-only routes, device-management, Quick Connect lookup/approval, PIN retrieval, account deletion, and email and password changes, which require a cookie session. See each operation's security block for route-specific requirements. Authentication and session middleware failures return sanitized JSON error envelopes even on media, static-file, subtitle, image-proxy, HLS, and WebSocket routes. HEAD responses never include a body, including errors; their Content-Type describes the corresponding GET representation. Movie, show, season and episode images, cast and crew photos, and network logos hold TMDB image paths such as /abc.jpg, which clients request through /api/tmdb/images/{size}/{file}; album covers and musician photos hold the Spotify or Apple image URL. While the download_images setting is on, the server downloads these images into the static directory, and a field whose image it has downloaded holds that copy's URL under /api/static/ instead, with a ?v= version; clients request it as it is, with the same authentication as the API. JSON responses, HLS playlists, and WebVTT subtitles of 1,400 bytes or more are compressed with gzip when the request's Accept-Encoding accepts it: the response then carries Content-Encoding: gzip, and a response of that size carries Vary: Accept-Encoding whether or not it was compressed. Media streams, HLS segments, Matroska subtitle streams, images, and static files are never compressed."
   },
   "servers": [
     {
@@ -168,7 +168,7 @@
             "$ref": "#/components/responses/InternalServerError"
           }
         },
-        "description": "The email is matched exactly as sent: it is not trimmed and the match is case-sensitive. Passwords exceeding 72 UTF-8 bytes are invalid credentials and return 401. Rate limited to 10 requests per 5 minutes per client IP (the TCP peer address, not forwarded headers), shared with device login."
+        "description": "The email is matched exactly as sent: it is not trimmed and the match is case-sensitive. Passwords exceeding 72 UTF-8 bytes are invalid credentials and return 401. Rate limited to 10 requests per 5 minutes per client IP: the TCP peer address, or, when the peer is a proxy listed in the TRUSTED_PROXIES startup setting, the right-most X-Forwarded-For address that is not a trusted proxy. Shared with device login."
       }
     },
     "/api/auth/user": {
@@ -240,7 +240,7 @@
             "$ref": "#/components/responses/InternalServerError"
           }
         },
-        "description": "The email is matched exactly as sent: it is not trimmed and the match is case-sensitive. Passwords exceeding 72 UTF-8 bytes are invalid credentials and return 401. Rate limited to 10 requests per 5 minutes per client IP (the TCP peer address, not forwarded headers), shared with browser login."
+        "description": "The email is matched exactly as sent: it is not trimmed and the match is case-sensitive. Passwords exceeding 72 UTF-8 bytes are invalid credentials and return 401. Rate limited to 10 requests per 5 minutes per client IP: the TCP peer address, or, when the peer is a proxy listed in the TRUSTED_PROXIES startup setting, the right-most X-Forwarded-For address that is not a trusted proxy. Shared with browser login."
       }
     },
     "/api/quick-connect/initiate": {
@@ -271,7 +271,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "description": "Starts a pairing. The code expires 5 minutes after this request; approval does not extend it. Rate limited to 10 requests per minute per client IP (the TCP peer address, not forwarded headers). Returns 503 while 1,000 codes are already pending."
+        "description": "Starts a pairing. The code expires 5 minutes after this request; approval does not extend it. Rate limited to 10 requests per minute per client IP: the TCP peer address, or, when the peer is a proxy listed in the TRUSTED_PROXIES startup setting, the right-most X-Forwarded-For address that is not a trusted proxy. Returns 503 while 1,000 codes are already pending."
       }
     },
     "/api/quick-connect/redeem": {
@@ -280,7 +280,7 @@
           "Devices"
         ],
         "summary": "Poll a quick-connect code and receive a device token once approved",
-        "description": "Devices poll this endpoint at the advertised interval. Pending codes live only in this server process's memory, so a restart discards them. A 404 means the code or secret is missing, unknown, expired, or mismatched; the device should request a new code and start over. 400 is returned only for a malformed body. The approved response consumes the code; it is issued at most once per approval. A redeem that arrives while another request is still issuing the token for the same code answers pending, and a failed issuance leaves the code redeemable on the next poll. Rate limited to 60 requests per minute per client IP (the TCP peer address, not forwarded headers).",
+        "description": "Devices poll this endpoint at the advertised interval. Pending codes live only in this server process's memory, so a restart discards them. A 404 means the code or secret is missing, unknown, expired, or mismatched; the device should request a new code and start over. 400 is returned only for a malformed body. The approved response consumes the code; it is issued at most once per approval. A redeem that arrives while another request is still issuing the token for the same code answers pending, and a failed issuance leaves the code redeemable on the next poll. Rate limited to 60 requests per minute per client IP: the TCP peer address, or, when the peer is a proxy listed in the TRUSTED_PROXIES startup setting, the right-most X-Forwarded-For address that is not a trusted proxy.",
         "operationId": "redeemQuickConnect",
         "security": [],
         "requestBody": {
@@ -2104,7 +2104,7 @@
           "TV Shows"
         ],
         "summary": "Get an HLS playlist for a TV episode",
-        "description": "Creates or reuses the authenticated user's HLS session, then returns its media playlist. The same cookie or bearer authentication is required again on every rewritten manifest and asset request; credentials are not embedded in playlist URLs. Asset URLs propagate audio_track, the explicit audio profile pair, the normalized start, playback_session, and reload so they resolve the same session. Each user holds at most HLS_MAX_SESSIONS_PER_USER sessions (3 by default): at the cap the user's least recently used sessions are evicted, and 503 is returned only when every slot is still being created. Sessions expire after 5 minutes without a manifest or asset request. Creating a session ends the user's other sessions for the same media and playback_session (an earlier seek window, profile, or audio track), whose assets then return 404. They end as soon as the new session is admitted, before it is planned, so a creation that then fails (400, 422, 503, or 500) has still ended them. A session whose FFmpeg process failed is replaced on the next manifest request without keepalive=1. A cold manifest request can wait up to 30 seconds for a remux preflight (remux requests without a stored verdict), up to 15 seconds for transcode capacity, and up to 30 seconds for the first published output (init.mp4 for transcodes, the first segment for copy-video), so one creation can take about 75 seconds before a retryable 503; a request that joined a creation whose own client went away runs it again, up to three times, and returns 500 if each attempt is cancelled that way. 404 also covers a start position with no playable media, a session stopped or replaced while the request waited (request the manifest again), and a keepalive=1 request whose session no longer exists or failed. Responses generated by this handler carry Cache-Control: no-store, including handler errors. Authentication or session middleware failures (401 or 500) can omit this header.",
+        "description": "Creates or reuses the authenticated user's HLS session, then returns its media playlist. The same cookie or bearer authentication is required again on every rewritten manifest and asset request; credentials are not embedded in playlist URLs. Asset URLs propagate audio_track, the explicit audio profile pair, video_codecs, the normalized start, playback_session, and reload so they resolve the same session. Each user holds at most HLS_MAX_SESSIONS_PER_USER sessions (3 by default): at the cap the user's least recently used sessions are evicted, and 503 is returned only when every slot is still being created. Sessions expire after 5 minutes without a manifest or asset request. Creating a session ends the user's other sessions for the same media and playback_session (an earlier seek window, profile, or audio track), whose assets then return 404. They end as soon as the new session is admitted, before it is planned, so a creation that then fails (400, 422, 503, or 500) has still ended them. A session whose FFmpeg process failed is replaced on the next manifest request without keepalive=1. A cold manifest request can wait up to 30 seconds for a remux preflight (remux requests without a stored verdict), up to 15 seconds for transcode capacity, and up to 30 seconds for the first published output (init.mp4 for transcodes, the first segment for copy-video), so one creation can take about 75 seconds before a retryable 503; a request that joined a creation whose own client went away runs it again, up to three times, and returns 500 if each attempt is cancelled that way. 404 also covers a start position with no playable media, a session stopped or replaced while the request waited (request the manifest again), and a keepalive=1 request whose session no longer exists or failed. Responses generated by this handler carry Cache-Control: no-store, including handler errors. Authentication or session middleware failures (401 or 500) can omit this header.",
         "operationId": "episodeHlsManifest",
         "parameters": [
           {
@@ -2121,6 +2121,9 @@
           },
           {
             "$ref": "#/components/parameters/HLSAudioChannelsQuery"
+          },
+          {
+            "$ref": "#/components/parameters/HLSVideoCodecsQuery"
           },
           {
             "$ref": "#/components/parameters/StartQuery"
@@ -2192,6 +2195,9 @@
           },
           {
             "$ref": "#/components/parameters/HLSAudioChannelsQuery"
+          },
+          {
+            "$ref": "#/components/parameters/HLSVideoCodecsQuery"
           },
           {
             "$ref": "#/components/parameters/StartQuery"
@@ -2485,7 +2491,7 @@
           "TV Shows"
         ],
         "summary": "Extract a subtitle track as WebVTT",
-        "description": "Converts the text subtitle track at trackIndex, a zero-based position in the media's subtitle list (not the raw stream index), to WebVTT, with cues rebased by start. Image-based tracks return 415. Concurrent requests for the same file and track share one extraction, which keeps running when the request that started it goes away; it fails with 500 after 60 seconds or when the server begins shutting down. The result is cached per file and track for an hour, each cache hit renewing that hour, and a rescan of the file drops it. When the track has a copy on the server, made for a subtitle stream of the same track, the conversion reads that copy instead of the media file.",
+        "description": "Converts the text subtitle track at trackIndex, a zero-based position in the media's subtitle list (not the raw stream index), to WebVTT, with cues rebased by start. Bitmap tracks (PGS, DVD, DVB, and XSUB) return 415 before extraction. Other unsupported codecs can fail conversion with 500. Concurrent requests for the same file and track share one extraction, which keeps running when the request that started it goes away; it fails with 500 after 60 seconds or when the server begins shutting down. The result is cached per file and track for an hour, each cache hit renewing that hour, and a technical rescan of the file drops it. Requests after invalidation use a new extraction generation; older in-flight work cannot refill or renew the cache. When the track has a copy on the server, made for a subtitle stream of the same track, the conversion tries that copy with source-container timestamp normalization, falling back to the media file if the start-time probe or conversion fails.",
         "operationId": "episodeSubtitleWebVTT",
         "parameters": [
           {
@@ -3392,7 +3398,7 @@
           "Movies"
         ],
         "summary": "Get an HLS playlist for a movie",
-        "description": "Creates or reuses the authenticated user's HLS session, then returns its media playlist. The same cookie or bearer authentication is required again on every rewritten manifest and asset request; credentials are not embedded in playlist URLs. Asset URLs propagate audio_track, the explicit audio profile pair, the normalized start, playback_session, and reload so they resolve the same session. Each user holds at most HLS_MAX_SESSIONS_PER_USER sessions (3 by default): at the cap the user's least recently used sessions are evicted, and 503 is returned only when every slot is still being created. Sessions expire after 5 minutes without a manifest or asset request. Creating a session ends the user's other sessions for the same media and playback_session (an earlier seek window, profile, or audio track), whose assets then return 404. They end as soon as the new session is admitted, before it is planned, so a creation that then fails (400, 422, 503, or 500) has still ended them. A session whose FFmpeg process failed is replaced on the next manifest request without keepalive=1. A cold manifest request can wait up to 30 seconds for a remux preflight (remux requests without a stored verdict), up to 15 seconds for transcode capacity, and up to 30 seconds for the first published output (init.mp4 for transcodes, the first segment for copy-video), so one creation can take about 75 seconds before a retryable 503; a request that joined a creation whose own client went away runs it again, up to three times, and returns 500 if each attempt is cancelled that way. 404 also covers a start position with no playable media, a session stopped or replaced while the request waited (request the manifest again), and a keepalive=1 request whose session no longer exists or failed. Responses generated by this handler carry Cache-Control: no-store, including handler errors. Authentication or session middleware failures (401 or 500) can omit this header.",
+        "description": "Creates or reuses the authenticated user's HLS session, then returns its media playlist. The same cookie or bearer authentication is required again on every rewritten manifest and asset request; credentials are not embedded in playlist URLs. Asset URLs propagate audio_track, the explicit audio profile pair, video_codecs, the normalized start, playback_session, and reload so they resolve the same session. Each user holds at most HLS_MAX_SESSIONS_PER_USER sessions (3 by default): at the cap the user's least recently used sessions are evicted, and 503 is returned only when every slot is still being created. Sessions expire after 5 minutes without a manifest or asset request. Creating a session ends the user's other sessions for the same media and playback_session (an earlier seek window, profile, or audio track), whose assets then return 404. They end as soon as the new session is admitted, before it is planned, so a creation that then fails (400, 422, 503, or 500) has still ended them. A session whose FFmpeg process failed is replaced on the next manifest request without keepalive=1. A cold manifest request can wait up to 30 seconds for a remux preflight (remux requests without a stored verdict), up to 15 seconds for transcode capacity, and up to 30 seconds for the first published output (init.mp4 for transcodes, the first segment for copy-video), so one creation can take about 75 seconds before a retryable 503; a request that joined a creation whose own client went away runs it again, up to three times, and returns 500 if each attempt is cancelled that way. 404 also covers a start position with no playable media, a session stopped or replaced while the request waited (request the manifest again), and a keepalive=1 request whose session no longer exists or failed. Responses generated by this handler carry Cache-Control: no-store, including handler errors. Authentication or session middleware failures (401 or 500) can omit this header.",
         "operationId": "hlsManifest",
         "parameters": [
           {
@@ -3409,6 +3415,9 @@
           },
           {
             "$ref": "#/components/parameters/HLSAudioChannelsQuery"
+          },
+          {
+            "$ref": "#/components/parameters/HLSVideoCodecsQuery"
           },
           {
             "$ref": "#/components/parameters/StartQuery"
@@ -3480,6 +3489,9 @@
           },
           {
             "$ref": "#/components/parameters/HLSAudioChannelsQuery"
+          },
+          {
+            "$ref": "#/components/parameters/HLSVideoCodecsQuery"
           },
           {
             "$ref": "#/components/parameters/StartQuery"
@@ -3773,7 +3785,7 @@
           "Movies"
         ],
         "summary": "Extract a subtitle track as WebVTT",
-        "description": "Converts the text subtitle track at trackIndex, a zero-based position in the media's subtitle list (not the raw stream index), to WebVTT, with cues rebased by start. Image-based tracks return 415. Concurrent requests for the same file and track share one extraction, which keeps running when the request that started it goes away; it fails with 500 after 60 seconds or when the server begins shutting down. The result is cached per file and track for an hour, each cache hit renewing that hour, and a rescan of the file drops it. When the track has a copy on the server, made for a subtitle stream of the same track, the conversion reads that copy instead of the media file.",
+        "description": "Converts the text subtitle track at trackIndex, a zero-based position in the media's subtitle list (not the raw stream index), to WebVTT, with cues rebased by start. Bitmap tracks (PGS, DVD, DVB, and XSUB) return 415 before extraction. Other unsupported codecs can fail conversion with 500. Concurrent requests for the same file and track share one extraction, which keeps running when the request that started it goes away; it fails with 500 after 60 seconds or when the server begins shutting down. The result is cached per file and track for an hour, each cache hit renewing that hour, and a technical rescan of the file drops it. Requests after invalidation use a new extraction generation; older in-flight work cannot refill or renew the cache. When the track has a copy on the server, made for a subtitle stream of the same track, the conversion tries that copy with source-container timestamp normalization, falling back to the media file if the start-time probe or conversion fails.",
         "operationId": "subtitleWebVTT",
         "parameters": [
           {
@@ -3858,7 +3870,12 @@
           "Movies"
         ],
         "summary": "Replace local movie metadata from a TMDB movie",
-        "description": "Admin-only endpoint. Returns 503 when TMDB is not configured and 404 for an unknown movie before TMDB is contacted; a tmdb_id TMDB does not know returns 400, and any other failed TMDB lookup returns 500. Successful Identify atomically replaces TMDB descriptive metadata and relationships and clears pending enrichment retries. Audience rating and file-derived duration/runtime are preserved. Automatic scans retain the selected TMDB identity; stale in-flight enrichment cannot overwrite a changed identity. Failed Identify leaves metadata and retry state unchanged.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Returns 503 when TMDB is not configured and 404 for an unknown movie before TMDB is contacted; a tmdb_id TMDB does not know returns 400, and any other failed TMDB lookup returns 500. Successful Identify atomically replaces TMDB descriptive metadata and relationships and clears pending enrichment retries. Audience rating and file-derived duration/runtime are preserved. Automatic scans retain the selected TMDB identity; stale in-flight enrichment cannot overwrite a changed identity. Failed Identify leaves metadata and retry state unchanged.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "identifyMovie",
         "parameters": [
           {
@@ -3899,7 +3916,12 @@
           "Movies"
         ],
         "summary": "Partially update local movie metadata",
-        "description": "Admin-only endpoint. Only the fields present in the body change; a field sent as null is left unchanged. An empty string clears any field other than title to null (an empty title is stored as an empty string), and year 0 clears the year. Values are stored without format validation. A later successful TMDB enrichment, including after a file change or a pending retry, replaces descriptive fields and can overwrite manual edits. Identify pins the TMDB identity and clears pending retries; it does not protect edits from future enrichment.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Only the fields present in the body change; a field sent as null is left unchanged. An empty string clears any field other than title to null (an empty title is stored as an empty string), and year 0 clears the year. Values are stored without format validation. A later successful TMDB enrichment, including after a file change or a pending retry, replaces descriptive fields and can overwrite manual edits. Identify pins the TMDB identity and clears pending retries; it does not protect edits from future enrichment.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "updateMovieMetadata",
         "parameters": [
           {
@@ -3935,7 +3957,12 @@
           "Movies"
         ],
         "summary": "Delete a movie from the library",
-        "description": "Admin-only endpoint. The request body is optional and is never rejected. The file is deleted only when the body is a JSON object that sets delete_file to true; unknown fields or trailing content beside it do not prevent that, but a syntax error inside the object does. Deleting the movie also deletes its watch rooms: their members receive room_deleted and their connections close. With delete_file true the file is removed from disk; a failure to remove it is logged and the response is still 200.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. The request body is optional and is never rejected. The file is deleted only when the body is a JSON object that sets delete_file to true; unknown fields or trailing content beside it do not prevent that, but a syntax error inside the object does. Deleting the movie also deletes its watch rooms: their members receive room_deleted and their connections close. With delete_file true the file is removed from disk; a failure to remove it is logged and the response is still 200.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "deleteMovie",
         "parameters": [
           {
@@ -3999,7 +4026,12 @@
           "Admin Users"
         ],
         "summary": "List all users",
-        "description": "Admin-only endpoint.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "adminGetUsers",
         "responses": {
           "200": {
@@ -4021,7 +4053,12 @@
           "Admin Users"
         ],
         "summary": "Create a user",
-        "description": "Admin-only endpoint. Name and email are trimmed, and the email is stored without format validation. New passwords must contain at least 9 Unicode characters and at most 72 UTF-8 bytes. Passwords outside these limits are rejected with 400 before hashing.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Name and email are trimmed, and the email is stored without format validation. New passwords must contain at least 9 Unicode characters and at most 72 UTF-8 bytes. Passwords outside these limits are rejected with 400 before hashing.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "adminCreateUser",
         "requestBody": {
           "$ref": "#/components/requestBodies/AdminCreateUserRequest"
@@ -4054,7 +4091,12 @@
           "Admin Users"
         ],
         "summary": "Update a user",
-        "description": "Admin-only endpoint. Replaces the user's name, email, and admin flag; name and email are trimmed, and the email is stored without format validation. Returns 403 when an administrator removes their own admin status or the last administrator's status, and 409 when the email belongs to another user.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Replaces the user's name, email, and admin flag; name and email are trimmed, and the email is stored without format validation. Returns 403 when an administrator removes their own admin status or the last administrator's status, and 409 when the email belongs to another user.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "adminUpdateUser",
         "parameters": [
           {
@@ -4093,7 +4135,12 @@
           "Admin Users"
         ],
         "summary": "Delete a user",
-        "description": "Admin-only endpoint. Returns 403 for deleting your own account or the last administrator. Deleting a user also deletes everything they own, including playlists and watch rooms shared with other users, the requests they filed, and their watch progress, likes and listening history, along with their device tokens and uploaded avatar file, ends their browser sessions, and stops their personal HLS sessions at once, whose assets then return 404. Members of the watch rooms they owned receive room_deleted and their connections close.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Returns 403 for deleting your own account or the last administrator. Deleting a user also deletes everything they own, including playlists and watch rooms shared with other users, the requests they filed, and their watch progress, likes and listening history, along with their device tokens and uploaded avatar file, ends their browser sessions, and stops their personal HLS sessions at once, whose assets then return 404. Members of the watch rooms they owned receive room_deleted and their connections close.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "adminDeleteUser",
         "parameters": [
           {
@@ -4128,7 +4175,12 @@
           "Admin Users"
         ],
         "summary": "Reset a user's password",
-        "description": "Admin-only endpoint. New passwords must contain at least 9 Unicode characters and at most 72 UTF-8 bytes. Passwords outside these limits are rejected with 400 before hashing. An unknown user returns 404. A reset signs the user out of every browser session and revokes all of their device tokens; an administrator resetting their own password using cookie authentication keeps that browser session. A device token used to reset its own account's password is revoked too.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. New passwords must contain at least 9 Unicode characters and at most 72 UTF-8 bytes. Passwords outside these limits are rejected with 400 before hashing. An unknown user returns 404. A reset signs the user out of every browser session and revokes all of their device tokens; an administrator resetting their own password keeps that browser session.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "adminResetUserPassword",
         "parameters": [
           {
@@ -4223,7 +4275,7 @@
             }
           }
         },
-        "description": "subtitle_track is null to disable subtitles, or a zero-based ordinal below the current subtitle count (ordered by stream_index); non-null selection is rejected when no subtitles exist. Direct mode requires video/mp4, a primary H.264/AVC video stream, and browser-safe scanned video metadata: no bit depth above 8, no interlacing, no 10-bit/4:2:2/4:4:4 profile, and a known nonempty pixel format must be yuv420p, yuvj420p, nv12, or nv21. Missing optional video metadata is tolerated. Embedded cover-art streams are skipped when selecting primary video if a real video stream exists. Direct audio_track must be 0; with multiple audio streams, either none may be marked default or exactly the first must be the sole default. The server does not check direct-play audio codec support at room creation. Invalid selections or direct-play eligibility return 400. An unknown movie_id returns 400. invited_user_ids drops the owner's own id and duplicates; an unknown id returns 400. audio_track defaults to 0, subtitle_track to null, and invited_user_ids to an empty list. HLS rooms start their session before responding, which can include a 30-second remux preflight; if it cannot start, the room is deleted, and a failed deletion returns 500 and can leave the room behind. A room start never waits for a transcode permit, so a full transcode pool, exhausted transcode storage, or a server that is shutting down returns a retryable 503 with Retry-After; any other failure returns 500."
+        "description": "subtitle_track is null to disable subtitles, or a zero-based ordinal below the current subtitle count (ordered by stream_index); non-null selection is rejected when no subtitles exist. Direct mode requires video/mp4, a primary H.264/AVC video stream, and browser-safe scanned video metadata: no bit depth above 8, no interlacing, no 10-bit/4:2:2/4:4:4 profile, and a known nonempty pixel format must be yuv420p, yuvj420p, nv12, or nv21. Missing optional video metadata is tolerated. Embedded cover-art streams are skipped when selecting primary video if a real video stream exists. Direct audio_track must be 0; with multiple audio streams, either none may be marked default or exactly the first must be the sole default. When audio exists, the first audio stream's codec must be aac, mp3, opus, vorbis, or flac (the web client's direct-play allowlist); a stream with no stored codec name passes. Invalid selections or direct-play eligibility return 400. An unknown movie_id returns 400. invited_user_ids drops the owner's own id and duplicates; an unknown id returns 400. audio_track defaults to 0, subtitle_track to null, and invited_user_ids to an empty list. HLS rooms start their session before responding, which can include a 30-second remux preflight; if it cannot start, the room is deleted, and a failed deletion returns 500 and can leave the room behind. A room start never waits for a transcode permit, so a full transcode pool, exhausted transcode storage, or a server that is shutting down returns a retryable 503 with Retry-After; any other failure returns 500."
       }
     },
     "/api/watch-rooms/{id}": {
@@ -4323,7 +4375,83 @@
             "$ref": "#/components/responses/InternalServerError"
           }
         },
-        "description": "Confirms that the caller is a member. Membership is granted only when the room is created, through invited_user_ids; this endpoint never adds members. Returns 404 for an unknown room and 403 for a non-member."
+        "description": "Confirms that the caller is a member. Members are set when the room is created, through invited_user_ids, and changed by the owner with PUT /api/watch-rooms/{id}/members; this endpoint never adds members. Returns 404 for an unknown room and 403 for a non-member."
+      }
+    },
+    "/api/watch-rooms/{id}/leave": {
+      "post": {
+        "tags": [
+          "Watch Rooms"
+        ],
+        "summary": "Leave a watch room",
+        "operationId": "leaveWatchRoom",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/LeaveWatchRoomResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "description": "Removes the caller from a room they were invited to. The caller's cached authorization is invalidated, their open WebSocket connections in the room receive room_access_revoked and are closed, and the connections still open receive members_changed. Returns 404 for an unknown room, 403 for a non-member, and 409 for the owner, who closes the room with DELETE instead."
+      }
+    },
+    "/api/watch-rooms/{id}/members": {
+      "put": {
+        "tags": [
+          "Watch Rooms"
+        ],
+        "summary": "Change who is invited to a watch room",
+        "operationId": "updateWatchRoomMembers",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdPath"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/UpdateWatchRoomMembersRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/WatchRoomResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "description": "Only the room owner may change the members. invited_user_ids replaces every member but the owner, who always stays; the owner's own id and duplicates are dropped, and an id that names no user returns 400. An empty list leaves the owner alone in the room. Removed members lose access at once: their cached authorizations are invalidated, and their open WebSocket connections receive room_access_revoked and are closed. When the member list changed, every connection still open receives members_changed. Returns the room's details as the owner now sees them; 404 for an unknown room and 403 for a caller who is not the owner."
       }
     },
     "/api/watch-rooms/{id}/ws": {
@@ -4391,7 +4519,7 @@
             }
           }
         },
-        "description": "Requires an authenticated room member before upgrading. Invalid room IDs, authentication failures, membership denial (including nonexistent rooms), and database failures use JSON error envelopes. Upgrade failures use text/plain: 400 for malformed handshake headers or key/version, 403 for a rejected Origin, and 500 for an unsupported server upgrade. Origin may be absent; otherwise it must match the request host with an https scheme when the server itself terminates TLS and http otherwise (X-Forwarded-Proto is not consulted), the configured VITE_DEV_SERVER origin, or HTTP port 3000 on the same local development hostname (localhost, 127.0.0.1, or ::1). On connection the server sends room_snapshot immediately. Client JSON messages follow WatchRoomClientEvent; server messages follow WatchRoomServerEvent. Any member may send playback commands. join requests another snapshot, ping receives pong, playback commands broadcast playback_changed to all room connections, member_joined goes to the other connections when a user opens their first connection, and member_left when a user's last connection closes while others remain. Playback state lives in server memory and resets to paused at 0 when the last connection leaves. Room deletion, including the removal of its movie or of its owner's account, sends room_deleted and closes connections. Invalid JSON and unknown event types are ignored. The server sends a ping control frame every 40 seconds and closes a connection that sends no message or pong for 60 seconds, or that falls 256 messages behind.",
+        "description": "Requires an authenticated room member before upgrading. Invalid room IDs, authentication failures, membership denial (including nonexistent rooms), and database failures use JSON error envelopes. Upgrade failures use text/plain: 400 for malformed handshake headers or key/version, 403 for a rejected Origin, and 500 for an unsupported server upgrade. Origin may be absent; otherwise it must be the request host over http or https (a TLS-terminating proxy that keeps the Host header serves the page over https while this server sees http), the configured VITE_DEV_SERVER origin, or HTTP port 3000 on the same local development hostname (localhost, 127.0.0.1, or ::1). On connection the server sends room_snapshot immediately. Client JSON messages follow WatchRoomClientEvent; server messages follow WatchRoomServerEvent. Any member may send playback commands. join requests another snapshot, ping receives pong, playback commands broadcast playback_changed to all room connections, the sender's included, in the order the server applied them, member_joined goes to the other connections when a user opens their first connection, and member_left when a user's last connection closes while others remain. Playback state lives in server memory and resets to paused at 0 when the last connection leaves. Room deletion, including the removal of its movie or of its owner's account, sends room_deleted and closes connections. A member removed by the owner, or who leaves, gets room_access_revoked on each of their connections, which are then closed; the connections still open get members_changed, as they do when a member's account is deleted. Revoking the credential a connection opened with (logging that cookie session out, revoking or logging out the device, deleting the account) closes it without a message; reconnecting then fails with 401. A password change closes every cookie connection the user has, the changing session's own included; that one reconnects at once under its renewed cookie, the others get 401. Invalid JSON and unknown event types are ignored. A message larger than 4 KiB closes the connection. A playback position past the movie's known duration is clamped to it. The server sends a ping control frame every 40 seconds and closes a connection that sends no message or pong for 60 seconds, or that falls 256 messages behind.",
         "x-websocket-client-event": {
           "$ref": "#/components/schemas/WatchRoomClientEvent"
         },
@@ -4655,7 +4783,7 @@
           "Watch Rooms"
         ],
         "summary": "Get the HLS playlist for a watch room",
-        "description": "Creates or reuses the room's single HLS session, which always starts at 0, and returns its media playlist. Every member must authenticate every manifest and asset request; room membership is authorized on each request, with successful membership lookups cached for up to 30 seconds. An unknown room returns 403, the same as a room the caller is not a member of. Credentials are not embedded in playlist URLs. Rewritten asset URLs carry the room's selected audio_track. Any member's manifest or asset request keeps the session alive; after 30 minutes without one, or after its FFmpeg process fails, the next manifest request starts a new session from the beginning. Room sessions never wait for transcode capacity: a full pool returns 503 at once. A cold room can spend up to 30 seconds on a remux preflight and up to 30 seconds waiting for the first output before a retryable 503. A direct-mode room returns 400. 404 means the session was stopped while the request waited (request the manifest again) or has no playable media. Returns 409 when a pinned selected audio or subtitle ordinal is out of range after rescanning, selects a different stream_index, or its pinned non-null language changes. Recreate the room to select current tracks. The audio check is skipped when the room was created for a movie without audio, and the subtitle check when subtitle_track is null. Responses generated by this handler carry Cache-Control: no-store, including handler errors. Authentication or session middleware failures (401 or 500) can omit this header.",
+        "description": "Creates or reuses the room's single HLS session, which always starts at 0, and returns its media playlist. Every member must authenticate every manifest and asset request; room membership is authorized on each request, with successful membership lookups cached for up to 30 seconds and dropped at once when the owner changes the members or a member leaves. An unknown room returns 403, the same as a room the caller is not a member of; a room deleted while the request waits returns 404. Credentials are not embedded in playlist URLs. Rewritten asset URLs carry the room's selected audio_track. Any member's manifest or asset request keeps the session alive; after 30 minutes without one, or after its FFmpeg process fails, the next manifest request starts a new session from the beginning. Room sessions never wait for transcode capacity: a full pool returns 503 at once. A cold room can spend up to 30 seconds on a remux preflight and up to 30 seconds waiting for the first output before a retryable 503. A direct-mode room returns 400. 404 means the session was stopped while the request waited (request the manifest again) or has no playable media. Returns 409 when a pinned selected audio or subtitle ordinal is out of range after rescanning, selects a different stream_index, or its pinned non-null language changes. Recreate the room to select current tracks. The audio check is skipped when the room was created for a movie without audio, and the subtitle check when subtitle_track is null. Responses generated by this handler carry Cache-Control: no-store, including handler errors. Authentication or session middleware failures (401 or 500) can omit this header.",
         "operationId": "watchRoomHLSManifest",
         "parameters": [
           {
@@ -4706,7 +4834,7 @@
           "Watch Rooms"
         ],
         "summary": "Get a watch-room HLS initialization file or media segment",
-        "description": "Serves an asset from a room HLS session after independently authenticating the requester and authorizing current room membership. Successful membership lookups are cached for up to 30 seconds. An unknown room returns 403, the same as a room the caller is not a member of. Request the room manifest first and follow its rewritten asset URLs. The session is selected by the room alone; query parameters on asset URLs are ignored. A ready file supports conditional and byte-range requests. A file that FFmpeg has not completed yet can wait up to 120 seconds before a retryable 503. Ready assets use video/mp4 and Last-Modified, without ETag. If-Match with a specific entity tag fails with empty 412; If-None-Match: * returns 304. If-Range supports date validators; a nonmatching validator causes a full 200 response. Asset requests refresh the session's 30-minute idle timer but never create a session; with no live session, including in a direct-mode room, they return 404. A 500 can mean FFmpeg failed before writing this file; the next manifest request replaces the failed session. Responses generated by this handler carry Cache-Control: no-store, including handler errors. Authentication or session middleware failures (401 or 500) can omit this header; the plain-text 416 generated by Go's http.ServeContent strips it.",
+        "description": "Serves an asset from a room HLS session after independently authenticating the requester and authorizing current room membership. Successful membership lookups are cached for up to 30 seconds and dropped at once when the owner changes the members or a member leaves. An unknown room returns 403, the same as a room the caller is not a member of; a room deleted while the request is served returns 404. Request the room manifest first and follow its rewritten asset URLs. The session is selected by the room alone; query parameters on asset URLs are ignored. A ready file supports conditional and byte-range requests. A file that FFmpeg has not completed yet can wait up to 120 seconds before a retryable 503. Ready assets use video/mp4 and Last-Modified, without ETag. If-Match with a specific entity tag fails with empty 412; If-None-Match: * returns 304. If-Range supports date validators; a nonmatching validator causes a full 200 response. Asset requests refresh the session's 30-minute idle timer but never create a session; with no live session, including in a direct-mode room, they return 404. A 500 can mean FFmpeg failed before writing this file; the next manifest request replaces the failed session. Responses generated by this handler carry Cache-Control: no-store, including handler errors. Authentication or session middleware failures (401 or 500) can omit this header; the plain-text 416 generated by Go's http.ServeContent strips it.",
         "operationId": "watchRoomHLSSegment",
         "parameters": [
           {
@@ -4797,7 +4925,12 @@
           "Settings"
         ],
         "summary": "Get general application settings",
-        "description": "Admin-only endpoint. API keys and secrets are returned in plain text.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. API keys and secrets are returned in plain text.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "getGeneralSettings",
         "responses": {
           "200": {
@@ -4819,7 +4952,12 @@
           "Settings"
         ],
         "summary": "Update general application settings",
-        "description": "Admin-only endpoint. Replaces every general setting; see restart_required in the response for values that need a restart.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Replaces every general setting; see restart_required in the response for values that need a restart.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "updateGeneralSettings",
         "requestBody": {
           "$ref": "#/components/requestBodies/UpdateGeneralSettingsRequest"
@@ -4849,7 +4987,12 @@
           "Settings"
         ],
         "summary": "Update configured library paths",
-        "description": "Admin-only endpoint. Paths are trimmed and must name an existing, readable directory (400 otherwise). null, a blank string, or an omitted field clears that library path; a null body is rejected with 400 rather than clearing all three. At startup, a configured path that is not accessible is treated as unset and reported as null without changing the stored value, until the next settings save reloads the stored path. With the library watcher on, a changed path is watched from then on and walked once.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Paths are trimmed and must name an existing, readable directory (400 otherwise). null, a blank string, or an omitted field clears that library path; a null body is rejected with 400 rather than clearing all three. At startup, a configured path that is not accessible is treated as unset and reported as null without changing the stored value, until the next settings save reloads the stored path. With the library watcher on, a changed path is watched from then on and walked once.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "updateLibrarySettings",
         "requestBody": {
           "$ref": "#/components/requestBodies/UpdateLibrarySettingsRequest"
@@ -4897,7 +5040,12 @@
           "Settings"
         ],
         "summary": "Update server playback settings",
-        "description": "Admin-only. Updates the server's advertised upload bandwidth and hardware acceleration device; fields absent from the body keep their current value. Per-device playback preferences are not stored on the server; they live in the client's local storage. Unknown fields and a null body return 400.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Updates the server's advertised upload bandwidth and hardware acceleration device; fields absent from the body keep their current value. Per-device playback preferences are not stored on the server; they live in the client's local storage. Unknown fields and a null body return 400.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "updatePlaybackSettings",
         "requestBody": {
           "$ref": "#/components/requestBodies/UpdatePlaybackSettingsRequest"
@@ -4927,7 +5075,12 @@
           "Settings"
         ],
         "summary": "Trigger a music library scan",
-        "description": "Admin-only endpoint. The scan runs asynchronously; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when no music directory is configured. Files are inspected by cleaned catalog path using persisted filesystem fingerprints and full-file SHA-256. Matching filesystem metadata skips hashing and probing; identical bytes with changed metadata update only the fingerprint. New or changed bytes are processed after a 60-second quiet period from the later of modification and status-change time. Recent, future-dated, or unstable files preserve their previous records and retry on the next startup or manual scan; deferred totals are logged separately from failures. New and changed m4a files have the Apple catalog ids of an iTunes purchase read and kept. When Apple lookups are enabled, albums whose files carry an Apple collection id are looked up on Apple Music after the walk, in batches, and their tracks paired by catalog id; an album Apple no longer lists falls back to Spotify in the same scan. When Spotify is available, other missing or failed artist and album enrichment is retried from catalog metadata even for unchanged files, without probing them again; confirmed matches and non-matches are retained. Local sort tags and album dates are reconciled from current track contributions, with Spotify dates used only when no valid local date remains. Music identities normalize surrounding whitespace and case; Apple Music and Spotify id collisions retain the existing owner and preserve track IDs. Track changes and deletions reconcile local artist, album, and genre relationships and derived sorting and dates. Missing-file cleanup runs before the Apple Music and Spotify passes. Startup and manual scans remove confirmed missing catalog files, including broken symlink targets and rows without fingerprints, only within the directory captured at scan start. A startup scan, like a library watcher catch-up, keeps missing files that look unmounted rather than deleted: every file when its walk finds none while the catalog holds some, otherwise those beneath a mount point an earlier run recorded by path that is not mounted now, such as a disk mounted inside the library that has not come up; it reports an issue per mount point. A manual scan removes them and records only the mount points mounted then; a manual scan queued behind a run of changes keeps that cleanup when a watcher catch-up joins it. Cleanup follows a successful walk and final batch; files seen during the scan remain protected even if processing fails or is deferred. Cancellation, fatal walk failures, and unavailable or replaced roots prevent cleanup. Permission and I/O failures and symlink loops preserve records. Root accessibility and identity and file absence are rechecked before each deletion commits; runtime caches are invalidated after commit. Unreferenced shared metadata remains. A file renamed or moved within the library keeps its catalog row, paired with it by inode, size and modification time once its old path is confirmed missing, so watch progress, likes, playlist entries and its match survive; a copy that leaves the original in place is imported on its own. No forced refresh is performed. GET returns the current/latest in-memory report; POST duplicate protection lasts for the entire run. Completion logs include local, cleanup and enrichment counts.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. The scan runs asynchronously; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when no music directory is configured. Files are inspected by cleaned catalog path using persisted filesystem fingerprints and full-file SHA-256. Matching filesystem metadata skips hashing and probing; identical bytes with changed metadata update only the fingerprint. New or changed bytes are processed after a 60-second quiet period from the later of modification and status-change time. Recent, future-dated, or unstable files preserve their previous records and retry on the next startup or manual scan; deferred totals are logged separately from failures. New and changed m4a files have the Apple catalog ids of an iTunes purchase read and kept. When Apple lookups are enabled, albums whose files carry an Apple collection id are looked up on Apple Music after the walk, in batches, and their tracks paired by catalog id; an album Apple no longer lists falls back to Spotify in the same scan. When Spotify is available, other missing or failed artist and album enrichment is retried from catalog metadata even for unchanged files, without probing them again; confirmed matches and non-matches are retained. Local sort tags and album dates are reconciled from current track contributions, with Spotify dates used only when no valid local date remains. Music identities normalize surrounding whitespace and case; Apple Music and Spotify id collisions retain the existing owner and preserve track IDs. Track changes and deletions reconcile local artist, album, and genre relationships and derived sorting and dates. Missing-file cleanup runs before the Apple Music and Spotify passes. Startup and manual scans remove confirmed missing catalog files, including broken symlink targets and rows without fingerprints, only within the directory captured at scan start. A startup scan, like a library watcher catch-up, keeps missing files that look unmounted rather than deleted: every file when its walk finds none while the catalog holds some, otherwise those beneath a mount point an earlier run recorded by path that is not mounted now, such as a disk mounted inside the library that has not come up; it reports an issue per mount point. A manual scan removes them and records only the mount points mounted then; a manual scan queued behind a run of changes keeps that cleanup when a watcher catch-up joins it. Cleanup follows a successful walk and final batch; files seen during the scan remain protected even if processing fails or is deferred. Cancellation, fatal walk failures, and unavailable or replaced roots prevent cleanup. Permission and I/O failures and symlink loops preserve records. Root accessibility and identity and file absence are rechecked before each deletion commits; runtime caches are invalidated after commit. Unreferenced shared metadata remains. A file renamed or moved within the library keeps its catalog row, paired with it by inode, size and modification time once its old path is confirmed missing, so watch progress, likes, playlist entries and its match survive; a copy that leaves the original in place is imported on its own. No forced refresh is performed. GET returns the current/latest in-memory report; POST duplicate protection lasts for the entire run. Completion logs include local, cleanup and enrichment counts.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "triggerMusicScan",
         "responses": {
           "200": {
@@ -4952,7 +5105,12 @@
           "Settings"
         ],
         "summary": "Get music scan progress",
-        "description": "Admin-only current/latest in-memory report. No persistent history. Discovery and processing are interleaved, so total grows while the local phase runs. Enrichment tallies count unique artists and albums, one outcome each, across Apple Music and Spotify. Interrupted scans retain committed work and report canceled or failed, never successful completion.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Returns the current/latest in-memory report. No persistent history. Discovery and processing are interleaved, so total grows while the local phase runs. Enrichment tallies count unique artists and albums, one outcome each, across Apple Music and Spotify. Interrupted scans retain committed work and report canceled or failed, never successful completion.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "getMusicScanStatus",
         "responses": {
           "200": {
@@ -4976,7 +5134,12 @@
           "Settings"
         ],
         "summary": "Trigger a movie library scan",
-        "description": "Admin-only endpoint. The scan runs asynchronously; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when no movies directory is configured. Discovery establishes eligible file totals before two bounded probe workers process new or changed files. Movie scans read no content for change detection: size, nanosecond modification/change times, device and inode form the baseline. Unchanged files skip probing. Changed filesystem metadata triggers a reprobe and playback-cache invalidation even when bytes are identical; scans do not prove byte equality. Files must be quiet for 60 seconds. Deferred paths receive at most two retries within 120 seconds after initial processing; unresolved paths remain deferred. Technical metadata, streams, chapters, baselines and pending enrichment commit atomically before TMDB requests. Imports require accepted video; moving MJPEG is supported, while attached artwork alone is rejected. TMDB failures preserve existing descriptions and relationships; new movies use filename-derived defaults. Later startup or manual scans retry eligible unchanged movies with pending enrichment or no TMDB identity at most once per movie per scan, without probing again, rebuilding streams or chapters, or invalidating playback caches and keyframe/remux data. Unavailable TMDB leaves a movie eligible for the next scan. A definitive no-match is retried once on the next scan; from the second consecutive miss the movie backs off, doubling from one day up to seven days, until Identify resets it; a technical rescan of the same file keeps the backoff. Identified movies fetch details by stored TMDB ID and never automatically rematch. Successful enrichment replaces descriptive metadata, including manual edits, while preserving audience rating and file-derived duration/runtime; it clears the internal retry state. Persistence discards stale enrichment after a concurrent identity change and discards work for deleted or replaced catalog rows. After local processing and cleanup, two workers enrich movies with serialized persistence. Complete TMDB resolution is limited to 30 seconds including HTTP retries. Three consecutive transient provider failures or an authentication failure stop further dispatch; already active requests may finish. No-match responses are distinguished from outages. Catalog identity, pending state and filesystem baseline are checked before applying enrichment. GET returns the current/latest in-memory report; POST duplicate protection lasts for the entire run. Completion logs include successful and outstanding enrichment counts. Startup and manual scans remove confirmed missing catalog files, including broken symlink targets and rows without fingerprints, only within the directory captured at scan start. A startup scan, like a library watcher catch-up, keeps missing files that look unmounted rather than deleted: every file when its walk finds none while the catalog holds some, otherwise those beneath a mount point an earlier run recorded by path that is not mounted now, such as a disk mounted inside the library that has not come up; it reports an issue per mount point. A manual scan removes them and records only the mount points mounted then; a manual scan queued behind a run of changes keeps that cleanup when a watcher catch-up joins it. Cleanup follows successful discovery and local processing, including bounded deferred retries; files seen during the scan remain protected even if processing fails or is deferred. Cancellation, fatal walk failures, and unavailable or replaced roots prevent cleanup. Permission and I/O failures and symlink loops preserve records. Root accessibility and identity and file absence are rechecked before each deletion commits; runtime caches are invalidated after commit. Unreferenced shared metadata remains. A file renamed or moved within the library keeps its catalog row, paired with it by inode, size and modification time once its old path is confirmed missing, so watch progress, likes, playlist entries and its match survive; a copy that leaves the original in place is imported on its own. No forced refresh is performed.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. The scan runs asynchronously; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when no movies directory is configured. Discovery establishes eligible file totals before two bounded probe workers process new or changed files. Movie scans read no content for change detection: size, nanosecond modification/change times, device and inode form the baseline. Unchanged files skip probing. Changed filesystem metadata triggers a reprobe and playback-cache invalidation even when bytes are identical; scans do not prove byte equality. Files must be quiet for 60 seconds. Deferred paths receive at most two retries within 120 seconds after initial processing; unresolved paths remain deferred. Technical metadata, streams, chapters, baselines and pending enrichment commit atomically before TMDB requests. Imports require accepted video; moving MJPEG is supported, while attached artwork alone is rejected. TMDB failures preserve existing descriptions and relationships; new movies use filename-derived defaults. Later startup or manual scans retry eligible unchanged movies with pending enrichment or no TMDB identity at most once per movie per scan, without probing again, rebuilding streams or chapters, or invalidating playback caches and keyframe/remux data. Unavailable TMDB leaves a movie eligible for the next scan. A definitive no-match is retried once on the next scan; from the second consecutive miss the movie backs off, doubling from one day up to seven days, until Identify resets it; a technical rescan of the same file keeps the backoff. Identified movies fetch details by stored TMDB ID and never automatically rematch. Successful enrichment replaces descriptive metadata, including manual edits, while preserving audience rating and file-derived duration/runtime; it clears the internal retry state. Persistence discards stale enrichment after a concurrent identity change and discards work for deleted or replaced catalog rows. After local processing and cleanup, two workers enrich movies with serialized persistence. Complete TMDB resolution is limited to 30 seconds including HTTP retries. Three consecutive transient provider failures or an authentication failure stop further dispatch; already active requests may finish. No-match responses are distinguished from outages. Catalog identity, pending state and filesystem baseline are checked before applying enrichment. GET returns the current/latest in-memory report; POST duplicate protection lasts for the entire run. Completion logs include successful and outstanding enrichment counts. Startup and manual scans remove confirmed missing catalog files, including broken symlink targets and rows without fingerprints, only within the directory captured at scan start. A startup scan, like a library watcher catch-up, keeps missing files that look unmounted rather than deleted: every file when its walk finds none while the catalog holds some, otherwise those beneath a mount point an earlier run recorded by path that is not mounted now, such as a disk mounted inside the library that has not come up; it reports an issue per mount point. A manual scan removes them and records only the mount points mounted then; a manual scan queued behind a run of changes keeps that cleanup when a watcher catch-up joins it. Cleanup follows successful discovery and local processing, including bounded deferred retries; files seen during the scan remain protected even if processing fails or is deferred. Cancellation, fatal walk failures, and unavailable or replaced roots prevent cleanup. Permission and I/O failures and symlink loops preserve records. Root accessibility and identity and file absence are rechecked before each deletion commits; runtime caches are invalidated after commit. Unreferenced shared metadata remains. A file renamed or moved within the library keeps its catalog row, paired with it by inode, size and modification time once its old path is confirmed missing, so watch progress, likes, playlist entries and its match survive; a copy that leaves the original in place is imported on its own. No forced refresh is performed.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "triggerMovieScan",
         "responses": {
           "200": {
@@ -5001,7 +5164,12 @@
           "Settings"
         ],
         "summary": "Get movie scan progress",
-        "description": "Admin-only current/latest in-memory report. No persistent history. Local and enrichment counts are separate. Interrupted scans retain committed work and report canceled or failed, never successful completion.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Returns the current/latest in-memory report. No persistent history. Local and enrichment counts are separate. Interrupted scans retain committed work and report canceled or failed, never successful completion.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "getMovieScanStatus",
         "responses": {
           "200": {
@@ -5025,7 +5193,12 @@
           "Settings"
         ],
         "summary": "Trigger a TV show library scan",
-        "description": "Admin-only endpoint. Starts an asynchronous scan of the configured shows directory; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when unconfigured. Accepts Show/Season N/file, Show/Season N - Title/file, Show/SN/file, Show/Specials/file, and episode files directly inside the show folder, where the token names the season. Hidden entries and nested extras are excluded. Files use the movie video extensions and symlink behavior. Standard season/episode tokens, inclusive ranges, and repeated episode tokens identify logical episodes; filename seasons must match their directories. Each new or changed file is probed once after the shared 60-second quiet period and commits technical metadata, episode links, fingerprints, fallback catalog records, and pending enrichment atomically. Combined files retain one duration without inferred episode boundaries. Unchanged files skip probing; changed filesystem metadata re-probes the file without reading its content, and a technical change never re-queues matched metadata. After safe missing-file cleanup, pending show, season, and locally represented episode metadata is enriched sequentially through TMDB, at most once per entity per scan, with the entity total published before the first request. Failed requests preserve existing metadata and retry state; a definitive no-match is reported as unmatched and backs off before the show is searched again; an authentication failure or repeated transient failures stop enrichment for the run; matched shows use stored TMDB IDs without automatic rematching. Cleanup deletes only confirmed missing files within the captured, readable, unchanged root, prunes the affected season of unreferenced episodes and then the empty season and show, and retains shared metadata. A file renamed or moved within its season keeps its row when it is paired by inode, size and modification time; a file changed while it moves, such as a retag that also renames it, is imported as new and its old row is cleaned up. A renamed show folder keeps its show, seasons, episodes and watch progress once the old folder is gone and the new one has no show; an unmatched show is searched again at once. A matched show moves while the folder keeps its title and its year, drops the year, or adds the first air year; any other rename of a matched show imports it as a new show and searches again. An episode file renamed to other episode numbers keeps its row and is linked to them. A startup scan, like a library watcher catch-up, keeps missing files that look unmounted rather than deleted: every file when its walk finds none while the catalog holds some, otherwise those beneath a mount point an earlier run recorded by path that is not mounted now, such as a disk mounted inside the library that has not come up; it reports an issue per mount point. A manual scan removes them and records only the mount points mounted then; a manual scan queued behind a run of changes keeps that cleanup when a watcher catch-up joins it. Observed failures and deferred files remain protected. Cancellation, unavailable or replaced roots, and fatal walks prevent cleanup. Saving settings does not start a scan, except that with the library watcher on a library whose path changed, or that is paused, is walked once. Scanned shows are browsable and playable through the TV show endpoints; manual identification is not provided.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Starts an asynchronous scan of the configured shows directory; returns 200 when started, or when queued behind a run of changes the library watcher is applying, 409 when a library scan is already running, and 500 when unconfigured. Accepts Show/Season N/file, Show/Season N - Title/file, Show/SN/file, Show/Specials/file, and episode files directly inside the show folder, where the token names the season. Hidden entries and nested extras are excluded. Files use the movie video extensions and symlink behavior. Standard season/episode tokens, inclusive ranges, and repeated episode tokens identify logical episodes; filename seasons must match their directories. Each new or changed file is probed once after the shared 60-second quiet period and commits technical metadata, episode links, fingerprints, fallback catalog records, and pending enrichment atomically. Combined files retain one duration without inferred episode boundaries. Unchanged files skip probing; changed filesystem metadata re-probes the file without reading its content, and a technical change never re-queues matched metadata. After safe missing-file cleanup, pending show, season, and locally represented episode metadata is enriched sequentially through TMDB, at most once per entity per scan, with the entity total published before the first request. Failed requests preserve existing metadata and retry state; a definitive no-match is reported as unmatched and backs off before the show is searched again; an authentication failure or repeated transient failures stop enrichment for the run; matched shows use stored TMDB IDs without automatic rematching. Cleanup deletes only confirmed missing files within the captured, readable, unchanged root, prunes the affected season of unreferenced episodes and then the empty season and show, and retains shared metadata. A file renamed or moved within its season keeps its row when it is paired by inode, size and modification time; a file changed while it moves, such as a retag that also renames it, is imported as new and its old row is cleaned up. A renamed show folder keeps its show, seasons, episodes and watch progress once the old folder is gone and the new one has no show; an unmatched show is searched again at once. A matched show moves while the folder keeps its title and its year, drops the year, or adds the first air year; any other rename of a matched show imports it as a new show and searches again. An episode file renamed to other episode numbers keeps its row and is linked to them. A startup scan, like a library watcher catch-up, keeps missing files that look unmounted rather than deleted: every file when its walk finds none while the catalog holds some, otherwise those beneath a mount point an earlier run recorded by path that is not mounted now, such as a disk mounted inside the library that has not come up; it reports an issue per mount point. A manual scan removes them and records only the mount points mounted then; a manual scan queued behind a run of changes keeps that cleanup when a watcher catch-up joins it. Observed failures and deferred files remain protected. Cancellation, unavailable or replaced roots, and fatal walks prevent cleanup. Saving settings does not start a scan, except that with the library watcher on a library whose path changed, or that is paused, is walked once. Scanned shows are browsable and playable through the TV show endpoints; manual identification is not provided.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "triggerShowScan",
         "responses": {
           "200": {
@@ -5050,7 +5223,12 @@
           "Settings"
         ],
         "summary": "Get TV show scan progress",
-        "description": "Admin-only current/latest in-memory report. No persistent history. Local counts are physical files; enrichment counts are entities (shows, seasons, and episodes), so the two do not add up. Interrupted scans retain committed work and report canceled or failed, never successful completion.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Returns the current/latest in-memory report. No persistent history. Local counts are physical files; enrichment counts are entities (shows, seasons, and episodes), so the two do not add up. Interrupted scans retain committed work and report canceled or failed, never successful completion.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "getShowScanStatus",
         "responses": {
           "200": {
@@ -5175,7 +5353,12 @@
           "Music"
         ],
         "summary": "Delete an album",
-        "description": "Admin-only endpoint. Removes the album and its tracks from the database, along with those tracks' playlist entries, likes, play history, and listening statistics. Musicians are kept. Audio files stay on disk, so a later music scan imports them again.",
+        "description": "Admin-only endpoint for session-authenticated admins: requests carrying a device bearer token are rejected with 401, even alongside a session cookie. Removes the album and its tracks from the database, along with those tracks' playlist entries, likes, play history, and listening statistics. Musicians are kept. Audio files stay on disk, so a later music scan imports them again.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
         "operationId": "deleteAlbum",
         "parameters": [
           {
@@ -6686,9 +6869,18 @@
         "name": "audio_channels",
         "in": "query",
         "required": false,
-        "description": "Maximum output channels for an explicit audio profile: 2 means at most stereo, 6 preserves up to 5.1. A ceiling, never a target - mono and stereo sources are never upmixed, and sources above the maximum are downmixed with a full channel-layout conversion. Must appear together with audio_codec; supplying only one of the pair returns HTTP 400.",
+        "description": "Maximum output channels for an explicit audio profile: 2 means at most stereo, 6 preserves up to 5.1. A ceiling, never a target - mono and stereo sources are never upmixed, and sources above the maximum are mixed to stereo or 5.1 with center, surround, and LFE contribution. The resolved layout is supplied to the resampler; the encoder may normalize layout labels (for example, 5.1 to 5.1(side)), so exact source layout labels are not guaranteed. Explicit output uses 48 kHz. Must appear together with audio_codec; supplying only one of the pair returns HTTP 400.",
         "schema": {
           "$ref": "#/components/schemas/HLSAudioChannelLimit"
+        }
+      },
+      "HLSVideoCodecsQuery": {
+        "name": "video_codecs",
+        "in": "query",
+        "required": false,
+        "description": "Comma-separated video codecs the client decodes from fragmented MP4 besides H.264, which every client is assumed to decode. Only hevc is accepted; an empty or unknown value returns 400. It widens only what a remux request may copy: with hevc, a progressive HEVC Main or Main 10 (4:2:0) stream is copied instead of transcoded, keeping HDR10 or HLG. Dolby Vision streams are copied when their base layer is HDR10, SDR, or HLG compatible, and play as that base layer: the copy is tagged hvc1 and carries no Dolby Vision configuration box. Dolby Vision profile 5, Rext profiles, interlaced HEVC, and every HEVC stream without this parameter still fall back to a transcode. Transcode profiles always encode H.264. The value is part of the session identity and is propagated onto rewritten asset URLs. Watch-room HLS never copies HEVC.",
+        "schema": {
+          "$ref": "#/components/schemas/HLSRequestedVideoCodecs"
         }
       },
       "SubtitleStartQuery": {
@@ -7136,6 +7328,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/CreateWatchRoomRequest"
+            }
+          }
+        }
+      },
+      "UpdateWatchRoomMembersRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UpdateWatchRoomMembersRequest"
             }
           }
         }
@@ -7751,15 +7953,35 @@
               "const": "no-store"
             }
           },
+          "Content-Encoding": {
+            "description": "Present when the playlist is 1,400 bytes or more and the request's Accept-Encoding accepts gzip; the body is then gzip-compressed.",
+            "schema": {
+              "type": "string",
+              "const": "gzip"
+            }
+          },
+          "Vary": {
+            "description": "Names Accept-Encoding when the playlist is 1,400 bytes or more, compressed or not, alongside the session middleware's Cookie.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "Content-Length": {
+            "description": "Length of the body as sent, after any compression.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
           "X-Igloo-Effective-Profile": {
-            "description": "Profile FFmpeg actually ran. This differs from the requested profile in the path when the remux safety gate forces a transcode, so a `remux` request can be answered with a transcode profile here, and when a requested transcode profile is taller than the effective encoder supports (software encoding runs 2160p_16mbps as 1080p_8mbps).",
+            "description": "Profile FFmpeg actually ran. This differs from the requested profile in the path when the remux safety gate forces a transcode (it copies H.264 for every client and HEVC only for a request with video_codecs=hevc), so a `remux` request can be answered with a transcode profile here, and when a requested transcode profile is taller than the effective encoder supports (software encoding runs 2160p_16mbps as 1080p_8mbps).",
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/HLSProfile"
             }
           },
           "X-Igloo-Actual-Start": {
-            "description": "Seconds into the source file where the session's media really begins. Stream copy cannot cut mid-GOP, so a copy-video session starts at the source keyframe at or before the requested start. Omitted when it has not been measured.",
+            "description": "Seconds into the source file where the session's media really begins, at or before the requested start. Stream copy cannot cut mid-GOP, so a copy-video session starts on the source keyframe FFmpeg's input seek lands on, which the server measures; that can be more than one keyframe before the requested start. The value is the time of that first copied video packet: in an MP4 source the session's first audio packet can precede it by up to about 0.1 s. Omitted when it has not been measured.",
             "schema": {
               "type": "number",
               "minimum": 0
@@ -8171,6 +8393,26 @@
               "type": "string",
               "const": "no-cache"
             }
+          },
+          "Content-Encoding": {
+            "description": "Present when the cues are 1,400 bytes or more and the request's Accept-Encoding accepts gzip; the body is then gzip-compressed.",
+            "schema": {
+              "type": "string",
+              "const": "gzip"
+            }
+          },
+          "Vary": {
+            "description": "Names Accept-Encoding when the cues are 1,400 bytes or more, compressed or not, alongside the session middleware's Cookie.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "Content-Length": {
+            "description": "Length of the body as sent, after any compression.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
         "content": {
@@ -8266,6 +8508,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/DeleteWatchRoomEnvelope"
+            }
+          }
+        }
+      },
+      "LeaveWatchRoomResponse": {
+        "description": "Watch-room leave response.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeaveWatchRoomEnvelope"
             }
           }
         }
@@ -9057,6 +9309,13 @@
         "enum": [
           "ac3",
           "eac3"
+        ]
+      },
+      "HLSRequestedVideoCodecs": {
+        "type": "string",
+        "pattern": "^\\s*hevc\\s*(,\\s*hevc\\s*)*$",
+        "examples": [
+          "hevc"
         ]
       },
       "HLSEffectiveAudioCodec": {
@@ -9927,6 +10186,8 @@
           "id",
           "title",
           "poster_path",
+          "backdrop_path",
+          "overview",
           "year"
         ],
         "properties": {
@@ -9941,6 +10202,14 @@
             "$ref": "#/components/schemas/SqlNullString",
             "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
           },
+          "backdrop_path": {
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description. The movie's backdrop, for the home billboard."
+          },
+          "overview": {
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "The movie's overview, for the home billboard."
+          },
           "year": {
             "$ref": "#/components/schemas/SqlNullInt64"
           }
@@ -9954,6 +10223,8 @@
           "id",
           "title",
           "poster_path",
+          "backdrop_path",
+          "overview",
           "year",
           "progress_sec",
           "duration_sec"
@@ -9975,6 +10246,14 @@
           "poster_path": {
             "$ref": "#/components/schemas/SqlNullString",
             "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
+          },
+          "backdrop_path": {
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description. The movie's backdrop, for the home billboard."
+          },
+          "overview": {
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "The movie's overview, for the home billboard."
           },
           "year": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -9998,6 +10277,8 @@
           "id",
           "title",
           "poster_path",
+          "backdrop_path",
+          "overview",
           "year",
           "progress_sec",
           "duration_sec",
@@ -10023,6 +10304,14 @@
           "poster_path": {
             "$ref": "#/components/schemas/SqlNullString",
             "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
+          },
+          "backdrop_path": {
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description. The show's backdrop, for the home billboard."
+          },
+          "overview": {
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "The episode's overview, or the show's when the episode has none."
           },
           "year": {
             "$ref": "#/components/schemas/SqlNullInt64"
@@ -10385,7 +10674,8 @@
         "required": [
           "genre_id",
           "genre_tag",
-          "show_count"
+          "show_count",
+          "backdrop_path"
         ],
         "properties": {
           "genre_id": {
@@ -10398,6 +10688,10 @@
           "show_count": {
             "type": "integer",
             "format": "int64"
+          },
+          "backdrop_path": {
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description. The backdrop of one of the genre's newest shows, for the genre's tile, chosen so that the genres in the list show different shows where the library allows. Null when no show in the genre has a backdrop."
           }
         },
         "additionalProperties": false
@@ -11014,6 +11308,19 @@
           }
         ]
       },
+      "MoviesStatsData": {
+        "type": "object",
+        "required": [
+          "total_movies"
+        ],
+        "properties": {
+          "total_movies": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "MoviesStatsEnvelope": {
         "allOf": [
           {
@@ -11026,17 +11333,7 @@
             ],
             "properties": {
               "data": {
-                "type": "object",
-                "required": [
-                  "total_movies"
-                ],
-                "properties": {
-                  "total_movies": {
-                    "type": "integer",
-                    "format": "int64"
-                  }
-                },
-                "additionalProperties": false
+                "$ref": "#/components/schemas/MoviesStatsData"
               }
             }
           }
@@ -11106,7 +11403,8 @@
         "required": [
           "genre_id",
           "genre_tag",
-          "movie_count"
+          "movie_count",
+          "backdrop_path"
         ],
         "properties": {
           "genre_id": {
@@ -11119,6 +11417,25 @@
           "movie_count": {
             "type": "integer",
             "format": "int64"
+          },
+          "backdrop_path": {
+            "$ref": "#/components/schemas/SqlNullString",
+            "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description. The backdrop of one of the genre's newest movies, for the genre's tile, chosen so that the genres in the list show different movies where the library allows. Null when no movie in the genre has a backdrop."
+          }
+        },
+        "additionalProperties": false
+      },
+      "MovieGenresData": {
+        "type": "object",
+        "required": [
+          "genres"
+        ],
+        "properties": {
+          "genres": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MovieGenreWithCount"
+            }
           }
         },
         "additionalProperties": false
@@ -11135,19 +11452,7 @@
             ],
             "properties": {
               "data": {
-                "type": "object",
-                "required": [
-                  "genres"
-                ],
-                "properties": {
-                  "genres": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/MovieGenreWithCount"
-                    }
-                  }
-                },
-                "additionalProperties": false
+                "$ref": "#/components/schemas/MovieGenresData"
               }
             }
           }
@@ -11344,6 +11649,53 @@
         },
         "additionalProperties": false
       },
+      "MovieDetailsData": {
+        "type": "object",
+        "required": [
+          "movie",
+          "cast",
+          "crew",
+          "genres",
+          "production_companies",
+          "extra_videos"
+        ],
+        "properties": {
+          "movie": {
+            "$ref": "#/components/schemas/Movie"
+          },
+          "cast": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MovieCastCredit"
+            }
+          },
+          "crew": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MovieCrewCredit"
+            }
+          },
+          "genres": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MovieGenre"
+            }
+          },
+          "production_companies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MovieProductionCompany"
+            }
+          },
+          "extra_videos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExtraVideo"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "MovieDetailsEnvelope": {
         "allOf": [
           {
@@ -11356,51 +11708,7 @@
             ],
             "properties": {
               "data": {
-                "type": "object",
-                "required": [
-                  "movie",
-                  "cast",
-                  "crew",
-                  "genres",
-                  "production_companies",
-                  "extra_videos"
-                ],
-                "properties": {
-                  "movie": {
-                    "$ref": "#/components/schemas/Movie"
-                  },
-                  "cast": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/MovieCastCredit"
-                    }
-                  },
-                  "crew": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/MovieCrewCredit"
-                    }
-                  },
-                  "genres": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/MovieGenre"
-                    }
-                  },
-                  "production_companies": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/MovieProductionCompany"
-                    }
-                  },
-                  "extra_videos": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/ExtraVideo"
-                    }
-                  }
-                },
-                "additionalProperties": false
+                "$ref": "#/components/schemas/MovieDetailsData"
               }
             }
           }
@@ -11431,6 +11739,8 @@
           "color_transfer",
           "field_order",
           "rotation",
+          "dv_profile",
+          "dv_bl_signal_compatibility_id",
           "language",
           "title"
         ],
@@ -11506,6 +11816,14 @@
           },
           "rotation": {
             "$ref": "#/components/schemas/SqlNullInt64"
+          },
+          "dv_profile": {
+            "$ref": "#/components/schemas/SqlNullInt64",
+            "description": "Dolby Vision profile from the stream's configuration record; invalid without one."
+          },
+          "dv_bl_signal_compatibility_id": {
+            "$ref": "#/components/schemas/SqlNullInt64",
+            "description": "Dolby Vision base-layer compatibility id: 1 HDR10, 2 SDR, 4 HLG, 6 Blu-ray HDR10, 0 none (profile 5). Invalid without a configuration record."
           },
           "language": {
             "$ref": "#/components/schemas/SqlNullString"
@@ -11683,6 +12001,46 @@
         },
         "additionalProperties": false
       },
+      "MovieTechnicalDetailsData": {
+        "type": "object",
+        "required": [
+          "movie",
+          "video_streams",
+          "audio_streams",
+          "subtitles",
+          "chapters"
+        ],
+        "properties": {
+          "movie": {
+            "$ref": "#/components/schemas/MovieTechnicalFile"
+          },
+          "video_streams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VideoStream"
+            }
+          },
+          "audio_streams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AudioStream"
+            }
+          },
+          "subtitles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Subtitle"
+            }
+          },
+          "chapters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Chapter"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "MovieTechnicalDetailsEnvelope": {
         "allOf": [
           {
@@ -11695,44 +12053,7 @@
             ],
             "properties": {
               "data": {
-                "type": "object",
-                "required": [
-                  "movie",
-                  "video_streams",
-                  "audio_streams",
-                  "subtitles",
-                  "chapters"
-                ],
-                "properties": {
-                  "movie": {
-                    "$ref": "#/components/schemas/MovieTechnicalFile"
-                  },
-                  "video_streams": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/VideoStream"
-                    }
-                  },
-                  "audio_streams": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/AudioStream"
-                    }
-                  },
-                  "subtitles": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/Subtitle"
-                    }
-                  },
-                  "chapters": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/Chapter"
-                    }
-                  }
-                },
-                "additionalProperties": false
+                "$ref": "#/components/schemas/MovieTechnicalDetailsData"
               }
             }
           }
@@ -12141,7 +12462,9 @@
           "updated_at",
           "is_owner",
           "can_edit",
-          "movie_count"
+          "movie_count",
+          "artwork",
+          "owner"
         ],
         "properties": {
           "id": {
@@ -12186,6 +12509,19 @@
           "movie_count": {
             "type": "integer",
             "format": "int64"
+          },
+          "artwork": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "string",
+              "description": "TMDB image path, or the /api/static/ URL of the server's downloaded copy; see the API description."
+            },
+            "description": "Up to four different posters from the playlist's first 24 movies, in the order they were added, for the card's collage. Empty when none of those movies has a poster."
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserSummary",
+            "description": "The playlist's owner; a collaborator's card names them."
           }
         },
         "additionalProperties": false
@@ -13226,6 +13562,18 @@
         },
         "additionalProperties": false
       },
+      "TmdbStatusData": {
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "TmdbStatusEnvelope": {
         "allOf": [
           {
@@ -13238,16 +13586,7 @@
             ],
             "properties": {
               "data": {
-                "type": "object",
-                "required": [
-                  "available"
-                ],
-                "properties": {
-                  "available": {
-                    "type": "boolean"
-                  }
-                },
-                "additionalProperties": false
+                "$ref": "#/components/schemas/TmdbStatusData"
               }
             }
           }
@@ -13439,7 +13778,7 @@
       },
       "UserSummary": {
         "type": "object",
-        "description": "The public face of a user as other users see it: no email or admin flag. Carried by watch rooms (owner, members), watch-room WebSocket member events, and playlist details (owner).",
+        "description": "The public face of a user as other users see it: no email or admin flag. Carried by watch rooms (owner, members), watch-room WebSocket member events, playlist details (owner), and playlist summaries (owner).",
         "required": [
           "id",
           "name",
@@ -13626,6 +13965,23 @@
         },
         "additionalProperties": false
       },
+      "UpdateWatchRoomMembersRequest": {
+        "type": "object",
+        "required": [
+          "invited_user_ids"
+        ],
+        "properties": {
+          "invited_user_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The users who should be members besides the owner. The owner's own id and duplicates are dropped."
+          }
+        },
+        "additionalProperties": false
+      },
       "WatchRoomsEnvelope": {
         "allOf": [
           {
@@ -13779,6 +14135,36 @@
           }
         ]
       },
+      "LeaveWatchRoomData": {
+        "type": "object",
+        "required": [
+          "left"
+        ],
+        "properties": {
+          "left": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LeaveWatchRoomEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/JsonSuccess"
+          },
+          {
+            "type": "object",
+            "required": [
+              "data"
+            ],
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/LeaveWatchRoomData"
+              }
+            }
+          }
+        ]
+      },
       "WatchRoomPlaybackState": {
         "type": "object",
         "required": [
@@ -13803,7 +14189,7 @@
       },
       "WatchRoomServerEvent": {
         "type": "object",
-        "description": "Server JSON message. room_snapshot carries playback and connected_user_ids; playback_changed carries playback; member_joined and member_left carry member and connected_user_ids; room_deleted and pong carry only type and room_id.",
+        "description": "Server JSON message. room_snapshot carries playback and connected_user_ids; playback_changed carries playback; member_joined and member_left carry member and connected_user_ids; members_changed carries members; room_deleted, room_access_revoked and pong carry only type and room_id.",
         "required": [
           "type",
           "room_id"
@@ -13816,7 +14202,9 @@
               "playback_changed",
               "member_joined",
               "member_left",
+              "members_changed",
               "room_deleted",
+              "room_access_revoked",
               "pong"
             ]
           },
@@ -13829,6 +14217,13 @@
           },
           "member": {
             "$ref": "#/components/schemas/UserSummary"
+          },
+          "members": {
+            "type": "array",
+            "description": "The room's members after the change, the owner included, in the order they joined.",
+            "items": {
+              "$ref": "#/components/schemas/UserSummary"
+            }
           },
           "connected_user_ids": {
             "type": "array",
@@ -14945,7 +15340,9 @@
           "track_count",
           "total_duration",
           "is_owner",
-          "can_edit"
+          "can_edit",
+          "artwork",
+          "owner"
         ],
         "properties": {
           "id": {
@@ -14995,6 +15392,19 @@
           },
           "can_edit": {
             "type": "boolean"
+          },
+          "artwork": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "string",
+              "description": "Spotify or Apple image URL, or the /api/static/ URL of the server's downloaded copy; see the API description."
+            },
+            "description": "Up to four different album covers from the playlist's first 24 tracks, in playlist order, for the card's collage. Empty when none of those tracks has a cover."
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserSummary",
+            "description": "The playlist's owner; a collaborator's card names them."
           }
         },
         "additionalProperties": false
@@ -17649,6 +18059,8 @@
           "color_transfer",
           "field_order",
           "rotation",
+          "dv_profile",
+          "dv_bl_signal_compatibility_id",
           "language",
           "title"
         ],
@@ -17724,6 +18136,14 @@
           },
           "rotation": {
             "$ref": "#/components/schemas/SqlNullInt64"
+          },
+          "dv_profile": {
+            "$ref": "#/components/schemas/SqlNullInt64",
+            "description": "Dolby Vision profile from the stream's configuration record; invalid without one."
+          },
+          "dv_bl_signal_compatibility_id": {
+            "$ref": "#/components/schemas/SqlNullInt64",
+            "description": "Dolby Vision base-layer compatibility id: 1 HDR10, 2 SDR, 4 HLG, 6 Blu-ray HDR10, 0 none (profile 5). Invalid without a configuration record."
           },
           "language": {
             "$ref": "#/components/schemas/SqlNullString"

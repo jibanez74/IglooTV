@@ -8,6 +8,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
 import com.igloo.blindpenguincoder.data.model.AudioStream
 import com.igloo.blindpenguincoder.data.model.MusicStats
+import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.model.SortOrder
 import com.igloo.blindpenguincoder.data.model.SqlNullInt64
 import com.igloo.blindpenguincoder.data.model.SqlNullString
@@ -24,6 +25,7 @@ import com.igloo.blindpenguincoder.feature.library.LibraryGenre
 import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryTab
 import com.igloo.blindpenguincoder.feature.library.LibraryUiState
+import com.igloo.blindpenguincoder.feature.movies.WatchRoomPresets
 import com.igloo.blindpenguincoder.feature.movies.movieAboutFacts
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUi
@@ -59,15 +61,24 @@ import com.igloo.blindpenguincoder.feature.shows.SeasonUi
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUi
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsUiState
+import com.igloo.blindpenguincoder.feature.watchrooms.RoomConnection
 import com.igloo.blindpenguincoder.feature.watchrooms.RoomMemberUi
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomActions
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomPageUi
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomSync
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomUi
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomUiState
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsActions
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsUiState
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchTogetherActions
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchTogetherUiState
 import com.igloo.blindpenguincoder.playback.media3.FakeMusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.FakeVideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.MusicPlayerEngine
 import com.igloo.blindpenguincoder.playback.media3.VideoPlayerEngine
 import com.igloo.blindpenguincoder.playback.model.MusicPlayRequest
+import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
+import com.igloo.blindpenguincoder.playback.model.RoomPlayhead
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 
 /**
@@ -835,3 +846,109 @@ internal fun testWatchRoomsState(
 )
 
 internal val inertWatchRoomsActions = WatchRoomsActions(onShown = {}, onRefresh = {})
+
+/**
+ * Room 1's own screen: the signed-in profile hosts it, with Maria in it too. Its request is what
+ * Watch hands the player, minus where the room is.
+ */
+internal fun testWatchRoomPage(isOwner: Boolean = true) = WatchRoomPageUi(
+    id = 1,
+    title = "Movie 1",
+    posterUrl = null,
+    backdropUrl = null,
+    ownerId = if (isOwner) 1 else 2,
+    isOwner = isOwner,
+    hostLine = if (isOwner) "Hosted by Jose (you)" else "Hosted by Maria",
+    settingsLine = "Original quality — audio adjusted · English · 5.1 surround · Subtitles off",
+    members = listOf(
+        RoomMemberUi(id = 1, name = "Jose", avatarUrl = null),
+        RoomMemberUi(id = 2, name = "Maria", avatarUrl = null),
+    ),
+    playRequest = VideoPlayRequest(
+        media = PlaybackMediaRef.Movie(101),
+        title = "Movie 1",
+        posterUrl = null,
+        mimeType = "video/mp4",
+        mode = PlaybackMode.Remux,
+        audioTypeIndex = null,
+        subtitleTypeIndex = null,
+        resumeAtSec = null,
+        durationSec = 7200.0,
+        promptForResume = false,
+        watchRoomId = 1,
+    ),
+)
+
+/**
+ * Room 1, open and live: [playhead] says where it is (paused at 0 unless given), and
+ * [connected] who is in it — the signed-in profile and Maria by default.
+ */
+internal fun testWatchRoomState(
+    page: WatchRoomPageUi? = testWatchRoomPage(),
+    playhead: RoomPlayhead? = RoomPlayhead(paused = true, positionSec = 0.0, atMs = 0),
+    connected: List<Long> = listOf(1, 2),
+    confirmingClose: Boolean = false,
+) = WatchRoomUiState(
+    openRoomId = page?.id,
+    details = page?.let { DetailsState.Loaded(it) } ?: DetailsState.Loading,
+    sync = WatchRoomSync(
+        selfId = 1,
+        connection = if (playhead == null) RoomConnection.Connecting else RoomConnection.Live,
+        playhead = playhead,
+        connectedUserIds = connected,
+    ),
+    confirmingClose = confirmingClose,
+)
+
+/** No room open: the shell's resting state. */
+internal val closedWatchRoomState = WatchRoomUiState(sync = WatchRoomSync(selfId = 1))
+
+internal val inertWatchRoomActions = WatchRoomActions(
+    onWatch = {},
+    onRetry = {},
+    onRequestClose = {},
+    onDismissClose = {},
+    onConfirmClose = {},
+    onRequestLeave = {},
+    onDismissLeave = {},
+    onConfirmLeave = {},
+    onEditInvitees = {},
+    onToggleInvitee = {},
+    onSaveInvitees = {},
+    onRetryInvitees = {},
+    onDismissEdit = {},
+    onForeground = {},
+    onBackground = {},
+    onTransport = { _, _ -> },
+    onPlaybackStarted = {},
+    clock = { 0L },
+)
+
+internal val inertWatchTogetherActions = WatchTogetherActions(onToggle = {}, onCreate = {}, onRetry = {}, onDismiss = {})
+
+/** Watch Together over movie 1, Maria and Ana to invite. */
+internal fun testWatchTogetherState(
+    people: IglooRailState<RoomMemberUi> = IglooRailState.Loaded(
+        listOf(
+            RoomMemberUi(id = 2, name = "Maria", avatarUrl = null),
+            RoomMemberUi(id = 3, name = "Ana", avatarUrl = null),
+        ),
+    ),
+    selected: Set<Long> = emptySet(),
+    creating: Boolean = false,
+    hint: String? = null,
+) = WatchTogetherUiState(
+    movieId = 1,
+    shown = true,
+    title = "Heat",
+    presets = WatchRoomPresets(
+        mode = PlaybackMode.Remux,
+        audioTrack = 0,
+        subtitleTrack = null,
+        settingsLine = "Original quality — audio adjusted · English · 5.1 surround · Subtitles off",
+    ),
+    people = people,
+    selected = selected,
+    creating = creating,
+    hint = hint,
+)

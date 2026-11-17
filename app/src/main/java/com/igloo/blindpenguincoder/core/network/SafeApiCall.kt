@@ -5,13 +5,14 @@ import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.data.model.MessageResponse
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 
 /**
  * Runs a request and maps the Igloo envelope conventions onto [ApiResult]:
- * 401 -> Unauthorized, other non-2xx -> Api with the backend message
+ * 401 -> Unauthorized, other non-2xx -> Api with the backend message and any `Retry-After`
  * preserved, transport failures -> Timeout / TlsVerification / Network.
  */
 suspend fun <T> safeApiCall(
@@ -32,7 +33,13 @@ suspend fun <T> safeApiCall(
 
     if (!response.status.isSuccess()) {
         val message = response.backendMessage() ?: "Server error (${response.status.value})"
-        return ApiResult.Failure(AppError.Api(message, response.status.value))
+        return ApiResult.Failure(
+            AppError.Api(
+                message = message,
+                status = response.status.value,
+                retryAfterSec = response.headers[HttpHeaders.RetryAfter]?.toIntOrNull(),
+            ),
+        )
     }
 
     return try {

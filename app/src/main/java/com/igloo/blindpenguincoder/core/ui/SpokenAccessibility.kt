@@ -7,6 +7,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -15,7 +17,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import java.util.concurrent.Executor
 import kotlinx.coroutines.delay
@@ -121,3 +129,21 @@ private fun AccessibilityManager?.hasSpokenFeedbackService(): Boolean =
 
 /** Long enough for TalkBack to finish binding after its settings change is reported. */
 private const val SERVICE_BIND_SETTLE_MS = 1_500L
+
+/**
+ * Words for TalkBack wherever its focus is parked: the players' play-state flips driven by media
+ * keys, and what another member of a watch room did. Polite — it narrates, it never interrupts. A
+ * null [text] composes nothing, which is how a moment with nothing to say stays quiet.
+ */
+@Composable
+internal fun PoliteAnnouncement(text: String?) {
+    if (text == null) return
+    Box(
+        modifier = Modifier
+            .size(1.dp)
+            .clearAndSetSemantics {
+                liveRegion = LiveRegionMode.Polite
+                contentDescription = text
+            },
+    )
+}

@@ -1,5 +1,9 @@
 package com.igloo.blindpenguincoder.core.ui
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -8,6 +12,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
@@ -100,4 +105,44 @@ class IglooButtonSemanticsTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
             .assert(SemanticsMatcher.keyNotDefined(SemanticsActions.RequestFocus))
     }
+
+    // A watch room's Watch is inert until the room's state arrives. When that came after the page,
+    // focus sat on the inert button, and the swap to a live one dropped it: focus on nothing.
+    @Test
+    fun aFocusedButtonKeepsFocusWhenItsActionArrivesOrGoes() {
+        var live by mutableStateOf(false)
+        composeRule.setContent {
+            IglooTheme {
+                Row {
+                    IglooButton(
+                        text = "Watch",
+                        onClick = if (live) ({}) else null,
+                        modifier = Modifier.testTag("button"),
+                    )
+                    IglooIconButton(
+                        icon = IglooIcons.Play,
+                        semanticLabel = "Play",
+                        onClick = if (live) ({}) else null,
+                        modifier = Modifier.testTag("icon"),
+                    )
+                }
+            }
+        }
+
+        for (tag in listOf("button", "icon")) {
+            val node = composeRule.onNodeWithTag(tag)
+            node.requestFocus()
+            node.assertIsFocused()
+            live = !live
+            composeRule.waitForIdle()
+            node.assertIsFocused().assertHasClickActionIf(live)
+            live = !live
+            composeRule.waitForIdle()
+            node.assertIsFocused()
+        }
+    }
+
+    private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertHasClickActionIf(live: Boolean) =
+        if (live) assertHasClickAction() else assertHasNoClickAction()
 }
+

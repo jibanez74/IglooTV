@@ -1,7 +1,11 @@
 package com.igloo.blindpenguincoder.core.error
 
 sealed interface AppError {
-    data class Api(val message: String, val status: Int) : AppError
+    /**
+     * A non-2xx answer. [retryAfterSec] is the server's `Retry-After` when it sent one: a full
+     * transcode pool refuses a room's creation with 503 and says when to try again.
+     */
+    data class Api(val message: String, val status: Int, val retryAfterSec: Int? = null) : AppError
     data object Unauthorized : AppError
     data object Network : AppError
     data object Timeout : AppError

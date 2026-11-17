@@ -10,14 +10,14 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.ui.IglooRadioListDialog
+import com.igloo.blindpenguincoder.core.ui.IglooListDialog
 import com.igloo.blindpenguincoder.core.ui.IglooRadioRow
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 
 /**
  * The Playback Settings modal (section 11.4.1): three flat radio lists — quality/mode, audio
- * track, subtitles — over a pinned explanation line, on the [IglooRadioListDialog] shell.
+ * track, subtitles — over a pinned explanation line, on the [IglooListDialog] shell.
  *
  * Selection is not dismissal: OK on a row updates state and keeps focus where it is, so the
  * user can hear the explanation change and keep adjusting. Only Back and Done leave.
@@ -31,7 +31,7 @@ internal fun PlaybackSettingsDialog(
     onDismiss: () -> Unit,
 ) {
     val rowCount = settings.modes.size + settings.audioTracks.size + settings.subtitleTracks.size
-    IglooRadioListDialog(
+    IglooListDialog(
         title = "Playback Settings",
         paneTitle = "Playback settings",
         rowCount = rowCount,
@@ -66,7 +66,7 @@ internal fun PlaybackSettingsDialog(
                 modifier = Modifier
                     .rowFocus(row++)
                     // The wire id ("1080p_8mbps") is the stable tag suffix; direct play has none.
-                    .testTag("playback_mode_${option.mode.hlsProfileId ?: "direct"}"),
+                    .testTag("playback_mode_${option.mode.wireId}"),
             )
         }
 

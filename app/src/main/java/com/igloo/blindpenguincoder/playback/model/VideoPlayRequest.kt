@@ -45,6 +45,12 @@ data class VideoPlayRequest(
      * Resume, or this is the hand-off to the next episode.
      */
     val promptForResume: Boolean = true,
+    /**
+     * The watch room this showing belongs to; null for the viewer's own. A room fixes its stream
+     * on the server — mode, audio and a start at 0 — so the engine plays the room's direct
+     * stream or its one shared HLS session instead of the movie's.
+     */
+    val watchRoomId: Long? = null,
 ) {
     /** The position the Resume prompt asks about, or null when the player starts without asking. */
     val resumePromptSec: Double?

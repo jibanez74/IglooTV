@@ -235,7 +235,7 @@ internal fun <T> PaneCardGrid(
     contentInset: PaddingValues,
     contentStartRequester: FocusRequester,
     navigationRequester: FocusRequester,
-    returnRequester: FocusRequester?,
+    returnRequester: FocusRequester,
     firstItemRequester: FocusRequester,
     upRequester: FocusRequester,
     lastFocusedId: Long?,

@@ -857,6 +857,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooTextField` | `heightIn(min = sizes.fieldHeight)`, radius `lg`, placeholder at `mutedForeground @ 0.60`; the one control that opts out of the focus scale. `label` is always the spoken description and visible unless `labelVisible = false`; optional `leadingIcon` inside the field; `fieldModifier` goes on the input node itself (its test tag, extra requesters). D-pad up/down move focus to the wired neighbours instead of the cursor; left leaves to `leftFocusRequester` only while the text is empty. |
 | `IglooInlineError` | `destructive @ 0.10` fill, `@ 0.25` border, radius `lg` |
 | `IglooNotice` | One announced line — `bodyMedium` / `mutedForeground`, `liveRegion = Polite`. For a message the user did not ask for and cannot act on: what a gate says after an action that already happened (§10, §11.1.1). Not an error card; no Retry. |
+| `PoliteAnnouncement` | Words for TalkBack wherever its focus is, drawn nowhere: a 1dp cleared node with `liveRegion = Polite` whose description is the text, and nothing at all while the text is null. The players' play-state flips driven by media keys (§11.8), and what another member of a watch room did (§11.10.1). |
 | `IglooIconButton` | The square icon-only control for row ends (the detail hero's More trigger, a track row's three actions): `controlHeight` both ways, radius `lg`, focus per §6.1, glyph at `icons.md`. `semanticLabel` is mandatory — the glyph alone says nothing to TalkBack. With a null `onClick` it stays a focus target but announces no action, the inert-poster-card contract. Takes `overMedia` for the §3.2 over-media ground like `IglooButton`, and `IglooButton`'s toggle semantics — `stateDescription`, `actionLabel` — plus `iconTint` for a glyph that changes weight while the ground stays. |
 | `TrackRow` | §11.5's three-action row (`feature/shared`): Play, Like, More as `IglooIconButton`s, all focusable, none hidden until focus, the row itself never a target and painting `muted @ 0.50` at `radius.lg` while a child holds focus. Play is the entry column and speaks the row's one sentence with "Liked" as its state; Like carries the like state and an action naming the track; More names the track, or says "None available." while inert. `TrackRowFocus` answers up/down **per column** so vertical moves keep their column, a null answer leaving the direction to the spatial search (a lazy list wires only its edges); `riders` park a host's requesters on one control of one row. `TrackRowSkeleton` is the row-shaped placeholder; `TrackRowMenu` the row's `IglooMenu` ("Go to album" / "Go to artist"). |
 | `PagedLoader` | One infinite list's paging machine (`feature/shared`): cursor, loaded rows, job and generation, writing its `PagedState` into one field of a view model's state through `read`/`write`, with `fetch` the only place `page`/`per_page` and `limit`/`offset` lists differ. `ensureLoaded`, `loadFirstPage(userInitiated)`, `loadMore`, `retryAppend` and `reset` (back to the skeleton, late answers dropped, generations kept monotonic). First-page hooks let a view model keep whole-state flags in step (Music's `refreshing`/`notice`). The Music and Search panes keep one per tab. |
@@ -866,13 +867,15 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooConfirmDialog` | The confirmation modal (§9.3) |
 | `IglooMenu` | The anchored menu: a `card` surface of focusable rows placed against the trigger's root-coordinate bounds — right-aligned, below it, flipping above when the bottom safe area would be breached. In-tree for §9.3's four reasons and hosted as the last child of the screen that owns the trigger; **unscrimmed**, unlike the modal — an anchored menu is local chrome, not a page-blocking decision, and §9.1 gives the scrim to the rail and the modal only. One `standard` alpha reveal, no exit animation. Focus is trapped (up/down walk the rows, everything else `Cancel`), the first row takes focus on reveal, the caller restores focus in `onDismiss` and gates its own Back (§9.3). `paneTitle` + one cleared Button node per row; a `destructive` row wears the destructive token pair, and `separatorBefore` draws a silent hairline. The covered screen leaves the semantics tree via an empty `clearAndSetSemantics { }` — the partial-overlay rule (§9.3), since an anchored card occludes nothing and a merely-hidden node keeps TalkBack's focus. |
 | `IglooRadioRow` | One option row of a radio list on a card ground: the `IglooMenu` row recipe (`navItemHeight` minimum, `muted` focused fill, `spacing.md` padding, focus per §6.1) plus a drawn-only leading radio glyph — outer ring on `border` (`primary` when selected), `primary` dot when selected, unscaled 2dp stroke so the hairline stays a hairline. One cleared `RadioButton` node per row announcing label and selected state with a "Select" action. A null `onSelect` is the inert variant: still **focusable** — an unfocusable row mid-list punches a hole in a hand-wired up/down chain, the §9.3 pending-row argument — but announced disabled with no action; the label carries the reason it cannot be chosen. Optional `detail` is trailing muted text (a timecode), drawn-only; optional `semanticLabel` replaces the spoken label when the drawn one is not the sentence to read, the `IglooButton` contract. Focus wiring is the caller's, like the menu's rows. |
+| `IglooCheckRow` | One row of a checklist on a card ground, the Watch Together dialog's invitees (§11.10.3): `IglooRadioRow`'s body — they share it — with a drawn check glyph in place of the radio (a `border` hairline square, filled `primary` with a `primaryForeground` tick when checked) and an optional leading slot (an avatar) before the label. One cleared `Checkbox` node with its toggleable state and the caller's `actionLabel` ("Invite" / "Don't invite"). |
 | `FocusRing` | The one focus treatment (§6.1) as one modifier: glow, scale, fill, clip, ring, separator. **Owns the fill; call sites pass `fill =` and must not clip.** |
 | `IglooQrCode` | Pairing-code QR |
 | `IglooBrandMark` | The "I" tile. Always radius `lg`; hidden from accessibility, since the glyph is not a word. Size and text style are the only parameters. |
 | `IglooPosterCard` | The rail media card (§8.2): artwork at `layout.posterWidth` / `layout.posterAspect` by default, with both geometry values as parameters (`wideCardWidth` / `wideAspect` for video thumbnails), radius `lg` by default and `artworkRadius = radius.pill` for a musician's circle — §8.2's circle is a radius the focus ring clamps, not a second component — with `centerText` for the text under it and `semanticLabel` when "Title, Year" is not the sentence to read, focus per §6.1 on the artwork only — title (`bodyMedium`, 2 lines) and one context line (`label`) sit below it and keep still while the poster scales. An optional `detail` third line in the context line's tier (a show's cast card: "228 episodes") joins the spoken sentence. One cleared semantics node ("Title, Year"); it takes `Role.Button` and an "Open …" action **only when given an `onClick`** — with none, the card is still focusable but announces no action it cannot perform. A null or failed image falls back to the film glyph on `muted` with the text unchanged. Optional `PosterCardProgress`: a 4dp bar on the poster's bottom edge (`primary` fill on a `Black @ 0.40` track, §3.2) whose fully spoken remaining-time description joins the cleared node ("Title, Year, 2 hours and 20 minutes remaining", §12) so the bar can never render unannounced. The description is semantic only; no numeric percentage or remaining-time caption renders on the card. |
 | `IglooMediaRail` | The §8.3 rail: heading + foundation `LazyRow` of cards, grid-matched static skeletons (shaped by the caller's `cardAspect` and `cardWidth`, so a wide rail's placeholders match its cards), the minimal `IglooFocusableEmpty`, and `IglooInlineError` with Retry. Owns per-rail focus memory (§6.3): the entry card is the last-focused one, and a rail rebuilt on re-entry is created scrolled so that card exists to take focus. **Every state keeps exactly one focus anchor** wired to the pane's entry requester and the spine, so the shell's focus model (§8.1, Back) always has somewhere to land — including while loading and when empty. An optional `returnRequester` rides that same anchor: an overlay opened from a card requests it on close, so Back lands on the card that led away (§6.3, §11.4). Takes the pane's `contentInset` and splits it by node per §8.3 — heading and non-scrolling states pad, the `LazyRow` carries it as `contentPadding` so cards bleed off the panel edge. Optional `upFocusRequester` / `downFocusRequester` pin the vertical edges for a rail between hand-wired neighbours (a details page's sections) on every card **and** on whichever anchor the state holds — skeleton cell, Retry or empty box — so no state leaves an edge to a spatial search; null leaves it spatial, as Home's column wants. |
 | `IglooFocusableEmpty` | §10 empty state, minimal variant only: faded icon + one line, as the pane's focusable anchor announcing the line when focused — no live region (§6.3). The rich-CTA variant is not built yet; the first screen with a real action to offer adds it. The Watch Rooms pane's empty state is §10's illustrated variant, which is not focusable at all (§11.10). |
-| `IglooRadioListDialog` | The scrimmed radio-list dialog behind Playback Settings and the player's track and chapter menus: the `IglooConfirmDialog` recipe (§9.3) — both, and the player's resume prompt, sit on the one `IglooDialogCard` frame (scrim, reveal, card, pane title, heading) — around one flat, scrolling list of `IglooRadioRow`s and a pinned Done. The caller draws the rows, applying `rowFocus(n)` to row `n`, which walks up/down and onto Done and cancels every other direction; entry focus lands on `entryIndex`. |
+| `IglooListDialog` | The scrimmed list dialog behind Playback Settings, the player's track and chapter menus and Watch Together: the `IglooConfirmDialog` recipe (§9.3) — both, and the player's resume prompt, sit on the one `IglooDialogCard` frame (scrim, reveal, card, pane title, heading) — around one flat, scrolling list of rows, with optional `header` and `footer` slots and the actions pinned under them, a Done by default. The caller draws the rows, applying `rowFocus(n)` to row `n`, which walks up/down and onto the first action and cancels every other direction; entry focus lands on `entryIndex`, or on the first action while there are no rows, and moves to the row when a list that arrives late lands. |
+| `IglooPendingRow` | §9.3's pending line: one focusable, pinned, polite status that stands in for a modal's buttons while its action is in flight. The confirm dialog's and Watch Together's. |
 | `IglooPinnedError` | A screen's full-screen error: `IglooInlineError` centred in the safe area at `dialogWidth`, its one action pinned in every direction because the host is still composed underneath. Assertive — it is the only region on screen. |
 | `ProgressTrack` | The one thin progress bar: 4dp, a ground and a fill, square where it sits flush on an edge (poster card, seek bar) and `rounded` where it stands free (the resume strip). |
 | `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. A surface whose text sits over the art hoists its `rememberArtworkState` so the §3.2 treatment follows the decode (the In Theaters card, the Home hero and the details hero, which draw the art themselves through `ArtworkImage`). |
@@ -930,7 +933,8 @@ one node in the app with a focus treatment of its own.
 ### 9.3 The confirmation dialog
 
 `IglooConfirmDialog` is the app's only modal. It exists for actions that destroy something the
-user cannot get back with one press — today, sign out (§11.2).
+user cannot get back with one press — today, sign out (§11.2) and closing a watch room
+(§11.10.1).
 
 **It is an in-tree overlay, not `androidx.compose.ui.window.Dialog`.** This is a deliberate
 choice, not an oversight, and four things break if someone "fixes" it into a real dialog window:
@@ -2592,6 +2596,14 @@ autoplay is still pending. The icon and toggle use `playWhenReady`, so Pause dur
 rebuffering cancels pending autoplay and the ready transition cannot restart behind the user's
 back.
 
+**One transport.** Every play, pause and seek runs through the screen's own four controls, whatever
+sent it: the chrome, the keys, and the system's media controls and Assistant, which reach the
+MediaSession's player and are handed up by the engine as `SessionTransport` rather than acting on
+the engine themselves. So a seek from Assistant moves the seek bar at once and lapses a dismissed
+Up Next card like a press does, and a watch room hears it (§11.10.2). The engine's intent gate
+(`PlaybackIntent`) still rules: an Assistant "play" behind a covered screen ends in the engine's
+gated play and stays refused.
+
 **The Resume prompt asks only when the control did not.** A launch whose control already said
 Resume — the show page's "Resume S1 E3", an episode card drawn with its progress bar, a Continue
 Watching card — carries `promptForResume = false` and starts at the saved position at once; a
@@ -2849,26 +2861,23 @@ The unread count polls every 30s; the full list is fetched only while the panel 
 
 ### 11.10 Watch Rooms
 
-**The list, as built (2026-11-12).** The rooms the signed-in profile hosts or was invited to
+**The list.** The rooms the signed-in profile hosts or was invited to
 (`GET /watch-rooms`): on the web a section of the home page, here the destination under Home. A
 heading with the room count and one action, **Refresh Watch Rooms**, over a grid of wide cards.
 The list is short and arrives whole — no paging, no tabs, no sort; the server orders it newest
-first.
-
-**Joining a room is not built.** The cards are inert: focusable and spoken, with no press. Synced
-playback over the room's WebSocket is its own pass, and it brings the card's action, the pane's
-return requester and the room page with it. Rooms are created on the web (a movie's Watch
-Together), which is what the empty state says.
+first. A card's press opens the room (§11.10.1). Rooms are created from a movie's Watch Together
+(§11.10.3), on the TV or the web, which is what the empty state says.
 
 **The card** (`WatchRoomCard`) is one `card` surface at `radius.lg`, at least as tall as its
 poster (`roomPosterWidth` at 2:3) and taller when a larger font scale needs it (§2.6). The poster's box runs down the left edge on `muted`, the film glyph
 standing in for a missing poster. Beside it, padded `spacing.md`: the movie's title (`bodyLarge`,
 2 lines), "Hosted by {name}" with "(you)" on the profile's own room (`label`,
 `mutedForeground`), then at the bottom the first four members as overlapping `IglooAvatar`s at
-`icons.lg` — each on a 2dp rim of the card's colour, a "+N" pill for the rest — over the member
-count. The whole card is the focus target (§6.1 on the surface) and one cleared node speaking
-everything drawn: "Dune: Part Two, hosted by you, 6 members: Maria, Jorge, Ana, Luis and 2 more".
-No role and no action, the inert-card contract (§9.1). Cards sit `roomGridColumns` to a row.
+`icons.lg` — each on a 2dp rim of the card's colour, a "+N" pill for the rest (`MemberStack`,
+shared with the player's presence badge) — over the member count. The whole card is the focus
+target (§6.1 on the surface) and one cleared `Role.Button` node speaking everything drawn —
+"Dune: Part Two, hosted by you, 6 members: Maria, Jorge, Ana, Luis and 2 more" — whose press is
+offered as "Join room". Cards sit `roomGridColumns` to a row.
 
 **States.** Loading is the card's own skeleton on the grid's geometry, the first cell the anchor
 ("Loading watch rooms"). A failed first load is `IglooInlineError` with Retry ("Retry loading
@@ -2876,7 +2885,7 @@ watch rooms"), which stays on screen while the retry is out. A Refresh that fail
 screen keeps them and reports in the header's notice (§11.4's rule). No rooms is the illustrated
 empty state (§10): a lit screen with the play mark over a row of five empty seats, "No watch
 rooms right now", and two lines — "Rooms you host or are invited to show up here." and "Start one
-from a movie on the web with Watch Together."
+from a movie with Watch Together."
 
 **When the list is read.** The server pushes nothing when a room is created, so an invitation
 appears only on a re-read. The pane asks for one whenever it comes on screen — when it is opened,
@@ -2884,7 +2893,10 @@ and when the app returns to the foreground on it — through a start effect of i
 Refresh button. It is deliberately **not** in the host's start effect, which re-reads every
 library on each foreground: this list is only worth a request while someone is looking at it.
 The view model keeps the list for the session, so a return shows it at once while the re-read is
-out. There is no timer.
+out. There is no timer. A room that goes away while it is open — its owner closed it, its movie
+was deleted, it is no longer this user's — leaves the list at once without a re-read, and the
+header's notice says why ("The watch room for Heat was closed.", or the web's "This room no
+longer exists or you were not invited.").
 
 **Two kinds of arrival.** A list the user asked for — the first load, a Refresh, a Retry —
 replaces what is on screen: the grid returns to the top and focus goes to the first room, the
@@ -2892,15 +2904,15 @@ newest, as on §11.4's Refresh. A re-read nobody pressed for reconciles in place
 where they are, and focus moves only if the room it was on is gone (to the first room, or to
 Refresh when that was the last one). A background failure over a loaded list says nothing. The
 two are `contentGeneration` and `reconcileGeneration` on the state, the pair
-`PaneFocusHandoffCoordinator` already takes.
+`PaneFocusHandoffCoordinator` already takes; a room taken off the list is a reconcile.
 
 **Focus.** The pane's entry anchor is the remembered card if it is on screen, otherwise the
 first card on screen (§11.4); the first skeleton cell while loading; Retry on the error card. **With no rooms it is
 the Refresh button** — the empty scene offers nothing to do, so the anchor goes to the one
 control that does, and its Down is cancelled because nothing below takes focus. The left column
 and Refresh exit to the spine; the first row climbs to Refresh and Refresh returns to the entry
-card; Refresh's Up and Right, the grid's right edge and its last row are pinned. Nothing opens
-over the pane, so it has no return requester.
+card; Refresh's Up and Right, the grid's right edge and its last row are pinned. The pane's return
+requester rides the entry card, so leaving a room lands on the card that opened it.
 
 **What TalkBack hears.** The destination through `paneTitle` (§12). The count as a polite live
 region: "Loading your watch rooms", "3 watch rooms", "Watch rooms unavailable". The button as
@@ -2912,7 +2924,172 @@ every entry, after the load that found nothing, and again when a Refresh comes b
 **Tags.** `watch_rooms_grid`, `watch_room_card_{id}`, `watch_rooms_count`, `watch_rooms_notice`,
 `watch_rooms_empty`.
 
----
+#### 11.10.1 The room
+
+**Being on the room's screen is being in the room.** Opening it confirms membership
+(`POST /watch-rooms/{id}/join`) and connects to the room's WebSocket at once, so the others see
+this viewer arrive and the screen can say who is there and whether it is playing. Any member may
+play, pause or seek for everyone; there is no host control, no chat, and nothing the owner can do
+that a guest cannot except close the room. The screen is a layer of its own over the details slot
+— shell → details → room → player — so a room opened from a movie's page leaves that page under
+it, and Back from the room returns there.
+
+**Layout.** The details pages' hero (§11.4.1): the movie's backdrop (`W1280`, from the movie's own
+page, which only lends the backdrop and the runtime — the room plays without it) behind the
+poster and a prose column — the title, "Hosted by {name}" with "(you)", the room's fixed choices
+in the Playback Settings dialog's words ("Original quality — audio adjusted · English · 5.1
+surround · Subtitles off", `roomSettingsLine`, shared with §11.10.3), and where the room is now:
+"● Playing · 1:02:10" moving each second, "Paused at 0:00", "Connecting…" or "Reconnecting…".
+Under it the action row: **Watch** (Primary, play glyph), for the owner **Edit invitees**
+(Ghost) and **Close room** (Destructive), and for an invitee **Leave room** (Ghost). Below the hero, **People in this room**: everyone, the host
+first, each with an avatar at `icons.lg`, "(you)" on this viewer, a "Host" tag and a status dot —
+`primary` and "Watching" while connected (on this screen or in the player), `muted` and "Away"
+otherwise.
+
+**Edit invitees** opens a §9.3 list dialog over the room, the Watch Together dialog's shell
+(§11.10.3): everyone on the server as `IglooCheckRow`s with the room's invitees checked, then
+Cancel and **Save invitees**, inert (state "No changes") until a check differs. A save re-reads the
+room; a failure closes the dialog and says why on the page, as a dialog carries no inline error.
+Anyone unchecked leaves the room at once on every device: the server sends their sockets
+`room_access_revoked`, which leaves the room with "You're no longer in the watch room for {title}.",
+and the others `members_changed`, which re-reads the page. The room's mode and tracks stay fixed
+(docs/known-issues.md).
+
+**Leave room** asks first (§9.3 confirm, "Leave this watch room?", Destructive confirm "Leave
+room") and then leaves the room for good: it drops off the list on every device, and only the host
+can invite the viewer back. Back on either dialog answers the dialog, not the room, and focus returns
+to the button that opened it.
+
+**Watch** opens the player (§11.10.2) where the room is now. It is inert, its state "Connecting to
+the room", until the room's first snapshot says where that is. A **playing** room is joined
+playing, at its moving position; a **paused** room with others in it is joined paused with Play
+focused, so this press does not start the room for everyone; a paused room this viewer **has to
+themselves** starts — there is nobody to wait for — and its clock starts at the player's first
+frame, not at the press, so the load time does not put the room ahead of the only person in it.
+
+**Close room** asks first, on §9.3's modal: "Close this watch room?", "This closes the room for
+{title} and sends everyone out of it. It can't be undone.", Cancel focused, "Close room"
+destructive, "Closing room…" while the request is out. Cancel, Back and a failure all return focus
+to Close room; a failure stays on the page and says why in a notice under the actions ("Couldn't
+close the room: …"). A close that lands leaves the room as below.
+
+**When a room goes away on its own** — `room_deleted` on the socket, or a membership check that
+answers 403/404 — the room screen and any player over it close, focus returns to where the room
+was opened from, and the list's header says why (§11.10).
+
+**The link.** The socket reconnects on the web's schedule, 1, 2, 4, 8 and then 16 s for as long as
+it takes, re-checking membership before each attempt; OkHttp pings it every 25 s, because the
+server never sends a Close frame and a link that died silently would otherwise look open forever.
+The app going to the background takes the link down — the others see this viewer leave, as the
+web's page hide does — and the foreground brings it back. The server forgets an empty room's
+position and starts it again paused at 0; a viewer who comes back to such a room alone puts it
+back where it was.
+
+**Focus.** Watch is the entry anchor; under a screen reader the hero's summary stop takes it, as
+on every details page, with Watch one press down. The action row walks left and right between its
+buttons with every outer edge pinned; Down from any of them is the people panel, one focus stop
+like the facts panel (§11.4.1) — reachable so a d-pad brings it into view, with nothing to press
+— and Up from it returns to the action last focused. The skeleton's action-slot stub holds the
+anchor while loading; the error is `IglooPinnedError` with "Retry loading watch room".
+
+**What TalkBack hears.** The pane title "{title} watch room". The summary stop reads the title,
+host line, settings line and the status as it stands — "Playing", never a ticking timecode, which
+would be read again each second. The people panel reads "People in this room: Jose (you), host,
+watching. Maria, away". What another member does is spoken through a polite announcement wherever
+focus is, and nothing is drawn for it: "Room paused at 12 minutes", "Room playing from 1 minute",
+"Room jumped to 1 hour and 2 minutes", "Maria joined the room", "Maria left the room". This
+viewer's own presses add nothing to what the player already says.
+
+**Tags.** `watch_room_layer`, `watch_room`, `watch_room_backdrop`, `watch_room_info`,
+`watch_room_status`, `watch_room_watch`, `watch_room_edit`, `watch_room_close`,
+`watch_room_notice`, `watch_room_people`, `watch_room_member_{id}`.
+
+#### 11.10.2 In a room: the player
+
+The room's player is §11.8's, given a `PlayerRoom`. What changes:
+
+- **What plays.** The room's own stream: its original file for a direct room, otherwise its one
+  shared HLS session (`/watch-rooms/{id}/hls/playlist.m3u8`), which the room fixed at creation —
+  profile, audio and a start at 0, H.264 only. The session controller drives it through the same
+  interface as a personal session, so its capacity waits, lost-session recovery and keepalive all
+  apply; but nothing of the player's own spec is sent, the keepalive is the same plain request,
+  the session is never stopped from here (it is everyone's), and a seek never rebases it — it
+  covers the movie from 0, so a far seek waits on the room's encoder instead. Subtitles are the
+  movie's own stream, at the room's track. A 409 on any room route means the movie's file was
+  replaced under the room: "This room's movie file was replaced. The room has to be closed and
+  created again."
+- **Every press is the viewer's command to everyone.** Play, pause and seek — from the chrome, the
+  keys, and the system's media controls and Assistant, which the engine hands up to the screen
+  (§11.8) — go to the room with where the player is. A run of seeks (a held Left or Right) goes
+  out as one once it has been quiet for 400 ms, so the others are not dragged through every step;
+  a play or pause sends the pending seek first. The end of the movie pauses the room, as on the web.
+  While the link is down a press only moves this player, and the room's state wins when it is back.
+- **Following the room.** On each new room state — another member's command, a snapshot, or the
+  server's echo of this viewer's own — and again once a new engine can take commands, the player
+  matches the room: it seeks only when it is more than **1.5 s** off where the room is now (the
+  web's threshold: a smaller seek costs a rebuffer the drift does not), then plays or pauses.
+  Following calls the engine directly, never the transport above, so the room's moves never go
+  back out as this viewer's. The server sends a command back to its sender too; the tolerance makes
+  that harmless, and the last echo is followed anyway, so a command that crossed someone else's
+  settles on the order the server ran them. Drift between commands is not corrected
+  (docs/known-issues.md).
+- **No menus.** The room fixes the tracks and the quality for everyone, so Audio, Subtitles and
+  Quality are gone; Chapters, Up Next and the resume prompt never apply.
+- **No progress.** A shared showing is no one's own: nothing is saved to Continue Watching or
+  the watched state.
+- **The presence badge** sits at the far end of the top bar: a `sizes.dot` dot in `primary`,
+  "3 watching" (`label`, white over media), and up to four of their avatars at `icons.md` on black
+  rims; "Reconnecting…" behind a dimmed dot while the link is down. Hidden from TalkBack, which
+  hears each arrival and departure as it happens instead. Tag `movie_room_presence`.
+- **What TalkBack hears.** Another member's action, the §11.10.1 sentences, takes the place of
+  the player's own phase words while the picture plays or rests; loading and buffering words still
+  win, since they say why nothing moves.
+- **The trip away.** `ON_STOP` releases the engine as always; on return the player follows the
+  room rather than opening paused (§11.8's rule for a solo showing), because a viewer paused in a
+  playing room is out of step and their only way out, Play, would pull everyone back.
+- **Back** closes the player onto the room's screen, still in the room, with focus on Watch.
+
+#### 11.10.3 Watch Together
+
+A movie's More menu → **Watch Together** makes a room for it, on the TV as on the web. It opens a
+dialog on §9.3's list-dialog shell (`IglooListDialog`), a partial overlay that clears the page's
+semantics under it:
+
+- **What the room will fix.** "Create a private room for {title}. Everyone you invite gets these
+  settings and can play, pause and seek for everyone.", then the room's settings line
+  (`roomSettingsLine`, the Playback Settings dialog's words) — the page's **current Playback
+  Settings**, which the room fixes for everyone. Direct is kept only where the server allows a
+  direct room — an MP4, its first audio track chosen unambiguously in a codec browsers decode
+  (AAC, MP3, Opus, Vorbis, FLAC), and 8-bit 4:2:0 progressive H.264 — and becomes Remux anywhere
+  else, the web client's same turn, so the same settings make the same room on either client
+  (`WatchRoomPresets`). Pressed before the page has the file's track details, the menu item says
+  so on the page instead of opening.
+- **Who to invite.** "Invite people", then everyone else on the server (`GET /users`) as
+  `IglooCheckRow`s — a check glyph, their avatar at `icons.lg`, their name — in the server's
+  order. Each is a Checkbox node offering "Invite" or "Don't invite". Loading, a failure ("Couldn't
+  load people: …", with Create turned to **Retry**) and nobody else on the server are prose in
+  the dialog, no rows.
+- **Cancel and Create and join room.** Cancel at its own width, Create taking the rest; Create
+  speaks the settings line as its state, the one place TalkBack hears it, since TV TalkBack
+  never reaches plain text. With nobody chosen, Create says "Select at least one person to
+  invite." (the web's words) in a polite line above the buttons and sends nothing.
+- **Pending.** The buttons give way to §9.3's focusable pending line, "Creating room…" — the
+  server starts the room's stream before it answers, up to half a minute. A server whose transcode
+  pool is full refuses with 503 and a `Retry-After`, which is waited out on the HLS manifest's own
+  capacity budget, the line saying "Waiting for the server to free up…" meanwhile. Pending outlives
+  the dialog: Back and Cancel stop showing it, and opening Watch Together again shows it still
+  under way.
+- **When it lands** the room's screen opens over the movie's page (§11.10.1), and Back from the
+  room returns to More. If the page is no longer what the user is looking at, the room is simply
+  in the list. **When it fails** the dialog closes and the reason lands on the page as its notice
+  ("Couldn't create the watch room: …"): a dialog never carries an inline error (§9.3).
+- **Focus.** Entry is the first person — Cancel while there is nobody to list — and moves to the
+  first person when the list lands. Up and Down walk the people and continue onto Cancel; Cancel
+  and Create are one row, every outer edge pinned. Back, Cancel and a failure return focus to the
+  page's More trigger.
+
+**Tags.** `watch_together_dialog`, `watch_together_presets`, `watch_together_invitee_{id}`,
+`watch_together_hint`, `watch_together_cancel`, `watch_together_create`.
 
 ## 12. Accessibility
 
@@ -3018,6 +3195,32 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-11-16 — Watch rooms: edit invitees and leave (§11.10.1).**
+
+- **§11.10.1** — the owner's Edit invitees works (it was inert), an invitee gets Leave room, and
+  the room follows the server's `members_changed` and `room_access_revoked` events. A close
+  answered 404 counts as the room being gone.
+
+**2026-11-13 — Watch Together: joining, following and making a watch room (§9.1, §9.3, §11.8, §11.10).**
+
+- **§11.10** — a room card's press opens the room; the empty state no longer sends people to the
+  web; a room that goes away leaves the list at once with the reason in its header.
+- **§11.10.1** is new: the room's screen — being on it is being in the room — with live status,
+  Watch, the owner's inert Edit room and Close room, the people in it, the link's reconnect and
+  background rules, and what TalkBack hears of other members.
+- **§11.10.2** is new: the player in a room — the room's own stream or shared HLS session, every
+  press sent to the room (seeks settled into one), following the room past 1.5 s of drift, no
+  menus and no progress, the presence badge.
+- **§11.10.3** is new: Watch Together from a movie's page — the page's Playback Settings with
+  Direct kept only where the server allows a direct room, an invite checklist, pending that
+  outlives the dialog.
+- **§11.8**: one transport — the system's media controls and Assistant hand their commands to the
+  screen, which runs them through its own controls.
+- **§9.3**: closing a watch room joins sign out as a confirmation.
+- **§9.1**: `IglooRadioListDialog` became `IglooListDialog` with header and buttons slots;
+  `IglooCheckRow`, `IglooPendingRow` and `PoliteAnnouncement` are new primitives.
+- The players' loading words now centre across the picture; they sat against the left edge.
 
 **2026-11-13 — Spotify popularity and followers are gone (§9.1, §11.5.1, §11.5.2).**
 

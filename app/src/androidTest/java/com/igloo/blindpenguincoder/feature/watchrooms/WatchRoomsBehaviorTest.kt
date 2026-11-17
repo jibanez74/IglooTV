@@ -378,9 +378,10 @@ class WatchRoomsBehaviorTest {
                 IglooTheme {
                     posterHeight = IglooTheme.layout.roomPosterWidth / IglooTheme.layout.posterAspect
                     Column(modifier = Modifier.width(368.dp)) {
-                        WatchRoomCard(testWatchRoom(1), Modifier.testTag("short"))
+                        WatchRoomCard(testWatchRoom(1), onClick = {}, Modifier.testTag("short"))
                         WatchRoomCard(
                             testWatchRoom(1).copy(title = "Three Billboards Outside Ebbing, Missouri"),
+                            onClick = {},
                             Modifier.testTag("long"),
                         )
                     }
@@ -438,8 +439,10 @@ class WatchRoomsBehaviorTest {
                         gridState = rememberLazyGridState(),
                         contentStartRequester = remember { FocusRequester() },
                         navigationRequester = remember { FocusRequester() },
+                        returnRequester = remember { FocusRequester() },
                         lastFocusedId = null,
                         onItemFocused = {},
+                        onRoomSelected = {},
                         spokenAccessibilityEnabled = false,
                     )
                 }

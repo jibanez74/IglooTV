@@ -8,11 +8,13 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.api.SendingRequest
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.util.AttributeKey
+import java.util.concurrent.TimeUnit
 import kotlinx.serialization.json.Json
 
 val IglooJson = Json {
@@ -78,7 +80,14 @@ fun deviceTokenAuth(credentials: DeviceCredentialSource, events: AuthEventBus) =
 fun createIglooHttpClient(
     credentials: DeviceCredentialSource,
     authEvents: AuthEventBus,
-    engine: HttpClientEngine = OkHttp.create(),
+    engine: HttpClientEngine = OkHttp.create {
+        // OkHttp pings an open WebSocket from its own client settings; Ktor's WebSockets plugin
+        // only reports its interval. A watch room's server never sends a Close frame, so without
+        // these pings a link that died silently (Wi-Fi gone, a server killed without a FIN) would
+        // look open forever: OkHttp fails a socket whose pong misses the next ping. The server's
+        // own pings, every 40 s, OkHttp answers by itself.
+        config { pingInterval(SOCKET_PING_INTERVAL_SEC, TimeUnit.SECONDS) }
+    },
     networkAccess: NetworkAccess = UnrestrictedNetworkAccess,
 ): HttpClient = HttpClient(engine) {
     expectSuccess = false
@@ -86,6 +95,9 @@ fun createIglooHttpClient(
     install(ContentNegotiation) {
         json(IglooJson)
     }
+    // A socket's upgrade goes through the same plugins as any request: the bearer token, the
+    // local-network gate and a 401's report. HttpTimeout leaves upgrades alone.
+    install(WebSockets)
     install(deviceTokenAuth(credentials, authEvents))
     install(HttpTimeout) {
         connectTimeoutMillis = 10_000
@@ -114,6 +126,8 @@ fun createServerProbeHttpClient(
 }
 
 const val SERVER_PROBE_TIMEOUT_MILLIS = 10_000L
+
+private const val SOCKET_PING_INTERVAL_SEC = 25L
 
 /** Holds every request, redirects included, until [networkAccess] lets it reach its host. */
 private fun HttpClientConfig<*>.gateLocalNetwork(networkAccess: NetworkAccess) =

@@ -26,6 +26,8 @@ internal class ReadOnlyDetailsLoader<State, Response, Ui>(
     private val state = MutableStateFlow(createState(null))
     val uiState: StateFlow<State> = state.asStateFlow()
     private var loadJob: Job? = null
+    // Only the latest read publishes, even one that outlived its cancellation.
+    private var generation = 0L
 
     /** Opens the overlay on [id] and starts its one load. */
     fun open(id: Long) {
@@ -60,13 +62,16 @@ internal class ReadOnlyDetailsLoader<State, Response, Ui>(
      */
     fun refresh() {
         val id = openId(state.value) ?: return
+        // The newer read supersedes one still out, so an older answer cannot land last.
+        loadJob?.cancel()
         load(id, userInitiated = false)
     }
 
     private fun load(id: Long, userInitiated: Boolean) {
+        val readGeneration = ++generation
         loadJob = scope.launch {
             val result = fetch(id)
-            if (openId(state.value) != id) return@launch
+            if (openId(state.value) != id || readGeneration != generation) return@launch
             state.update {
                 val nextDetails = when (result) {
                     is ApiResult.Success -> DetailsState.Loaded(toUi(result.value))

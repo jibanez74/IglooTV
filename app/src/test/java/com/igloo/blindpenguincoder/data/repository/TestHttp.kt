@@ -1013,5 +1013,22 @@ fun watchRoomJson(
     """"members":[${members.joinToString(",")}],"playback_mode":"direct","is_owner":$isOwner,""" +
     """"created_at":"2026-11-12 18:30:00"}"""
 
+/** `GET /watch-rooms/{id}`: the list item's fields plus the room's fixed tracks. */
+fun watchRoomDetailJson(
+    id: Long = 1,
+    movieId: Long = 101,
+    movieTitle: String = "Heat",
+    owner: String = userSummaryJson(),
+    members: List<String> = listOf(owner),
+    playbackMode: String = "remux",
+    isOwner: Boolean = true,
+    audioTrack: Long = 0,
+    subtitleTrack: Long? = null,
+): String = """{"error":false,"message":"watch room","data":{"room":{"id":$id,"movie_id":$movieId,""" +
+    """"movie_title":"$movieTitle","movie_poster":"/heat.jpg","owner":$owner,""" +
+    """"members":[${members.joinToString(",")}],"playback_mode":"$playbackMode",""" +
+    """"is_owner":$isOwner,"created_at":"2026-11-12 18:30:00","audio_track":$audioTrack,""" +
+    """"subtitle_track":$subtitleTrack}}}"""
+
 fun watchRoomsJson(vararg rooms: String): String =
     """{"error":false,"message":"watch rooms","data":{"rooms":[${rooms.joinToString(",")}]}}"""

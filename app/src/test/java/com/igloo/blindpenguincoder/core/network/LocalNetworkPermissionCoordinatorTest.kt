@@ -131,11 +131,11 @@ class LocalNetworkPermissionCoordinatorTest {
     }
 
     @Test
-    fun `LAN literals hostnames IPv6 and both schemes are classified`() {
+    fun `LAN literals hostnames IPv6 and every network scheme are classified`() {
         for (ip in listOf("10.0.2.2", "172.16.0.1", "192.168.1.5", "169.254.1.1", "127.0.0.1", "fc00::1", "fd12::4", "fe80::1", "::1")) {
             val address = InetAddress.getByName(ip)
             assertTrue(ip, isLocalAddress(address))
-            for (scheme in listOf("http", "https")) {
+            for (scheme in listOf("http", "https", "ws", "wss")) {
                 val host = if (':' in ip) "[$ip]" else ip
                 assertTrue(ip, isLocalNetworkUrl("$scheme://$host:8080/api") { listOf(address) })
             }

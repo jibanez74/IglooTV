@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder
 
+import android.os.SystemClock
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -50,6 +51,7 @@ import com.igloo.blindpenguincoder.feature.movies.MovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.TheaterMovieDetailsViewModel
 import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.music.AlbumDetailsViewModel
+import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.EpisodePlayPreparer
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsViewModel
@@ -61,7 +63,10 @@ import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.search.SearchViewModel
 import com.igloo.blindpenguincoder.feature.search.actions
 import com.igloo.blindpenguincoder.feature.shows.showLibrarySource
+import com.igloo.blindpenguincoder.feature.watchrooms.WATCH_TOGETHER_UNAVAILABLE_NOTICE
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomViewModel
 import com.igloo.blindpenguincoder.feature.watchrooms.WatchRoomsViewModel
+import com.igloo.blindpenguincoder.feature.watchrooms.WatchTogetherViewModel
 import com.igloo.blindpenguincoder.feature.watchrooms.actions
 import com.igloo.blindpenguincoder.playback.media3.VideoPlaybackServices
 import com.igloo.blindpenguincoder.playback.media3.deviceCanDecodeVideoMime
@@ -308,6 +313,29 @@ fun IglooRoot(container: IglooAppContainer) {
                                 container.serverUrlProvider,
                             )
                         }
+                    // The open room, single-slot like the details pages. A room that goes away on
+                    // its own is taken off the list at once, with the reason in its header.
+                    val watchRoomViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "watch-room") {
+                            WatchRoomViewModel(
+                                link = container.watchRoomRepository,
+                                movies = container.movieRepository,
+                                serverUrl = container.serverUrlProvider,
+                                selfId = state.user.id,
+                                onRoomGone = watchRoomsViewModel::onRoomGone,
+                                clock = SystemClock::elapsedRealtime,
+                            )
+                        }
+                    // A movie page's Watch Together. A creation that fails leaves its reason on the
+                    // page the dialog was over (section 9.3).
+                    val watchTogetherViewModel =
+                        sessionViewModel(authenticatedSessionOwner, "watch-together") {
+                            WatchTogetherViewModel(
+                                container.watchRoomRepository,
+                                container.serverUrlProvider,
+                                onNotice = detailsViewModel::showNotice,
+                            )
+                        }
                     // One liked-id set for every track row in the session, so no two surfaces
                     // can disagree about a heart; cleared with the rest on sign-out.
                     val trackLikesViewModel =
@@ -378,6 +406,10 @@ fun IglooRoot(container: IglooAppContainer) {
                     val watchRoomsActions = remember(watchRoomsViewModel) {
                         watchRoomsViewModel.actions()
                     }
+                    val watchRoom by watchRoomViewModel.uiState.collectAsStateWithLifecycle()
+                    val watchRoomActions = remember(watchRoomViewModel) { watchRoomViewModel.actions() }
+                    val watchTogether by watchTogetherViewModel.uiState.collectAsStateWithLifecycle()
+                    val watchTogetherActions = remember(watchTogetherViewModel) { watchTogetherViewModel.actions() }
                     val libraryDetails by detailsViewModel.uiState.collectAsStateWithLifecycle()
                     val theaterDetails by theaterDetailsViewModel.uiState
                         .collectAsStateWithLifecycle()
@@ -414,6 +446,26 @@ fun IglooRoot(container: IglooAppContainer) {
                         searchActions = searchActions,
                         watchRooms = watchRooms,
                         watchRoomsActions = watchRoomsActions,
+                        watchRoom = watchRoom,
+                        watchRoomActions = watchRoomActions,
+                        onRoomSelected = watchRoomViewModel::open,
+                        onLeaveRoom = watchRoomViewModel::leave,
+                        roomPlayRequests = watchRoomViewModel.playRequests,
+                        watchTogether = watchTogether,
+                        watchTogetherActions = watchTogetherActions,
+                        // The page's own settings, as its Playback Settings dialog last left them.
+                        onOpenWatchTogether = {
+                            val movie = (libraryDetails.details as? DetailsState.Loaded)?.value
+                            val presets = movie?.watchRoomPresets
+                            if (movie != null && presets != null) {
+                                watchTogetherViewModel.open(movie.id, movie.title, presets)
+                            } else {
+                                libraryDetails.openMovieId?.let {
+                                    detailsViewModel.showNotice(it, WATCH_TOGETHER_UNAVAILABLE_NOTICE)
+                                }
+                            }
+                        },
+                        createdRooms = watchTogetherViewModel.createdRooms,
                         voiceSearch = container.voiceSearch,
                         searchPlayRequests = searchViewModel.playRequests,
                         details = if (theaterOpen) theaterDetails else libraryDetails,
@@ -435,14 +487,20 @@ fun IglooRoot(container: IglooAppContainer) {
                         playRequests = detailsViewModel.playRequests,
                         videoPlayerViewModel = videoPlayerViewModel,
                         videoPlayerEngineFactory = { context, request ->
+                            val movies = container.videoPlaybackRepository
+                            val rooms = container.watchRoomRepository
+                            val roomId = request.watchRoomId
                             ExoVideoPlayerEngine(
                                 context = context,
                                 request = request,
                                 services = VideoPlaybackServices(
                                     progressiveDataSourceFactory = container.streamDataSourceFactory,
                                     hlsDataSourceFactory = container.hlsStreamDataSourceFactory,
-                                    directStreamUrl = container.videoPlaybackRepository::streamUrl,
-                                    hlsSessionApi = container.videoPlaybackRepository,
+                                    // A room plays its own stream or session, never the movie's.
+                                    directStreamUrl = { media ->
+                                        roomId?.let(rooms::streamUrl) ?: movies.streamUrl(media)
+                                    },
+                                    hlsSessionApi = roomId?.let { rooms.hlsSession(it, movies) } ?: movies,
                                     canPlayVideoMime = ::deviceCanDecodeVideoMime,
                                     canPlayAudioMime = canPlayAudioMime,
                                     stopScope = container.applicationScope,

@@ -107,6 +107,11 @@ data class MovieDetailsUi(
      * session-only selection. Null for the in-theaters page, which has no file to configure.
      */
     val playbackSettings: PlaybackSettingsUi? = null,
+    /**
+     * What Watch Together would make of [playbackSettings] (section 11.10.3); null until the
+     * technical details say what the file holds, and always for the in-theaters page.
+     */
+    val watchRoomPresets: WatchRoomPresets? = null,
 ) {
     /** Everything the hero's text column says, as its reading stop announces it. */
     val heroInfoDescription: String
@@ -257,6 +262,16 @@ class MovieDetailsViewModel(
     fun refresh() {
         val movieId = _uiState.value.openMovieId ?: return
         loadAll(movieId, userInitiated = false)
+    }
+
+    /**
+     * Something another surface over this page has to say on it: a Watch Together that failed
+     * closes its dialog, and its reason lands here (section 9.3). Dropped unless [movieId]'s page
+     * is the one open: a creation that fails after the user moved on is not this page's news.
+     */
+    fun showNotice(movieId: Long, message: String) {
+        if (_uiState.value.openMovieId != movieId) return
+        _uiState.update { it.copy(mutationNotice = message) }
     }
 
     /** Optimistic: the button flips now and flips back if the server disagrees. */
@@ -592,6 +607,14 @@ class MovieDetailsViewModel(
         val badges = technical?.let(::mediaBadges).orEmpty()
         val runtimeMinutes = movie.runTime?.orNull()?.takeIf { it > 0 }
         val releaseDateText = movie.releaseDate?.orNullIfBlank()?.let(::formatReleaseDate)
+        val settings = playbackSettingsUi(
+            audioStreams = technical?.audioStreams,
+            subtitles = technical?.subtitles,
+            selection = playbackSelection,
+            videoCodec = technical?.let { primaryVideoStream(it.videoStreams) }?.codec,
+            canPlayVideoMime = canPlayVideoMime,
+            canPlayAudioMime = canPlayAudioMime,
+        )
         return MovieDetailsUi(
             id = movie.id,
             title = movie.title,
@@ -637,14 +660,8 @@ class MovieDetailsViewModel(
                 runtimeMinutes = runtimeMinutes,
                 releaseDateText = releaseDateText,
             ),
-            playbackSettings = playbackSettingsUi(
-                audioStreams = technical?.audioStreams,
-                subtitles = technical?.subtitles,
-                selection = playbackSelection,
-                videoCodec = technical?.let { primaryVideoStream(it.videoStreams) }?.codec,
-                canPlayVideoMime = canPlayVideoMime,
-                canPlayAudioMime = canPlayAudioMime,
-            ),
+            playbackSettings = settings,
+            watchRoomPresets = technical?.let { watchRoomPresets(it, settings) },
         )
     }
 

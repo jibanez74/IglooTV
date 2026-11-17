@@ -38,7 +38,8 @@ Seen so far:
 
 Not yet checked, but wired the same way: the details pages (reading stops, extras rails, season
 chips, the More menu), the player chrome's Cancel pins, the up-next card, every dialog, the
-library and music panes' header chains, Search, and Quick Connect. VoiceView on the Firestick is
+library and music panes' header chains, Search, Quick Connect, and a watch room's screen and its
+Watch Together dialog. VoiceView on the Firestick is
 untested too.
 
 **Why earlier passes missed it.** `adb shell input keyevent` (and `input dpad keyevent`) is
@@ -62,3 +63,57 @@ far:
   its menu).
 
 Audit screen by screen with the virtual remote before changing code.
+
+---
+
+## A watch room cannot be edited
+
+**Found:** 2026-11-13, building the room screen (design-system §11.10.1).
+**Status:** partly fixed 2026-11-16. The owner can now change who is invited (**Edit invitees**,
+`PUT /api/watch-rooms/{id}/members`), and an invitee can leave (`POST /api/watch-rooms/{id}/leave`).
+The room's mode, audio and subtitles are still fixed when it is created; the server has no route to
+change them.
+
+## An empty watch room forgets where it was
+
+**Found:** 2026-11-13, reading `server/cmd/api/watch_room_ws.go`.
+**Status:** open, server-side.
+
+The server keeps a room's position in memory only, and drops it when the room's last connection
+closes or the server restarts: the next viewer finds it paused at 0. A TV that comes back to such
+a room alone puts its own position back (§11.10.1), but a viewer opening it later, after
+everyone has left, starts the movie over. The fix is the server's: keep the last position with
+the room.
+
+## A watch room's drift is corrected only on room events
+
+**Found:** 2026-11-13, matching the web client's sync (§11.10.2).
+**Status:** open, by design for now.
+
+A member's player is matched to the room when someone plays, pauses or seeks, when it connects,
+and when its own engine comes back — never in between. A TV that rebuffers falls behind and stays
+behind until the next event. The web client behaves the same. A periodic check (re-follow every
+so often, or after each rebuffer) would close it; the cost is a seek, and a rebuffer, whenever two
+members' players disagree by more than 1.5 s.
+
+## Seeking far in a watch room waits on its one encoder
+
+**Found:** 2026-11-13, reading the room's HLS session (§11.10.2).
+**Status:** open, server-side.
+
+A room has one HLS session from 0, never rebased, so a far seek waits for the room's encoder to
+reach it: the player's long-poll and 503 budget, minutes for a transcode. A remux room's playlist
+is a live EVENT playlist until FFmpeg finishes, and ExoPlayer clamps a seek past its live edge,
+so a member who joins late or jumps ahead trails the room until the encoder catches up. The
+server would need seekable room sessions (a second session window, as personal sessions rebase).
+
+## A command made while a room's link is down stays on that TV
+
+**Found:** 2026-11-13, building the room's reconnect (§11.10.1).
+**Status:** open, deliberate.
+
+While a room's socket is reconnecting, a play, pause or seek moves only that TV, and the room's
+state wins once the link is back — unless the TV was the only one there, when it puts its own
+position back. Queueing the commands for the reconnect would replay a viewer's pauses onto a room
+that moved on without them.
+
