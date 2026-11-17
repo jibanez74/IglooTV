@@ -60,6 +60,8 @@ class WatchRoomViewModelTest {
         var leaveGate: CompletableDeferred<Unit>? = null
         var update: ApiResult<Unit> = ApiResult.Success(Unit)
         var invite: ApiResult<List<UserSummary>> = ApiResult.Success(emptyList())
+        /** Holds the invite list's answer until completed. */
+        var inviteGate: CompletableDeferred<Unit>? = null
         var failSends = false
         var joins = 0
         var deletes = 0
@@ -79,7 +81,10 @@ class WatchRoomViewModelTest {
             return joinAnswers.removeFirstOrNull() ?: join
         }
 
-        override suspend fun inviteUsers() = invite
+        override suspend fun inviteUsers(): ApiResult<List<UserSummary>> {
+            inviteGate?.await()
+            return invite
+        }
 
         override suspend fun updateMembers(id: Long, invitedUserIds: List<Long>): ApiResult<Unit> {
             updates += invitedUserIds
@@ -591,5 +596,96 @@ class WatchRoomViewModelTest {
     fun `an invitee cannot open Edit invitees`() = test(FakeRoomLink(detail(isOwner = false))) { viewModel, _ ->
         viewModel.editInvitees()
         assertNull(viewModel.uiState.value.editing)
+    }
+
+    @Test
+    fun `back from the background the room is re-read`() = test { viewModel, link ->
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1, 2)))
+        runCurrent()
+        val reads = link.roomReads
+
+        viewModel.onBackground()
+        runCurrent()
+        link.room = detail().copy(members = listOf(me, ana))
+        viewModel.onForeground()
+        runCurrent()
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
+        runCurrent()
+
+        assertEquals(reads + 1, link.roomReads)
+        val page = (viewModel.uiState.value.details as DetailsState.Loaded).value
+        assertEquals(listOf(1L, 3L), page.members.map { it.id })
+    }
+
+    @Test
+    fun `the people still load when the app goes to the background meanwhile`() = test(
+        FakeRoomLink(detail()).apply {
+            invite = ApiResult.Success(listOf(maria, ana))
+            inviteGate = CompletableDeferred()
+        },
+    ) { viewModel, link ->
+        viewModel.editInvitees()
+        runCurrent()
+        viewModel.onBackground()
+        runCurrent()
+        link.inviteGate!!.complete(Unit)
+        runCurrent()
+        viewModel.onForeground()
+        runCurrent()
+
+        val people = viewModel.uiState.value.editing!!.people
+        assertEquals(listOf(2L, 3L), (people as IglooRailState.Loaded).items.map { it.id })
+    }
+
+    @Test
+    fun `an invitee who leaves while Edit invitees is open is not saved back`() = test(
+        FakeRoomLink(detail().copy(members = listOf(me, maria, ana))).apply {
+            invite = ApiResult.Success(listOf(maria, ana))
+        },
+    ) { viewModel, link ->
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
+        runCurrent()
+        viewModel.editInvitees()
+        runCurrent()
+        assertEquals(setOf(2L, 3L), viewModel.uiState.value.editing!!.selected)
+
+        link.emit(WatchRoomServerEvent(type = WatchRoomEventType.MembersChanged, members = listOf(me, ana)))
+        runCurrent()
+
+        val editing = viewModel.uiState.value.editing!!
+        assertEquals(setOf(3L), editing.initial)
+        assertEquals(setOf(3L), editing.selected)
+        assertFalse(editing.changed)
+    }
+
+    @Test
+    fun `a reconnect refused while this viewer's leave is out reads as leaving`() = test(
+        FakeRoomLink(detail(isOwner = false)).apply { leaveGate = CompletableDeferred() },
+    ) { viewModel, link ->
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1, 2)))
+        runCurrent()
+        viewModel.requestLeave()
+        viewModel.confirmLeave()
+        runCurrent()
+
+        link.join = ApiResult.Failure(AppError.Api("access denied", 403))
+        link.hangUp()
+        runCurrent()
+        advanceTimeBy(1_001)
+
+        assertEquals(listOf(7L to "You left the watch room for Heat."), gone)
+        link.leaveGate!!.complete(Unit)
+        runCurrent()
+    }
+
+    @Test
+    fun `a leave answered 404 says the room was closed`() = test(
+        FakeRoomLink(detail(isOwner = false)).apply { leave = ApiResult.Failure(AppError.Api("room not found", 404)) },
+    ) { viewModel, _ ->
+        viewModel.requestLeave()
+        viewModel.confirmLeave()
+        runCurrent()
+
+        assertEquals(listOf(7L to "The watch room for Heat was closed."), gone)
     }
 }

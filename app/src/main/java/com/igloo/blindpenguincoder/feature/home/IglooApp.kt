@@ -687,7 +687,7 @@ fun IglooApp(
         restoreFocus(returnRequester)
     }
     // Back from a room leaves it: its socket closes, which is how the others learn this viewer
-    // left. Its player and its Close room confirmation each answer Back first.
+    // left. Its player and its dialogs (Close room, Leave room, Edit invitees) each answer Back first.
     BackHandler(
         enabled = roomOpen && !playerOpen && !watchRoom.dialogOpen && !signOut.confirming,
     ) {

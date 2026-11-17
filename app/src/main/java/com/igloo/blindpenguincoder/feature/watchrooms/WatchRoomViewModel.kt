@@ -87,14 +87,14 @@ data class WatchRoomActions(
     val onRequestClose: () -> Unit,
     val onDismissClose: () -> Unit,
     val onConfirmClose: () -> Unit,
-    val onRequestLeave: () -> Unit = {},
-    val onDismissLeave: () -> Unit = {},
-    val onConfirmLeave: () -> Unit = {},
-    val onEditInvitees: () -> Unit = {},
-    val onToggleInvitee: (userId: Long) -> Unit = {},
-    val onSaveInvitees: () -> Unit = {},
-    val onRetryInvitees: () -> Unit = {},
-    val onDismissEdit: () -> Unit = {},
+    val onRequestLeave: () -> Unit,
+    val onDismissLeave: () -> Unit,
+    val onConfirmLeave: () -> Unit,
+    val onEditInvitees: () -> Unit,
+    val onToggleInvitee: (userId: Long) -> Unit,
+    val onSaveInvitees: () -> Unit,
+    val onRetryInvitees: () -> Unit,
+    val onDismissEdit: () -> Unit,
     /** The screen came on screen with the app, or went off it with the app. */
     val onForeground: () -> Unit,
     val onBackground: () -> Unit,
@@ -147,6 +147,11 @@ class WatchRoomViewModel(
 
     private var connectJob: Job? = null
     private var inviteesJob: Job? = null
+    /**
+     * The open room has had a snapshot: the next one, after a drop or a return from the
+     * background, is a reconnect, and the page re-reads the room.
+     */
+    private var roomSeen = false
     private var socket: RoomSocket? = null
     private val sendLock = Mutex()
     private var heldSeekJob: Job? = null
@@ -155,12 +160,14 @@ class WatchRoomViewModel(
 
     fun open(roomId: Long) {
         leave()
+        roomSeen = false
         loader.open(roomId)
         if (foreground) connect(roomId)
     }
 
     /** Back from the room: the socket closes, which is how the others learn this viewer left. */
     fun leave() {
+        inviteesJob?.cancel()
         disconnect()
         loader.close()
         room.value = WatchRoomUiState(sync = WatchRoomSync(room.value.sync.selfId))
@@ -269,7 +276,9 @@ class WatchRoomViewModel(
         viewModelScope.launch {
             when (val result = link.leave(id)) {
                 is ApiResult.Success -> roomGone(id, leftNotice())
-                // No longer a member, or the room is gone: either way there is nothing to leave.
+                // Closed meanwhile: the room is gone, not left.
+                is ApiResult.Failure if result.error.isNotFound() -> roomGone(id, closedNotice())
+                // Already not a member (left on another device): there is nothing left to leave.
                 is ApiResult.Failure if result.error.isRoomGone() -> roomGone(id, leftNotice())
                 is ApiResult.Failure -> room.update {
                     it.copy(
@@ -335,6 +344,19 @@ class WatchRoomViewModel(
         }
     }
 
+    /**
+     * The room's members changed under an open Edit invitees: anyone who was an invitee when the
+     * dialog opened and is no longer a member (they left, or another device removed them) drops
+     * out of both the starting list and the checks, so a save cannot quietly invite them back.
+     */
+    private fun followMembers(memberIds: Set<Long>) {
+        room.update { state ->
+            val editing = state.editing ?: return@update state
+            val gone = editing.initial - memberIds
+            state.copy(editing = editing.copy(initial = editing.initial - gone, selected = editing.selected - gone))
+        }
+    }
+
     private fun loadInvitees() {
         inviteesJob?.cancel()
         room.update { state -> state.copy(editing = state.editing?.copy(people = IglooRailState.Loading)) }
@@ -355,15 +377,14 @@ class WatchRoomViewModel(
         connectJob?.cancel()
         connectJob = viewModelScope.launch {
             var attempt = 0
-            // Whether a socket of this run has seen the room yet: the next snapshot is a reconnect.
-            var connectedOnce = false
             while (true) {
                 when (val joined = link.join(roomId)) {
                     is ApiResult.Failure -> when {
                         // The session itself is gone; the sign-in gate takes it from here.
                         joined.error == AppError.Unauthorized -> return@launch
                         joined.error.isRoomGone() -> {
-                            roomGone(roomId, ROOM_UNAVAILABLE_NOTICE)
+                            // A reconnect's join can be refused before this viewer's own leave answers.
+                            roomGone(roomId, if (room.value.leaving) leftNotice() else ROOM_UNAVAILABLE_NOTICE)
                             return@launch
                         }
                         else -> Unit
@@ -386,15 +407,18 @@ class WatchRoomViewModel(
                                     }
                                     // The page re-reads itself: who is in the room, and the host's
                                     // line, come from the room's details.
-                                    WatchRoomEventType.MembersChanged -> loader.refresh()
+                                    WatchRoomEventType.MembersChanged -> {
+                                        event.members?.let { followMembers(it.map { member -> member.id }.toSet()) }
+                                        loader.refresh()
+                                    }
                                     else -> Unit
                                 }
                                 if (event.type == WatchRoomEventType.RoomSnapshot) {
                                     attempt = 0
-                                    // Back after a drop: a member change made meanwhile never
-                                    // reached this TV, so the page re-reads the room.
-                                    if (connectedOnce) loader.refresh()
-                                    connectedOnce = true
+                                    // Back after a drop or the background: a member change made
+                                    // meanwhile never reached this TV, so the page re-reads the room.
+                                    if (roomSeen) loader.refresh()
+                                    roomSeen = true
                                 }
                                 val step = room.value.sync.onEvent(event, clock())
                                 room.update { state ->
@@ -424,7 +448,6 @@ class WatchRoomViewModel(
     }
 
     private fun disconnect() {
-        inviteesJob?.cancel()
         heldSeekJob?.cancel()
         heldSeekJob = null
         heldSeekSec = null
