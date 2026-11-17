@@ -3196,15 +3196,11 @@ forgot to change the code.**
 
 ## Changelog
 
-**2026-11-16 — Watch rooms: edit invitees and leave; the Spotify meter goes (§11.5.1, §11.5.2, §11.10.1).**
+**2026-11-16 — Watch rooms: edit invitees and leave (§11.10.1).**
 
 - **§11.10.1** — the owner's Edit invitees works (it was inert), an invitee gets Leave room, and
   the room follows the server's `members_changed` and `room_access_revoked` events. A close
   answered 404 counts as the room being gone.
-- **§11.5.1, §11.5.2** — the Spotify popularity meter and the popularity and followers facts are
-  gone: the server dropped the fields (Spotify stopped reporting them to Development Mode apps),
-  and the album and musician pages could no longer decode its answer. The Spotify glyph and
-  brand green went with them.
 
 **2026-11-13 — Watch Together: joining, following and making a watch room (§9.1, §9.3, §11.8, §11.10).**
 
