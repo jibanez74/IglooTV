@@ -688,4 +688,53 @@ class WatchRoomViewModelTest {
 
         assertEquals(listOf(7L to "The watch room for Heat was closed."), gone)
     }
+
+    @Test
+    fun `someone invited elsewhere while Edit invitees is open is kept by a save`() = test(
+        FakeRoomLink(detail()).apply { invite = ApiResult.Success(listOf(maria, ana)) },
+    ) { viewModel, link ->
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
+        runCurrent()
+        viewModel.editInvitees()
+        runCurrent()
+        assertEquals(setOf(2L), viewModel.uiState.value.editing!!.selected)
+
+        link.room = detail().copy(members = listOf(me, maria, ana))
+        link.emit(WatchRoomServerEvent(type = WatchRoomEventType.MembersChanged, members = listOf(me, maria, ana)))
+        runCurrent()
+
+        val editing = viewModel.uiState.value.editing!!
+        assertEquals(setOf(2L, 3L), editing.initial)
+        assertEquals(setOf(2L, 3L), editing.selected)
+        assertFalse(editing.changed)
+    }
+
+    @Test
+    fun `a guest who left while the TV slept drops out of an open Edit invitees`() = test(
+        FakeRoomLink(detail().copy(members = listOf(me, maria, ana))).apply {
+            invite = ApiResult.Success(listOf(maria, ana))
+        },
+    ) { viewModel, link ->
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
+        runCurrent()
+        viewModel.editInvitees()
+        runCurrent()
+        viewModel.toggleInvitee(3)
+        assertEquals(setOf(2L), viewModel.uiState.value.editing!!.selected)
+
+        viewModel.onBackground()
+        runCurrent()
+        // Maria left while the socket was down; no event reached this TV.
+        link.room = detail().copy(members = listOf(me, ana))
+        viewModel.onForeground()
+        runCurrent()
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
+        runCurrent()
+
+        val editing = viewModel.uiState.value.editing!!
+        assertEquals(setOf(3L), editing.initial)
+        // The owner's own uncheck of Ana stands; Maria is no longer there to invite back.
+        assertEquals(emptySet<Long>(), editing.selected)
+    }
 }
+

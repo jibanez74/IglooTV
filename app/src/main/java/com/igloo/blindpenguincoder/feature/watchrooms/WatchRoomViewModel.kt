@@ -140,6 +140,17 @@ class WatchRoomViewModel(
         room.copy(openRoomId = page.id, details = page.details)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, room.value)
 
+    init {
+        // Every room read that lands — a member change, a reconnect, the return from the
+        // background — brings an open Edit invitees up to date with it.
+        viewModelScope.launch {
+            loader.uiState.collect { page ->
+                val loaded = (page.details as? DetailsState.Loaded)?.value ?: return@collect
+                followMembers(loaded.ownerId, loaded.members.map { it.id }.toSet())
+            }
+        }
+    }
+
     private val playRequestChannel = Channel<VideoPlayRequest>(Channel.CONFLATED)
 
     /** The Watch press's player request, for the shell to open. */
@@ -345,15 +356,25 @@ class WatchRoomViewModel(
     }
 
     /**
-     * The room's members changed under an open Edit invitees: anyone who was an invitee when the
-     * dialog opened and is no longer a member (they left, or another device removed them) drops
-     * out of both the starting list and the checks, so a save cannot quietly invite them back.
+     * The room's members, as the server last said, under an open Edit invitees. The PUT replaces
+     * the whole list, so the dialog must start from the room as it is now: an invitee who left
+     * or was removed elsewhere drops out of the starting list and the checks, and one added
+     * elsewhere joins both. Otherwise a save would quietly undo another device's change. The
+     * owner's own choices in the dialog are kept.
      */
-    private fun followMembers(memberIds: Set<Long>) {
+    private fun followMembers(ownerId: Long, memberIds: Set<Long>) {
         room.update { state ->
             val editing = state.editing ?: return@update state
-            val gone = editing.initial - memberIds
-            state.copy(editing = editing.copy(initial = editing.initial - gone, selected = editing.selected - gone))
+            val invitees = memberIds - ownerId
+            val gone = editing.initial - invitees
+            val added = invitees - editing.initial
+            if (gone.isEmpty() && added.isEmpty()) return@update state
+            state.copy(
+                editing = editing.copy(
+                    initial = editing.initial - gone + added,
+                    selected = editing.selected - gone + added,
+                ),
+            )
         }
     }
 
@@ -408,7 +429,11 @@ class WatchRoomViewModel(
                                     // The page re-reads itself: who is in the room, and the host's
                                     // line, come from the room's details.
                                     WatchRoomEventType.MembersChanged -> {
-                                        event.members?.let { followMembers(it.map { member -> member.id }.toSet()) }
+                                        val ownerId = (loader.uiState.value.details as? DetailsState.Loaded)?.value?.ownerId
+                                        val members = event.members
+                                        if (ownerId != null && members != null) {
+                                            followMembers(ownerId, members.map { it.id }.toSet())
+                                        }
                                         loader.refresh()
                                     }
                                     else -> Unit
