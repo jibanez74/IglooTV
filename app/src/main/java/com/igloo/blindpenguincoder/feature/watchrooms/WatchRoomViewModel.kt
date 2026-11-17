@@ -355,6 +355,8 @@ class WatchRoomViewModel(
         connectJob?.cancel()
         connectJob = viewModelScope.launch {
             var attempt = 0
+            // Whether a socket of this run has seen the room yet: the next snapshot is a reconnect.
+            var connectedOnce = false
             while (true) {
                 when (val joined = link.join(roomId)) {
                     is ApiResult.Failure -> when {
@@ -387,7 +389,13 @@ class WatchRoomViewModel(
                                     WatchRoomEventType.MembersChanged -> loader.refresh()
                                     else -> Unit
                                 }
-                                if (event.type == WatchRoomEventType.RoomSnapshot) attempt = 0
+                                if (event.type == WatchRoomEventType.RoomSnapshot) {
+                                    attempt = 0
+                                    // Back after a drop: a member change made meanwhile never
+                                    // reached this TV, so the page re-reads the room.
+                                    if (connectedOnce) loader.refresh()
+                                    connectedOnce = true
+                                }
                                 val step = room.value.sync.onEvent(event, clock())
                                 room.update { state ->
                                     state.copy(

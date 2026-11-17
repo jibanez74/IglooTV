@@ -434,6 +434,24 @@ class WatchRoomViewModelTest {
     }
 
     @Test
+    fun `a reconnect re-reads the page, the first connection does not`() = test { viewModel, link ->
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1, 2)))
+        runCurrent()
+        val reads = link.roomReads
+
+        link.room = detail().copy(members = listOf(me, ana))
+        link.hangUp()
+        runCurrent()
+        advanceTimeBy(1_001)
+        link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
+        runCurrent()
+
+        assertEquals(reads + 1, link.roomReads)
+        val page = (viewModel.uiState.value.details as DetailsState.Loaded).value
+        assertEquals(listOf(1L, 3L), page.members.map { it.id })
+    }
+
+    @Test
     fun `a revoked membership leaves the room without reconnecting`() = test(
         FakeRoomLink(detail(isOwner = false)),
     ) { viewModel, link ->
