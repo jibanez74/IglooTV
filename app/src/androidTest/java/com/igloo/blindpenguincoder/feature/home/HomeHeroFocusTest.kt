@@ -370,9 +370,9 @@ class HomeHeroFocusTest {
         hero().assertIsFocused().assertContentDescriptionEquals(moviePageDescription)
     }
 
-    /** A lead page arriving in front keeps the user on the page they were reading. */
+    /** A lead page arriving in front keeps the user on a page they turned to. */
     @Test
-    fun aLeadPageArrivingInFrontLeavesTheUserOnTheirPage() {
+    fun aLeadPageArrivingInFrontLeavesTheUserOnThePageTheyTurnedTo() {
         setShellContent(bothPages)
         press(Key.DirectionRight)
 
@@ -382,6 +382,35 @@ class HomeHeroFocusTest {
         hero().assertIsFocused().assertContentDescriptionEquals(
             showPageDescription.replace("2 of 2", "3 of 3"),
         )
+    }
+
+    /**
+     * A hero nobody turned shows its first page, and first means whatever stands first: a title
+     * just started leads as soon as its rail knows of it, rather than waiting one Left away.
+     */
+    @Test
+    fun aHeroLeftOnItsFirstPageShowsTheLeadPageWhenOneArrives() {
+        setShellContent(bothPages)
+        hero().assertContentDescriptionEquals(moviePageDescription)
+
+        heroState = HomeHeroState.Loaded(listOf(testContinueHero, testHero, testShowHero))
+        composeRule.waitForIdle()
+
+        hero().assertIsFocused().assert(clickActionLabelled("Resume Slow Horses S1 E3"))
+    }
+
+    /** Turning back to the first page is remembering nothing: the lead still takes it. */
+    @Test
+    fun turningBackToTheFirstPageLetsANewLeadPageTakeIt() {
+        setShellContent(bothPages)
+        press(Key.DirectionRight)
+        press(Key.DirectionLeft)
+        hero().assertContentDescriptionEquals(moviePageDescription)
+
+        heroState = HomeHeroState.Loaded(listOf(testContinueHero, testHero, testShowHero))
+        composeRule.waitForIdle()
+
+        hero().assert(clickActionLabelled("Resume Slow Horses S1 E3"))
     }
 
     @Test

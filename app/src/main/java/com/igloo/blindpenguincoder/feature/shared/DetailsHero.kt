@@ -85,14 +85,15 @@ import com.igloo.blindpenguincoder.core.ui.withRequester
  * scrims with two jobs (sections 3.2 and 11.4): the black side gradient is the over-media
  * literal that licenses the white text column against busy art; the vertical fade is the token
  * gradient that blends the backdrop into the canvas the sections sit on. The whole stack fades
- * in rather than popping (section 7.2). [header] is told whether media has actually decoded
- * behind it, because section 3.2's literals are licensed only then; a non-null URL alone would
- * paint white text over the bare canvas for the whole load window.
+ * in rather than popping (section 7.2).
  *
- * [missingBackdrop] says what a title without a backdrop shows instead. A movie's, a show's and
- * a watch room's page pass [MissingBackdrop.Poster]: the missing-media tile lies under the hero
- * from its first frame, so [header] is over media throughout and the side scrim does not wait
- * for a decode.
+ * [missingBackdrop] says what a title without a backdrop shows instead, and with it when
+ * [header] is over media. A movie's, a show's and a watch room's page pass
+ * [MissingBackdrop.Poster]: the missing-media tile lies under the hero from its first frame, so
+ * [header] is over media throughout and the side scrim does not wait for a decode. On the
+ * default, [MissingBackdrop.Canvas], [header] is told whether the image has actually decoded
+ * behind it, because section 3.2's literals are licensed only then: a non-null URL alone would
+ * paint white text over the bare canvas for the whole load window.
  *
  * The stops are the detail hero's own, not section 3.2's home-hero ramp. That one is written for
  * a clipped card about 752dp wide; stretched across a full-bleed panel it has decayed to alpha

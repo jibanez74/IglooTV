@@ -95,14 +95,15 @@ internal fun TransportButton(
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
     val recessed = primary && !focused && LocalTransportRowFocused.current
+    // Toward black, the ground a player's chrome stands on in both themes, not toward the canvas.
     val fill = when {
         !primary -> OVER_MEDIA_CONTROL_FILL
-        recessed -> colors.recessedPrimary()
+        recessed -> colors.recessedPrimary(ground = Color.Black)
         else -> colors.primary
     }
     val tint = when {
         !primary -> Color.White
-        recessed -> colors.recessedPrimaryContent()
+        recessed -> colors.recessedPrimaryContent(ground = Color.Black)
         else -> colors.primaryForeground
     }
     Box(

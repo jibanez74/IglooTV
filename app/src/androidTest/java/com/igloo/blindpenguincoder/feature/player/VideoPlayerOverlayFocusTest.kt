@@ -45,6 +45,7 @@ import com.igloo.blindpenguincoder.playback.model.PlayableAudioTrack
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine
 import com.igloo.blindpenguincoder.pressBack
+import com.igloo.blindpenguincoder.testContinueHero
 import com.igloo.blindpenguincoder.testContinueItems
 import com.igloo.blindpenguincoder.testMovieDetails
 import com.igloo.blindpenguincoder.testShowDetailsState
@@ -126,6 +127,7 @@ class VideoPlayerOverlayFocusTest {
      */
     private fun setShellContent(
         detailsOpen: Boolean = true,
+        hero: HomeHeroState = HomeHeroState.Hidden,
         showOpen: Boolean = false,
         requestPlayback: () -> VideoPlayRequest? = { playRequest },
     ) {
@@ -161,7 +163,7 @@ class VideoPlayerOverlayFocusTest {
                 }
                 TestIglooApp(
                     home = HomeUiState(
-                        hero = HomeHeroState.Hidden,
+                        hero = hero,
                         continueWatching = IglooRailState.Loaded(testContinueItems),
                     ),
                     details = detailsState,
@@ -328,6 +330,37 @@ class VideoPlayerOverlayFocusTest {
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("movie_progress_error").assertExists()
+    }
+
+    /**
+     * The hero's lead page resumes its episode as the card does, but the hero is what was
+     * pressed, so the hero is where the close returns — whatever Continue Watching card the rail
+     * last remembered (section 11.3.1).
+     */
+    @Test
+    fun anEpisodeResumedFromTheHeroReturnsToTheHeroNotToTheRailsLastCard() {
+        setShellContent(
+            detailsOpen = false,
+            hero = HomeHeroState.Loaded(listOf(testContinueHero)),
+        )
+        val heroNode = composeRule.onNodeWithTag("home_hero")
+        // Leave the rail remembering a card that is not the hero's title.
+        heroNode.performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithTag("continue_episode_card_900")
+            .performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.onNodeWithTag("continue_card_1")
+            .assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionUp) }
+        heroNode.assertIsFocused()
+
+        heroNode.performKeyInput { pressKey(Key.DirectionCenter) }
+        emitHomePlayRequest()
+        composeRule.onNodeWithTag("movie_play_pause").assertIsFocused()
+
+        composeRule.pressBack()
+
+        composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
+        heroNode.assertIsFocused()
     }
 
     @Test

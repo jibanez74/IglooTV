@@ -10,6 +10,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.request.transformations
+import coil3.size.Scale
 import coil3.size.Size
 import coil3.transform.Transformation
 
@@ -49,6 +50,8 @@ private fun BlurredArtwork(state: ArtworkState, modifier: Modifier = Modifier) {
         ImageRequest.Builder(context)
             .data(state.imageUrl)
             .size(BLUR_DECODE_PX)
+            // Fit, or the image's crop scale would decode a poster's longer side past the size.
+            .scale(Scale.FIT)
             // The blur reads and writes pixels, which a hardware bitmap does not allow.
             .allowHardware(false)
             .transformations(BoxBlurTransformation)

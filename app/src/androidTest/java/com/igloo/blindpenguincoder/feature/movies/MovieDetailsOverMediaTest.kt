@@ -52,12 +52,23 @@ class MovieDetailsOverMediaTest {
     /** Requests for the poster as the backdrop's blurred stand-in; the engine answers off the UI thread. */
     private val standInLoads = AtomicInteger()
 
+    /** Successful answers for the backdrop, so a test can wait for a decode it then relies on. */
+    private val backdropDecodes = AtomicInteger()
+
     @Before
     fun installFakeImageLoader() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         standInLoads.set(0)
+        backdropDecodes.set(0)
         val engine = FakeImageLoaderEngine.Builder()
-            .intercept({ it == DECODING_BACKDROP }, ColorImage(BACKDROP_COLOR))
+            .intercept({ it == DECODING_BACKDROP }) { chain ->
+                backdropDecodes.incrementAndGet()
+                SuccessResult(
+                    image = ColorImage(BACKDROP_COLOR),
+                    request = chain.request,
+                    dataSource = DataSource.MEMORY,
+                )
+            }
             // The page's own poster figure asks for the same URL; only the stand-in's request
             // carries the blur.
             .intercept({ it == POSTER }) { chain ->
@@ -122,9 +133,11 @@ class MovieDetailsOverMediaTest {
         setContent(DECODING_BACKDROP, posterUrl = POSTER)
 
         composeRule.onNodeWithTag("details_backdrop_scrim").assertExists()
+        // Wait for the backdrop's own answer: before it, nothing has had the chance to go wrong.
+        composeRule.waitUntil(timeoutMillis = 5_000) { backdropDecodes.get() > 0 }
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("details_backdrop").assertExists()
         // The poster is only a stand-in: with a backdrop on screen it is never asked for.
-        composeRule.waitForIdle()
         assertEquals(0, standInLoads.get())
     }
 

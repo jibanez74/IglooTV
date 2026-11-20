@@ -79,9 +79,9 @@ import com.igloo.blindpenguincoder.feature.shared.HeroMetadataRow
 /**
  * The billboard at the top of home (docs/design-system.md section 11.3.1): what is in progress,
  * then the newest movie and the newest show, as the pages of one full-bleed hero, one page on
- * screen at a time. D-pad right and left turn the page; nothing ever turns it on its own (section 7.2). The caller renders it
- * only while [state] is Loading or Loaded — Hidden means no hero at all, and the Continue Watching
- * rail owns the pane's entry anchor instead.
+ * screen at a time. D-pad right and left turn the page; nothing ever turns it on its own
+ * (section 7.2). The caller renders it only while [state] is Loading or Loaded — Hidden means no
+ * hero at all, and the Continue Watching rail owns the pane's entry anchor instead.
  *
  * **One focus target, whichever page shows.** A page turn changes what the target says, not
  * where focus is, and TalkBack reads the new page out because the description of the node its
@@ -89,8 +89,11 @@ import com.igloo.blindpenguincoder.feature.shared.HeroMetadataRow
  * page, sharing a rectangle — cannot work: Compose builds the accessibility tree topmost-first
  * and leaves out a node another one covers completely, so TalkBack only ever saw the top page,
  * a focus move onto the one beneath sent no event, and TalkBack moved input focus onto the top
- * page whenever it went looking for a node. The page on screen is hoisted as [pageKind], like
- * the rails' focus memory, so Home comes back on the page the user left.
+ * page whenever it went looking for a node. The page the user turned to is hoisted as
+ * [pageKind], like the rails' focus memory, so Home comes back on it. It is null while the hero
+ * is on its first page, and first means whatever stands first: a hero nobody turned shows what
+ * is in progress as soon as the rail knows of it, where a remembered first page would keep a
+ * title just started one Left away.
  *
  * The Loading skeleton is the same target, so when the hero loads the focused node stays put and
  * only what it says changes — read out the same way, rather than by a focus handoff to a node
@@ -118,7 +121,7 @@ import com.igloo.blindpenguincoder.feature.shared.HeroMetadataRow
 fun HomeHero(
     state: HomeHeroState,
     pageKind: HomeHeroKind?,
-    onPageChange: (HomeHeroKind) -> Unit,
+    onPageChange: (HomeHeroKind?) -> Unit,
     entryRequester: FocusRequester,
     leftFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester,
@@ -136,16 +139,20 @@ fun HomeHero(
     }
     val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val activeIndex = pages.indexOfFirst { it != null && it.kind == pageKind }.takeIf { it >= 0 } ?: 0
+    val activeIndex =
+        pages.indexOfFirst { it != null && it.kind == pageKind }.takeIf { it >= 0 } ?: 0
     val activePage = pages[activeIndex]
-    val backdrops = pages.mapIndexed { index, page ->
-        key(index) { rememberArtworkState(page?.backdropUrl) }
+    // Everything a page owns is keyed by what it features, not by where it stands: the lead page
+    // comes and goes with the Continue Watching rail, and a page that only moved over must keep
+    // its decoded art and must not take part in a dissolve it has no part in.
+    val backdrops = pages.map { page ->
+        key(page?.kind) { rememberArtworkState(page?.backdropUrl) }
     }
     // What stands in for a page's missing backdrop: its poster, blurred (section 3.2).
-    val posters = pages.mapIndexed { index, page ->
-        key(index) { rememberArtworkState(page?.posterUrl) }
+    val posters = pages.map { page ->
+        key(page?.kind) { rememberArtworkState(page?.posterUrl) }
     }
-    val transition = updateTransition(targetState = activeIndex, label = "heroPage")
+    val transition = updateTransition(targetState = activePage?.kind, label = "heroPage")
     val openPage = activePage?.let { page ->
         val open = when {
             page.resumeLabel != null -> onResumeEpisode
@@ -165,17 +172,19 @@ fun HomeHero(
                 // The missing-media tile under every page: it shows while an image fetches and
                 // under a page with no picture at all, and it is what licenses the scrims and
                 // the white words from a page's first frame (section 3.2).
-                .background(if (state is HomeHeroState.Loaded) MEDIA_FALLBACK_TILE else colors.muted)
+                .background(
+                    if (state is HomeHeroState.Loaded) MEDIA_FALLBACK_TILE else colors.muted,
+                )
                 .testTag("home_hero_bleed")
                 .clearAndSetSemantics { },
         ) {
             pages.forEachIndexed { index, page ->
                 if (page != null) {
-                    key(index) {
+                    key(page.kind) {
                         HeroArtLayer(
                             backdrop = backdrops[index],
                             poster = posters[index],
-                            pageAlpha = transition.artAlpha(index),
+                            pageAlpha = transition.artAlpha(page.kind),
                             modifier = Modifier
                                 .matchParentSize()
                                 // The incoming page fades in over the outgoing one, which holds
@@ -201,8 +210,8 @@ fun HomeHero(
             // Every plate is composed, so the hero measures to the taller one and a turn never
             // moves the rails; only the active one is opaque.
             pages.forEachIndexed { index, page ->
-                key(index) {
-                    val textAlpha = transition.textAlpha(index)
+                key(page?.kind) {
+                    val textAlpha = transition.textAlpha(page?.kind)
                     val plateModifier = Modifier
                         .zIndex(3f)
                         .align(Alignment.BottomStart)
@@ -268,7 +277,10 @@ fun HomeHero(
                     val target = turnTo?.let { pages.getOrNull(it) }
                     when {
                         target != null -> {
-                            if (event.type == KeyEventType.KeyDown) onPageChange(target.kind)
+                            // The first page is remembered as no page at all: see [pageKind].
+                            if (event.type == KeyEventType.KeyDown) {
+                                onPageChange(target.kind.takeIf { turnTo != 0 })
+                            }
                             true
                         }
                         openPage != null && event.key in CONFIRM_KEYS -> {
@@ -381,12 +393,12 @@ private fun HeroArtLayer(
  * layers without recomposing the hero every frame.
  */
 @Composable
-private fun Transition<Int>.artAlpha(index: Int): () -> Float {
+private fun Transition<HomeHeroKind?>.artAlpha(kind: HomeHeroKind): () -> Float {
     val alpha = animateFloat(
         transitionSpec = { iglooTween(IglooMotion.PAGE_MS) },
-        label = "heroArt$index",
-    ) { active -> if (active == index) 1f else 0f }
-    return { if (isRunning && currentState == index) 1f else alpha.value }
+        label = "heroArt$kind",
+    ) { active -> if (active == kind) 1f else 0f }
+    return { if (isRunning && currentState == kind) 1f else alpha.value }
 }
 
 /**
@@ -394,17 +406,17 @@ private fun Transition<Int>.artAlpha(index: Int): () -> Float {
  * incoming one arrives after it, each over `micro`.
  */
 @Composable
-private fun Transition<Int>.textAlpha(index: Int): () -> Float {
+private fun Transition<HomeHeroKind?>.textAlpha(kind: HomeHeroKind?): () -> Float {
     val alpha = animateFloat(
         transitionSpec = {
-            if (targetState == index) {
+            if (targetState == kind) {
                 iglooTween(IglooMotion.MICRO_MS, delayMillis = IglooMotion.MICRO_MS)
             } else {
                 iglooTween(IglooMotion.MICRO_MS, easing = IglooEasing.exit)
             }
         },
-        label = "heroText$index",
-    ) { active -> if (active == index) 1f else 0f }
+        label = "heroText$kind",
+    ) { active -> if (active == kind) 1f else 0f }
     return { alpha.value }
 }
 
@@ -456,8 +468,8 @@ private fun HeroPlate(
 
 /**
  * "CONTINUE WATCHING" or "RECENTLY ADDED · TV SHOW" behind a short aurora mark: the kicker that
- * says what the page is before the title says which. Aurora is the one accent licensed over media (section 3.2), and the
- * mark is decoration, so the words carry the meaning on their own.
+ * says what the page is before the title says which. Aurora is the one accent licensed over
+ * media (section 3.2), and the mark is decoration, so the words carry the meaning on their own.
  */
 @Composable
 private fun HeroEyebrow(kind: HomeHeroKind) {
@@ -492,7 +504,12 @@ private fun HeroEyebrow(kind: HomeHeroKind) {
 private fun HeroMetadataRow(hero: HomeHero) {
     val plainLine = joinedLine(listOfNotNull(hero.year, hero.extent), " · ")
     if (hero.ratingBadge == null && hero.certification == null && plainLine == null) return
-    HeroMetadataRow(hero.ratingBadge, listOfNotNull(hero.certification), plainLine, overMedia = true)
+    HeroMetadataRow(
+        ratingBadge = hero.ratingBadge,
+        chips = listOfNotNull(hero.certification),
+        plainLine = plainLine,
+        overMedia = true,
+    )
 }
 
 /**

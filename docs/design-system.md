@@ -285,7 +285,8 @@ light lightens it under a white `primaryForeground` and drops that pair to 3.35:
 takes over there (5.55:1) while dark keeps `primaryForeground` (4.83:1). Both live in
 `core/design/IglooColors.kt` as `recessedPrimary()` / `recessedPrimaryContent()`, and
 `RecessedPrimaryTest` pins the values, the opacity, the distance from disabled, and both labels.
-See §6.1 for when a control recedes.
+See §6.1 for when a control recedes. `recessedPrimary(ground)` takes the ground the control
+stands on: the canvas everywhere but in a player, whose transport recedes toward black (§11.8).
 
 **Only one scrim renders at a time.** The rail's and the modal's are the same `background @ 0.60`,
 and two of them composite to 0.84 — an alpha this table does not authorize, and dark enough that
@@ -1513,9 +1514,10 @@ WATCHING`, the title (the show's, for an episode), a facts line ending in the ti
 (`ProgressTrack`, `primary` on §3.2's white hairline: the black track a poster card wears would
 vanish into the focused plate's own black ground). **Its press is its card's press**: an
 episode resumes straight into the player, announced "Resume {show} S1 E3", and a movie opens its
-page. Closing a player it started lands on the title's card in the Continue Watching rail, where
-every resume from Home returns. When the movie in progress is also the newest movie, the Recently
-Added page for it steps aside: one page per title.
+page. Closing a player it started lands back on the hero — the control that was pressed (§6.3) —
+whatever card the Continue Watching rail last remembered; a card's own resume still returns to
+the card. When the movie in progress is also the newest movie, the Recently Added page for it
+steps aside: one page per title.
 
 This is the web's billboard content in the TV's shape. The web draws two buttons, Resume and
 Details; here the page stays **one focus target** (below), because stacked targets under one
@@ -1649,9 +1651,18 @@ page out as it reads a turn. The hero stays Loading until **every** page has
 settled — the lead page's Continue Watching read included — so a page never appears or disappears
 under focus mid-load and "1 of 3" is right from the first word. After that the lead page follows
 its rail: finishing the title removes it and starting one adds it, on the refresh a watched change
-or a return to the foreground already makes. Pages are remembered by what they feature, so a lead
-page arriving in front leaves the user on the page they were reading, and one that leaves under
-focus hands the same focused node to the page now first. There is no hero error card: a page whose list is empty, whose latest fetch fails, or whose
+or a return to the foreground already makes.
+
+**The hero shows its first page unless the user turned to another.** A page turned to is
+remembered by what it features, so a lead page arriving in front of it leaves the user where they
+were. The first page is remembered as no page at all — turning back to it forgets — and first
+means whatever stands first: a hero nobody turned shows a title the moment it is in progress,
+where a remembered "Recently added" page would keep it one Left away, out of sight, which is the
+opposite of what the lead page is for. In practice the change lands while the player or a details
+page covers Home. A lead page that leaves under focus hands the same focused node to the page now
+first. Each page's art, words and place in the cross-fade are keyed by what it features, not by
+its position, so a page that only moved over keeps its decoded picture and takes no part in a
+dissolve. There is no hero error card: a page whose list is empty, whose latest fetch fails, or whose
 details fetch fails **hides**, and the hero shows whatever is left — both gone hides the hero.
 The movie and show pages share their respective Recently Added rails' list request and Retry.
 Each rail publishes its cards before fetching details for only the newest title in the same
@@ -1673,8 +1684,12 @@ item and its right edge; a rail with no cards has none, and Continue Watching an
 no shelf to open. **The press goes where the shelf's rail row goes**: focus moves to that
 destination's row in the spine first, then the pane changes and claims its anchor (§11.2) — the
 row outlives the swap, where focus left on the card would die with Home's tree and nothing would
-claim it. So the spine opens on the shelf for a moment and closes into it, exactly as when the
-row itself is pressed, and TalkBack hears the same sequence.
+claim it. So the spine opens on the shelf for a moment and closes into it, as when the row itself
+is pressed. TalkBack reads the hand-off in order — measured on the Google TV emulator's TalkBack
+14.2 on 2026-11-20 with See all on Recently Added Movies: the pane's count ("Showing 48 of 435
+movies"), then the row as focus lands on it ("Selected. Movies. Button"), the pane's title
+("Movies"), and the card focus settles on ("12 Angry Men, 1957. Button"). A press on the row
+itself differs only in not re-reading the row, which TalkBack was already on.
 
 **The section is spoken once, on entry.** The visible heading is not reachable through TV
 screen-reader input focus (§12), so the rail's title rides the description of the node focus
@@ -2876,9 +2891,13 @@ focus and traversal never reshuffle.
 **Play/Pause is the transport's primary control**, in every player — video, trailer, music and a
 watch room's (`TransportButton(primary = true)`): a 64dp `primary` circle with its glyph at
 `icons.lg`, among 52dp controls on the over-media ground, as the web's players draw theirs (56
-to 40 there). It is a `Primary` among peers, so it recedes to §3.1's mix while another control of
-the transport row holds focus (§6.1) and returns to full `primary` when it is focused itself or
-the row holds no focus. Seek and skip keep the over-media ground and the white glyph.
+to 40 there). It is a `Primary` among peers, so it recedes while another control of the transport
+row holds focus (§6.1) and returns to full `primary` when it is focused itself or the row holds
+no focus. Here the §3.1 mix is **toward black, not toward the canvas** — `#2784AE` in dark,
+`#024A71` in light: a player stands on video in both themes, and mixed toward the light canvas
+the fill would get brighter against the picture and outweigh the focused sibling's ring.
+`RecessedPrimaryTest` pins that it darkens in both. Seek and skip keep the over-media ground and
+the white glyph.
 
 | Input | Chrome hidden | Chrome visible |
 |---|---|---|
@@ -3396,8 +3415,8 @@ forgot to change the code.**
   the older rule.
 - **§11.3.2** — Recently Added Movies, Shows and Albums end in a See-all card that opens the
   shelf through its rail row.
-- **§11.8** — Play/Pause is a larger `primary` circle in every player and recedes while another
-  transport control holds focus.
+- **§11.8** — Play/Pause is a larger `primary` circle in every player and recedes, toward black,
+  while another transport control holds focus.
 
 **2026-11-20 — The web's redesign, part 2: the browse screens (§3.2, §9.1, §11.2, §11.4, §11.5, Appendix A).**
 

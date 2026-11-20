@@ -238,7 +238,8 @@ class HomeViewModel(
                 is ApiResult.Success -> {
                     val (inProgress, apiBaseUrl) = result.value
                     val lead = inProgress.firstNotNullOfOrNull { item ->
-                        toContinueItem(item, apiBaseUrl)?.let { toContinueHero(item, it, apiBaseUrl) }
+                        toContinueItem(item, apiBaseUrl)
+                            ?.let { card -> toContinueHero(item, card, apiBaseUrl) }
                     }
                     // Nothing in progress has no page to protect: hide unconditionally.
                     setFeature(HomeHeroKind.Continue, lead?.let(Feature::Loaded) ?: Feature.Hidden)
