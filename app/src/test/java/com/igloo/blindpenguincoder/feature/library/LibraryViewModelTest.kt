@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.feature.library
 import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.SortOrder
+import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.movieGenreWithCountJson
 import com.igloo.blindpenguincoder.data.repository.movieLibraryItemJson
@@ -502,6 +503,26 @@ class LibraryViewModelTest {
         gate.complete(Unit)
 
         assertEquals(96L, model.uiState.value.paged.total)
+    }
+
+    @Test
+    fun `a genre carries its backdrop for the tile, resolved through the image proxy`() = runTest {
+        val http = routedHttp(
+            genres = {
+                jsonResponse(
+                    moviesGenresJson(
+                        movieGenreWithCountJson(id = 1, tag = "Action", backdropPath = "/heat.jpg"),
+                        movieGenreWithCountJson(id = 2, tag = "Drama"),
+                    ),
+                )
+            },
+        )
+        val model = loaded(http)
+
+        assertEquals(
+            listOf("$TEST_SERVER/tmdb/images/w500/heat.jpg", null),
+            model.uiState.value.genres.map { it.backdropUrl },
+        )
     }
 
     @Test

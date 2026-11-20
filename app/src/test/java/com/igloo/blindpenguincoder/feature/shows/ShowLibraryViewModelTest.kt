@@ -127,15 +127,25 @@ class ShowLibraryViewModelTest {
             genres = {
                 jsonResponse(
                     showsGenresJson(
-                        showGenreWithCountJson(id = 7, tag = "Comedy", showCount = 2),
+                        showGenreWithCountJson(
+                            id = 7,
+                            tag = "Comedy",
+                            showCount = 2,
+                            backdropPath = "/office.jpg",
+                        ),
                         showGenreWithCountJson(id = 9, tag = "Drama", showCount = 1),
                     ),
                 )
             },
         )
         val model = loaded(http)
+        // A tile's picture is the genre's backdrop at w500; a genre the server found none for
+        // has none, and draws the missing-media tile.
         assertEquals(
-            listOf(LibraryGenre(7, "Comedy", 2), LibraryGenre(9, "Drama", 1)),
+            listOf(
+                LibraryGenre(7, "Comedy", 2, "$TEST_SERVER/tmdb/images/w500/office.jpg"),
+                LibraryGenre(9, "Drama", 1),
+            ),
             model.uiState.value.genres,
         )
 

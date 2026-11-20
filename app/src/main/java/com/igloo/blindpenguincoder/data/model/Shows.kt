@@ -32,6 +32,8 @@ data class ShowGenreWithCount(
     @SerialName("genre_id") val genreId: Long,
     @SerialName("genre_tag") val genreTag: String,
     @SerialName("show_count") val showCount: Long,
+    /** A backdrop from one of the genre's shows, picked so that genres show different titles. */
+    @SerialName("backdrop_path") val backdropPath: SqlNullString,
 )
 
 /** Payload of `ShowGenresEnvelope.data`. */

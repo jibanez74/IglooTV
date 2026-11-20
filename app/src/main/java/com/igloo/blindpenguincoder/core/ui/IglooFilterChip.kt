@@ -57,4 +57,5 @@ fun IglooFilterChip(
     }
 }
 
-private const val SELECTED_STATE_DESCRIPTION = "Selected"
+/** What a selected filter says of itself to TalkBack, chip or tile. */
+internal const val SELECTED_STATE_DESCRIPTION = "Selected"

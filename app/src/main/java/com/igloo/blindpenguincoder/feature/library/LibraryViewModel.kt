@@ -494,7 +494,8 @@ class LibraryViewModel(
         genresJob?.cancel()
         if (userInitiated) _uiState.update { it.copy(refreshing = true, notice = null) }
         genresJob = viewModelScope.launch {
-            val result = source.genres()
+            // No server to resolve a tile's picture against is no server to ask either.
+            val result = apiBaseUrlOrNull()?.let { source.genres(it) }
             if (result !is ApiResult.Success) {
                 _uiState.update { it.copy(genresLoaded = true) }
                 if (userInitiated) clearRefreshing()

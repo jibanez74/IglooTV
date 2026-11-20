@@ -209,7 +209,9 @@ fun movieGenreWithCountJson(
     id: Long = 7,
     tag: String = "Action",
     movieCount: Long = 26,
-): String = """{"genre_id":$id,"genre_tag":"$tag","movie_count":$movieCount}"""
+    backdropPath: String? = null,
+): String = """{"genre_id":$id,"genre_tag":"$tag","movie_count":$movieCount,""" +
+    """"backdrop_path":${sqlNullStringJson(backdropPath)}}"""
 
 fun moviesGenresJson(vararg genres: String): String =
     """{"error":false,"message":"movie genres","data":{"genres":[${genres.joinToString(",")}]}}"""
@@ -246,7 +248,9 @@ fun showGenreWithCountJson(
     id: Long = 7,
     tag: String = "Comedy",
     showCount: Long = 2,
-): String = """{"genre_id":$id,"genre_tag":"$tag","show_count":$showCount}"""
+    backdropPath: String? = null,
+): String = """{"genre_id":$id,"genre_tag":"$tag","show_count":$showCount,""" +
+    """"backdrop_path":${sqlNullStringJson(backdropPath)}}"""
 
 fun showsGenresJson(vararg genres: String): String =
     """{"error":false,"message":"show genres","data":{"genres":[${genres.joinToString(",")}]}}"""
