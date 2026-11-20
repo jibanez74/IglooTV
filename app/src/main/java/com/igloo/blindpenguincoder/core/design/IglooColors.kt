@@ -34,7 +34,7 @@ val IglooDarkColors = IglooColors(
     primaryForeground = Color(0xFF08131F),
     muted = Color(0xFF0F1A2E),
     mutedForeground = Color(0xFF8094AE),
-    border = Color(0xFF2A3C57),
+    border = Color(0xFF24354E),
     ring = Color(0xFF38BDF8),
     aurora = Color(0xFFF59E0B),
     auroraForeground = Color(0xFF08131F),
@@ -103,7 +103,7 @@ fun IglooColors.recessedPrimaryContent(): Color {
     }
 }
 
-private fun contrastRatio(a: Color, b: Color): Float {
+internal fun contrastRatio(a: Color, b: Color): Float {
     val first = a.luminance()
     val second = b.luminance()
     val lighter = maxOf(first, second)
