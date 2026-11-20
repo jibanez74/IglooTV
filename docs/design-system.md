@@ -1614,7 +1614,8 @@ now reads the platform tree through `UiAutomation`, not only Compose's.
 D-pad right turns to the next page and is cancelled on the last; left turns back, and from the
 first page exits to the spine; down is hand-wired to the first rail's entry anchor on every page
 — spatial resolution from a pane-wide surface is heuristic, and the wire means the rail's focus
-memory applies, the same as spine re-entry.
+memory applies, the same as spine re-entry. The one exception is a progress Retry (§11.8): it
+stands between the hero and that rail while it shows, and down goes to it.
 
 **The art bleeds; the node does not.** The backdrop, fade, plates and dots are one paint-only
 surface out to the physical edges. The focus target and its single node lie over the text column

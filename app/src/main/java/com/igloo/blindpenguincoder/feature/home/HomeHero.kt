@@ -260,8 +260,9 @@ fun HomeHero(
                     left = leftFocusRequester
                     right = FocusRequester.Cancel
                     // Hand-wired: spatial resolution from a pane-wide surface picks whichever card
-                    // happens to win its beam heuristic. Down goes to the first rail's entry card,
-                    // so the rail's focus memory applies, same as spine re-entry.
+                    // happens to win its beam heuristic. Down goes where the pane says: the first
+                    // rail's entry card, so the rail's focus memory applies, same as spine
+                    // re-entry — or the progress Retry standing between them (section 11.8).
                     down = downFocusRequester
                 }
                 // Focus observation outside the focusable, per section 6.3's ordering rule.
