@@ -1202,7 +1202,7 @@ private fun ContentPane(
     val lastFocusedByRail =
         rememberSaveable(saver = enumKeyedSaver(HomeRail.entries)) { mutableStateMapOf() }
     // The hero's page memory, hoisted with the rails' for the same round trip: Home comes back
-    // on the page the user left, movie or show (section 11.3.1).
+    // on the page the user left, whichever it features (section 11.3.1).
     var heroPageKind by rememberSaveable { mutableStateOf<HomeHeroKind?>(null) }
 
     // Hoisted beside lastFocusedByRail and for the same reason: a Movies -> Home -> Movies round
@@ -1532,6 +1532,7 @@ private fun HomeRails(
                 contentInset = contentInset,
                 onOpenMovie = { movieId -> openMovie(DetailsOrigin.Hero, movieId) },
                 onOpenShow = { showId -> openShow(DetailsOrigin.Hero, showId) },
+                onResumeEpisode = onResumeEpisode,
                 modifier = Modifier.announcedSection(tools(HERO_SECTION)).onFocusChanged { onHeroFocus(it.hasFocus) },
             )
         }
@@ -1587,7 +1588,7 @@ private fun HomeRails(
                     subtitle = item.subtitle,
                     imageUrl = item.posterUrl,
                     onClick = { onResumeEpisode(item.episodeId) },
-                    actionLabel = "Resume ${item.showTitle} ${item.episodeCode}",
+                    actionLabel = continueEpisodeActionLabel(item),
                     progress = PosterCardProgress(item.progressFraction, item.progressDescription),
                     aspect = cardAspect,
                     fallbackIcon = IglooIcons.TvShows,

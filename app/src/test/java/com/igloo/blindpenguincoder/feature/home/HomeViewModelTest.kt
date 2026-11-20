@@ -869,6 +869,7 @@ class HomeViewModelTest {
                 ratingBadge = ratingBadgeSpec(8.2),
                 extent = "2h 50m",
                 metadataDescription = "Rated 8.2 out of 10, R, 1995, 2 hours and 50 minutes",
+                posterUrl = "http://igloo.test:8080/api/tmdb/images/w500/heat.jpg",
             ),
             hero,
         )
@@ -1053,6 +1054,8 @@ class HomeViewModelTest {
                 ratingBadge = null,
                 extent = null,
                 metadataDescription = null,
+                // The poster is still there, which is what stands in for the missing backdrop.
+                posterUrl = "http://igloo.test:8080/api/tmdb/images/w500/heat.jpg",
             ),
             hero,
         )
@@ -1164,6 +1167,7 @@ class HomeViewModelTest {
                     ratingBadge = ratingBadgeSpec(8.4),
                     extent = "2 Seasons",
                     metadataDescription = "Rated 8.4 out of 10, TV-MA, 2022, 2 seasons",
+                    posterUrl = "http://igloo.test:8080/api/tmdb/images/w500/severance.jpg",
                 ),
                 pages[1],
             )
@@ -1220,6 +1224,159 @@ class HomeViewModelTest {
         assertNull(show.ratingBadge)
         assertNull(show.extent)
         assertNull(show.metadataDescription)
+    }
+
+    @Test
+    fun `the hero leads with the episode in progress, then the newest movie and show`() = runTest {
+        val http = routedHttp(
+            continueWatching = {
+                jsonResponse(
+                    continueWatchingJson(
+                        continueWatchingEpisodeJson(),
+                        continueWatchingMovieJson(id = 3, title = "Ran"),
+                    ),
+                )
+            },
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat"))) },
+            details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
+            latestShows = { jsonResponse(latestShowsJson(latestShowJson(id = 40))) },
+            showDetails = { jsonResponse(showDetailsJson(id = 40)) },
+        )
+        val viewModel = viewModel(http)
+
+        val pages = viewModel.awaitHeroPages()
+
+        assertEquals(
+            listOf(HomeHeroKind.Continue, HomeHeroKind.Movie, HomeHeroKind.Show),
+            pages.map { it.kind },
+        )
+        // The lead page is the rail's first card, filled from the same response: 45 of the
+        // episode's 55 minutes are left.
+        val card = viewModel.awaitContinue().items.first() as HomeContinueItem.Episode
+        assertEquals(
+            HomeHero(
+                kind = HomeHeroKind.Continue,
+                id = 900,
+                title = "Severance",
+                backdropUrl = "http://igloo.test:8080/api/tmdb/images/w1280/severance-backdrop.jpg",
+                overview = "Mark takes the team somewhere new.",
+                year = null,
+                certification = null,
+                ratingBadge = null,
+                extent = "S1 E3 · In Perpetuity · 45m left",
+                metadataDescription = "S1 E3, In Perpetuity, 45 minutes remaining",
+                posterUrl = "http://igloo.test:8080/api/tmdb/images/w500/severance.jpg",
+                progressFraction = card.progressFraction,
+                resumeLabel = "Resume Severance S1 E3",
+            ),
+            pages.first(),
+        )
+    }
+
+    @Test
+    fun `a movie in progress leads, and its own Recently Added page steps aside`() = runTest {
+        val http = routedHttp(
+            continueWatching = {
+                jsonResponse(continueWatchingJson(continueWatchingMovieJson(id = 7, title = "Heat")))
+            },
+            latest = {
+                jsonResponse(
+                    latestMoviesJson(
+                        latestMovieJson(id = 7, title = "Heat"),
+                        latestMovieJson(id = 2, title = "Arrival"),
+                    ),
+                )
+            },
+            details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
+            latestShows = { jsonResponse(latestShowsJson(latestShowJson(id = 40))) },
+            showDetails = { jsonResponse(showDetailsJson(id = 40)) },
+        )
+
+        val pages = viewModel(http).awaitHeroPages()
+
+        // The newest movie is the one in progress: one page for it, not two.
+        assertEquals(listOf(HomeHeroKind.Continue, HomeHeroKind.Show), pages.map { it.kind })
+        val lead = pages.first()
+        assertEquals(7L, lead.id)
+        assertEquals("1995", lead.year)
+        assertEquals("2h 20m left", lead.extent)
+        assertEquals("1995, 2 hours and 20 minutes remaining", lead.metadataDescription)
+        // A movie's page opens the movie; only an episode resumes from the hero.
+        assertNull(lead.resumeLabel)
+    }
+
+    @Test
+    fun `a different movie in progress keeps the newest movie's page`() = runTest {
+        val http = routedHttp(
+            continueWatching = {
+                jsonResponse(continueWatchingJson(continueWatchingMovieJson(id = 3, title = "Ran")))
+            },
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat"))) },
+            details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
+        )
+
+        assertEquals(
+            listOf(HomeHeroKind.Continue, HomeHeroKind.Movie),
+            viewModel(http).awaitHeroPages().map { it.kind },
+        )
+    }
+
+    @Test
+    fun `the hero stays loading until what is in progress has settled too`() = runTest {
+        val continueGate = CompletableDeferred<Unit>()
+        val http = routedHttp(
+            continueWatching = {
+                continueGate.await()
+                jsonResponse(continueWatchingJson(continueWatchingEpisodeJson()))
+            },
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat"))) },
+            details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
+        )
+        val viewModel = viewModel(http)
+
+        // The movie page is ready, but the lead page would arrive in front of it under focus.
+        viewModel.awaitLatest()
+        assertEquals(HomeHeroState.Loading, viewModel.uiState.value.hero)
+
+        continueGate.complete(Unit)
+        assertEquals(
+            listOf(HomeHeroKind.Continue, HomeHeroKind.Movie),
+            viewModel.awaitHeroPages().map { it.kind },
+        )
+    }
+
+    @Test
+    fun `a failed refresh keeps the lead page, and finishing the title removes it`() = runTest {
+        var answer = 0
+        val http = routedHttp(
+            continueWatching = {
+                when (answer++) {
+                    0 -> jsonResponse(continueWatchingJson(continueWatchingEpisodeJson()))
+                    1 -> jsonResponse(
+                        """{"error":true,"message":"boom"}""",
+                        HttpStatusCode.InternalServerError,
+                    )
+                    else -> jsonResponse(continueWatchingJson())
+                }
+            },
+            latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 7, title = "Heat"))) },
+            details = { jsonResponse(movieDetailsJson(id = 7, title = "Heat")) },
+        )
+        val viewModel = viewModel(http)
+        assertEquals(HomeHeroKind.Continue, viewModel.awaitHeroPages().first().kind)
+
+        // A moment of bad wifi must not take the page the user is on.
+        viewModel.refreshContinueWatching()
+        advanceUntilIdle()
+        assertEquals(
+            listOf(HomeHeroKind.Continue, HomeHeroKind.Movie),
+            viewModel.awaitHeroPages().map { it.kind },
+        )
+
+        // Nothing in progress any more: the newest movie leads again.
+        viewModel.refreshContinueWatching()
+        advanceUntilIdle()
+        assertEquals(listOf(HomeHeroKind.Movie), viewModel.awaitHeroPages().map { it.kind })
     }
 
     @Test

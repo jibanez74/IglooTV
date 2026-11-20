@@ -27,6 +27,15 @@ internal class ArtworkState(val imageUrl: String?) {
     var loaded by mutableStateOf(false)
     var failed by mutableStateOf(false)
     val showsArtwork: Boolean get() = imageUrl != null && !failed
+
+    /** What the image's painter reports, wherever the image is drawn: decoded, or failed. */
+    fun onPainterState(painter: AsyncImagePainter.State) {
+        when (painter) {
+            is AsyncImagePainter.State.Success -> loaded = true
+            is AsyncImagePainter.State.Error -> failed = true
+            else -> Unit
+        }
+    }
 }
 
 @Composable
@@ -59,13 +68,7 @@ internal fun ArtworkImage(state: ArtworkState, modifier: Modifier = Modifier) {
         model = state.imageUrl,
         contentDescription = null,
         contentScale = ContentScale.Crop,
-        onState = {
-            when (it) {
-                is AsyncImagePainter.State.Success -> state.loaded = true
-                is AsyncImagePainter.State.Error -> state.failed = true
-                else -> Unit
-            }
-        },
+        onState = state::onPainterState,
         modifier = modifier,
     )
 }

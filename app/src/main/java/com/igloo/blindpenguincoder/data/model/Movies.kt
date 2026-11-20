@@ -47,6 +47,10 @@ data class ContinueWatchingItem(
     val id: Long,
     val title: String,
     @SerialName("poster_path") val posterPath: SqlNullString,
+    /** The movie's backdrop, or the show's on an episode: the Home hero's picture. */
+    @SerialName("backdrop_path") val backdropPath: SqlNullString,
+    /** The movie's overview, or the episode's (the show's when the episode has none). */
+    val overview: SqlNullString,
     val year: SqlNullInt64,
     @SerialName("progress_sec") val progressSec: Double,
     @SerialName("duration_sec") val durationSec: Double,
