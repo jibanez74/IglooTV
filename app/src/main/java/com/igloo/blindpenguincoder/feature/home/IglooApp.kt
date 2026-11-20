@@ -797,6 +797,7 @@ fun IglooApp(
                 progressSyncError = progressSyncError.takeIf {
                     videoPlayOrigin.isHome && !playerOpen && !anyDetailsOpen
                 },
+                progressSyncFromHero = videoPlayOrigin == VideoPlayOrigin.HomeHero,
                 onRetryProgressSync = videoPlayerViewModel::retryFailedSave,
                 onRetryRail = onRetryRail,
                 // A Home rail's See all goes where that shelf's rail row goes. Focus moves to
@@ -1211,6 +1212,7 @@ private fun ContentPane(
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
     progressSyncError: String?,
+    progressSyncFromHero: Boolean,
     onRetryProgressSync: () -> Unit,
     onRetryRail: (HomeRail) -> Unit,
     onSeeAllFromHome: (HomeRail) -> Unit,
@@ -1305,6 +1307,7 @@ private fun ContentPane(
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 mutationNotice = mutationNotice,
                 progressSyncError = progressSyncError,
+                progressSyncFromHero = progressSyncFromHero,
                 onRetryProgressSync = onRetryProgressSync,
                 contentInset = contentInset,
                 onRetryRail = onRetryRail,
@@ -1492,6 +1495,7 @@ private fun HomeRails(
     spokenAccessibilityEnabled: Boolean,
     mutationNotice: String?,
     progressSyncError: String?,
+    progressSyncFromHero: Boolean,
     onRetryProgressSync: () -> Unit,
     contentInset: PaddingValues,
     onRetryRail: (HomeRail) -> Unit,
@@ -1536,18 +1540,23 @@ private fun HomeRails(
     )
     fun tools(key: Any) = sectionColumn.section(key)
     // The hero's d-pad down target: attached to the Continue rail's entry anchor in every rail
-    // state, so down always lands where spine re-entry would.
-    val continueEntryRequester = tools(HomeRail.ContinueWatching).entry
+    // state, so down always lands where spine re-entry would. A progress Retry stands between
+    // the two while it shows and takes the press, or a player closed onto the hero would leave
+    // it a Down and an Up away.
+    val heroDownRequester =
+        tools(if (progressSyncError != null) RETRY_SECTION else HomeRail.ContinueWatching).entry
     // The hero's one target outlives Loading -> Loaded and every page turn, so this matters only
     // when the hero hides while focused: the requester then sits on the Continue rail's anchor.
     val onHeroFocus = rememberRefocusAfterSwap(home.hero, spokenAccessibilityEnabled) {
         contentStartRequester.requestFocus()
     }
-    // A Retry that clears while focused leaves focus on nothing; it goes back to the card the
-    // player closed onto, the same hand-back the details page's Retry makes.
+    // A Retry that clears while focused leaves focus on nothing; it goes back to the control the
+    // player closed onto — the hero, or the rail's card — the same hand-back the details page's
+    // Retry makes. The pane's entry anchor is the hero while it shows and the fallback otherwise.
     val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError, spokenAccessibilityEnabled) {
         if (progressSyncError == null &&
-            !railReturnRequesters.getValue(HomeRail.ContinueWatching).requestFocusSafely()
+            (progressSyncFromHero ||
+                !railReturnRequesters.getValue(HomeRail.ContinueWatching).requestFocusSafely())
         ) {
             contentStartRequester.requestFocusSafely()
         }
@@ -1572,7 +1581,7 @@ private fun HomeRails(
                 onPageChange = onHeroPageChange,
                 entryRequester = contentStartRequester,
                 leftFocusRequester = navigationRequester,
-                downFocusRequester = continueEntryRequester,
+                downFocusRequester = heroDownRequester,
                 contentInset = contentInset,
                 onOpenMovie = { movieId -> openMovie(DetailsOrigin.Hero, movieId) },
                 onOpenShow = { showId -> openShow(DetailsOrigin.Hero, showId) },
@@ -1581,7 +1590,8 @@ private fun HomeRails(
             )
         }
 
-        // Directly above the rail whose card launched the player, so Up from that card reaches it.
+        // Between the hero and the rail, whichever launched the player: Down from the one and Up
+        // from the other reach it.
         if (progressSyncError != null) {
             ProgressSyncRetry(
                 message = progressSyncError,

@@ -2851,9 +2851,10 @@ lose the end of a movie. Save failures never pause playback. They hold the chrom
 D-pad-reachable inline Retry and follow the user back to the page that launched if exit finishes
 first — movie details, or the show page for an episode played from it (§11.4.3) — or, for an
 episode resumed from Continue Watching, to Home, since no details page sits under that
-launch: the same Retry card sits directly above the Continue Watching rail, reached by Up from the
-card the player closed onto, and hands focus back to that card when it clears. Each surface shows
-only the failures of the launches it made.
+launch: the same Retry card sits between the hero and the Continue Watching rail, one press from
+the control the player closed onto — Up from the rail's card, Down from the hero's lead page
+(§11.3.1), whose Down goes to the Retry while it shows — and hands focus back to that control
+when it clears. Each surface shows only the failures of the launches it made.
 Retry keeps the original save session id and takes a higher sequence. A retry or later cadence
 success clears the error, safely restores focus if Retry held it, and refreshes movie details and
 Continue Watching.

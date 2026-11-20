@@ -381,6 +381,23 @@ class VideoPlayerOverlayFocusTest {
     }
 
     @Test
+    fun aFailedSaveAfterAHeroResumePutsRetryOneDownFromTheHeroAndHandsFocusBackToIt() {
+        setShellContent(
+            detailsOpen = false,
+            hero = HomeHeroState.Loaded(listOf(testContinueHero)),
+        )
+        composeRule.onNodeWithTag("home_hero").performKeyInput { pressKey(Key.DirectionCenter) }
+        emitHomePlayRequest()
+        failACadenceSave(engines.single(), durationSec = 3300.0)
+
+        composeRule.pressBack()
+
+        // The hero launched it, so the hero is where the player closes, where Retry is one
+        // press away from, and where focus returns once the save lands — not the rail's card.
+        assertRetryClearsTheErrorFrom("home", anchorTag = "home_hero", toRetry = Key.DirectionDown)
+    }
+
+    @Test
     fun anEpisodesFailedSaveStaysOffAnUnrelatedMoviesDetailsPage() {
         setShellContent(detailsOpen = false)
         emitHomePlayRequest()
