@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -278,6 +279,31 @@ class FocusTreatmentTest {
                 "(r=$red, b=$blue); `border` is a blue slate and `destructive` is not",
             red > blue,
         )
+    }
+
+    /** `OutlineDestructive` is a Ghost whose resting hairline is `destructive` (section 9.1). */
+    @Test
+    fun anOutlineDestructiveButtonRestsOnTheDestructiveHairline() {
+        val variant = mutableStateOf(IglooButtonVariant.Ghost)
+        composeRule.setContent { Probe(variant.value, remember { FocusRequester() }) }
+        composeRule.waitForIdle()
+        val ghost = composeRule.onRoot().captureToImage().asAndroidBitmap()
+
+        composeRule.runOnUiThread { variant.value = IglooButtonVariant.OutlineDestructive }
+        composeRule.waitForIdle()
+        val outline = composeRule.onRoot().captureToImage().asAndroidBitmap()
+
+        // Scanning in from the left, the hairline is the first thing the two can differ in: the
+        // label, which changes colour too, sits well inside it.
+        val row = ghost.height / 2
+        val edge = (0 until ghost.width).firstOrNull { x ->
+            ghost.getPixel(x, row) != outline.getPixel(x, row)
+        }
+        assertTrue("OutlineDestructive rests on the same hairline as Ghost", edge != null)
+        val pixel = outline.getPixel(edge!!, row)
+        val red = (pixel shr 16) and 0xFF
+        val blue = pixel and 0xFF
+        assertTrue("the resting hairline is not the destructive red (r=$red, b=$blue)", red > blue)
     }
 
     /**
