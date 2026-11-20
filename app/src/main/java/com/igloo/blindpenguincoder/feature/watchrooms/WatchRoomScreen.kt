@@ -60,6 +60,7 @@ import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.HeroArtwork
 import com.igloo.blindpenguincoder.feature.shared.HeroReadingStop
 import com.igloo.blindpenguincoder.feature.shared.HeroTitle
+import com.igloo.blindpenguincoder.feature.shared.MissingBackdrop
 import com.igloo.blindpenguincoder.feature.shared.detailsSections
 import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
 import com.igloo.blindpenguincoder.feature.shared.readingStopTarget
@@ -231,7 +232,11 @@ private fun RoomContent(
     DetailsScrollColumn(
         scrollState = rememberScrollState(),
         hero = {
-            DetailsHero(imageUrl = page.backdropUrl, backdropTag = "watch_room_backdrop") { overMedia ->
+            DetailsHero(
+                imageUrl = page.backdropUrl,
+                backdropTag = "watch_room_backdrop",
+                missingBackdrop = MissingBackdrop.Poster(page.posterUrl),
+            ) { overMedia ->
                 Row(
                     modifier = Modifier.heroHeaderModifier(this),
                     horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xl),

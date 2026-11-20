@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.MEDIA_FALLBACK_TILE
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
@@ -51,8 +52,8 @@ import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.overMediaSideScrim
 import com.igloo.blindpenguincoder.core.design.scaled
-import com.igloo.blindpenguincoder.core.ui.ArtworkImage
 import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
+import com.igloo.blindpenguincoder.core.ui.BackdropOrBlurredPoster
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooText
@@ -68,6 +69,7 @@ import com.igloo.blindpenguincoder.core.ui.overMediaPill
 import com.igloo.blindpenguincoder.core.ui.pinnedSideways
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
 import com.igloo.blindpenguincoder.core.ui.rememberArtworkState
+import com.igloo.blindpenguincoder.core.ui.standInLoaded
 import com.igloo.blindpenguincoder.core.ui.withRequester
 
 /*
@@ -87,6 +89,11 @@ import com.igloo.blindpenguincoder.core.ui.withRequester
  * behind it, because section 3.2's literals are licensed only then; a non-null URL alone would
  * paint white text over the bare canvas for the whole load window.
  *
+ * [missingBackdrop] says what a title without a backdrop shows instead. A movie's, a show's and
+ * a watch room's page pass [MissingBackdrop.Poster]: the missing-media tile lies under the hero
+ * from its first frame, so [header] is over media throughout and the side scrim does not wait
+ * for a decode.
+ *
  * The stops are the detail hero's own, not section 3.2's home-hero ramp. That one is written for
  * a clipped card about 752dp wide; stretched across a full-bleed panel it has decayed to alpha
  * 0.14 by the time the metadata line ends, and the backdrop's highlights come back through the
@@ -96,13 +103,18 @@ import com.igloo.blindpenguincoder.core.ui.withRequester
 internal fun DetailsHero(
     imageUrl: String?,
     backdropTag: String,
+    missingBackdrop: MissingBackdrop = MissingBackdrop.Canvas,
     header: @Composable BoxScope.(overMedia: Boolean) -> Unit,
 ) {
     val colors = IglooTheme.colors
     val art = rememberArtworkState(imageUrl)
-    val overMedia = art.loaded
+    val standIn = missingBackdrop as? MissingBackdrop.Poster
+    val poster = rememberArtworkState(standIn?.posterUrl)
+    val onTile = standIn != null
+    val overMedia = onTile || art.loaded
+    val showsPicture = art.showsArtwork || poster.showsArtwork
     val backdropAlpha by animateFloatAsState(
-        targetValue = if (art.loaded) 1f else 0f,
+        targetValue = if (standInLoaded(art, poster)) 1f else 0f,
         animationSpec = iglooTween(IglooMotion.PAGE_MS),
         label = "detailsBackdrop",
     )
@@ -113,23 +125,29 @@ internal fun DetailsHero(
             .fillMaxWidth()
             .heightIn(min = HERO_MIN_HEIGHT.scaled()),
     ) {
-        if (art.showsArtwork) {
-            ArtworkImage(
-                state = art,
+        if (onTile) Box(Modifier.matchParentSize().background(MEDIA_FALLBACK_TILE))
+        if (showsPicture) {
+            BackdropOrBlurredPoster(
+                backdrop = art,
+                poster = poster,
                 modifier = Modifier
                     .testTag(backdropTag)
                     .matchParentSize()
                     .graphicsLayer { alpha = backdropAlpha },
             )
+        }
+        if (showsPicture || onTile) {
             // Alpha-zero stops come from the color itself — Color.Transparent is black at zero
             // and would gray the token fade.
             Box(
                 modifier = Modifier
-                    // Tagged only once the decode lands: the tag's presence is what a test reads
-                    // as "the section 3.2 treatment is on".
+                    // Tagged only while the header is over media: the tag's presence is what a
+                    // test reads as "the section 3.2 treatment is on".
                     .then(if (overMedia) Modifier.testTag("${backdropTag}_scrim") else Modifier)
                     .matchParentSize()
-                    .graphicsLayer { alpha = backdropAlpha }
+                    // On the tile the scrim is licensed at once; over the bare canvas it arrives
+                    // with the picture it is there for.
+                    .graphicsLayer { alpha = if (onTile) 1f else backdropAlpha }
                     .background(
                         overMediaSideScrim(),
                     ),
@@ -147,6 +165,21 @@ internal fun DetailsHero(
         }
         header(overMedia)
     }
+}
+
+/** What a details hero shows when its title has no backdrop, or the backdrop fails (section 3.2). */
+internal sealed interface MissingBackdrop {
+    /**
+     * Nothing: the header stands on the canvas in token colours. A music page's own art sits
+     * beside its title, and the web's music hero is themed text rather than text over media.
+     */
+    data object Canvas : MissingBackdrop
+
+    /**
+     * The title's poster, blurred, over the missing-media tile, as the web's detail heroes do;
+     * the tile alone when [posterUrl] is null or fails to load.
+     */
+    data class Poster(val posterUrl: String?) : MissingBackdrop
 }
 
 /**
