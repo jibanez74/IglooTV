@@ -51,6 +51,8 @@ class MusicMappingTest {
         assertEquals(11L, rows[1].albumId)
         assertEquals(4L, rows[1].musicianId)
         assertNull(rows[1].indexText)
+        // No track number, so the row leads with its album's cover instead.
+        assertEquals("https://i.scdn.co/image/help.jpg", rows[1].coverUrl)
     }
 
     @Test
@@ -60,6 +62,7 @@ class MusicMappingTest {
         assertNull(row.subtitle)
         assertNull(row.albumId)
         assertNull(row.musicianId)
+        assertNull(row.coverUrl)
         assertEquals("Tracks starting with S. Solo. 2 minutes and 5 seconds.", row.spokenInfo)
     }
 

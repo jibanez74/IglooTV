@@ -44,6 +44,7 @@ internal fun musicTrackRow(
     musicianId: Long?,
     indexText: String? = null,
     spokenPrefix: String? = null,
+    coverUrl: String? = null,
 ): TrackRowUi {
     val durationSec = millisToSeconds(durationMs)
     return TrackRowUi(
@@ -56,6 +57,7 @@ internal fun musicTrackRow(
         albumId = albumId,
         musicianId = musicianId,
         spokenInfo = trackSpokenInfo(spokenPrefix, title, subtitle, durationSec),
+        coverUrl = coverUrl,
     )
 }
 

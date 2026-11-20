@@ -95,6 +95,7 @@ internal fun TrackListItem.toRowUi(prefix: String? = null): TrackRowUi = musicTr
     albumId = albumId.orNull(),
     musicianId = musicianId.orNull(),
     spokenPrefix = prefix,
+    coverUrl = albumCover.orNullIfBlank(),
 )
 
 /** A row's Play: every track loaded so far, starting at the pressed one (web parity). */
