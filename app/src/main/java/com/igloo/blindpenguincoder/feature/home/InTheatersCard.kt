@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import com.igloo.blindpenguincoder.core.design.IglooTheme
+import com.igloo.blindpenguincoder.core.design.MEDIA_FALLBACK_GLYPH
+import com.igloo.blindpenguincoder.core.design.MEDIA_FALLBACK_TILE
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
@@ -28,7 +30,6 @@ import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.mediaCardInteraction
 import com.igloo.blindpenguincoder.core.ui.mediaSectionDescription
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpec
-import com.igloo.blindpenguincoder.core.ui.rememberArtworkState
 import com.igloo.blindpenguincoder.core.ui.spoken
 
 /**
@@ -36,10 +37,10 @@ import com.igloo.blindpenguincoder.core.ui.spoken
  * the title and year sit on the poster over a bottom scrim, with a critic-rating badge in the
  * top-right corner — TMDB content the library does not hold, so it looks deliberately different.
  *
- * Section 3.2 licenses those literals only where a poster is actually behind them: the scrim and
- * low-tier badge are black literals, and aurora/auroraForeground are pinned to the same values in
- * both themes (section 3.1), so nothing shifts with the theme. With no poster to load — or one
- * that failed — the card drops the scrim and paints its text in theme tokens instead.
+ * Nothing on the card shifts with the theme (section 3.2): the scrim and low-tier badge are black
+ * literals, aurora/auroraForeground are pinned to the same values in both themes (section 3.1),
+ * and the box itself is the fixed missing-media tile. So with no poster to load — or one that
+ * failed — the scrim and the white text read exactly as they do over a poster, in light too.
  *
  * Focus, press and announcement are the poster card's (`mediaCardInteraction`).
  */
@@ -50,10 +51,7 @@ fun InTheatersCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val art = rememberArtworkState(movie.posterUrl)
-    val overMedia = art.showsArtwork
     val ratingBadge = movie.rating?.let { ratingBadgeSpec(it) }
     val spokenDescription = mediaSectionDescription(
         listOfNotNull(movie.title, movie.year, ratingBadge?.spoken()).joinToString(", "),
@@ -69,32 +67,34 @@ fun InTheatersCard(
                 description = spokenDescription,
                 actionLabel = "Open ${movie.title}",
             )
-            // focusRing owns the clip, so the muted fill doubles as the image backdrop and
-            // nothing here may clip over it.
+            // focusRing owns the clip, so the tile doubles as the image backdrop and nothing
+            // here may clip over it.
             .focusRing(
                 focused = focused,
                 radius = IglooTheme.radius.lg,
-                fill = colors.muted,
+                fill = MEDIA_FALLBACK_TILE,
             ),
         contentAlignment = Alignment.Center,
     ) {
-        ArtworkOrGlyph(imageUrl = movie.posterUrl, fallbackIcon = IglooIcons.Movies, state = art)
-        if (overMedia) {
-            // Scrim under the text, lower third of the poster.
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.38f)
-                    .background(
-                        Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            0.5f to Color.Black.copy(alpha = 0.50f),
-                            1f to Color.Black.copy(alpha = 0.90f),
-                        ),
+        ArtworkOrGlyph(
+            imageUrl = movie.posterUrl,
+            fallbackIcon = IglooIcons.Movies,
+            fallbackTint = MEDIA_FALLBACK_GLYPH,
+        )
+        // Scrim under the text, lower third of the poster.
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.38f)
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.5f to Color.Black.copy(alpha = 0.50f),
+                        1f to Color.Black.copy(alpha = 0.90f),
                     ),
-            )
-        }
+                ),
+        )
 
         Column(
             modifier = Modifier
@@ -103,15 +103,15 @@ fun InTheatersCard(
         ) {
             IglooText(
                 text = movie.title,
-                style = IglooTheme.typography.bodyMedium.overMedia(overMedia),
-                color = if (overMedia) Color.White else colors.cardForeground,
+                style = IglooTheme.typography.bodyMedium.overMedia(true),
+                color = Color.White,
                 maxLines = 2,
             )
             if (movie.year != null) {
                 IglooText(
                     text = movie.year,
-                    style = IglooTheme.typography.label.overMedia(overMedia),
-                    color = if (overMedia) OVER_MEDIA_SECONDARY else colors.mutedForeground,
+                    style = IglooTheme.typography.label.overMedia(true),
+                    color = OVER_MEDIA_SECONDARY,
                     maxLines = 1,
                 )
             }
