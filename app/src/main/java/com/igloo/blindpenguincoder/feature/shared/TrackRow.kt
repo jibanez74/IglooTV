@@ -184,8 +184,8 @@ fun TrackRow(
                     onColumnFocused = onColumnFocused,
                 ),
         )
-        // The cover and the track number are the same slot's two tenants: an album's rows sit
-        // under their cover and count instead, every other list shows whose album a track is on.
+        // A row has a cover or a track number, never both: an album's rows sit under their
+        // cover and lead with their number, every other list shows whose album a track is on.
         if (track.indexText == null) {
             Box(
                 modifier = Modifier
@@ -298,7 +298,8 @@ private fun Modifier.trackColumn(
 
 /**
  * A row-shaped loading stand-in of the real row's height and column layout (section 10), so
- * content arriving under focus moves nothing. The Play slot of one row can be the surface's
+ * content arriving under focus moves nothing — the cover's tile included, since every list that
+ * waits behind this skeleton draws rows with covers. The Play slot of one row can be the surface's
  * anchor — focusable, announcing "Loading tracks" politely — through [anchorModifier]; every
  * other skeleton row is texture, invisible to focus and TalkBack.
  */
@@ -335,6 +336,11 @@ fun TrackRowSkeleton(
                         Modifier.background(colors.muted, controlShape)
                     },
                 ),
+        )
+        Box(
+            modifier = Modifier
+                .size(TRACK_COVER_SIZE.scaled())
+                .background(colors.muted, RoundedCornerShape(IglooTheme.radius.md)),
         )
         Column(
             modifier = Modifier.weight(1f),

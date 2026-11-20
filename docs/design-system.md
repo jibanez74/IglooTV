@@ -351,14 +351,16 @@ rather than theme tokens:
   lighter than dark `destructive` (`#F87171`), which reaches only 3.21:1 on that same ground.
   `IglooColorsContrastTest` pins the pair over both canvases, the side scrim's far stop on white
   art, and black.
-- Genre-tile band (§11.4): `Color.Black.copy(alpha = 0.70f)` behind the name and count, with a
-  short fade to transparent above it. White on it is 8.5:1 over a white picture. Selected, the
+- Picture-tile band (§11.4's genre tile): `Color.Black.copy(alpha = 0.70f)`
+  (`OVER_MEDIA_TILE_BAND`) behind the name and count, with a short fade to transparent above it.
+  White on it is 8.5:1 over a white picture; `IglooColorsContrastTest` pins both lines. Selected, the
   band is `primary`, a token, because the selected state is the app's and not the picture's.
 - Missing-media tile: `#0F1A2E` with its glyph in `#8094AE` (`MEDIA_FALLBACK_TILE`,
   `MEDIA_FALLBACK_GLYPH`) — the web's `media-fallback`. One navy, fixed across the themes as the
   app icon's canvas is, so the scrim and the white text over it read exactly as they do over a
   poster. A `muted` box is near-white in light and turns a black scrim under white text into a
-  grey smear. It is for a box that over-media text sits **on**: the theater card and a genre tile. A
+  grey smear. It is for a box that over-media text sits **on**: the theater card, and a genre
+  tile, which shows the navy bare under its band. A
   placeholder with token text beside or below it — a poster card, an album cover, an episode
   still, a watch-room poster — keeps `muted`.
 
@@ -889,7 +891,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 |---|---|
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
 | `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Four variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3) and `OutlineDestructive` — a Ghost whose label and resting hairline are `destructive`, for **a removal that is not its surface's confirming action** (a watch room's Leave room, §11.10.1). The filled `Destructive` is the confirming press, inside the dialog (§9.3); the owner's Close room keeps it on the page as well, as on the web, because it ends the room for everyone in it. `Ghost` is the quiet second action everywhere — the web's `outline`. Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `overMedia` takes the §3.2 over-media ground and white content where the button sits on a backdrop (`OutlineDestructive` takes §3.2's removal pair instead: its own heavier ground and fixed label). `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. A null `onClick` draws a button in its final place before its action exists (the show page's Play/Resume, §11.4.3): still a focus target, but with no `Role.Button` and no action — the `IglooIconButton` inert contract. That is not `enabled = false`, which leaves the focus tree and announces "disabled": a control that will work is not a disabled one. |
-| `IglooFilterChip` | One choice in a row of mutually exclusive filters (the show page's season picker, §11.4.3; the genre picker draws §11.4's tiles in the same row): `heightIn(min = sizes.controlHeight)`, radius `lg`, `spacing.md` horizontal padding, `bodyMedium` label. Selection and focus compose rather than compete — selected is a `primary` fill that holds while unfocused, focus is the §6.1 ring/scale/glow over whatever fill the chip has; unselected rests as the ring's hairline border and takes the Ghost focus fill. Not an `IglooButton` variant: a selected-state fill on an unfocused node is outside the button contract. Built on the internal `SelectablePill`, which carries that body for both pills. One cleared node: `semanticLabel` replaces the drawn text ("Action · 26" speaks as "Action, 26 movies"), the selected chip announces "Selected" via state description, and `actionLabel` names the press. |
+| `IglooFilterChip` | One choice in a row of mutually exclusive filters (the show page's season picker, §11.4.3; the genre picker draws §11.4's tiles in the same row): `heightIn(min = sizes.controlHeight)`, radius `lg`, `spacing.md` horizontal padding, `bodyMedium` label. Selection and focus compose rather than compete — selected is a `primary` fill that holds while unfocused, focus is the §6.1 ring/scale/glow over whatever fill the chip has; unselected rests as the ring's hairline border and takes the Ghost focus fill. Not an `IglooButton` variant: a selected-state fill on an unfocused node is outside the button contract. Built on the internal `SelectablePill`, which carries that body for both pills. One cleared node: `semanticLabel` replaces the drawn text ("Season 2 · 10" speaks as "Season 2, 10 episodes"), the selected chip announces "Selected" via state description, and `actionLabel` names the press. |
 | `IglooTabRow` / `IglooTab` | A strip of mutually exclusive sections (the Movies index, §11.4) — the web client's tab list. The row is one bordered pill on `muted @ 0.50` with a `border @ 0.50` hairline at `focus.restWidth`, radius `lg`, `spacing.xs` padding and gap, sized to its content and never scrolling (more tabs than fit the panel is too many tabs). A tab is `controlHeight` minus the row's padding, radius `sm` — concentric with the row's `lg` corner at its `xs` inset — `spacing.md` horizontal padding, `bodyMedium` label: `primary` fill / `primaryForeground` selected, `card @ 0.72` / `foreground` focused, transparent / `mutedForeground` at rest — selection and focus compose as on the chip, but **no focus scale**, since a lifted tab would overlap the row's border. Shares `IglooFilterChip`'s `SelectablePill` body; the five differences (radius, focus scale, height inset, resting label colour, semantics) are its parameters. **Selects on focus**: d-pad landing on a tab is the switch, the Android TV convention. `onPress` is the separate, deliberate signal — TalkBack's click action, and the way back after a failed switch reverted the selection out from under a focused tab — and every caller passes it separately, because the panes' landing is debounced and a press must not wait behind it. The focused-but-unselected treatment exists for exactly that revert window and nowhere else. One cleared node with `Role.Tab`, `selected` set only when true (never false — TalkBack would say "not selected" on every other tab) and `actionLabel` on the press; the row is a `selectableGroup`. Hand-rolled on Foundation, not `androidx.tv.material3.TabRow` (§9.2), and the ground is written out rather than taken from `iglooSurface`, whose `clip` would cut the focused tab's glow at the row's bounds. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
 | `MediaFormatting` | Shared display formatting for media: `formatRuntime` ("2h 50m"), `formatReleaseDate`, `progressFraction`, compact `formatRemainingTime` ("2h 20m left"), spoken `formatSpokenRemainingTime` ("2 hours and 20 minutes remaining"), `formatTimecode` ("1:01:15"), sparse `formatSpokenTime` ("1 hour and 15 seconds"), and exact `formatSpokenTimeThroughSeconds` ("1 hour, 0 minutes, and 15 seconds"). `formatEpisodeCode` ("S1 E3") names an episode the way the web client does. Both remaining-time forms clamp overshoot and round partial minutes up; they use "Less than 1m left" / "Less than 1 minute remaining" below one minute and defensively fall back to "In progress" for an invalid duration. The exact resume form floors to the last completed second and includes every unit from the largest relevant one through seconds, never a leading zero hour. Called from view models, never from composables — with one exception: the trailer player (§11.8.1) has no view model, so its chrome formats in place. A screen with a view model has no excuse. |
@@ -1694,7 +1696,7 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   title's row as the web's library header does, so the grid starts a line higher; a long count
   wraps in what the title leaves, and the notice keeps its line beneath. The header is
   **top-aligned** with its actions, not centred: beside its count the title is shorter than a
-  button, and a centred header moved by 6dp whenever its own height changed — the caption
+  button, and a centred header moved whenever its own height changed — the caption
   wrapping, the notice arriving — taking the spoken count's node with it, which TalkBack reads
   as a change and announces again (§12). `PaneHeaderLiveRegionTest` pins the node's bounds
   through both),
@@ -1766,8 +1768,9 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   of a backdrop's width) and the name over the count in a band along the bottom — `bodyMedium`
   white over `label` at §3.2's secondary white, "Action" over "26 movies". The band is §3.2's
   tile band: opaque behind the words, fading out above them, so they hold their contrast on any
-  picture. A genre with no backdrop, or one that fails to load, shows the missing-media tile
-  under the same band, so the row reads alike in both themes. **Selected, the band turns
+  picture. A genre with no backdrop, or one that fails to load, shows the missing-media navy
+  under the same band, so the row reads alike in both themes — without that tile's glyph, since
+  the band already names the tile and a glyph would sit behind it. **Selected, the band turns
   `primary`** with `primaryForeground` words (the count at 0.85) and the picture stays above
   it; a tint over the whole picture would leave the words on whatever the art happened to be.
   Focus stays the §6.1 ring (selection and focus compose, not compete). One cleared node, the
@@ -1779,7 +1782,7 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   tab, else to the selected tab; every tile goes up to the selected tab and down to the pane's
   content anchor; every tab goes up to Refresh and down to the picker when it is shown, else to
   the content anchor — entry card, skeleton anchor, error Retry, the empty box, or the genres
-  placeholder, whichever the state drew. The first tab and the first chip exit left to the
+  placeholder, whichever the state drew. The first tab and the first tile exit left to the
   spine; the last tab's and the last chip's right edges are pinned. The header's left chain is
   Refresh → Sort → spine, and both buttons go down to the selected tab. In the states with no
   cards the anchor also carries the overlay-return requester: the details overlay can outlive
@@ -2362,9 +2365,10 @@ lands on the entry row's Play.
 row itself never a target. Between Play and the title sits **the track's album cover**, as on the
 web's rows: a 44dp tile (`.dp.scaled()`, inside the row's two text lines and under its controls'
 height, so no row grows for it), radius `md`, on `muted` with the hairline, decorative and silent.
-A track with no cover shows the Music glyph there so the titles stay aligned. The cover and the
-track number are one slot's two tenants: an album's own rows sit under their cover already and
-keep the number (§11.5.1), every other list — the Tracks tab, a musician's tracks, Search — shows
+A track with no cover shows the Music glyph there so the titles stay aligned, and the loading
+skeleton draws the same tile so nothing jumps when the rows arrive. A row has a cover or a track
+number, never both: an album's own rows sit under their cover already and lead with their number
+ahead of Play (§11.5.1), every other list — the Tracks tab, a musician's tracks, Search — shows
 whose album a track is on. `TrackListItem.album_cover` feeds it; a musician's track borrows its
 album's cover from the page's discography, the same lookup the play queue used. Play is the entry column and carries the row's whole sentence with
 "Liked" as its state; Like carries the like state ("Liked" / "Not liked" / "…, saving" while

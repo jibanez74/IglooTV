@@ -21,24 +21,20 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.MEDIA_FALLBACK_TILE
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TILE_BAND
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.ArtworkImage
 import com.igloo.blindpenguincoder.core.ui.IglooText
-import com.igloo.blindpenguincoder.core.ui.SELECTED_STATE_DESCRIPTION
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.formatCount
 import com.igloo.blindpenguincoder.core.ui.rememberArtworkState
+import com.igloo.blindpenguincoder.core.ui.selectableFilter
 import com.igloo.blindpenguincoder.feature.shared.ChipSpec
 import com.igloo.blindpenguincoder.feature.shared.SelectableChipRow
 
@@ -98,7 +94,7 @@ internal fun LibraryGenreRow(
     ) { chip, selected, onClick, modifier ->
         val genre = genresById.getValue(chip.key)
         GenreTile(
-            name = genre.tag,
+            name = chip.text,
             countLine = genre.countLine(kind),
             backdropUrl = genre.backdropUrl,
             selected = selected,
@@ -118,7 +114,8 @@ private fun LibraryGenre.countLine(kind: LibraryKind): String =
  * One genre as a media tile (section 11.4): its backdrop fills the tile and the name and count
  * sit in a band along the bottom, opaque behind the words and fading out above them so they keep
  * their contrast on any picture. A genre with no backdrop, or one that fails to load, shows the
- * section 3.2 missing-media tile under the same band, so the row reads alike in both themes.
+ * section 3.2 missing-media navy under the same band, so the row reads alike in both themes —
+ * without that tile's glyph: the band already names the tile, and a glyph would sit behind it.
  *
  * Selected, the band turns `primary` and the picture stays above it; a tint over the whole
  * picture would leave the words on whatever the art happened to be. Selection and focus compose
@@ -142,7 +139,7 @@ private fun GenreTile(
     val spacing = IglooTheme.spacing
     var focused by remember { mutableStateOf(false) }
     val art = rememberArtworkState(backdropUrl)
-    val band = if (selected) colors.primary else GENRE_BAND
+    val band = if (selected) colors.primary else OVER_MEDIA_TILE_BAND
     // The shadow is for words over a picture; on the solid selected band it would only smear.
     val overPicture = !selected
 
@@ -163,13 +160,7 @@ private fun GenreTile(
                 onClick = onClick,
             )
             .clearAndSetSemantics {
-                contentDescription = semanticLabel
-                role = Role.Button
-                if (selected) stateDescription = SELECTED_STATE_DESCRIPTION
-                onClick(label = actionLabel) {
-                    onClick()
-                    true
-                }
+                selectableFilter(semanticLabel, selected, actionLabel, onClick)
             },
         contentAlignment = Alignment.BottomStart,
     ) {
@@ -213,9 +204,6 @@ private fun GenreTile(
 /** Twice as wide as tall: a backdrop's crop that still shows what the picture is of. */
 private val GENRE_TILE_WIDTH = 176.dp
 private val GENRE_TILE_MIN_HEIGHT = 88.dp
-
-/** The band behind a tile's words (section 3.2): white on it is 8.5:1 over a white picture. */
-private val GENRE_BAND = Color.Black.copy(alpha = 0.70f)
 
 /** The count steps back from the name on the selected band, as it does over the picture. */
 private const val SELECTED_COUNT_ALPHA = 0.85f

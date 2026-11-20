@@ -52,6 +52,14 @@ class IglooColorsContrastTest {
     }
 
     @Test
+    fun `a picture tile's words read on its band over a white picture`() {
+        // White art is the worst a backdrop can do to the band; the count is the dimmer line.
+        val band = OVER_MEDIA_TILE_BAND.compositeOver(Color.White)
+        assertTrue(contrastRatio(Color.White, band) >= 7f)
+        assertTrue(contrastRatio(OVER_MEDIA_SECONDARY.compositeOver(band), band) >= 4.5f)
+    }
+
+    @Test
     fun `the missing-media glyph reads on its tile`() {
         assertTrue(contrastRatio(MEDIA_FALLBACK_GLYPH, MEDIA_FALLBACK_TILE) >= 4.5f)
     }
