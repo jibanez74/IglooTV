@@ -30,6 +30,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -48,6 +49,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.focusFill
@@ -171,8 +173,11 @@ fun NavigationRail(
                     .verticalScroll(destinationScrollState),
                 verticalArrangement = Arrangement.spacedBy(destinationGap),
             ) {
-                IglooDestination.entries.forEach { destination ->
+                IglooDestination.entries.forEachIndexed { index, destination ->
                     val selected = destination == currentDestination
+                    // Where the library's shelves begin and where they end (section 11.2).
+                    val opensGroup = index > 0 &&
+                        destination.inLibrary != IglooDestination.entries[index - 1].inLibrary
                     val bringIntoView = remember { BringIntoViewRequester() }
                     // Through `destinationScroll`, so the row lands in the slot the d-pad gives it.
                     LaunchedEffect(expanded, selected) {
@@ -199,6 +204,7 @@ fun NavigationRail(
                         },
                         labelFade = labelFade,
                         contentStartRequester = contentStartRequester,
+                        gapAboveGroup = destinationGap.takeIf { opensGroup },
                         onClick = { onDestinationSelected(destination) },
                         modifier = Modifier
                             .bringIntoViewRequester(bringIntoView)
@@ -290,13 +296,38 @@ private fun RailRow(
     selected: Boolean = false,
     /** Out of TalkBack's reach while the rail is collapsed; still a d-pad target. */
     hiddenFromAccessibility: Boolean = false,
+    /**
+     * The gap above a row that opens a group; a hairline is drawn in its middle. It takes no
+     * room of its own: the destinations' scroll depends on every row starting one pitch after
+     * the last ([NeighbourRevealingScroll]).
+     */
+    gapAboveGroup: Dp? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val separator = IglooTheme.colors.border
+    val hairline = IglooTheme.focus.restWidth
+    val inset = IglooTheme.spacing.md
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = IglooTheme.sizes.navItemHeight)
+            // Ahead of the focus ring, which clips what it draws to the row and scales with it.
+            .then(
+                if (gapAboveGroup != null) {
+                    Modifier.drawBehind {
+                        val y = -gapAboveGroup.toPx() / 2f
+                        drawLine(
+                            color = separator,
+                            start = Offset(inset.toPx(), y),
+                            end = Offset(size.width - inset.toPx(), y),
+                            strokeWidth = hairline.toPx(),
+                        )
+                    }
+                } else {
+                    Modifier
+                },
+            )
             .focusRing(
                 focused = focused,
                 radius = IglooTheme.radius.lg,

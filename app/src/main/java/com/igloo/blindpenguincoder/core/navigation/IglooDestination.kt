@@ -7,10 +7,14 @@ package com.igloo.blindpenguincoder.core.navigation
  * yet. Search, Home, Watch Rooms, Movies, TV Shows and Music render real content and never
  * surface theirs; the entries stay so the enum has one shape, and are worded as if they would
  * be shown.
+ *
+ * [inLibrary] marks the library's own shelves — the web sidebar's "Library" group. The rail sets
+ * them apart from what comes before and after with a hairline (section 11.2).
  */
 enum class IglooDestination(
     val label: String,
     val supportingText: String,
+    val inLibrary: Boolean = false,
 ) {
     Search(
         label = "Search",
@@ -27,14 +31,17 @@ enum class IglooDestination(
     Movies(
         label = "Movies",
         supportingText = "Browse every movie in your library.",
+        inLibrary = true,
     ),
     TvShows(
         label = "TV Shows",
         supportingText = "Browse every show in your library.",
+        inLibrary = true,
     ),
     Music(
         label = "Music",
         supportingText = "Musicians, albums and tracks in your library.",
+        inLibrary = true,
     ),
     Settings(
         label = "Settings",
