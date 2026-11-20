@@ -1692,7 +1692,12 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   here in Movies terms; the TV Shows differences close the bullet. A heading with the current
   view's count beside it on the same baseline (`PaneHeader`, every pane: the count shares the
   title's row as the web's library header does, so the grid starts a line higher; a long count
-  wraps in what the title leaves, and the notice keeps its line beneath),
+  wraps in what the title leaves, and the notice keeps its line beneath. The header is
+  **top-aligned** with its actions, not centred: beside its count the title is shorter than a
+  button, and a centred header moved by 6dp whenever its own height changed — the caption
+  wrapping, the notice arriving — taking the spoken count's node with it, which TalkBack reads
+  as a change and announces again (§12). `PaneHeaderLiveRegionTest` pins the node's bounds
+  through both),
   **Sort (A–Z ⇄ Z–A)** and **Refresh** actions, a **tab strip** (All Movies · Genres ·
   Liked), the Genres tab's **genre picker** (one image tile per genre, with counts), and a poster grid
   at `gridColumns`, **paged by infinite scroll**. The strip mirrors the web movies page's All

@@ -103,7 +103,11 @@ internal fun PaneHeader(
             .padding(contentInset)
             .padding(top = IglooTheme.layout.safeAreaVertical),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-        verticalAlignment = Alignment.CenterVertically,
+        // Top, not centred. Beside its count the title is shorter than the actions, so a centred
+        // column would shift whenever its height changed — the caption wrapping, the notice
+        // arriving — and carry the spoken count's node with it, which TalkBack takes for a change
+        // and re-reads (below).
+        verticalAlignment = Alignment.Top,
     ) {
         Column(
             modifier = Modifier.weight(1f),
@@ -127,7 +131,8 @@ internal fun PaneHeader(
                 // visible line is hidden, not cleared, so it stays in the tree the tests read.
                 //
                 // The count takes what the title leaves and wraps there; the title never gives
-                // way to it.
+                // way to it. The node sits at the box's top, which the shared baseline pins to
+                // the title's, so neither a wrap nor a shorter caption moves it.
                 Box(modifier = Modifier.alignByBaseline().weight(1f)) {
                     IglooText(
                         text = countText,
