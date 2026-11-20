@@ -1783,7 +1783,7 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   content anchor; every tab goes up to Refresh and down to the picker when it is shown, else to
   the content anchor — entry card, skeleton anchor, error Retry, the empty box, or the genres
   placeholder, whichever the state drew. The first tab and the first tile exit left to the
-  spine; the last tab's and the last chip's right edges are pinned. The header's left chain is
+  spine; the last tab's and the last tile's right edges are pinned. The header's left chain is
   Refresh → Sort → spine, and both buttons go down to the selected tab. In the states with no
   cards the anchor also carries the overlay-return requester: the details overlay can outlive
   the card that opened it (the Liked reconcile empties the grid underneath), and a detached
@@ -1792,13 +1792,13 @@ between rails resolves spatially in the scrolling column; only the hero hand-wir
   navigation rail. Back must always find a live node inside the pane.
 
   **Transitions.** A tab, genre or sort change is a wholesale replacement, exactly like
-  Refresh: the tab or chip highlights at once, the loaded grid stays on screen while page one is
+  Refresh: the tab or tile highlights at once, the loaded grid stays on screen while page one is
   in flight, and success scrolls to top and re-anchors focus on the first card — except under a
   focused tab, above. Failure keeps the grid, **reverts the tab and genre** to the view the grid
   still shows, and reports in the notice — a tab must never claim a list the grid isn't in; the
   reverted tab stays focused, and a press on it is the retry. The revert restores the committed
   genre only if the current list still has it: a genres response that dropped it while the page
-  was in flight would otherwise strand the tab on a genre with no chip left to change it, so the
+  was in flight would otherwise strand the tab on a genre with no tile left to change it, so the
   placeholder takes over instead. Leaving a list also supersedes it — the page job is cancelled
   and the generation bumped **before** the endpoint check bails, so landing on the Genres tab
   with nothing to page cannot leave an earlier request alive to revert the tab underneath it. Counts belong to the active view: the
