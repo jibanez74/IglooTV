@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.stateDescription
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_DESTRUCTIVE
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_DESTRUCTIVE_FILL
 import com.igloo.blindpenguincoder.core.design.focusFill
 import com.igloo.blindpenguincoder.core.design.recessedPrimary
 import com.igloo.blindpenguincoder.core.design.recessedPrimaryContent
@@ -91,6 +92,10 @@ fun IglooButton(
             else -> colors.primary
         }
         IglooButtonVariant.Ghost, IglooButtonVariant.OutlineDestructive -> when {
+            // The destructive label needs the heavier ground to hold its contrast where a hero
+            // fades into a light canvas; white holds on the standard one.
+            overMedia && variant == IglooButtonVariant.OutlineDestructive ->
+                OVER_MEDIA_DESTRUCTIVE_FILL
             overMedia -> OVER_MEDIA_CONTROL_FILL
             focused -> colors.focusFill()
             else -> Color.Transparent
@@ -98,14 +103,17 @@ fun IglooButton(
         IglooButtonVariant.Destructive ->
             if (enabled) colors.destructive else colors.destructive.copy(alpha = 0.4f)
     }
-    val outlineDestructive = variant == IglooButtonVariant.OutlineDestructive
-    val foreground = when {
-        outlineDestructive -> if (overMedia) OVER_MEDIA_DESTRUCTIVE else colors.destructive
-        overMedia -> Color.White
-        variant == IglooButtonVariant.Primary ->
-            if (enabled && recessed) colors.recessedPrimaryContent() else colors.primaryForeground
-        variant == IglooButtonVariant.Ghost -> colors.foreground
-        else -> colors.destructiveForeground
+    val foreground = when (variant) {
+        IglooButtonVariant.Primary -> when {
+            overMedia -> Color.White
+            enabled && recessed -> colors.recessedPrimaryContent()
+            else -> colors.primaryForeground
+        }
+        IglooButtonVariant.Ghost -> if (overMedia) Color.White else colors.foreground
+        IglooButtonVariant.Destructive ->
+            if (overMedia) Color.White else colors.destructiveForeground
+        IglooButtonVariant.OutlineDestructive ->
+            if (overMedia) OVER_MEDIA_DESTRUCTIVE else colors.destructive
     }
 
     Box(
@@ -115,8 +123,9 @@ fun IglooButton(
                 focused = focused,
                 radius = IglooTheme.radius.lg,
                 fill = background,
-                // The destructive resting hairline is the outline the variant is named for.
-                hasError = outlineDestructive,
+                // The outline the variant is named for: the hairline wears the label's colour,
+                // so over media it is as fixed as the label is.
+                restColor = foreground.takeIf { variant == IglooButtonVariant.OutlineDestructive },
             )
             .focusRequester(trackFocus.requester)
             .onFocusChanged {

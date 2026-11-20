@@ -47,6 +47,9 @@ fun Modifier.focusRing(
     // For a surface that should read as bare content until focus arrives — the home hero's
     // text plate, whose ground arrives with the ring (section 11.3.1).
     restBorder: Boolean = true,
+    // The resting hairline's colour where it is neither `border` nor the error's `destructive`:
+    // an OutlineDestructive button's, which over media must not track the theme (section 3.2).
+    restColor: Color? = null,
 ): Modifier {
     val colors = IglooTheme.colors
     val focus = IglooTheme.focus
@@ -66,7 +69,7 @@ fun Modifier.focusRing(
     )
 
     val peakScale = if (scaleOnFocus) focus.scale else 1f
-    val restColor = if (hasError) colors.destructive else colors.border
+    val restStroke = restColor ?: if (hasError) colors.destructive else colors.border
     // The layer's shape is the shadow's outline; without it the glow would square off the
     // corners of a rounded control. Hoisted so the draw-phase block allocates nothing.
     val shape = remember(radius) { RoundedCornerShape(radius) }
@@ -143,7 +146,7 @@ fun Modifier.focusRing(
                 }
                 if (restBorder && t < 1f) {
                     drawInsetRoundRect(
-                        color = restColor,
+                        color = restStroke,
                         outerRadius = outerRadius,
                         inset = restWidth / 2f,
                         stroke = Stroke(restWidth),

@@ -6,7 +6,8 @@ import androidx.compose.ui.graphics.Color
 /*
  * The section 3.2 over-media literals. They are deliberately not theme tokens — a backdrop or a
  * video looks the same in light and dark — and they are licensed only by media actually behind
- * them. Named so every surface over media speaks the same vocabulary.
+ * them, or by the missing-media tile that stands in for it. Named so every surface over media
+ * speaks the same vocabulary.
  */
 
 /** The ground of a chip or control over media, held through focus. */
@@ -25,16 +26,23 @@ internal val OVER_MEDIA_TERTIARY = Color.White.copy(alpha = 0.75f)
 internal val OVER_MEDIA_TRACK = Color.Black.copy(alpha = 0.40f)
 
 /**
- * A removal's label over media (`OutlineDestructive`, section 9.1). Fixed, because the ground
- * under it is the section 3.2 black in both themes, and one step lighter than the dark palette's
- * `destructive`: that one reaches only 3.8:1 where the control ground sits over the far stop of
- * a hero's side scrim on white art, and this one 5.5:1.
+ * The label and resting hairline of a removal over media (`OutlineDestructive`, section 9.1).
+ * Fixed in both themes, and one step lighter than the dark palette's `destructive`, which cannot
+ * reach 4.5:1 on [OVER_MEDIA_DESTRUCTIVE_FILL] over a light canvas.
  */
 internal val OVER_MEDIA_DESTRUCTIVE = Color(0xFFFCA5A5)
 
 /**
- * The tile under over-media chrome whose media is missing: the same navy in both themes, like
- * the app icon's canvas, so a scrim and white text read on it exactly as they do on a poster. A
+ * The ground under [OVER_MEDIA_DESTRUCTIVE], held through focus. Heavier than
+ * [OVER_MEDIA_CONTROL_FILL] because a hero's action row sits in its fade into the canvas, and in
+ * light that canvas is near-white: at 0.45 the label drops under 2:1 there, at 0.70 it holds
+ * 4.68:1 on the bare light canvas, the lightest ground a hero can put under a control.
+ */
+internal val OVER_MEDIA_DESTRUCTIVE_FILL = Color.Black.copy(alpha = 0.70f)
+
+/**
+ * The tile under over-media chrome whose media is missing: one navy, fixed across the themes as
+ * the app icon's canvas is, so a scrim and white text read on it exactly as they do on a poster. A
  * `muted` box is near-white in light and turns them into a grey smear. Only where over-media
  * text sits on the box — a placeholder with token text beside it keeps `muted`.
  */

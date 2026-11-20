@@ -36,14 +36,18 @@ class IglooColorsContrastTest {
     }
 
     @Test
-    fun `the over-media destructive label reads on the over-media control ground`() {
-        // The ground is the section 3.2 black over a hero's side scrim; black is its floor and the
-        // scrim's far stop over white art its ceiling where a hero action row sits.
-        val overScrim = OVER_MEDIA_CONTROL_FILL
-            .compositeOver(Color.Black.copy(alpha = 0.55f).compositeOver(Color.White))
-        listOf(Color.Black, overScrim).forEach { ground ->
+    fun `the over-media destructive label reads on its ground wherever a hero puts it`() {
+        // A hero paints its art, a side scrim, then a fade into the theme's canvas, and its action
+        // row sits deep in that fade. So the canvas itself is the lightest thing that can lie
+        // under the control in light and the art under the scrim's far stop the lightest in dark;
+        // black art is the floor.
+        val underControl = themes.map { (_, colors) -> colors.background } +
+            Color.Black.copy(alpha = 0.55f).compositeOver(Color.White) +
+            Color.Black
+        underControl.forEach { behind ->
+            val ground = OVER_MEDIA_DESTRUCTIVE_FILL.compositeOver(behind)
             val ratio = contrastRatio(OVER_MEDIA_DESTRUCTIVE, ground)
-            assertTrue("over-media destructive label was $ratio", ratio >= 4.5f)
+            assertTrue("over-media destructive label was $ratio over $behind", ratio >= 4.5f)
         }
     }
 

@@ -263,22 +263,7 @@ class FocusTreatmentTest {
         composeRule.waitForIdle()
         val errored = composeRule.onRoot().captureToImage().asAndroidBitmap()
 
-        val row = plain.height / 2
-        val edge = (0 until plain.width).firstOrNull { x ->
-            plain.getPixel(x, row) != errored.getPixel(x, row)
-        }
-        assertTrue("the resting border looks identical with and without hasError", edge != null)
-
-        // Redness, not luminance: `destructive` and `border` are close in luminance and only the
-        // hue tells them apart, which is exactly what a luminance-only assertion would miss.
-        val pixel = errored.getPixel(edge!!, row)
-        val red = (pixel shr 16) and 0xFF
-        val blue = pixel and 0xFF
-        assertTrue(
-            "the errored border differs from the plain one but is not the destructive red " +
-                "(r=$red, b=$blue); `border` is a blue slate and `destructive` is not",
-            red > blue,
-        )
+        assertDestructiveHairline("hasError", plain, errored)
     }
 
     /** `OutlineDestructive` is a Ghost whose resting hairline is `destructive` (section 9.1). */
@@ -293,17 +278,42 @@ class FocusTreatmentTest {
         composeRule.waitForIdle()
         val outline = composeRule.onRoot().captureToImage().asAndroidBitmap()
 
-        // Scanning in from the left, the hairline is the first thing the two can differ in: the
-        // label, which changes colour too, sits well inside it.
-        val row = ghost.height / 2
-        val edge = (0 until ghost.width).firstOrNull { x ->
-            ghost.getPixel(x, row) != outline.getPixel(x, row)
+        // The label changes colour too, and it is red: without this the scan would find it and
+        // pass on a button whose hairline never changed. The hairline is the button's own edge.
+        val edge = assertDestructiveHairline("OutlineDestructive", ghost, outline)
+        val buttonLeft = with(composeRule.density) { PROBE_PADDING_DP.dp.roundToPx() }
+        assertTrue(
+            "the first difference is at x=$edge, not on the button's edge at x=$buttonLeft",
+            edge in buttonLeft - 1..buttonLeft + HAIRLINE_SCAN_PX,
+        )
+    }
+
+    /**
+     * Asserts that [destructive] differs from [plain] in a red resting hairline, and returns the
+     * x at which the two first differ on the middle row.
+     *
+     * Redness, not luminance: `destructive` and `border` are close in luminance and only the hue
+     * tells them apart, which is exactly what a luminance-only assertion would miss. The reddest
+     * of the first few differing pixels is read rather than the first, which can be a faint
+     * antialiased edge that is still mostly canvas.
+     */
+    private fun assertDestructiveHairline(case: String, plain: Bitmap, destructive: Bitmap): Int {
+        val row = plain.height / 2
+        val edge = (0 until plain.width).firstOrNull { x ->
+            plain.getPixel(x, row) != destructive.getPixel(x, row)
         }
-        assertTrue("OutlineDestructive rests on the same hairline as Ghost", edge != null)
-        val pixel = outline.getPixel(edge!!, row)
-        val red = (pixel shr 16) and 0xFF
-        val blue = pixel and 0xFF
-        assertTrue("the resting hairline is not the destructive red (r=$red, b=$blue)", red > blue)
+        assertTrue("$case: the resting border looks identical with and without it", edge != null)
+
+        val redness = (edge!! until minOf(edge + HAIRLINE_SCAN_PX, plain.width)).maxOf { x ->
+            val pixel = destructive.getPixel(x, row)
+            ((pixel shr 16) and 0xFF) - (pixel and 0xFF)
+        }
+        assertTrue(
+            "$case: the border differs from the plain one but is not the destructive red " +
+                "(red - blue = $redness); `border` is a blue slate and `destructive` is not",
+            redness > 0,
+        )
+        return edge
     }
 
     /**
@@ -560,7 +570,7 @@ class FocusTreatmentTest {
                         .background(IglooTheme.colors.background)
                         // Room for the scale and the glow to land clear of the button, so the
                         // scan below reads the treatment and not the edge of the canvas.
-                        .padding(24.dp),
+                        .padding(PROBE_PADDING_DP.dp),
                 ) {
                     IglooButton(
                         text = "Connect",
@@ -612,6 +622,9 @@ class FocusTreatmentTest {
 
         /** Room for the scale and the glow to land clear of the probe. */
         const val PROBE_PADDING_DP = 24
+
+        /** How far past the first differing pixel a hairline's own pixels can lie. */
+        const val HAIRLINE_SCAN_PX = 3
 
         /** Narrower than twice the unscaled `ringWidth + restWidth` gap. */
         val TINY_PROBE_SIZE = 6.dp

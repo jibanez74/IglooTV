@@ -230,7 +230,11 @@ Notes:
   Dark followed the web down from `#2A3C57` on 2026-11-20; that one was 1.67:1 on the canvas, a
   hard outline around every resting control. `IglooColorsContrastTest` pins both ends, so a token
   edit can neither erase the hairline nor bring the outline back. It is not a focus signal and
-  does not need 3:1 — the ring is (§6.1).
+  does not need 3:1 — the ring is (§6.1). Three marks draw in `border` without being separators,
+  and went quieter with it: an unchecked radio's ring and an unchecked check square on a dialog's
+  `card` (1.41:1 → 1.27:1 in dark, §9.1) and the home hero's inactive page pills off media
+  (§11.3.1). Accepted: each sits beside the label or the active mark that carries the state, and
+  none was at 3:1 before.
 - `destructiveForeground` is ported from web (`--destructive-foreground`), which authors both
   values *and* their contrast: **6.76:1 dark / 6.47:1 light** (light `destructive` followed the
   web from `#DC2626` to `#B91C1C` on 2026-10-20). That makes it the weakest paired token in the
@@ -335,14 +339,20 @@ rather than theme tokens:
   control carries this ground it keeps it through focus: the ring, glow, and scale carry the
   focus signal instead. Off media, all of it falls back to `muted` / `border` / `foreground`.
   The one inversion is the home hero's text plate (§11.3.1), which is words on a scrim rather
-  than a control: its ground arrives *with* focus and leaves with it. An `OutlineDestructive`
-  button (§9.1) over media takes the same ground and the label `#FCA5A5`
-  (`OVER_MEDIA_DESTRUCTIVE`) — one step lighter than dark `destructive`, which reaches only
-  3.8:1 where this ground sits over the far stop of a hero's side scrim on white art; the
-  lighter one is 5.5:1 there.
+  than a control: its ground arrives *with* focus and leaves with it.
+- A removal over media (an `OutlineDestructive` button, §9.1): label and resting hairline
+  `#FCA5A5` (`OVER_MEDIA_DESTRUCTIVE`) on `Color.Black.copy(alpha = 0.70f)`
+  (`OVER_MEDIA_DESTRUCTIVE_FILL`), both fixed across the themes and the ground held through focus.
+  The ground is heavier than the control ground above because a hero's action row sits deep in
+  its fade into `background`, and in light that canvas is near-white: on the 0.45 ground the
+  label falls under 2:1 over the bare light canvas, on 0.70 it holds 4.68:1 there — the lightest
+  ground a hero can put under a control — and 8.3:1 or better everywhere in dark. It is one step
+  lighter than dark `destructive` (`#F87171`), which reaches only 3.21:1 on that same ground.
+  `IglooColorsContrastTest` pins the pair over both canvases, the side scrim's far stop on white
+  art, and black.
 - Missing-media tile: `#0F1A2E` with its glyph in `#8094AE` (`MEDIA_FALLBACK_TILE`,
-  `MEDIA_FALLBACK_GLYPH`) — the web's `media-fallback`. The same navy in both themes, like the
-  app icon's canvas, so the scrim and the white text over it read exactly as they do over a
+  `MEDIA_FALLBACK_GLYPH`) — the web's `media-fallback`. One navy, fixed across the themes as the
+  app icon's canvas is, so the scrim and the white text over it read exactly as they do over a
   poster. A `muted` box is near-white in light and turns a black scrim under white text into a
   grey smear. It is for a box that over-media text sits **on**: the theater card today. A
   placeholder with token text beside or below it — a poster card, an album cover, an episode
@@ -3191,8 +3201,12 @@ Shared: the 16 color values, the missing-media tile (§3.2), the three motion du
 
 **Button vocabulary.** The web's `outline` — the quiet second action — is `Ghost` here, its
 `outline-destructive` is `OutlineDestructive`, and `default`/`accent` are both `Primary`
-(§9.1). `ghost-muted`, `ghost-destructive`, `link` and `link-muted` dress pointer-sized icons
-and inline text; here those are `IglooIconButton` or a full button.
+(§9.1). The TV's `Ghost` is not the web's `ghost`: that one has no chrome until hover, and no
+control here goes without its resting hairline (§6.1), so it has no counterpart.
+`ghost-muted`, `ghost-destructive`, `link` and `link-muted` dress pointer-sized icons and
+inline text; here those are `IglooIconButton` or a full button. The web draws the
+`outline-destructive` edge at half strength (`border-destructive/50`); here it is the full
+`destructive` hairline, 1dp wide.
 
 **The web's November 2026 redesign** (its PRs #228–#266) was evaluated against this document on
 2026-11-20. What it changed in the shared palette came over (the dark `border`, the
@@ -3247,8 +3261,9 @@ forgot to change the code.**
   box that over-media text sits on. The theater card rests on it and keeps its scrim and white
   text with no poster, where it used to fall back to token colours on `muted`.
 - **§9.1** — `IglooButton` gains `OutlineDestructive` for a removal that is not its surface's
-  confirming action; over media its label is `#FCA5A5`. A watch room's Leave room uses it
-  (§11.10.1).
+  confirming action; over media its label and hairline are `#FCA5A5` on a `Black @ 0.70` ground
+  (§3.2), which holds 4.5:1 where a hero fades into the light canvas. A watch room's Leave room
+  uses it (§11.10.1).
 - **Appendix A** — re-verified against web `b5ad3bad`; records the button vocabulary and the
   parts of the web's redesign that deliberately do not transfer.
 
