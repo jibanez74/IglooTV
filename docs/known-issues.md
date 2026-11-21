@@ -117,3 +117,30 @@ state wins once the link is back — unless the TV was the only one there, when 
 position back. Queueing the commands for the reconnect would replay a viewer's pauses onto a room
 that moved on without them.
 
+
+---
+
+## The details hero's text column fails contrast in the light palette
+
+**Found:** 2026-11-21, from a review comment on the hero's missing-backdrop stand-in.
+**Status:** open, and not visible in the app: `IglooTheme` defaults `darkTheme = true` and no
+caller passes anything else, so the light palette is specified (§3) and tested but never shown.
+
+`DetailsHero` paints its picture, the black side scrim, then a vertical fade into `background`
+from 0.45 of its height to its bottom edge. The header is bottom-anchored, so its lower lines sit
+deep in that fade. In dark the canvas is `#0A1322` and white text holds. In light the canvas is
+`#F2F7FC`, and the fade puts near-white under the over-media text: the remaining-time caption
+under Play stands where the fade is most of the way to the canvas, and the facts and genre lines
+above it stand on a ground the fade has already lightened.
+
+Controls are covered: chips and Ghost buttons carry `OVER_MEDIA_CONTROL_FILL`, and the
+destructive outline carries its heavier fill for exactly this reason (§3.2). Bare text is not.
+
+This is the hero's own design, not one picture's: it holds for a decoded backdrop, for the
+blurred-poster stand-in and for the bare missing-media tile alike (the tile is fixed navy so that
+all three read the same). Before the stand-in, a title with no art used token text on the canvas
+and was readable in light; it now shares the hero's treatment and this gap with it.
+
+Fix when a light theme ships: either end the fade above the header's text (the picture then meets
+the canvas at a hard edge, or the fade moves below the header), or give the text column a ground
+in light. Both change every details page, so they belong with the light theme's own pass.
