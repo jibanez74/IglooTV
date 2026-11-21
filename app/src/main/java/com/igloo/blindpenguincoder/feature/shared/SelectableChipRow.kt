@@ -21,7 +21,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooFilterChip
 import com.igloo.blindpenguincoder.core.ui.leadingEdgeFade
 import com.igloo.blindpenguincoder.core.ui.withRequester
 
-/** One chip of a [SelectableChipRow]: what it draws, what TalkBack hears, and its identity. */
+/** One item of a [SelectableChipRow]: what it draws, what TalkBack hears, and its identity. */
 internal data class ChipSpec(
     val key: Long,
     val text: String,
@@ -31,8 +31,10 @@ internal data class ChipSpec(
 )
 
 /**
- * A row of mutually exclusive filter chips that select on press — the Genres tab's genre picker
- * (section 11.4) and the show page's season picker (section 11.4.3).
+ * A row of mutually exclusive filters that select on press — the Genres tab's genre picker
+ * (section 11.4) and the show page's season picker (section 11.4.3). Each is an [IglooFilterChip]
+ * unless the caller draws its own through [item], as the genre picker draws its tiles; the row
+ * owns the focus wiring either way and hands it over in the item's modifier.
  *
  * A plain [Row] under [horizontalScroll], deliberately not a `LazyRow`: the lists are bounded
  * (tens, not thousands), and keeping every chip composed keeps every focus requester permanently
@@ -57,6 +59,21 @@ internal fun SelectableChipRow(
     rowTag: String,
     onPress: (Long) -> Unit,
     onChipFocusChanged: (String, Boolean) -> Unit = { _, _ -> },
+    item: @Composable (
+        chip: ChipSpec,
+        selected: Boolean,
+        onClick: () -> Unit,
+        modifier: Modifier,
+    ) -> Unit = { chip, selected, onClick, modifier ->
+        IglooFilterChip(
+            text = chip.text,
+            selected = selected,
+            onClick = onClick,
+            semanticLabel = chip.semanticLabel,
+            actionLabel = chip.actionLabel,
+            modifier = modifier,
+        )
+    },
 ) {
     val direction = LocalLayoutDirection.current
     // The anchor must always attach somewhere the row actually renders; the first chip does.
@@ -83,13 +100,11 @@ internal fun SelectableChipRow(
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
     ) {
         chips.forEachIndexed { index, chip ->
-            IglooFilterChip(
-                text = chip.text,
-                selected = chip.key == selectedKey,
-                onClick = { onPress(chip.key) },
-                semanticLabel = chip.semanticLabel,
-                actionLabel = chip.actionLabel,
-                modifier = Modifier
+            item(
+                chip,
+                chip.key == selectedKey,
+                { onPress(chip.key) },
+                Modifier
                     .withRequester(anchorRequester.takeIf { chip.key == anchorKey })
                     .onFocusChanged { onChipFocusChanged(chip.testTag, it.isFocused) }
                     .focusProperties {

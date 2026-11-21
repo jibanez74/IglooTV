@@ -24,6 +24,12 @@ data class TrackRowUi(
     val albumId: Long?,
     val musicianId: Long?,
     val spokenInfo: String,
+    /**
+     * The album cover a row leads with wherever it has no track number: the Tracks tab, a
+     * musician's tracks, search. Null where the wire has none, which draws the placeholder so
+     * the titles stay aligned, and on an album row, which sits under its cover already.
+     */
+    val coverUrl: String? = null,
 )
 
 /**

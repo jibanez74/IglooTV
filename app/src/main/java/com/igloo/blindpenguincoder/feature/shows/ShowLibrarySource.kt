@@ -5,6 +5,7 @@ import com.igloo.blindpenguincoder.data.model.ShowLibraryItem
 import com.igloo.blindpenguincoder.data.model.ShowsLibraryData
 import com.igloo.blindpenguincoder.data.repository.ShowRepository
 import com.igloo.blindpenguincoder.feature.library.LibraryGenre
+import com.igloo.blindpenguincoder.feature.library.genreBackdropUrl
 import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryPage
 import com.igloo.blindpenguincoder.feature.library.LibraryRow
@@ -27,9 +28,16 @@ fun showLibrarySource(shows: ShowRepository): LibrarySource = LibrarySource(
     },
     liked = null,
     total = { shows.showStats().map { it.totalShows } },
-    genres = {
+    genres = { apiBaseUrl ->
         shows.showGenres().map { genres ->
-            genres.map { LibraryGenre(id = it.genreId, tag = it.genreTag, count = it.showCount) }
+            genres.map {
+                LibraryGenre(
+                    id = it.genreId,
+                    tag = it.genreTag,
+                    count = it.showCount,
+                    backdropUrl = genreBackdropUrl(apiBaseUrl, it.backdropPath),
+                )
+            }
         }
     },
 )

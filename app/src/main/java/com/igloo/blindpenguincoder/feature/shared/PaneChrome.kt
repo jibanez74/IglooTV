@@ -75,8 +75,11 @@ const val GRID_PREFETCH_ROWS = 2
 const val SKELETON_ROWS = 3
 
 /**
- * A pane's header: the title over its count line and any notice, with the pane's [actions] on
- * the right. The count line is a polite live region that speaks counts only, never titles — it
+ * A pane's header: the title with its count line beside it on one baseline, any notice beneath,
+ * and the pane's [actions] on the right. The count shares the title's row, as the web's library
+ * header does, so the content below starts a line higher.
+ *
+ * The count line is a polite live region that speaks counts only, never titles — it
  * re-announces whenever the loaded count changes, and a TalkBack user must not have the whole
  * list read back at them on every appended page (section 12). The notice is a refresh that
  * failed with content still on screen: the failure is over and Refresh is one press away, so it
@@ -100,41 +103,53 @@ internal fun PaneHeader(
             .padding(contentInset)
             .padding(top = IglooTheme.layout.safeAreaVertical),
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.lg),
-        verticalAlignment = Alignment.CenterVertically,
+        // Top, not centred. Beside its count the title is shorter than the actions, so a centred
+        // column would shift whenever its height changed — the caption wrapping, the notice
+        // arriving — and carry the spoken count's node with it, which TalkBack takes for a change
+        // and re-reads (below).
+        verticalAlignment = Alignment.Top,
     ) {
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(IglooTheme.spacing.xs),
         ) {
-            IglooText(
-                text = title,
-                style = IglooTheme.typography.titleLarge,
-                color = colors.foreground,
-                modifier = Modifier.semantics { heading() },
-            )
-            // The spoken line rides a node of its own. The visible line changes under a request
-            // ("Searching…", "—") while the spoken one deliberately keeps the count it replaces,
-            // and TalkBack re-reads a live region on any content change of its node — its text
-            // or its layout — so one node for both re-announced the previous count on every tab
-            // switch (Shield, 2026-10-26). A fixed 1dp node changes only when the spoken line does,
-            // and it is the count's only node a screen reader reaches: the visible line is hidden,
-            // not cleared, so it stays in the tree the tests read.
-            Box {
+            Row(horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md)) {
                 IglooText(
-                    text = countText,
-                    style = IglooTheme.typography.bodyMedium,
-                    color = colors.mutedForeground,
-                    modifier = Modifier.semantics { hideFromAccessibility() },
-                )
-                Box(
+                    text = title,
+                    style = IglooTheme.typography.titleLarge,
+                    color = colors.foreground,
                     modifier = Modifier
-                        .size(1.dp)
-                        .testTag(countTag)
-                        .semantics {
-                            contentDescription = countDescription
-                            liveRegion = LiveRegionMode.Polite
-                        },
+                        .alignByBaseline()
+                        .semantics { heading() },
                 )
+                // The spoken line rides a node of its own. The visible line changes under a
+                // request ("Searching…", "—") while the spoken one deliberately keeps the count it
+                // replaces, and TalkBack re-reads a live region on any content change of its node
+                // — its text or its layout — so one node for both re-announced the previous count
+                // on every tab switch (Shield, 2026-10-26). A fixed 1dp node changes only when the
+                // spoken line does, and it is the count's only node a screen reader reaches: the
+                // visible line is hidden, not cleared, so it stays in the tree the tests read.
+                //
+                // The count takes what the title leaves and wraps there; the title never gives
+                // way to it. The node sits at the box's top, which the shared baseline pins to
+                // the title's, so neither a wrap nor a shorter caption moves it.
+                Box(modifier = Modifier.alignByBaseline().weight(1f)) {
+                    IglooText(
+                        text = countText,
+                        style = IglooTheme.typography.bodyMedium,
+                        color = colors.mutedForeground,
+                        modifier = Modifier.semantics { hideFromAccessibility() },
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(1.dp)
+                            .testTag(countTag)
+                            .semantics {
+                                contentDescription = countDescription
+                                liveRegion = LiveRegionMode.Polite
+                            },
+                    )
+                }
             }
             if (notice != null) {
                 IglooNotice(

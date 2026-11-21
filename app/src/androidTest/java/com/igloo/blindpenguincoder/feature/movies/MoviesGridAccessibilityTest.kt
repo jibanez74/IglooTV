@@ -209,7 +209,7 @@ class MoviesGridAccessibilityTest {
         composeRule.onNodeWithTag("movies_tab_liked").assert(clickActionLabelled("Show liked movies"))
     }
 
-    /** One cleared node per chip: the drawn "Action · 26" must not leak past the spoken form. */
+    /** One cleared node per tile: the drawn name and count must not leak past the spoken form. */
     @Test
     fun eachGenreChipAnnouncesItsNameCountAndSelection() {
         setContent(

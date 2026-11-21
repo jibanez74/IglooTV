@@ -46,6 +46,14 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
         genresSpoken?.let { add(FactUi("Genres", it)) }
         musician.summary.orNullIfBlank()?.let { add(FactUi("About", it)) }
     }
+    val albums = data.albums.map {
+        AlbumCardUi(
+            id = it.id,
+            title = it.title.ifBlank { UNTITLED_ALBUM },
+            subtitle = it.year.orNull()?.toString(),
+            coverUrl = it.cover.orNullIfBlank(),
+        )
+    }
     return MusicianDetailsUi(
         id = musician.id,
         name = name,
@@ -54,15 +62,11 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
         trackCountText = trackCountText,
         totalDurationText = totalDurationText,
         genresLine = joinedLine(data.genres, " · "),
-        albums = data.albums.map {
-            AlbumCardUi(
-                id = it.id,
-                title = it.title.ifBlank { UNTITLED_ALBUM },
-                subtitle = it.year.orNull()?.toString(),
-                coverUrl = it.cover.orNullIfBlank(),
-            )
+        albums = albums,
+        tracks = data.tracks.map { track ->
+            // The row wears its album's cover, and the queue takes it from the row.
+            track.toRowUi(coverUrl = albums.firstOrNull { it.id == track.albumId.orNull() }?.coverUrl)
         },
-        tracks = data.tracks.map { it.toRowUi() },
         facts = facts,
         factsDescription = factsDescription("Artist details", facts),
         heroInfoDescription = listOfNotNull(
@@ -75,7 +79,7 @@ internal fun toMusicianDetailsUi(data: MusicianDetailsData): MusicianDetailsUi {
 }
 
 /** A musician's track: its album is the subtitle and More's one destination. */
-private fun MusicianTrack.toRowUi(): TrackRowUi = musicTrackRow(
+private fun MusicianTrack.toRowUi(coverUrl: String?): TrackRowUi = musicTrackRow(
     id = id,
     title = title,
     subtitle = albumTitle.orNullIfBlank(),
@@ -83,6 +87,7 @@ private fun MusicianTrack.toRowUi(): TrackRowUi = musicTrackRow(
     albumId = albumId.orNull(),
     // The musician is the page; there is nowhere else for More to go.
     musicianId = null,
+    coverUrl = coverUrl,
 )
 
 /** Play all, or a row's Play with [startIndex] at that row: the discography in page order. */
@@ -97,7 +102,7 @@ internal fun toMusicPlayRequest(musician: MusicianDetailsUi, startIndex: Int = 0
                 durationSec = track.durationSec,
                 artistName = musician.name,
                 albumTitle = track.subtitle,
-                coverUrl = musician.albums.firstOrNull { it.id == track.albumId }?.coverUrl,
+                coverUrl = track.coverUrl,
             )
         },
     )

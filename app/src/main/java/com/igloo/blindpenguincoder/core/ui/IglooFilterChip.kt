@@ -3,6 +3,7 @@ package com.igloo.blindpenguincoder.core.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
@@ -23,8 +24,8 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
  * outside the button contract, and threading it through would bloat a primitive four screens
  * already depend on.
  *
- * [semanticLabel] replaces the drawn [text] for TalkBack — "Action · 26" reads better spoken as
- * "Action, 26 movies" — and the selected chip announces "Selected" via state description, the
+ * [semanticLabel] replaces the drawn [text] for TalkBack — "Season 2 · 10" reads better spoken as
+ * "Season 2, 10 episodes" — and the selected chip announces "Selected" via state description, the
  * same toggle contract the buttons use.
  */
 @Composable
@@ -47,13 +48,26 @@ fun IglooFilterChip(
         restForeground = colors.foreground,
         modifier = modifier,
     ) {
-        contentDescription = semanticLabel
-        role = Role.Button
-        if (selected) stateDescription = SELECTED_STATE_DESCRIPTION
-        onClick(label = actionLabel) {
-            onClick()
-            true
-        }
+        selectableFilter(semanticLabel, selected, actionLabel, onClick)
+    }
+}
+
+/**
+ * The one cleared node of a selectable filter, whatever draws it — a chip here, a genre's tile in
+ * the library: [label] for the words, "Selected" as the state, [actionLabel] for the press.
+ */
+internal fun SemanticsPropertyReceiver.selectableFilter(
+    label: String,
+    selected: Boolean,
+    actionLabel: String,
+    onClick: () -> Unit,
+) {
+    contentDescription = label
+    role = Role.Button
+    if (selected) stateDescription = SELECTED_STATE_DESCRIPTION
+    onClick(label = actionLabel) {
+        onClick()
+        true
     }
 }
 

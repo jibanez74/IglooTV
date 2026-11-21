@@ -80,6 +80,8 @@ data class MovieGenreWithCount(
     @SerialName("genre_id") val genreId: Long,
     @SerialName("genre_tag") val genreTag: String,
     @SerialName("movie_count") val movieCount: Long,
+    /** A backdrop from one of the genre's movies, picked so that genres show different titles. */
+    @SerialName("backdrop_path") val backdropPath: SqlNullString,
 )
 
 /** Payload of `MovieGenresEnvelope.data`. */

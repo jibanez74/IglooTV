@@ -41,6 +41,12 @@ internal val OVER_MEDIA_DESTRUCTIVE = Color(0xFFFCA5A5)
 internal val OVER_MEDIA_DESTRUCTIVE_FILL = Color.Black.copy(alpha = 0.70f)
 
 /**
+ * The band behind the words on a picture tile — a genre's (section 11.4): opaque enough that
+ * white holds 8.5:1 over a white picture, with a short fade above it.
+ */
+internal val OVER_MEDIA_TILE_BAND = Color.Black.copy(alpha = 0.70f)
+
+/**
  * The tile under over-media chrome whose media is missing: one navy, fixed across the themes as
  * the app icon's canvas is, so a scrim and white text read on it exactly as they do on a poster. A
  * `muted` box is near-white in light and turns them into a grey smear. Only where over-media

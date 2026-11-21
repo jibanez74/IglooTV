@@ -5,6 +5,7 @@ import com.igloo.blindpenguincoder.data.model.MovieLibraryItem
 import com.igloo.blindpenguincoder.data.model.MoviesLibraryData
 import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.feature.library.LibraryGenre
+import com.igloo.blindpenguincoder.feature.library.genreBackdropUrl
 import com.igloo.blindpenguincoder.feature.library.LibraryKind
 import com.igloo.blindpenguincoder.feature.library.LibraryPage
 import com.igloo.blindpenguincoder.feature.library.LibraryRow
@@ -28,9 +29,16 @@ fun movieLibrarySource(movies: MovieRepository): LibrarySource = LibrarySource(
         movies.likedMovies(page, perPage, sort).map { it.toLibraryPage() }
     },
     total = { movies.movieStats().map { it.totalMovies } },
-    genres = {
+    genres = { apiBaseUrl ->
         movies.movieGenres().map { genres ->
-            genres.map { LibraryGenre(id = it.genreId, tag = it.genreTag, count = it.movieCount) }
+            genres.map {
+                LibraryGenre(
+                    id = it.genreId,
+                    tag = it.genreTag,
+                    count = it.movieCount,
+                    backdropUrl = genreBackdropUrl(apiBaseUrl, it.backdropPath),
+                )
+            }
         }
     },
 )

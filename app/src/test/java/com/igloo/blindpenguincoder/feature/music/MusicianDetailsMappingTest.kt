@@ -106,8 +106,11 @@ class MusicianDetailsMappingTest {
         assertEquals(11L, first.albumId)
         assertNull(first.musicianId)
         assertEquals("Yesterday. Help!. 2 minutes and 5 seconds.", first.spokenInfo)
+        // The wire's track has no cover of its own here; the row borrows its album's.
+        assertEquals("https://i.scdn.co/image/help.jpg", first.coverUrl)
         assertNull(second.subtitle)
         assertNull(second.albumId)
+        assertNull(second.coverUrl)
         assertEquals("", second.durationText)
         assertEquals("Demo.", second.spokenInfo)
     }

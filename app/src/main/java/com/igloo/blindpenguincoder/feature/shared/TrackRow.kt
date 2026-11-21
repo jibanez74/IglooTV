@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
 import com.igloo.blindpenguincoder.core.ui.IglooIconButton
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooMenu
@@ -46,6 +47,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.SkeletonStub
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.hiddenFromAccessibilityIf
+import com.igloo.blindpenguincoder.core.ui.iglooSurface
 
 /** The three controls of a track row, left to right. */
 enum class TrackRowColumn { Play, Like, More }
@@ -112,7 +114,9 @@ fun rememberPlainColumnTrackRowFocus(
  * One track with its three actions — play, like, more — all focusable and none hidden until
  * focus (docs/design-system.md section 11.5). The row itself is never a focus target: while
  * any control holds focus the row paints a `muted @ 0.50` ground at the control radius, which
- * at ten feet says which row the three controls belong to.
+ * at ten feet says which row the three controls belong to. Between Play and the title sits the
+ * track's album cover, decorative and silent, except on an album's own rows, which lead with
+ * their track number instead.
  *
  * TalkBack hears the row's information once. Play carries the whole sentence ([TrackRowUi
  * .spokenInfo]) plus "Liked" as its state; Like names itself with the like state and an action
@@ -180,6 +184,19 @@ fun TrackRow(
                     onColumnFocused = onColumnFocused,
                 ),
         )
+        // A row has a cover or a track number, never both: an album's rows sit under their
+        // cover and lead with their number, every other list shows whose album a track is on.
+        if (track.indexText == null) {
+            Box(
+                modifier = Modifier
+                    .size(TRACK_COVER_SIZE.scaled())
+                    .iglooSurface(IglooTheme.radius.md, colors.muted)
+                    .clearAndSetSemantics { },
+                contentAlignment = Alignment.Center,
+            ) {
+                ArtworkOrGlyph(imageUrl = track.coverUrl, fallbackIcon = IglooIcons.Music)
+            }
+        }
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -281,7 +298,8 @@ private fun Modifier.trackColumn(
 
 /**
  * A row-shaped loading stand-in of the real row's height and column layout (section 10), so
- * content arriving under focus moves nothing. The Play slot of one row can be the surface's
+ * content arriving under focus moves nothing — the cover's tile included, since every list that
+ * waits behind this skeleton draws rows with covers. The Play slot of one row can be the surface's
  * anchor — focusable, announcing "Loading tracks" politely — through [anchorModifier]; every
  * other skeleton row is texture, invisible to focus and TalkBack.
  */
@@ -318,6 +336,11 @@ fun TrackRowSkeleton(
                         Modifier.background(colors.muted, controlShape)
                     },
                 ),
+        )
+        Box(
+            modifier = Modifier
+                .size(TRACK_COVER_SIZE.scaled())
+                .background(colors.muted, RoundedCornerShape(IglooTheme.radius.md)),
         )
         Column(
             modifier = Modifier.weight(1f),
@@ -377,3 +400,6 @@ private fun TrackRowUi.hasMoreActions(canOpenAlbum: Boolean, canOpenArtist: Bool
 
 /** Wide enough for a two-digit index without the titles ragged-lefting between rows. */
 private val TRACK_INDEX_MIN_WIDTH = 28.dp
+
+/** Inside the row's two text lines and under its controls' height, so no row grows for it. */
+private val TRACK_COVER_SIZE = 44.dp
