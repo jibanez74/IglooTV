@@ -376,7 +376,8 @@ private fun RoomActionRow(
             IglooButton(
                 text = "Leave room",
                 onClick = actions.onRequestLeave,
-                variant = IglooButtonVariant.Ghost,
+                // A removal outside its confirmation; the dialog's Leave room is the filled one.
+                variant = IglooButtonVariant.OutlineDestructive,
                 overMedia = overMedia,
                 modifier = Modifier
                     .testTag("watch_room_leave")

@@ -10,7 +10,7 @@ The design system for **Igloo TV**, the Android TV client (Kotlin + Jetpack Comp
   clients stay recognizably one product. **Everything else — type sizes, spacing, geometry,
   focus, motion — is authored for the 10-foot TV target and does not mirror the web.**
   See [Appendix A](#appendix-a--web-parity) for what came from where.
-- **Last verified**: 2026-10-20, against web client `9b7d514d`.
+- **Last verified**: 2026-11-20, against web client `b5ad3bad`.
 
 > **Changing a number here means changing `core/design/`.** Appendix B maps every token
 > group to its file. A PR that changes one without the other is incomplete.
@@ -211,7 +211,7 @@ foreground) so contrast is structural rather than per-call-site.
 | `primaryForeground` | `#08131F` | `#FFFFFF` | Text on primary |
 | `muted` | `#0F1A2E` | `#E3EDF7` | Subtle surface |
 | `mutedForeground` | `#8094AE` | `#475569` | Secondary text |
-| `border` | `#2A3C57` | `#CBD9E8` | Borders |
+| `border` | `#24354E` | `#CBD9E8` | Borders |
 | `ring` | `#38BDF8` | `#0EA5E9` | **The one focus color** |
 | `aurora` | `#F59E0B` | `#F59E0B` | Warm accent, used sparingly |
 | `auroraForeground` | `#08131F` | `#08131F` | Text on aurora |
@@ -224,6 +224,18 @@ Notes:
 
 - `aurora` / `auroraForeground` are **identical in both themes** — intentional.
 - `ring` is the single focus color across the entire app. Do not introduce a second.
+- **A border is a quiet line.** It separates two surfaces and never outranks what they hold:
+  against the canvas and against a card it sits between 1.2:1 and 1.55:1 in both themes — dark
+  `#24354E` is 1.50:1 on `background` and 1.27:1 on `card`, light `#CBD9E8` 1.33:1 and 1.44:1.
+  Dark followed the web down from `#2A3C57` on 2026-11-20; that one was 1.67:1 on the canvas, a
+  hard outline around every resting control. `IglooColorsContrastTest` pins both ends, so a token
+  edit can neither erase the hairline nor bring the outline back. It is not a focus signal and
+  does not need 3:1 — the ring is (§6.1). Three state marks draw in `border` without being
+  separators, and went quieter with it: an unchecked radio's ring and an unchecked check square on a dialog's
+  `card` (1.41:1 → 1.27:1 in dark, §9.1) and the home hero's inactive page pills off media
+  (§11.3.1). Accepted: each sits beside the label or the active mark that carries the state, and
+  none was at 3:1 before. The home hero's skeleton stubs and the Watch Rooms empty-state drawing
+  use `border` as well; they carry no state.
 - `destructiveForeground` is ported from web (`--destructive-foreground`), which authors both
   values *and* their contrast: **6.76:1 dark / 6.47:1 light** (light `destructive` followed the
   web from `#DC2626` to `#B91C1C` on 2026-10-20). That makes it the weakest paired token in the
@@ -294,7 +306,8 @@ the modal is fully revealed.
 White-on-darkened-poster is a legitimate pattern that does **not** get tokens, because it must
 not track the theme — a poster looks the same in light and dark mode. Use literals; the ones
 several surfaces share — the control ground, the secondary and tertiary text, the progress-track
-ground — are named in `core/design/OverMediaColors.kt`, still literals rather than theme tokens:
+ground, the missing-media tile — are named in `core/design/OverMediaColors.kt`, still literals
+rather than theme tokens:
 
 - Poster dim overlay on focus: `Color.Black.copy(alpha = 0.30f)` (video) / `0.40f` (album art)
 - Title gradient over poster: `Brush.verticalGradient` to `Color.Black.copy(alpha = 0.90f)`
@@ -317,8 +330,8 @@ ground — are named in `core/design/OverMediaColors.kt`, still literals rather 
   5–7 `aurora.copy(alpha = 0.80f)` / `auroraForeground`; < 5 `Color.Black.copy(alpha = 0.60f)` /
   `Color.White`. Aurora is licensed over media because §3.1 pins it identical in both themes;
   the web's `muted` low tier tracks the theme and is deliberately **not** ported — the black
-  literal is its dark-mode equivalent. The badge paints its own ground, so it holds on the
-  no-poster fallback too and is the one item here that survives it.
+  literal is its dark-mode equivalent. The badge paints its own ground, so it holds on any
+  fallback.
 - Chip and control ground over media (§11.4): fill `Color.Black.copy(alpha = 0.45f)`, border
   `Color.White.copy(alpha = 0.25f)`, label `Color.White.copy(alpha = 0.90f)`. Used by the
   certification and media-info chips, and by the detail hero's `Ghost` buttons — a Ghost
@@ -328,10 +341,28 @@ ground — are named in `core/design/OverMediaColors.kt`, still literals rather 
   focus signal instead. Off media, all of it falls back to `muted` / `border` / `foreground`.
   The one inversion is the home hero's text plate (§11.3.1), which is words on a scrim rather
   than a control: its ground arrives *with* focus and leaves with it.
+- A removal over media (an `OutlineDestructive` button, §9.1): label and resting hairline
+  `#FCA5A5` (`OVER_MEDIA_DESTRUCTIVE`) on `Color.Black.copy(alpha = 0.70f)`
+  (`OVER_MEDIA_DESTRUCTIVE_FILL`), both fixed across the themes and the ground held through focus.
+  The ground is heavier than the control ground above because a hero's action row sits deep in
+  its fade into `background`, and in light that canvas is near-white: on the 0.45 ground the
+  label falls under 2:1 over the bare light canvas, on 0.70 it holds 4.68:1 there — the lightest
+  ground a hero can put under a control — and 8.3:1 or better everywhere in dark. It is one step
+  lighter than dark `destructive` (`#F87171`), which reaches only 3.21:1 on that same ground.
+  `IglooColorsContrastTest` pins the pair over both canvases, the side scrim's far stop on white
+  art, and black.
+- Missing-media tile: `#0F1A2E` with its glyph in `#8094AE` (`MEDIA_FALLBACK_TILE`,
+  `MEDIA_FALLBACK_GLYPH`) — the web's `media-fallback`. One navy, fixed across the themes as the
+  app icon's canvas is, so the scrim and the white text over it read exactly as they do over a
+  poster. A `muted` box is near-white in light and turns a black scrim under white text into a
+  grey smear. It is for a box that over-media text sits **on**: the theater card today. A
+  placeholder with token text beside or below it — a poster card, an album cover, an episode
+  still, a watch-room poster — keeps `muted`.
 
-These literals are licensed **only by media actually behind them**. A surface that would carry
-them but has no image — a hero with no backdrop, a theater card with no poster or one that failed
-to load — drops its scrim and falls back to token colors on its `card` or `muted` fill.
+These literals are licensed **only by media actually behind them, or by the missing-media tile**.
+A surface that would carry them but has neither — a hero with no backdrop — drops its scrim and
+falls back to token colors on its `card` or `muted` fill. The theater card (§11.3.2) rests on the
+tile, so with no poster, or one that failed to load, it keeps its scrim and its white text.
 
 ---
 
@@ -490,6 +521,11 @@ runs at `micro` and the scale/elevation at `standard`, per §7.
 `restBorder = false` drops the 1dp resting border and nothing else — the ring, separator, fill
 and glow are untouched — for a surface that should read as bare content until focus arrives. The
 home hero's text plate is its only caller (§11.3.1); a control keeps its hairline.
+
+The resting hairline is `colors.border` unless the call site says otherwise. `hasError` turns it
+`destructive` for a field in error (`IglooTextField`), and `restColor` hands it a colour outright:
+an `OutlineDestructive` button's hairline wears its label's colour, which over media is §3.2's
+fixed one (§9.1). It is the only caller.
 
 The clip applies **at rest as well as on focus**, at inset zero. A treatment that only clipped
 while focused would square off the corners of every control that had given up its own `clip` on
@@ -849,7 +885,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | Composable | Notes |
 |---|---|
 | `IglooText` | Wraps `BasicText`. Takes explicit `style` and `color` — there is no ambient text style, by design. |
-| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Three variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3). Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `overMedia` takes the §3.2 over-media ground and white content where the button sits on a backdrop. `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. A null `onClick` draws a button in its final place before its action exists (the show page's Play/Resume, §11.4.3): still a focus target, but with no `Role.Button` and no action — the `IglooIconButton` inert contract. That is not `enabled = false`, which leaves the focus tree and announces "disabled": a control that will work is not a disabled one. |
+| `IglooButton` | `heightIn(min = sizes.controlHeight)`, radius `lg`, focus per §6.1. Four variants: `Primary`, `Ghost`, `Destructive` (`destructive` fill / `destructiveForeground` label, §3) and `OutlineDestructive` — a Ghost whose label and resting hairline are `destructive`, for **a removal that is not its surface's confirming action** (a watch room's Leave room, §11.10.1). The filled `Destructive` is the confirming press, inside the dialog (§9.3); the owner's Close room keeps it on the page as well, as on the web, because it ends the room for everyone in it. `Ghost` is the quiet second action everywhere — the web's `outline`. Optional leading `icon` at `icons.md`, `spacing.sm` from the label. A toggle passes `stateDescription` and `actionLabel` so TalkBack announces the state it is in and the action a press performs, not just a label (§12). `overMedia` takes the §3.2 over-media ground and white content where the button sits on a backdrop (`OutlineDestructive` takes §3.2's removal pair instead: its own heavier ground and fixed label). `recessed` steps a `Primary` fill back to §3.1's mix while a sibling in the same row holds focus (§6.1); it is presentation only and never reaches the semantics. `labelVariants` lists every label a toggle can show so the button reserves the widest, making the flip a repaint instead of a relayout that shoves the row's siblings — the variants are laid out invisibly in the button's own style (a fixed width would drift under localisation) and never reach the semantics tree. A null `onClick` draws a button in its final place before its action exists (the show page's Play/Resume, §11.4.3): still a focus target, but with no `Role.Button` and no action — the `IglooIconButton` inert contract. That is not `enabled = false`, which leaves the focus tree and announces "disabled": a control that will work is not a disabled one. |
 | `IglooFilterChip` | One choice in a row of mutually exclusive filters (the Movies index's genre picker, §11.4): `heightIn(min = sizes.controlHeight)`, radius `lg`, `spacing.md` horizontal padding, `bodyMedium` label. Selection and focus compose rather than compete — selected is a `primary` fill that holds while unfocused, focus is the §6.1 ring/scale/glow over whatever fill the chip has; unselected rests as the ring's hairline border and takes the Ghost focus fill. Not an `IglooButton` variant: a selected-state fill on an unfocused node is outside the button contract. Built on the internal `SelectablePill`, which carries that body for both pills. One cleared node: `semanticLabel` replaces the drawn text ("Action · 26" speaks as "Action, 26 movies"), the selected chip announces "Selected" via state description, and `actionLabel` names the press. |
 | `IglooTabRow` / `IglooTab` | A strip of mutually exclusive sections (the Movies index, §11.4) — the web client's tab list. The row is one bordered pill on `muted @ 0.50` with a `border @ 0.50` hairline at `focus.restWidth`, radius `lg`, `spacing.xs` padding and gap, sized to its content and never scrolling (more tabs than fit the panel is too many tabs). A tab is `controlHeight` minus the row's padding, radius `sm` — concentric with the row's `lg` corner at its `xs` inset — `spacing.md` horizontal padding, `bodyMedium` label: `primary` fill / `primaryForeground` selected, `card @ 0.72` / `foreground` focused, transparent / `mutedForeground` at rest — selection and focus compose as on the chip, but **no focus scale**, since a lifted tab would overlap the row's border. Shares `IglooFilterChip`'s `SelectablePill` body; the five differences (radius, focus scale, height inset, resting label colour, semantics) are its parameters. **Selects on focus**: d-pad landing on a tab is the switch, the Android TV convention. `onPress` is the separate, deliberate signal — TalkBack's click action, and the way back after a failed switch reverted the selection out from under a focused tab — and every caller passes it separately, because the panes' landing is debounced and a press must not wait behind it. The focused-but-unselected treatment exists for exactly that revert window and nowhere else. One cleared node with `Role.Tab`, `selected` set only when true (never false — TalkBack would say "not selected" on every other tab) and `actionLabel` on the press; the row is a `selectableGroup`. Hand-rolled on Foundation, not `androidx.tv.material3.TabRow` (§9.2), and the ground is written out rather than taken from `iglooSurface`, whose `clip` would cut the focused tab's glow at the row's bounds. |
 | `RatingBadge` | The critic-score badge and its `ratingBadgeSpec` tiers (§3.2). The score is rounded once, and the tier read off the rounded value, so the colour can never disagree with the number shown. |
@@ -878,7 +914,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooPendingRow` | §9.3's pending line: one focusable, pinned, polite status that stands in for a modal's buttons while its action is in flight. The confirm dialog's and Watch Together's. |
 | `IglooPinnedError` | A screen's full-screen error: `IglooInlineError` centred in the safe area at `dialogWidth`, its one action pinned in every direction because the host is still composed underneath. Assertive — it is the only region on screen. |
 | `ProgressTrack` | The one thin progress bar: 4dp, a ground and a fill, square where it sits flush on an edge (poster card, seek bar) and `rounded` where it stands free (the resume strip). |
-| `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. A surface whose text sits over the art hoists its `rememberArtworkState` so the §3.2 treatment follows the decode (the In Theaters card, the Home hero and the details hero, which draw the art themselves through `ArtworkImage`). |
+| `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. `fallbackTint` colours the glyph (`mutedForeground` by default; the §3.2 tile's glyph where the box is the missing-media tile, as on the In Theaters card). A surface whose text sits over the art hoists its `rememberArtworkState` so the §3.2 treatment follows the decode (the Home hero and the details hero, which draw the art themselves through `ArtworkImage`). |
 | `IglooGlyph` | A decorative glyph in one tint at `icons.md` unless told otherwise; no description, because the control or text it sits in says what it means. |
 | `pinnedSideways` / `pinnedToScreen` | The focus pins of §6: `pinnedSideways(up, down)` cancels Left and Right and names the vertical neighbours, a null one cancelled too; `pinnedToScreen()` cancels all four. |
 | `SectionHeading` | The one section heading style (`titleMedium`, `foreground`, `heading()`): every details section and every Home rail. |
@@ -1607,7 +1643,9 @@ the client sorts by `release_date` descending — the same client-side sort the 
 
 **The theaters rail is TMDB content, not library content**, which is why its card looks
 deliberately different: the title and year sit *on* the poster over a bottom scrim, with a
-critic-rating badge (star + one-decimal score) in the top-right corner. It renders last because
+critic-rating badge (star + one-decimal score) in the top-right corner. Its box is §3.2's
+missing-media tile, so a card with no poster, or one that failed to load, shows the tile's glyph
+under the same scrim and white text, alike in both themes. It renders last because
 these are movies the user cannot play. Each card opens that movie's in-theaters detail page
 (§11.4.2) and announces "Open {title}"; the whole card is one cleared semantics node reading
 title, year, and "rated X.X out of 10". A rating of 0 is TMDB's "unrated" and drops the badge (and the
@@ -2941,7 +2979,8 @@ in the Playback Settings dialog's words ("Original quality — audio adjusted ·
 surround · Subtitles off", `roomSettingsLine`, shared with §11.10.3), and where the room is now:
 "● Playing · 1:02:10" moving each second, "Paused at 0:00", "Connecting…" or "Reconnecting…".
 Under it the action row: **Watch** (Primary, play glyph), for the owner **Edit invitees**
-(Ghost) and **Close room** (Destructive), and for an invitee **Leave room** (Ghost). Below the hero, **People in this room**: everyone, the host
+(Ghost) and **Close room** (Destructive), and for an invitee **Leave room** (OutlineDestructive,
+§9.1: a removal that its confirmation, not this button, carries out). Below the hero, **People in this room**: everyone, the host
 first, each with an avatar at `icons.lg`, "(you)" on this viewer, a "Host" tag and a status dot —
 `primary` and "Watching" while connected (on this screen or in the player), `muted` and "Away"
 otherwise.
@@ -3162,8 +3201,32 @@ and this document does not mirror them.
 | Lists | CSS grid, responsive breakpoints | `LazyRow`/`LazyColumn`/`LazyVerticalGrid` + `gridColumns` |
 | Type scale | Tailwind utility literals | Seven authored styles (§4) |
 
-Shared: the 15 color values, the three motion durations (150/200/300ms), and the 1.05× focus
-scale. The web's 0.20 focus-glow alpha did **not** transfer — see §6.1 for the platform reason.
+Shared: the 16 color values, the missing-media tile (§3.2), the three motion durations
+(150/200/300ms), and the 1.05× focus scale. The web's 0.20 focus-glow alpha did **not** transfer
+— see §6.1 for the platform reason.
+
+**Button vocabulary.** The web's `outline` — the quiet second action — is `Ghost` here, its
+`outline-destructive` is `OutlineDestructive`, and `default`/`accent` are both `Primary`
+(§9.1). The TV's `Ghost` is not the web's `ghost`: that one has no chrome until hover, and no
+control here goes without its resting hairline (§6.1), so it has no counterpart.
+`ghost-muted`, `ghost-destructive`, `link` and `link-muted` dress pointer-sized icons and
+inline text; here those are `IglooIconButton` or a full button. The web draws the
+`outline-destructive` edge at half strength (`border-destructive/50`); here it is the full
+`destructive` hairline, 1dp wide.
+
+**The web's November 2026 redesign** (its PRs #228–#266) was evaluated against this document on
+2026-11-20. What it changed in the shared palette came over (the dark `border`, the
+missing-media tile). These parts deliberately did not:
+
+| Web | Why not here |
+|---|---|
+| `shadow-glow` under a resting primary control | The glow belongs to the one focus treatment (§6.1). A resting control that glows reads as focused from ten feet — the reason a `Primary` recedes beside a focused sibling. |
+| `shadow-floating`, the `z-chrome`/`z-modal`/`z-popover` layers | A dialog sits on the scrim (§9.3) and nothing here floats over scrolling content; the platform shadow is all but invisible on the dark canvas (§6.1). Stacking is the composition order. |
+| The `popover` surface | Menus and dialogs draw on `card`; the focused row is the §6.1 fill, so no highlight colour can collide with the surface. |
+| Button sizes (`sm`…`xl`) and `shape="pill"` | One control height (§5.3), sized for a remote. |
+| `Tooltip`, the sidebar collapse control | Pointer and keyboard affordances. The rail expands on focus (§8.1), which is its tooltip. |
+| Field variants, `Switch`, `RadioCard`, the Settings page layout | No Settings forms here yet (§11.7). |
+| Playlist cards and their artwork collage | Playlists are deferred (§11.5). |
 
 **Web-side styling issues are tracked in the Igloo repo, not here.** That repo is a sibling
 checkout and is out of scope for this one; do not modify it. The one parity risk worth knowing:
@@ -3195,6 +3258,20 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-11-20 — The web's redesign, part 1: the quiet border, the missing-media tile, OutlineDestructive (§3, §3.2, §9.1, §11.3.2, §11.10.1, Appendix A).**
+
+- **§3** — dark `border` follows the web from `#2A3C57` to `#24354E`: a quiet line, 1.2–1.55:1
+  against the canvas and a card in both themes, pinned by `IglooColorsContrastTest`.
+- **§3.2** — the missing-media tile (`#0F1A2E`, glyph `#8094AE`), the same in both themes, for a
+  box that over-media text sits on. The theater card rests on it and keeps its scrim and white
+  text with no poster, where it used to fall back to token colours on `muted`.
+- **§9.1** — `IglooButton` gains `OutlineDestructive` for a removal that is not its surface's
+  confirming action; over media its label and hairline are `#FCA5A5` on a `Black @ 0.70` ground
+  (§3.2), which holds 4.5:1 where a hero fades into the light canvas. A watch room's Leave room
+  uses it (§11.10.1).
+- **Appendix A** — re-verified against web `b5ad3bad`; records the button vocabulary and the
+  parts of the web's redesign that deliberately do not transfer.
 
 **2026-11-16 — Watch rooms: edit invitees and leave (§11.10.1).**
 
