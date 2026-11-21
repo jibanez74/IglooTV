@@ -22,6 +22,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -36,13 +37,17 @@ import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.assertPlatformTree
 import com.igloo.blindpenguincoder.clickActionLabel
+import com.igloo.blindpenguincoder.clickActionLabelled
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_FOCUS_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.ANNOUNCED_LINE_WAIT_MS
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.feature.music.AlbumCardUi
+import com.igloo.blindpenguincoder.feature.music.MusicTab
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
+import com.igloo.blindpenguincoder.focusAndPress
+import com.igloo.blindpenguincoder.inertMusicActions
 import com.igloo.blindpenguincoder.openDestination
 import com.igloo.blindpenguincoder.pressBack
 import com.igloo.blindpenguincoder.testAlbums
@@ -92,6 +97,7 @@ class HomeRailBehaviorTest {
     private var theaterRetries = 0
     private val opened = mutableListOf<Long>()
     private val resumedEpisodes = mutableListOf<Long>()
+    private val musicTabsPressed = mutableListOf<MusicTab>()
     private val theatersOpened = mutableListOf<Long>()
     private val albumsOpened = mutableListOf<Long>()
     private val showsOpened = mutableListOf<Long>()
@@ -123,6 +129,7 @@ class HomeRailBehaviorTest {
         albumsOpened.clear()
         showsOpened.clear()
         resumedEpisodes.clear()
+        musicTabsPressed.clear()
         composeRule.setContent {
             IglooTheme {
                 expandedWidth = IglooTheme.layout.navRailExpandedWidth
@@ -152,6 +159,7 @@ class HomeRailBehaviorTest {
                     onAlbumSelected = onAlbumSelected,
                     onShowSelected = onShowSelected,
                     onResumeEpisode = { resumedEpisodes += it },
+                    musicActions = inertMusicActions.copy(onPressTab = { musicTabsPressed += it }),
                     spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 )
             }
@@ -176,6 +184,7 @@ class HomeRailBehaviorTest {
 
     private fun albumCard(id: Long) = composeRule.onNodeWithTag("album_card_$id")
 
+    private fun seeAll(shelf: String) = composeRule.onNodeWithTag("home_see_all_$shelf")
     private fun theaterCard(id: Long) = composeRule.onNodeWithTag("theater_card_$id")
 
     @Test
@@ -216,6 +225,67 @@ class HomeRailBehaviorTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithContentDescription("Home").assertIsFocused()
+    }
+
+    /**
+     * A rail of recent additions ends in the way into its whole shelf (section 11.3.2). The press
+     * goes where that shelf's rail row goes: the pane changes and focus lands inside it, not on
+     * the rail and not nowhere.
+     */
+    @Test
+    fun seeAllClosesTheRecentlyAddedMoviesRailAndOpensTheMoviesShelf() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+
+        composeRule.onNodeWithTag("home_see_all_movies")
+            .assert(clickActionLabelled("See all movies"))
+        composeRule.focusAndPress("home_see_all_movies")
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("home_see_all_movies").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Movies")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+        composeRule.onNode(isFocused()).assert(hasAnyAncestor(hasTestTag("content_pane")))
+    }
+
+    @Test
+    fun seeAllOnRecentlyAddedShowsOpensTheTvShowsShelf() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+
+        composeRule.focusAndPress("home_see_all_shows")
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithContentDescription("TV Shows")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+        composeRule.onNode(isFocused()).assert(hasAnyAncestor(hasTestTag("content_pane")))
+    }
+
+    /** Music has three shelves; the albums rail opens the one it was showing. */
+    @Test
+    fun seeAllOnRecentlyAddedAlbumsOpensMusicOnItsAlbums() {
+        setShellContent(IglooRailState.Loaded(continueMovies))
+
+        composeRule.onNodeWithTag("home_see_all_albums")
+            .assert(clickActionLabelled("See all albums"))
+        composeRule.focusAndPress("home_see_all_albums")
+        composeRule.waitForIdle()
+
+        assertEquals(listOf(MusicTab.Albums), musicTabsPressed)
+        composeRule.onNodeWithContentDescription("Music")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+        composeRule.onNode(isFocused()).assert(hasAnyAncestor(hasTestTag("content_pane")))
+    }
+
+    /** An empty rail has nothing to see more of, and what is in progress has no shelf. */
+    @Test
+    fun onlyARailWithCardsEndsInSeeAll() {
+        setShellContent(
+            initialContinue = IglooRailState.Loaded(continueMovies),
+            initialLatest = IglooRailState.Loaded(emptyList()),
+        )
+
+        composeRule.onNodeWithTag("home_see_all_movies").assertDoesNotExist()
+        composeRule.onNodeWithTag("home_see_all_shows").assertExists()
+        composeRule.onAllNodesWithTag("home_see_all_continue").assertCountEquals(0)
     }
 
     @Test
@@ -441,7 +511,7 @@ class HomeRailBehaviorTest {
     }
 
     @Test
-    fun theLastAlbumPinsTheRightEdge() {
+    fun seeAllFollowsTheLastAlbumAndPinsTheRightEdge() {
         setShellContent(IglooRailState.Loaded(continueMovies))
         continueCard(1).performKeyInput { pressKey(Key.DirectionDown) }
         latestCard(1).performKeyInput { pressKey(Key.DirectionDown) }
@@ -451,9 +521,12 @@ class HomeRailBehaviorTest {
         albumCard(12).performKeyInput { pressKey(Key.DirectionRight) }
         albumCard(13).assertIsFocused()
 
+        // The rail ends in its See-all card, and that card is the edge.
         albumCard(13).performKeyInput { pressKey(Key.DirectionRight) }
+        seeAll("albums").assertIsFocused()
+        seeAll("albums").performKeyInput { pressKey(Key.DirectionRight) }
 
-        albumCard(13).assertIsFocused()
+        seeAll("albums").assertIsFocused()
     }
 
     @Test
@@ -631,6 +704,10 @@ class HomeRailBehaviorTest {
         showCard(12).assertIsFocused()
         showCard(12).performKeyInput { pressKey(Key.DirectionRight) }
         showCard(7).performKeyInput { pressKey(Key.DirectionRight) }
+        // Past the last show is the rail's See-all card, which pins the edge.
+        seeAll("shows").performKeyInput { pressKey(Key.DirectionRight) }
+        seeAll("shows").assertIsFocused()
+        seeAll("shows").performKeyInput { pressKey(Key.DirectionLeft) }
         showCard(7).assertIsFocused()
         showCard(7).performKeyInput { pressKey(Key.DirectionLeft) }
         showCard(12).performKeyInput { pressKey(Key.DirectionLeft) }

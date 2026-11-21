@@ -112,6 +112,10 @@ import com.igloo.blindpenguincoder.feature.search.rememberSearchPaneMemory
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.PosterItemCard
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
+import com.igloo.blindpenguincoder.feature.shared.RailEntry
+import com.igloo.blindpenguincoder.feature.shared.SeeAllCard
+import com.igloo.blindpenguincoder.feature.shared.key
+import com.igloo.blindpenguincoder.feature.shared.withSeeAll
 import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsScreen
@@ -435,11 +439,19 @@ fun IglooApp(
     val launchablePane by rememberUpdatedState(
         currentDestination.takeIf { !shellCovered && !signOut.confirming },
     )
+    // Which Home control asked for the episode: the press records it — plain remember, the show
+    // page's reason: a recreation must never finish a press made in the old activity — and the
+    // request that follows takes that control as its origin.
+    var homeResumeFromHero by remember { mutableStateOf(false) }
     LaunchedEffect(homePlayRequests) {
         homePlayRequests.collect { request ->
             if (launchablePane == IglooDestination.Home) {
                 videoPlayRequest = request
-                videoPlayOrigin = VideoPlayOrigin.ContinueWatchingRail
+                videoPlayOrigin = if (homeResumeFromHero) {
+                    VideoPlayOrigin.HomeHero
+                } else {
+                    VideoPlayOrigin.ContinueWatchingRail
+                }
             }
         }
     }
@@ -577,8 +589,12 @@ fun IglooApp(
             )
         }
         // The launching control: a details page's Play button, the show page's episode card,
-        // or the Continue Watching rail's anchor while Home is the pane.
+        // or — while Home is the pane — the hero, or the Continue Watching rail's anchor.
         val returnRequester = when (videoPlayOrigin) {
+            // The hero holds the pane's entry anchor whenever it is visible; if it has hidden
+            // since, the first rail holds it instead and is where focus belongs.
+            VideoPlayOrigin.HomeHero ->
+                contentStartRequester.takeIf { currentDestination == IglooDestination.Home }
             VideoPlayOrigin.MovieDetails -> playReturnRequester
             VideoPlayOrigin.ShowDetailsHero -> showPlayReturnRequester
             VideoPlayOrigin.ShowDetailsEpisode -> episodeReturnRequester
@@ -779,12 +795,33 @@ fun IglooApp(
                 // An exit save that failed under a Home launch has no details page to follow the
                 // user back to, so Home carries its Retry once the player has closed (section 11.8).
                 progressSyncError = progressSyncError.takeIf {
-                    videoPlayOrigin == VideoPlayOrigin.ContinueWatchingRail && !playerOpen &&
-                        !anyDetailsOpen
+                    videoPlayOrigin.isHome && !playerOpen && !anyDetailsOpen
                 },
+                progressSyncFromHero = videoPlayOrigin == VideoPlayOrigin.HomeHero,
                 onRetryProgressSync = videoPlayerViewModel::retryFailedSave,
                 onRetryRail = onRetryRail,
-                onResumeEpisode = onResumeEpisode,
+                // A Home rail's See all goes where that shelf's rail row goes. Focus moves to
+                // the row first: it outlives the pane's swap, exactly as when the row itself is
+                // pressed, and the new pane claims its anchor once composed (ContentPane). Left
+                // on the card, focus would die with the Home tree and nothing would claim it.
+                onSeeAllFromHome = { rail ->
+                    val shelf = when (rail) {
+                        HomeRail.LatestMovies -> IglooDestination.Movies
+                        HomeRail.LatestShows -> IglooDestination.TvShows
+                        HomeRail.LatestAlbums -> IglooDestination.Music
+                        HomeRail.ContinueWatching, HomeRail.InTheaters -> null
+                    }
+                    if (shelf != null) {
+                        // Music opens on the shelf the rail showed.
+                        if (rail == HomeRail.LatestAlbums) musicActions.onPressTab(MusicTab.Albums)
+                        navigationRequesters.getValue(shelf).requestFocus()
+                        currentDestinationName = shelf.name
+                    }
+                },
+                onResumeEpisode = { episodeId, fromHero ->
+                    homeResumeFromHero = fromHero
+                    onResumeEpisode(episodeId)
+                },
                 openMovie = openMovie,
                 openTheaterMovie = openTheaterMovie,
                 openShow = openShow,
@@ -1175,9 +1212,11 @@ private fun ContentPane(
     trackLikes: TrackLikesUiState,
     mutationNotice: String?,
     progressSyncError: String?,
+    progressSyncFromHero: Boolean,
     onRetryProgressSync: () -> Unit,
     onRetryRail: (HomeRail) -> Unit,
-    onResumeEpisode: (Long) -> Unit,
+    onSeeAllFromHome: (HomeRail) -> Unit,
+    onResumeEpisode: (episodeId: Long, fromHero: Boolean) -> Unit,
     openMovie: (DetailsOrigin, Long) -> Unit,
     openTheaterMovie: (DetailsOrigin, Long) -> Unit,
     openShow: (DetailsOrigin, Long) -> Unit,
@@ -1202,7 +1241,7 @@ private fun ContentPane(
     val lastFocusedByRail =
         rememberSaveable(saver = enumKeyedSaver(HomeRail.entries)) { mutableStateMapOf() }
     // The hero's page memory, hoisted with the rails' for the same round trip: Home comes back
-    // on the page the user left, movie or show (section 11.3.1).
+    // on the page the user left, whichever it features (section 11.3.1).
     var heroPageKind by rememberSaveable { mutableStateOf<HomeHeroKind?>(null) }
 
     // Hoisted beside lastFocusedByRail and for the same reason: a Movies -> Home -> Movies round
@@ -1268,6 +1307,7 @@ private fun ContentPane(
                 spokenAccessibilityEnabled = spokenAccessibilityEnabled,
                 mutationNotice = mutationNotice,
                 progressSyncError = progressSyncError,
+                progressSyncFromHero = progressSyncFromHero,
                 onRetryProgressSync = onRetryProgressSync,
                 contentInset = contentInset,
                 onRetryRail = onRetryRail,
@@ -1282,6 +1322,7 @@ private fun ContentPane(
                 lastFocusedByRail = lastFocusedByRail,
                 heroPageKind = heroPageKind,
                 onHeroPageChange = { heroPageKind = it },
+                onSeeAll = onSeeAllFromHome,
             )
 
             IglooDestination.WatchRooms -> WatchRoomsScreen(
@@ -1416,6 +1457,7 @@ private enum class MusicPlayOrigin { AlbumDetails, MusicianDetails, MusicPane, S
 /** Which surface launched the video player; see `videoPlayOrigin` in [IglooApp]. */
 private enum class VideoPlayOrigin {
     MovieDetails,
+    HomeHero,
     ContinueWatchingRail,
     ShowDetailsHero,
     ShowDetailsEpisode,
@@ -1439,6 +1481,10 @@ private val EpisodeLaunchSite.origin: VideoPlayOrigin
 private val VideoPlayOrigin.episodeSite: EpisodeLaunchSite?
     get() = EpisodeLaunchSite.entries.firstOrNull { it.origin == this }
 
+/** Either of Home's origins, the hero's lead page or a Continue Watching card: no page follows. */
+private val VideoPlayOrigin?.isHome: Boolean
+    get() = this == VideoPlayOrigin.HomeHero || this == VideoPlayOrigin.ContinueWatchingRail
+
 /** Either of the show page's origins: its launches share one kill-on-close and Retry routing. */
 private val VideoPlayOrigin?.isShowDetails: Boolean
     get() = this?.episodeSite != null
@@ -1449,10 +1495,11 @@ private fun HomeRails(
     spokenAccessibilityEnabled: Boolean,
     mutationNotice: String?,
     progressSyncError: String?,
+    progressSyncFromHero: Boolean,
     onRetryProgressSync: () -> Unit,
     contentInset: PaddingValues,
     onRetryRail: (HomeRail) -> Unit,
-    onResumeEpisode: (Long) -> Unit,
+    onResumeEpisode: (episodeId: Long, fromHero: Boolean) -> Unit,
     openMovie: (DetailsOrigin, Long) -> Unit,
     openTheaterMovie: (DetailsOrigin, Long) -> Unit,
     openShow: (DetailsOrigin, Long) -> Unit,
@@ -1462,7 +1509,8 @@ private fun HomeRails(
     navigationRequester: FocusRequester,
     lastFocusedByRail: MutableMap<HomeRail, Long>,
     heroPageKind: HomeHeroKind?,
-    onHeroPageChange: (HomeHeroKind) -> Unit,
+    onHeroPageChange: (HomeHeroKind?) -> Unit,
+    onSeeAll: (HomeRail) -> Unit,
 ) {
     // The hero owns the pane's entry anchor whenever it is visible; the Continue Watching rail
     // takes it back when the hero hides (section 11.3.1). heroVisible gates both attachment
@@ -1492,18 +1540,23 @@ private fun HomeRails(
     )
     fun tools(key: Any) = sectionColumn.section(key)
     // The hero's d-pad down target: attached to the Continue rail's entry anchor in every rail
-    // state, so down always lands where spine re-entry would.
-    val continueEntryRequester = tools(HomeRail.ContinueWatching).entry
+    // state, so down always lands where spine re-entry would. A progress Retry stands between
+    // the two while it shows and takes the press, or a player closed onto the hero would leave
+    // it a Down and an Up away.
+    val heroDownRequester =
+        tools(if (progressSyncError != null) RETRY_SECTION else HomeRail.ContinueWatching).entry
     // The hero's one target outlives Loading -> Loaded and every page turn, so this matters only
     // when the hero hides while focused: the requester then sits on the Continue rail's anchor.
     val onHeroFocus = rememberRefocusAfterSwap(home.hero, spokenAccessibilityEnabled) {
         contentStartRequester.requestFocus()
     }
-    // A Retry that clears while focused leaves focus on nothing; it goes back to the card the
-    // player closed onto, the same hand-back the details page's Retry makes.
+    // A Retry that clears while focused leaves focus on nothing; it goes back to the control the
+    // player closed onto — the hero, or the rail's card — the same hand-back the details page's
+    // Retry makes. The pane's entry anchor is the hero while it shows and the fallback otherwise.
     val onProgressRetryFocus = rememberRefocusAfterSwap(progressSyncError, spokenAccessibilityEnabled) {
         if (progressSyncError == null &&
-            !railReturnRequesters.getValue(HomeRail.ContinueWatching).requestFocusSafely()
+            (progressSyncFromHero ||
+                !railReturnRequesters.getValue(HomeRail.ContinueWatching).requestFocusSafely())
         ) {
             contentStartRequester.requestFocusSafely()
         }
@@ -1528,15 +1581,17 @@ private fun HomeRails(
                 onPageChange = onHeroPageChange,
                 entryRequester = contentStartRequester,
                 leftFocusRequester = navigationRequester,
-                downFocusRequester = continueEntryRequester,
+                downFocusRequester = heroDownRequester,
                 contentInset = contentInset,
                 onOpenMovie = { movieId -> openMovie(DetailsOrigin.Hero, movieId) },
                 onOpenShow = { showId -> openShow(DetailsOrigin.Hero, showId) },
+                onResumeEpisode = { episodeId -> onResumeEpisode(episodeId, true) },
                 modifier = Modifier.announcedSection(tools(HERO_SECTION)).onFocusChanged { onHeroFocus(it.hasFocus) },
             )
         }
 
-        // Directly above the rail whose card launched the player, so Up from that card reaches it.
+        // Between the hero and the rail, whichever launched the player: Down from the one and Up
+        // from the other reach it.
         if (progressSyncError != null) {
             ProgressSyncRetry(
                 message = progressSyncError,
@@ -1561,6 +1616,7 @@ private fun HomeRails(
             lastFocusedByRail = lastFocusedByRail,
             returnRequesters = railReturnRequesters,
             onRetry = onRetryRail,
+            onSeeAll = onSeeAll,
             screenReader = spokenAccessibilityEnabled,
             tools = ::tools,
         )
@@ -1586,8 +1642,8 @@ private fun HomeRails(
                     title = item.showTitle,
                     subtitle = item.subtitle,
                     imageUrl = item.posterUrl,
-                    onClick = { onResumeEpisode(item.episodeId) },
-                    actionLabel = "Resume ${item.showTitle} ${item.episodeCode}",
+                    onClick = { onResumeEpisode(item.episodeId, false) },
+                    actionLabel = continueEpisodeActionLabel(item),
                     progress = PosterCardProgress(item.progressFraction, item.progressDescription),
                     aspect = cardAspect,
                     fallbackIcon = IglooIcons.TvShows,
@@ -1601,6 +1657,7 @@ private fun HomeRails(
             state = home.latestMovies,
             itemKey = { it.id },
             wiring = wiring,
+            seeAll = HomeSeeAll(shelf = "Movies", spokenShelf = "movies", tag = "movies"),
         ) { movie, itemModifier, cardAspect ->
             PosterItemCard(
                 item = movie,
@@ -1615,6 +1672,7 @@ private fun HomeRails(
             state = home.latestShows,
             itemKey = { it.id },
             wiring = wiring,
+            seeAll = HomeSeeAll(shelf = "TV Shows", spokenShelf = "TV shows", tag = "shows"),
         ) { show, itemModifier, cardAspect ->
             PosterItemCard(
                 item = show,
@@ -1631,6 +1689,7 @@ private fun HomeRails(
             itemKey = { it.id },
             wiring = wiring,
             cardAspect = IglooTheme.layout.albumAspect,
+            seeAll = HomeSeeAll(shelf = "Albums", spokenShelf = "albums", tag = "albums"),
         ) { album, itemModifier, cardAspect ->
             AlbumCard(
                 album = album,
@@ -1663,6 +1722,7 @@ private class HomeRailWiring(
     val lastFocusedByRail: MutableMap<HomeRail, Long>,
     val returnRequesters: Map<HomeRail, FocusRequester>,
     val onRetry: (HomeRail) -> Unit,
+    val onSeeAll: (HomeRail) -> Unit,
     val screenReader: Boolean,
     val tools: (HomeRail) -> AnnouncedSection,
 )
@@ -1683,6 +1743,43 @@ private fun <T> HomeRailSection(
     wiring: HomeRailWiring,
     entryRequester: FocusRequester? = null,
     cardAspect: Float = IglooTheme.layout.posterAspect,
+    seeAll: HomeSeeAll? = null,
+    itemContent: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
+) {
+    if (seeAll == null) {
+        HomeRailBody(rail, state, itemKey, wiring, entryRequester, cardAspect, itemContent)
+        return
+    }
+    // A rail of recent additions ends in the way into the whole shelf (section 11.3.2).
+    val entries = remember(state) { state.withSeeAll(itemKey) }
+    HomeRailBody(rail, entries, { it.key }, wiring, entryRequester, cardAspect) {
+            entry, itemModifier, aspect ->
+        when (entry) {
+            is RailEntry.Item -> itemContent(entry.item, itemModifier, aspect)
+            RailEntry.SeeAll -> SeeAllCard(
+                subtitle = seeAll.shelf,
+                label = "See all ${seeAll.spokenShelf}",
+                icon = rail.copy.emptyIcon,
+                aspect = aspect,
+                onClick = { wiring.onSeeAll(rail) },
+                modifier = itemModifier.testTag("home_see_all_${seeAll.tag}"),
+            )
+        }
+    }
+}
+
+/** A Home rail's See-all card: the shelf it opens, as drawn, as spoken, and as tagged. */
+private class HomeSeeAll(val shelf: String, val spokenShelf: String, val tag: String)
+
+/** [HomeRailSection]'s rail itself, over whatever its entries turned out to be. */
+@Composable
+private fun <T> HomeRailBody(
+    rail: HomeRail,
+    state: IglooRailState<T>,
+    itemKey: (T) -> Long,
+    wiring: HomeRailWiring,
+    entryRequester: FocusRequester?,
+    cardAspect: Float,
     itemContent: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
 ) {
     val copy = rail.copy

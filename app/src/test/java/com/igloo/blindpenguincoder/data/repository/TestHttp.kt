@@ -396,10 +396,14 @@ fun continueWatchingMovieJson(
     year: Long? = 1995,
     progressSec: Double = 1800.0,
     durationSec: Double = 10200.0,
+    backdropPath: String? = "/heat-backdrop.jpg",
+    overview: String? = "A crew of thieves and the detective on their trail.",
 ): String {
     val movie = latestMovieJson(id, title, posterPath, year)
     return """{"kind":"movie",""" + movie.drop(1).dropLast(1) +
-        ""","progress_sec":$progressSec,"duration_sec":$durationSec}"""
+        ""","backdrop_path":${sqlNullStringJson(backdropPath)},""" +
+        """"overview":${sqlNullStringJson(overview)},""" +
+        """"progress_sec":$progressSec,"duration_sec":$durationSec}"""
 }
 
 /** One `GET /continue-watching` episode entry; title, poster and year describe the show. */
@@ -412,8 +416,11 @@ fun continueWatchingEpisodeJson(
     episodeName: String = "In Perpetuity",
     progressSec: Double = 600.0,
     durationSec: Double = 3300.0,
+    backdropPath: String? = "/severance-backdrop.jpg",
+    overview: String? = "Mark takes the team somewhere new.",
 ): String = """{"kind":"episode","id":$id,"title":"$showTitle",""" +
     """"poster_path":${sqlNullStringJson("/severance.jpg")},"year":${sqlNullInt64Json(2022)},""" +
+    """"backdrop_path":${sqlNullStringJson(backdropPath)},"overview":${sqlNullStringJson(overview)},""" +
     """"progress_sec":$progressSec,"duration_sec":$durationSec,"show_id":$showId,""" +
     """"season_number":$seasonNumber,"episode_number":$episodeNumber,"episode_name":"$episodeName"}"""
 

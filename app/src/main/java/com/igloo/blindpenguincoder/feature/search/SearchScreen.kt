@@ -35,7 +35,6 @@ import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooEmpty
 import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooMediaRail
-import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooTextField
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
@@ -64,15 +63,19 @@ import com.igloo.blindpenguincoder.feature.shared.PaneHeader
 import com.igloo.blindpenguincoder.feature.shared.PaneTabRow
 import com.igloo.blindpenguincoder.feature.shared.PosterItem
 import com.igloo.blindpenguincoder.feature.shared.PosterItemCard
+import com.igloo.blindpenguincoder.feature.shared.RailEntry
+import com.igloo.blindpenguincoder.feature.shared.SeeAllCard
 import com.igloo.blindpenguincoder.feature.shared.TrackRow
 import com.igloo.blindpenguincoder.feature.shared.TrackRowColumn
 import com.igloo.blindpenguincoder.feature.shared.TrackRowFocus
 import com.igloo.blindpenguincoder.feature.shared.TrackRowMenu
 import com.igloo.blindpenguincoder.feature.shared.TrackRowRequesters
 import com.igloo.blindpenguincoder.feature.shared.TrackRowUi
+import com.igloo.blindpenguincoder.feature.shared.key
 import com.igloo.blindpenguincoder.feature.shared.loadedItems
 import com.igloo.blindpenguincoder.feature.shared.paneCardlessAnchor
 import com.igloo.blindpenguincoder.feature.shared.paneCountLine
+import com.igloo.blindpenguincoder.feature.shared.railEntries
 import com.igloo.blindpenguincoder.feature.shared.showingCountLine
 
 /**
@@ -729,14 +732,6 @@ private fun SearchAllResults(
     }
 }
 
-/** A rail's entry: one of the category's rows, or the See-all card that closes the rail. */
-private sealed interface RailEntry<out T> {
-    data class Result<T>(val item: T, val key: Long) : RailEntry<T>
-    data object SeeAll : RailEntry<Nothing>
-}
-
-private const val SEE_ALL_KEY = -1L
-
 /** What every rail of the All view is wired to alike; the cards come from the section. */
 private class SearchRailWiring(
     val section: SearchSectionUi,
@@ -767,15 +762,12 @@ private fun <T> SearchRail(
     val kind = section.kind
     val memory = wiring.memory
     val entries = remember(items, section.hasMore) {
-        buildList<RailEntry<T>> {
-            items.forEach { add(RailEntry.Result(it, itemKey(it))) }
-            if (section.hasMore) add(RailEntry.SeeAll)
-        }
+        railEntries(items, itemKey, seeAll = section.hasMore)
     }
     IglooMediaRail(
         title = sectionTitle(kind, section.total),
         state = IglooRailState.Loaded(entries),
-        itemKey = { entry -> if (entry is RailEntry.Result) entry.key else SEE_ALL_KEY },
+        itemKey = { entry -> entry.key },
         entryRequester = wiring.entryRequester,
         leftFocusRequester = wiring.navigationRequester,
         lastFocusedKey = memory.lastFocusedRailKeys[kind],
@@ -793,41 +785,20 @@ private fun <T> SearchRail(
         cardAspect = kind.cardAspect(),
     ) { entry, itemModifier, cardAspect ->
         when (entry) {
-            is RailEntry.Result -> card(entry.item, itemModifier, cardAspect)
+            is RailEntry.Item -> card(entry.item, itemModifier, cardAspect)
+            // Closes a rail with more matches than it shows: into the category's tab.
             RailEntry.SeeAll -> SeeAllCard(
-                kind = kind,
-                total = section.total,
+                subtitle = "${formatCount(section.total)} ${kind.noun(section.total)}",
+                label = seeAllLabel(kind, section.total),
+                icon = kind.icon,
                 aspect = cardAspect,
                 onClick = { wiring.onSeeAll(kind) },
                 modifier = itemModifier.testTag("search_see_all_${kind.key}"),
+                artworkRadius = kind.artworkRadius(),
+                centerText = kind == SearchKind.Musicians,
             )
         }
     }
-}
-
-/** The card that closes a rail with more matches than it shows: into the category's tab. */
-@Composable
-private fun SeeAllCard(
-    kind: SearchKind,
-    total: Long,
-    aspect: Float,
-    onClick: () -> Unit,
-    modifier: Modifier,
-) {
-    val label = seeAllLabel(kind, total)
-    IglooPosterCard(
-        title = "See all",
-        subtitle = "${formatCount(total)} ${kind.noun(total)}",
-        imageUrl = null,
-        onClick = onClick,
-        actionLabel = label,
-        semanticLabel = label,
-        aspect = aspect,
-        fallbackIcon = kind.icon,
-        artworkRadius = kind.artworkRadius(),
-        centerText = kind == SearchKind.Musicians,
-        modifier = modifier,
-    )
 }
 
 /**

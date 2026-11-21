@@ -23,9 +23,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
 import com.igloo.blindpenguincoder.assertPlatformTree
+import com.igloo.blindpenguincoder.clickActionLabelled
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.pressBack
+import com.igloo.blindpenguincoder.testContinueHero
 import com.igloo.blindpenguincoder.testHomeShows
 import com.igloo.blindpenguincoder.testContinueMovies
 import com.igloo.blindpenguincoder.testHero
@@ -56,6 +58,7 @@ class HomeHeroFocusTest {
     private var heroState by mutableStateOf<HomeHeroState>(HomeHeroState.Loading)
     private val opened = mutableListOf<Long>()
     private val showsOpened = mutableListOf<Long>()
+    private val resumed = mutableListOf<Long>()
 
     private val bothPages = HomeHeroState.Loaded(listOf(testHero, testShowHero))
 
@@ -72,6 +75,7 @@ class HomeHeroFocusTest {
         heroState = initialHero
         opened.clear()
         showsOpened.clear()
+        resumed.clear()
         composeRule.setContent {
             IglooTheme {
                 TestIglooApp(
@@ -83,6 +87,7 @@ class HomeHeroFocusTest {
                     ),
                     onMovieSelected = { id -> opened += id },
                     onShowSelected = { id -> showsOpened += id },
+                    onResumeEpisode = { id -> resumed += id },
                 )
             }
         }
@@ -312,6 +317,100 @@ class HomeHeroFocusTest {
         press(Key.Enter)
         assertEquals(listOf(testHero.id), opened)
         assertEquals(listOf(testShowHero.id), showsOpened)
+    }
+
+    /**
+     * What is in progress leads (section 11.3.1): the page says so, counts itself among three,
+     * and names its press as the episode's Continue Watching card does.
+     */
+    @Test
+    fun theLeadPageAnnouncesWhatIsInProgressAndNamesItsPressResume() {
+        setShellContent(HomeHeroState.Loaded(listOf(testContinueHero, testHero, testShowHero)))
+
+        hero()
+            .assertContentDescriptionEquals(
+                "Continue watching, 1 of 3. Slow Horses. " +
+                    "S1 E3, Bad Tradecraft, 45 minutes remaining. " +
+                    "River Cartwright follows a lead he was told to drop.",
+            )
+            .assert(clickActionLabelled("Resume Slow Horses S1 E3"))
+        assertNoLiveRegion()
+
+        press(Key.DirectionRight)
+        hero().assert(clickActionLabelled("Open Heat"))
+    }
+
+    /** The lead page's press resumes its episode; the pages after it still open their titles. */
+    @Test
+    fun selectOnTheLeadPageResumesItsEpisodeAndOpensNothing() {
+        setShellContent(HomeHeroState.Loaded(listOf(testContinueHero, testHero, testShowHero)))
+
+        press(Key.DirectionCenter)
+        assertEquals(listOf(testContinueHero.id), resumed)
+        assertEquals(emptyList<Long>(), opened)
+
+        press(Key.DirectionRight)
+        press(Key.DirectionCenter)
+        assertEquals(listOf(testHero.id), opened)
+        assertEquals(listOf(testContinueHero.id), resumed)
+    }
+
+    /**
+     * Finishing the title takes the lead page away while the hero may hold focus on it: the
+     * hero stays one focused node and shows the page that now stands first.
+     */
+    @Test
+    fun aLeadPageThatLeavesUnderFocusHandsTheHeroToTheNextPage() {
+        setShellContent(HomeHeroState.Loaded(listOf(testContinueHero, testHero, testShowHero)))
+        hero().assertIsFocused()
+
+        heroState = bothPages
+        composeRule.waitForIdle()
+
+        hero().assertIsFocused().assertContentDescriptionEquals(moviePageDescription)
+    }
+
+    /** A lead page arriving in front keeps the user on a page they turned to. */
+    @Test
+    fun aLeadPageArrivingInFrontLeavesTheUserOnThePageTheyTurnedTo() {
+        setShellContent(bothPages)
+        press(Key.DirectionRight)
+
+        heroState = HomeHeroState.Loaded(listOf(testContinueHero, testHero, testShowHero))
+        composeRule.waitForIdle()
+
+        hero().assertIsFocused().assertContentDescriptionEquals(
+            showPageDescription.replace("2 of 2", "3 of 3"),
+        )
+    }
+
+    /**
+     * A hero nobody turned shows its first page, and first means whatever stands first: a title
+     * just started leads as soon as its rail knows of it, rather than waiting one Left away.
+     */
+    @Test
+    fun aHeroLeftOnItsFirstPageShowsTheLeadPageWhenOneArrives() {
+        setShellContent(bothPages)
+        hero().assertContentDescriptionEquals(moviePageDescription)
+
+        heroState = HomeHeroState.Loaded(listOf(testContinueHero, testHero, testShowHero))
+        composeRule.waitForIdle()
+
+        hero().assertIsFocused().assert(clickActionLabelled("Resume Slow Horses S1 E3"))
+    }
+
+    /** Turning back to the first page is remembering nothing: the lead still takes it. */
+    @Test
+    fun turningBackToTheFirstPageLetsANewLeadPageTakeIt() {
+        setShellContent(bothPages)
+        press(Key.DirectionRight)
+        press(Key.DirectionLeft)
+        hero().assertContentDescriptionEquals(moviePageDescription)
+
+        heroState = HomeHeroState.Loaded(listOf(testContinueHero, testHero, testShowHero))
+        composeRule.waitForIdle()
+
+        hero().assert(clickActionLabelled("Resume Slow Horses S1 E3"))
     }
 
     @Test

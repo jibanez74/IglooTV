@@ -36,6 +36,7 @@ import com.igloo.blindpenguincoder.feature.shared.DetailsHeroSkeleton
 import com.igloo.blindpenguincoder.feature.shared.DetailsScrollColumn
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideoUi
+import com.igloo.blindpenguincoder.feature.shared.MissingBackdrop
 import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
 import com.igloo.blindpenguincoder.feature.shared.detailsSections
 import com.igloo.blindpenguincoder.feature.shared.heroHeaderModifier
@@ -445,7 +446,11 @@ private fun DetailsContent(
     DetailsScrollColumn(
         scrollState = rememberScrollState(),
         hero = {
-            DetailsHero(imageUrl = movie.backdropUrl, backdropTag = "details_backdrop") { overMedia ->
+            DetailsHero(
+                imageUrl = movie.backdropUrl,
+                backdropTag = "details_backdrop",
+                missingBackdrop = MissingBackdrop.Poster(movie.posterUrl),
+            ) { overMedia ->
                 MovieDetailsHeader(
                     movie = movie,
                     overMedia = overMedia,

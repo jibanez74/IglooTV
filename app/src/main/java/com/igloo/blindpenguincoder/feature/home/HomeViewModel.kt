@@ -9,9 +9,11 @@ import com.igloo.blindpenguincoder.core.network.withApiBaseUrl
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.formatEpisodeCode
+import com.igloo.blindpenguincoder.core.ui.formatRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatRuntime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
+import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.core.ui.orKeepContent
 import com.igloo.blindpenguincoder.core.ui.progressFraction
 import com.igloo.blindpenguincoder.core.ui.ratingBadgeSpecOrNull
@@ -91,14 +93,23 @@ data class HomeTheaterMovie(
 /** The rails Home renders, in the order it renders them (docs/design-system.md section 11.3). */
 enum class HomeRail { ContinueWatching, LatestMovies, LatestShows, LatestAlbums, InTheaters }
 
-/** What a hero page features: the newest movie or the newest show (section 11.3.1). */
-enum class HomeHeroKind { Movie, Show }
+/**
+ * What a hero page features, in the order the pages stand (section 11.3.1): what is in progress
+ * first — the web billboard's lead — then the newest movie and the newest show.
+ */
+enum class HomeHeroKind { Continue, Movie, Show }
 
 /**
  * One featured title, render-ready (section 11.3.1). Every field but kind, id and title may be
  * absent. [extent] is what the title runs to — "2h 50m" for a movie, "3 Seasons" for a show —
  * and [metadataDescription] is the metadata row's one spoken sentence, composed here so the chips
  * the row draws never reach TalkBack one by one.
+ *
+ * The [HomeHeroKind.Continue] page alone carries the last two. [progressFraction] is how far in
+ * the title is, drawn as a strip under the metadata, whose [extent] there ends in the time left.
+ * [resumeLabel] is set when what is in progress is an episode — [id] is then the episode's — and
+ * names the press for TalkBack in its Continue Watching card's words: the press resumes it, as
+ * the card's does, where a movie's opens the movie's page.
  */
 data class HomeHero(
     val kind: HomeHeroKind,
@@ -111,6 +122,10 @@ data class HomeHero(
     val ratingBadge: RatingBadgeSpec?,
     val extent: String?,
     val metadataDescription: String?,
+    /** Stands in for a missing backdrop, blurred (section 3.2). */
+    val posterUrl: String? = null,
+    val progressFraction: Float? = null,
+    val resumeLabel: String? = null,
 )
 
 /**
@@ -118,7 +133,8 @@ data class HomeHero(
  * pages share their Recently Added rails' data and Retry. A details failure affects
  * only its hero page; the rail's cards remain available.
  *
- * [Loaded] holds one page per feature that loaded, the movie first. The hero stays [Loading]
+ * [Loaded] holds one page per feature that loaded, in [HomeHeroKind]'s order, less the newest
+ * movie's page when that movie is the one in progress and already leads. The hero stays [Loading]
  * until every feature has settled, so a page never appears or disappears under the user's focus
  * mid-load and the announced "1 of 2" is right from the first word.
  */
@@ -199,13 +215,14 @@ class HomeViewModel(
     private fun loadContinueWatching(userInitiated: Boolean) {
         if (userInitiated) {
             _uiState.update { it.copy(continueWatching = IglooRailState.Loading) }
+            setFeature(HomeHeroKind.Continue, Feature.Loading)
         }
         launchLoad(HomeRail.ContinueWatching) {
             // Server order is the contract (most recently watched first) — do not re-sort.
-            val next = movies.continueWatching().withApiBaseUrl(serverUrl)
-                .toRailState { (inProgress, apiBaseUrl) ->
-                    inProgress.mapNotNull { item -> toContinueItem(item, apiBaseUrl) }
-                }
+            val result = movies.continueWatching().withApiBaseUrl(serverUrl)
+            val next = result.toRailState { (inProgress, apiBaseUrl) ->
+                inProgress.mapNotNull { item -> toContinueItem(item, apiBaseUrl) }
+            }
             _uiState.update {
                 it.copy(
                     continueWatching = next.orKeepContent(
@@ -214,7 +231,52 @@ class HomeViewModel(
                     ),
                 )
             }
+            // The hero's lead page is the rail's first card (section 11.3.1): one response, so
+            // the two can never name different titles.
+            when (result) {
+                is ApiResult.Failure -> hideFeatureOrKeep(HomeHeroKind.Continue, userInitiated)
+                is ApiResult.Success -> {
+                    val (inProgress, apiBaseUrl) = result.value
+                    val lead = inProgress.firstNotNullOfOrNull { item ->
+                        toContinueItem(item, apiBaseUrl)
+                            ?.let { card -> toContinueHero(item, card, apiBaseUrl) }
+                    }
+                    // Nothing in progress has no page to protect: hide unconditionally.
+                    setFeature(HomeHeroKind.Continue, lead?.let(Feature::Loaded) ?: Feature.Hidden)
+                }
+            }
         }
+    }
+
+    /** [card] as the hero's lead page; the response's own backdrop and overview fill it. */
+    private fun toContinueHero(
+        item: ContinueWatchingItem,
+        card: HomeContinueItem,
+        apiBaseUrl: String,
+    ): HomeHero {
+        val remaining = formatRemainingTime(item.progressSec, item.durationSec)
+        val year = (card as? HomeContinueItem.Movie)?.movie?.year?.takeIf { it > 0 }?.toString()
+        val episode = card as? HomeContinueItem.Episode
+        return HomeHero(
+            kind = HomeHeroKind.Continue,
+            id = item.id,
+            title = item.title,
+            backdropUrl = heroBackdropUrl(apiBaseUrl, item.backdropPath.orNull()),
+            overview = item.overview.orNullIfBlank(),
+            year = year,
+            certification = null,
+            ratingBadge = null,
+            extent = joinedLine(listOfNotNull(episode?.subtitle, remaining), " · "),
+            metadataDescription = listOfNotNull(
+                year,
+                episode?.episodeCode,
+                episode?.episodeName,
+                card.progressDescription,
+            ).joinToString(", "),
+            posterUrl = heroPosterUrl(apiBaseUrl, item.posterPath.orNull()),
+            progressFraction = card.progressFraction,
+            resumeLabel = episode?.let { continueEpisodeActionLabel(it) },
+        )
     }
 
     private fun toContinueItem(item: ContinueWatchingItem, apiBaseUrl: String): HomeContinueItem? {
@@ -385,7 +447,11 @@ class HomeViewModel(
     private fun setFeature(kind: HomeHeroKind, feature: Feature) {
         features[kind] = feature
         val slots = HomeHeroKind.entries.map { features.getValue(it) }
-        val pages = slots.filterIsInstance<Feature.Loaded>().map { it.hero }
+        val loaded = slots.filterIsInstance<Feature.Loaded>().map { it.hero }
+        // The movie in progress already leads; its Recently Added page would say it twice.
+        val leadMovieId = loaded.firstOrNull { it.kind == HomeHeroKind.Continue }
+            ?.takeIf { it.resumeLabel == null }?.id
+        val pages = loaded.filterNot { it.kind == HomeHeroKind.Movie && it.id == leadMovieId }
         val hero = when {
             slots.any { it is Feature.Loading } -> HomeHeroState.Loading
             pages.isEmpty() -> HomeHeroState.Hidden
@@ -430,6 +496,7 @@ class HomeViewModel(
                 year = year,
                 spokenExtent = runtime?.let { formatSpokenTime(it * 60.0) },
             ),
+            posterUrl = heroPosterUrl(apiBaseUrl, movie.posterPath?.orNull()),
         )
     }
 
@@ -455,13 +522,22 @@ class HomeViewModel(
                 year = year,
                 spokenExtent = seasons?.let { formatSpokenSeasonCount(it) },
             ),
+            posterUrl = heroPosterUrl(apiBaseUrl, show.posterPath.orNull()),
         )
     }
 
     // w1280 for a pane-width backdrop (section 11.3.1); w500 would upscale visibly at 10ft.
     private fun heroBackdropUrl(apiBaseUrl: String, path: String?): String? =
         tmdbImageUrl(apiBaseUrl = apiBaseUrl, size = TmdbImageSize.W1280, path = path)
+
+    // The rails' own poster size, so the stand-in is usually a decode of a file already cached.
+    private fun heroPosterUrl(apiBaseUrl: String, path: String?): String? =
+        tmdbImageUrl(apiBaseUrl = apiBaseUrl, size = TmdbImageSize.W500, path = path)
 }
+
+/** What a press on an episode in progress does, for TalkBack: its card's label and the hero's. */
+internal fun continueEpisodeActionLabel(episode: HomeContinueItem.Episode): String =
+    "Resume ${episode.showTitle} ${episode.episodeCode}"
 
 /** One featured title's own load state, before the hero composes its pages (section 11.3.1). */
 private sealed interface Feature {

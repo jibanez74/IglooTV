@@ -42,6 +42,41 @@ class HomeHeroDescriptionTest {
         )
     }
 
+    private val episodeInProgress = HomeHero(
+        kind = HomeHeroKind.Continue,
+        id = 900,
+        title = "Severance",
+        backdropUrl = null,
+        overview = "Mark takes the team somewhere new.",
+        year = null,
+        certification = null,
+        ratingBadge = null,
+        extent = "S1 E3 · In Perpetuity · 45m left",
+        metadataDescription = "S1 E3, In Perpetuity, 45 minutes remaining",
+        progressFraction = 0.18f,
+        resumeLabel = "Resume Severance S1 E3",
+    )
+
+    @Test
+    fun `the lead page says it is in progress, which episode, and how much is left`() {
+        assertEquals(
+            "Continue watching, 1 of 3. Severance. S1 E3, In Perpetuity, 45 minutes remaining. " +
+                "Mark takes the team somewhere new.",
+            heroPageDescription(episodeInProgress, index = 0, count = 3),
+        )
+    }
+
+    @Test
+    fun `an episode in progress resumes on a press, every other page opens its title`() {
+        assertEquals("Resume Severance S1 E3", heroPressLabel(episodeInProgress))
+        assertEquals("Open Heat", heroPressLabel(movie))
+        // A movie in progress opens its page too: only the episode's card resumes.
+        assertEquals(
+            "Open Heat",
+            heroPressLabel(movie.copy(kind = HomeHeroKind.Continue, progressFraction = 0.4f)),
+        )
+    }
+
     @Test
     fun `a lone page has no place to give`() {
         assertEquals(

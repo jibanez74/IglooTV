@@ -62,6 +62,20 @@ class RecessedPrimaryTest {
     }
 
     @Test
+    fun `over a player's black ground recession darkens in both themes`() {
+        // Toward the light canvas the fill would get brighter against the picture: the receded
+        // Play/Pause would then outweigh the ring on the control the remote is actually on.
+        listOf(IglooDarkColors, IglooLightColors).forEach { colors ->
+            val recessed = colors.recessedPrimary(ground = Color.Black)
+            assertTrue(recessed.luminance() < colors.primary.luminance())
+            assertTrue(contrast(recessed, colors.primary) >= 1.5f)
+            // The label there is a glyph: the 3:1 bar for a graphic, not a text label's 4.5.
+            val glyph = colors.recessedPrimaryContent(ground = Color.Black)
+            assertTrue(contrast(glyph, recessed) >= 3f)
+        }
+    }
+
+    @Test
     fun `dark keeps its paired label and light switches to foreground`() {
         assertEquals(IglooDarkColors.primaryForeground, IglooDarkColors.recessedPrimaryContent())
         assertEquals(IglooLightColors.foreground, IglooLightColors.recessedPrimaryContent())

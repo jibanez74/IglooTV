@@ -285,7 +285,8 @@ light lightens it under a white `primaryForeground` and drops that pair to 3.35:
 takes over there (5.55:1) while dark keeps `primaryForeground` (4.83:1). Both live in
 `core/design/IglooColors.kt` as `recessedPrimary()` / `recessedPrimaryContent()`, and
 `RecessedPrimaryTest` pins the values, the opacity, the distance from disabled, and both labels.
-See §6.1 for when a control recedes.
+See §6.1 for when a control recedes. `recessedPrimary(ground)` takes the ground the control
+stands on: the canvas everywhere but in a player, whose transport recedes toward black (§11.8).
 
 **Only one scrim renders at a time.** The rail's and the modal's are the same `background @ 0.60`,
 and two of them composite to 0.84 — an alpha this table does not authorize, and dark enough that
@@ -359,15 +360,18 @@ rather than theme tokens:
   `MEDIA_FALLBACK_GLYPH`) — the web's `media-fallback`. One navy, fixed across the themes as the
   app icon's canvas is, so the scrim and the white text over it read exactly as they do over a
   poster. A `muted` box is near-white in light and turns a black scrim under white text into a
-  grey smear. It is for a box that over-media text sits **on**: the theater card, and a genre
-  tile, which shows the navy bare under its band. A
+  grey smear. It is for a box that over-media text sits **on**: the theater card, a genre tile
+  (which shows the navy bare under its band), and the heroes — every Home hero page, and a
+  movie's, a show's and a watch room's details hero — where a title's poster, blurred, stands in
+  over it for a missing backdrop (§11.3.1). A
   placeholder with token text beside or below it — a poster card, an album cover, an episode
   still, a watch-room poster — keeps `muted`.
 
 These literals are licensed **only by media actually behind them, or by the missing-media tile**.
-A surface that would carry them but has neither — a hero with no backdrop — drops its scrim and
-falls back to token colors on its `card` or `muted` fill. The theater card (§11.3.2) rests on the
-tile, so with no poster, or one that failed to load, it keeps its scrim and its white text.
+A surface that would carry them but has neither — a music page's hero with no artwork, an episode
+card with no still — drops its scrim and falls back to token colors on the canvas or its `muted`
+fill. The theater card (§11.3.2) and the heroes above rest on the tile, so with no picture, or
+one that failed to load, they keep their scrims and their white text.
 
 ---
 
@@ -919,7 +923,7 @@ the way the cut card at the panel's end reads as it continuing right (§8.2).
 | `IglooPendingRow` | §9.3's pending line: one focusable, pinned, polite status that stands in for a modal's buttons while its action is in flight. The confirm dialog's and Watch Together's. |
 | `IglooPinnedError` | A screen's full-screen error: `IglooInlineError` centred in the safe area at `dialogWidth`, its one action pinned in every direction because the host is still composed underneath. Assertive — it is the only region on screen. |
 | `ProgressTrack` | The one thin progress bar: 4dp, a ground and a fill, square where it sits flush on an edge (poster card, seek bar) and `rounded` where it stands free (the resume strip). |
-| `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. `fallbackTint` colours the glyph (`mutedForeground` by default; the §3.2 tile's glyph where the box is the missing-media tile, as on the In Theaters card). A surface whose text sits over the art hoists its `rememberArtworkState` so the §3.2 treatment follows the decode (the Home hero and the details hero, which draw the art themselves through `ArtworkImage`). |
+| `ArtworkOrGlyph` | Cropped artwork, or the fallback glyph at `icons.lg` when there is none or it fails to load; decorative. `fallbackTint` colours the glyph (`mutedForeground` by default; the §3.2 tile's glyph where the box is the missing-media tile, as on the In Theaters card). A surface whose text sits over the art hoists its `rememberArtworkState` so the §3.2 treatment follows the decode (the details hero of a music page, the episode card). The heroes draw their picture through `BackdropOrBlurredPoster` (`core/ui/BlurredArtwork.kt`): the backdrop, or the poster blurred when there is none (§11.3.1). |
 | `IglooGlyph` | A decorative glyph in one tint at `icons.md` unless told otherwise; no description, because the control or text it sits in says what it means. |
 | `pinnedSideways` / `pinnedToScreen` | The focus pins of §6: `pinnedSideways(up, down)` cancels Left and Right and names the vertical neighbours, a null one cancelled too; `pinnedToScreen()` cancels all four. |
 | `SectionHeading` | The one section heading style (`titleMedium`, `foreground`, `heading()`): every details section and every Home rail. |
@@ -1482,7 +1486,8 @@ details pages' hero rule (§11.4.1, Focus).
 ### 11.3 Home
 
 Stacked horizontal rails — continue watching, latest movies, latest shows, latest albums, movies
-in theaters — under the hero, which features the newest movie and the newest show (§11.3.1). Watch
+in theaters — under the hero, which leads with what is in progress and then features the newest
+movie and the newest show (§11.3.1). Watch
 rooms, a section of the web client's home page, are a destination of their own here (§11.10).
 This is the most TV-native layout in the product and the model for other index screens. Vertical d-pad moves between rails; horizontal moves within one; focus is
 restored per-rail on return.
@@ -1495,8 +1500,30 @@ destinations still render a heading, inside their own content.
 
 #### 11.3.1 The hero
 
-The hero is a **paged billboard** of two features: the **single most recently added movie** and
-the **single most recently added TV show**, in that order, one page on screen at a time. The
+The hero is a **paged billboard** of up to three features, one page on screen at a time: **what
+is in progress**, then the **single most recently added movie** and the **single most recently
+added TV show**, in that order.
+
+**The lead page is the first Continue Watching item** — the web billboard's lead — and is there
+only while something is in progress. It is the rail's own first card, filled from the same
+`GET /api/continue-watching` response (`backdrop_path` and `overview` ride every item for exactly
+this), so the page and the card can never name different titles, and the rail's Retry and the
+refresh after a watched change re-run the page for free. It carries the eyebrow `CONTINUE
+WATCHING`, the title (the show's, for an episode), a facts line ending in the time left — `1995 ·
+2h 20m left`, or `S1 E3 · In Perpetuity · 45m left` — and under it a 200dp progress strip
+(`ProgressTrack`, `primary` on §3.2's white hairline: the black track a poster card wears would
+vanish into the focused plate's own black ground). **Its press is its card's press**: an
+episode resumes straight into the player, announced "Resume {show} S1 E3", and a movie opens its
+page. Closing a player it started lands back on the hero — the control that was pressed (§6.3) —
+whatever card the Continue Watching rail last remembered; a card's own resume still returns to
+the card. When the movie in progress is also the newest movie, the Recently Added page for it
+steps aside: one page per title.
+
+This is the web's billboard content in the TV's shape. The web draws two buttons, Resume and
+Details; here the page stays **one focus target** (below), because stacked targets under one
+rectangle are what TalkBack on a Shield could not see, and Left/Right already turn the pages.
+
+The
 movie page is the first item of the Recently Added data, enriched with
 `GET /api/movies/details/{id}`; the two requests chain inside the rail's own load job, so the
 rail's Retry re-runs the movie page and a foreground refresh cancels both together. The show page
@@ -1535,10 +1562,17 @@ Over it, two static over-media gradients (§3.2) — the side gradient left-to-r
 hero's stops so the text column reads against busy art across the full panel, and the bottom
 title gradient — and under the plate a short token fade (`background`, from 88% down) that
 dissolves the art into the canvas the rails sit on. Both pages' images load up front; the one
-off screen waits at zero alpha, so a page turn never waits on the network. When a page has **no
-backdrop** (or the image fails), it renders as an ordinary card surface — `card` fill, token text
-colors, **no over-media gradients** — because §3.2's white-on-black literals are licensed only by
-media actually behind them. Until the image decodes the page uses the token colors too.
+off screen waits at zero alpha, so a page turn never waits on the network.
+
+**Every page stands on §3.2's missing-media tile**, the same navy in both themes, so the two
+gradients and the white words are there from a page's first frame and no page changes its colors
+when its picture lands. When a title has **no backdrop** (or the image fails), its **poster
+stands in, blurred** past recognising and cropped to the bleed, as on the web, so the band still
+reads as that title's media; with no poster either, the tile shows on its own. The blur is a
+small decode — 96px on the longer side — with a three-pass box blur on those pixels, stretched to
+the bleed (`BackdropOrBlurredPoster`, `core/ui/BlurredArtwork.kt`): `Modifier.blur` needs API 31
+and the Shield and the Fire TV stick are API 30. Only the Loading skeleton, which has no title to
+stand on the tile for, still uses the token canvas (`muted`) and token stubs.
 
 **A page turn is a dissolve.** The incoming art fades in over the outgoing art (`page`), which
 holds still underneath until it is covered — two layers at half alpha would let the fill show
@@ -1549,9 +1583,9 @@ into a pill (`standard`). All of it goes through `iglooTween`, so reduced motion
 **Text.** Bottom-left column, max width ~420dp (readable measure), `spacing.lg` inside the plate.
 Over media: `Color.White` with a shadow (§3.2). Top to bottom:
 
-- **Eyebrow**: `RECENTLY ADDED · MOVIE` / `RECENTLY ADDED · TV SHOW` in `label`, upper-case with
-  1.5sp tracking, secondary over-media white (`mutedForeground` off media), behind a 4×16dp
-  `aurora` mark — the one accent licensed over media.
+- **Eyebrow**: `CONTINUE WATCHING`, `RECENTLY ADDED · MOVIE` or `RECENTLY ADDED · TV SHOW` in
+  `label`, upper-case with 1.5sp tracking, secondary over-media white, behind a 4×16dp `aurora`
+  mark — the one accent licensed over media.
 - **Title**: `display`, `maxLines = 2`. The hero is a full-bleed canvas now, which is what §4
   reserves `display` for; it was `titleLarge` while the hero was a card.
 - **Metadata row**, the detail hero's order so the two surfaces read alike: the rating badge
@@ -1559,6 +1593,8 @@ Over media: `Color.White` with a shadow (§3.2). Top to bottom:
   The extent is the runtime for a movie (`2h 50m`) and the season count for a show
   (`3 Seasons`), specials (season 0) not counted. Every field is nullable and guarded against
   zero — the scraper writes TMDB's "no data" as a valid 0 — and the row is omitted when empty.
+  The lead page has no badge or chip; its line is the year or the episode, then the time left.
+- **Progress strip**, the lead page only (above).
 - **Overview**: `bodyMedium`, `maxLines = 3` (§4.1).
 
 **Focus and semantics.** The hero is **one focus target**, whichever page shows, and owns the
@@ -1578,7 +1614,8 @@ now reads the platform tree through `UiAutomation`, not only Compose's.
 D-pad right turns to the next page and is cancelled on the last; left turns back, and from the
 first page exits to the spine; down is hand-wired to the first rail's entry anchor on every page
 — spatial resolution from a pane-wide surface is heuristic, and the wire means the rail's focus
-memory applies, the same as spine re-entry.
+memory applies, the same as spine re-entry. The one exception is a progress Retry (§11.8): it
+stands between the hero and that rail while it shows, and down goes to it.
 
 **The art bleeds; the node does not.** The backdrop, fade, plates and dots are one paint-only
 surface out to the physical edges. The focus target and its single node lie over the text column
@@ -1594,13 +1631,16 @@ fill-contract, and glow still carry the signal).
 
 The target reads as one node: the page's feature and place, then the title, the metadata sentence
 and the full overview (the visual clamp is not an accessibility clamp) — "Recently added TV show,
-2 of 2. Severance. Rated 8.4 out of 10, TV-MA, 2022, 2 seasons. Mark leads…". The position is
+2 of 2. Severance. Rated 8.4 out of 10, TV-MA, 2022, 2 seasons. Mark leads…", or for the lead
+page "Continue watching, 1 of 3. Severance. S1 E3, In Perpetuity, 45 minutes remaining. Mark
+takes…". The position is
 what tells a screen-reader user there is a page to the right; a lone page gives none, and draws no
 dots. **There is no live region.** TalkBack speaks a change to the description of the node its
 cursor is on, which covers a turn and a load under focus; a live region on top made TalkBack
 re-read the hero each time focus came or went, because Compose reports every focus change as a
 content change on the node. Each page announces "Open {title}" and opens its own details page —
-the movie's, or the show's (§11.4.3) — and Back returns to the hero. The target is `focusable` with the press handled on
+the movie's, or the show's (§11.4.3) — and Back returns to the hero; the lead page featuring an
+episode announces "Resume {show} S1 E3" instead and resumes it. The target is `focusable` with the press handled on
 it (Select, Enter, keypad Enter on release, and the semantics click) rather than `clickable`: the
 two are different modifier nodes, and the skeleton turning into the movie page under focus would
 otherwise detach the focused node.
@@ -1608,9 +1648,22 @@ otherwise detach the focused node.
 **States.** Loading is a static geometry-matched skeleton (§10) drawn by the **same target**,
 focusable and holding the entry anchor, announcing "Loading featured titles". When the hero
 loads, the focused node stays put and only what it says changes, and TalkBack reads the loaded
-page out as it reads a turn. The hero stays Loading until **both** pages have
-settled, so a page never appears or disappears under focus and "1 of 2" is right from the first
-word. There is no hero error card: a page whose list is empty, whose latest fetch fails, or whose
+page out as it reads a turn. The hero stays Loading until **every** page has
+settled — the lead page's Continue Watching read included — so a page never appears or disappears
+under focus mid-load and "1 of 3" is right from the first word. After that the lead page follows
+its rail: finishing the title removes it and starting one adds it, on the refresh a watched change
+or a return to the foreground already makes.
+
+**The hero shows its first page unless the user turned to another.** A page turned to is
+remembered by what it features, so a lead page arriving in front of it leaves the user where they
+were. The first page is remembered as no page at all — turning back to it forgets — and first
+means whatever stands first: a hero nobody turned shows a title the moment it is in progress,
+where a remembered "Recently added" page would keep it one Left away, out of sight, which is the
+opposite of what the lead page is for. In practice the change lands while the player or a details
+page covers Home. A lead page that leaves under focus hands the same focused node to the page now
+first. Each page's art, words and place in the cross-fade are keyed by what it features, not by
+its position, so a page that only moved over keeps its decoded picture and takes no part in a
+dissolve. There is no hero error card: a page whose list is empty, whose latest fetch fails, or whose
 details fetch fails **hides**, and the hero shows whatever is left — both gone hides the hero.
 The movie and show pages share their respective Recently Added rails' list request and Retry.
 Each rail publishes its cards before fetching details for only the newest title in the same
@@ -1622,6 +1675,22 @@ library hides its page unconditionally.
 
 Each rail is one `IglooMediaRail` over one endpoint, loaded by its own cancellable job so the
 rails fail, retry, and refresh independently (§12's polite live regions depend on that).
+
+**A rail of recent additions ends in See all.** Recently Added Movies, Shows and Albums each
+close with a card — the rail's own card shape, the shelf's glyph where the artwork would be, "See
+all" over the shelf's name, announced "See all movies" — that opens the shelf: Movies, TV Shows,
+or Music on its Albums tab. It is the web rows' "See all" link, drawn as the Search rails' See-all
+card (`SeeAllCard`, `feature/shared/SeeAllRail.kt`, which both use). The card is the rail's last
+item and its right edge; a rail with no cards has none, and Continue Watching and In Theaters have
+no shelf to open. **The press goes where the shelf's rail row goes**: focus moves to that
+destination's row in the spine first, then the pane changes and claims its anchor (§11.2) — the
+row outlives the swap, where focus left on the card would die with Home's tree and nothing would
+claim it. So the spine opens on the shelf for a moment and closes into it, as when the row itself
+is pressed. TalkBack reads the hand-off in order — measured on the Google TV emulator's TalkBack
+14.2 on 2026-11-20 with See all on Recently Added Movies: the pane's count ("Showing 48 of 435
+movies"), then the row as focus lands on it ("Selected. Movies. Button"), the pane's title
+("Movies"), and the card focus settles on ("12 Angry Men, 1957. Button"). A press on the row
+itself differs only in not re-reading the row, which TalkBack was already on.
 
 **The section is spoken once, on entry.** The visible heading is not reachable through TV
 screen-reader input focus (§12), so the rail's title rides the description of the node focus
@@ -1884,11 +1953,17 @@ right, and neither is licensed off media.
 
 Poster at `posterWidth` / `posterAspect`; title `titleLarge` at 2 lines (**not** `display`:
 it shares the hero row with the poster, so it is a heading, not a full-bleed headline); tagline `bodyLarge` italic in quotes; then the metadata row, genres joined by
-`·`, the action row, and the resume strip. The §3.2 treatment is licensed by a **decoded**
-backdrop, not by a non-null URL: until the decode lands — and permanently, with no backdrop or
-one that fails — every §3.2 literal is dropped for token colors, exactly as the home hero
-does. (A URL-gated treatment paints white text over the bare token canvas for the whole load
-window, which on the light palette is white on white.) The title's 2-line clamp and the
+`·`, the action row, and the resume strip. **A movie's, a show's and a watch room's hero
+stands on §3.2's missing-media tile** (`DetailsHero(missingBackdrop = MissingBackdrop.Poster)`),
+so the §3.2 treatment is on from the first frame and nothing recolors when the backdrop lands.
+With no backdrop, or one that fails, the **poster stands in, blurred** (§11.3.1 has the
+recipe), and with no poster the tile shows alone — the web's detail hero. A music page keeps the
+older rule (`MissingBackdrop.Canvas`, the default): its art sits beside its title, the web's
+music hero is themed text rather than text over media, and so its §3.2 treatment is licensed by
+a **decoded** image, not by a non-null URL — until the decode lands, and permanently without
+one, every §3.2 literal is dropped for token colors. (A URL-gated treatment there paints white
+text over the bare token canvas for the whole load window, which on the light palette is white
+on white.) The title's 2-line clamp and the
 single-line tagline, genres, and runtime/date lines ellipsize conventionally: end-of-line
 ellipsis on metadata is an honest cut signal, and the fade treatment (§4.1) is reserved for
 the overview — the one block of prose the user came to read.
@@ -2777,9 +2852,10 @@ lose the end of a movie. Save failures never pause playback. They hold the chrom
 D-pad-reachable inline Retry and follow the user back to the page that launched if exit finishes
 first — movie details, or the show page for an episode played from it (§11.4.3) — or, for an
 episode resumed from Continue Watching, to Home, since no details page sits under that
-launch: the same Retry card sits directly above the Continue Watching rail, reached by Up from the
-card the player closed onto, and hands focus back to that card when it clears. Each surface shows
-only the failures of the launches it made.
+launch: the same Retry card sits between the hero and the Continue Watching rail, one press from
+the control the player closed onto — Up from the rail's card, Down from the hero's lead page
+(§11.3.1), whose Down goes to the Retry while it shows — and hands focus back to that control
+when it clears. Each surface shows only the failures of the launches it made.
 Retry keeps the original save session id and takes a higher sequence. A retry or later cadence
 success clears the error, safely restores focus if Retry held it, and refreshes movie details and
 Continue Watching.
@@ -2813,6 +2889,17 @@ region; a narrating timer is §12 noise). No volume control — TV remotes drive
 Entry focus is Play/Pause. Chrome auto-hides after **4s** of no input, and only while playing —
 a paused frame with no UI reads as a hang. It stays composed while hidden (alpha only), so
 focus and traversal never reshuffle.
+
+**Play/Pause is the transport's primary control**, in every player — video, trailer, music and a
+watch room's (`TransportButton(primary = true)`): a 64dp `primary` circle with its glyph at
+`icons.lg`, among 52dp controls on the over-media ground, as the web's players draw theirs (56
+to 40 there). It is a `Primary` among peers, so it recedes while another control of the transport
+row holds focus (§6.1) and returns to full `primary` when it is focused itself or the row holds
+no focus. Here the §3.1 mix is **toward black, not toward the canvas** — `#2784AE` in dark,
+`#024A71` in light: a player stands on video in both themes, and mixed toward the light canvas
+the fill would get brighter against the picture and outweigh the focused sibling's ring.
+`RecessedPrimaryTest` pins that it darkens in both. Seek and skip keep the over-media ground and
+the white glyph.
 
 | Input | Chrome hidden | Chrome visible |
 |---|---|---|
@@ -3269,10 +3356,14 @@ missing-media tile). These parts deliberately did not:
 
 Came over with the browse screens (2026-11-20): the library's count on the title's row (§11.4),
 genre tiles with a backdrop (§11.4), album covers on track rows (§11.5) and the sidebar's Library
-group (§11.2).
+group (§11.2). With Home, the detail pages and the players (2026-11-20): the billboard's lead
+with what is in progress (§11.3.1), the blurred poster standing in for a missing backdrop on the
+fixed tile (§3.2, §11.3.1, §11.4.1), "See all" on the rows of recent additions (§11.3.2) and the
+players' primary Play/Pause (§11.8).
 
 | Web | Why not here |
 |---|---|
+| The billboard's two buttons, Resume and Details | The hero is one focus target whose pages turn with Left and Right; stacked targets under one rectangle are what TalkBack on a Shield could not see (§11.3.1). The lead page's press is its Continue Watching card's. |
 | The sidebar's "LIBRARY" heading | The group is marked by a hairline in the gap between rows instead. A heading takes a row's worth of the rail's height and breaks the equal pitch its scroll depends on (§11.2). |
 | The account block's role ("Administrator" / "Member") | The rail has neither the height nor the width for it (§11.2). |
 | `shadow-glow` under a resting primary control | The glow belongs to the one focus treatment (§6.1). A resting control that glows reads as focused from ten feet — the reason a `Primary` recedes beside a focused sibling. |
@@ -3313,6 +3404,21 @@ forgot to change the code.**
 ---
 
 ## Changelog
+
+**2026-11-20 — The web's redesign, part 3: the Home hero, missing backdrops, See all and the players (§3.2, §9.1, §11.3.1, §11.3.2, §11.4.1, §11.8, Appendix A).**
+
+- **§11.3.1** — the hero leads with what is in progress: the first Continue Watching item, with
+  its time left and a progress strip, whose press is its card's (an episode resumes, a movie
+  opens). The newest movie and show follow; a movie that is both in progress and newest gets one
+  page. Still one focus target.
+- **§3.2, §11.3.1, §11.4.1** — every Home hero page and a movie's, a show's and a watch room's
+  details hero stand on the missing-media tile, so the scrims and white words never wait for a
+  decode, and a title with no backdrop shows its poster blurred in its place. A music page keeps
+  the older rule.
+- **§11.3.2** — Recently Added Movies, Shows and Albums end in a See-all card that opens the
+  shelf through its rail row.
+- **§11.8** — Play/Pause is a larger `primary` circle in every player and recedes, toward black,
+  while another transport control holds focus.
 
 **2026-11-20 — The web's redesign, part 2: the browse screens (§3.2, §9.1, §11.2, §11.4, §11.5, Appendix A).**
 

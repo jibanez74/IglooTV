@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +43,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
@@ -48,6 +51,9 @@ import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
 import com.igloo.blindpenguincoder.core.design.iglooSafeArea
 import com.igloo.blindpenguincoder.core.design.overMedia
+import com.igloo.blindpenguincoder.core.design.recessedPrimary
+import com.igloo.blindpenguincoder.core.design.recessedPrimaryContent
+import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooGlyph
@@ -71,6 +77,12 @@ import kotlinx.coroutines.delay
 /**
  * An icon-only transport control on the over-media black ground (section 3.2); one cleared
  * TalkBack node whose label is also its action.
+ *
+ * [primary] is Play/Pause, the one control a player exists for: a larger `primary` circle, as the
+ * web's players draw it, so the eye finds it among the seek and skip buttons. It is still a
+ * `Primary` among peers, so it recedes while another control of its [PlayerTransportRow] holds
+ * focus (section 6.1) — otherwise its solid glacier would outweigh the ring on the control the
+ * remote is actually on.
  */
 @Composable
 internal fun TransportButton(
@@ -78,15 +90,29 @@ internal fun TransportButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    primary: Boolean = false,
 ) {
+    val colors = IglooTheme.colors
     var focused by remember { mutableStateOf(false) }
+    val recessed = primary && !focused && LocalTransportRowFocused.current
+    // Toward black, the ground a player's chrome stands on in both themes, not toward the canvas.
+    val fill = when {
+        !primary -> OVER_MEDIA_CONTROL_FILL
+        recessed -> colors.recessedPrimary(ground = Color.Black)
+        else -> colors.primary
+    }
+    val tint = when {
+        !primary -> Color.White
+        recessed -> colors.recessedPrimaryContent(ground = Color.Black)
+        else -> colors.primaryForeground
+    }
     Box(
         modifier = modifier
-            .size(IglooTheme.sizes.controlHeight)
+            .size(if (primary) PRIMARY_TRANSPORT_SIZE.scaled() else IglooTheme.sizes.controlHeight)
             .focusRing(
                 focused = focused,
                 radius = IglooTheme.radius.pill,
-                fill = OVER_MEDIA_CONTROL_FILL,
+                fill = fill,
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(
@@ -104,9 +130,19 @@ internal fun TransportButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        IglooGlyph(icon = icon, tint = Color.White)
+        IglooGlyph(
+            icon = icon,
+            tint = tint,
+            size = if (primary) IglooTheme.icons.lg else IglooTheme.icons.md,
+        )
     }
 }
+
+/** Play/Pause against the 52dp controls beside it: the web's 56 to 40, kept from shouting. */
+private val PRIMARY_TRANSPORT_SIZE = 64.dp
+
+/** Whether focus is somewhere in the transport row; the primary control recedes on a sibling. */
+private val LocalTransportRowFocused = compositionLocalOf { false }
 
 /**
  * The progress strip and timecodes: presentation plus one cleared, non-focusable summary node.
@@ -248,15 +284,19 @@ internal fun BoxScope.PlayerHoldMessage(text: String, tag: String) {
 /** The centred row every player lays its transport controls out in. */
 @Composable
 internal fun PlayerTransportRow(content: @Composable RowScope.() -> Unit) {
+    var rowHasFocus by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { rowHasFocus = it.hasFocus },
         horizontalArrangement = Arrangement.spacedBy(
             IglooTheme.spacing.lg,
             Alignment.CenterHorizontally,
         ),
         verticalAlignment = Alignment.CenterVertically,
-        content = content,
-    )
+    ) {
+        CompositionLocalProvider(LocalTransportRowFocused provides rowHasFocus) { content() }
+    }
 }
 
 /**
@@ -289,6 +329,7 @@ internal fun SeekTransportButtons(
         icon = if (playing) IglooIcons.Pause else IglooIcons.Play,
         label = if (playing) "Pause" else "Play",
         onClick = onTogglePlayPause,
+        primary = true,
         modifier = Modifier
             .focusRequester(playPauseRequester)
             .transportFocus(upRequester, onFocused = onFocused)

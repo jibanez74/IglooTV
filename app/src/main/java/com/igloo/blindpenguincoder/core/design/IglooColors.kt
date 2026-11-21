@@ -81,11 +81,15 @@ private const val RECESSED_PRIMARY_MIX = 0.30f
  * Opaque, and mixed component-wise in sRGB rather than through `androidx.compose.ui.graphics.lerp`
  * — that interpolates in Oklab, while the contrast figures this was chosen against are sRGB. An
  * alpha would also let a backdrop show through the fill.
+ *
+ * [ground] is what the control stands on, and what it recedes toward: the canvas by default, and
+ * black for a player's transport, which sits over video in both themes. Receding toward the
+ * light canvas there would make the control brighter against the picture, not quieter.
  */
-fun IglooColors.recessedPrimary(): Color = Color(
-    red = primary.red + (background.red - primary.red) * RECESSED_PRIMARY_MIX,
-    green = primary.green + (background.green - primary.green) * RECESSED_PRIMARY_MIX,
-    blue = primary.blue + (background.blue - primary.blue) * RECESSED_PRIMARY_MIX,
+fun IglooColors.recessedPrimary(ground: Color = background): Color = Color(
+    red = primary.red + (ground.red - primary.red) * RECESSED_PRIMARY_MIX,
+    green = primary.green + (ground.green - primary.green) * RECESSED_PRIMARY_MIX,
+    blue = primary.blue + (ground.blue - primary.blue) * RECESSED_PRIMARY_MIX,
 )
 
 /**
@@ -94,8 +98,8 @@ fun IglooColors.recessedPrimary(): Color = Color(
  * contrast keeps both themes past section 12's 4.5:1 bar for a control label: `primaryForeground`
  * still wins in dark at 4.83:1, `foreground` takes over in light at 5.55:1.
  */
-fun IglooColors.recessedPrimaryContent(): Color {
-    val fill = recessedPrimary()
+fun IglooColors.recessedPrimaryContent(ground: Color = background): Color {
+    val fill = recessedPrimary(ground)
     return if (contrastRatio(primaryForeground, fill) >= contrastRatio(foreground, fill)) {
         primaryForeground
     } else {

@@ -46,6 +46,7 @@ import com.igloo.blindpenguincoder.feature.shared.DetailsScrollColumn
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ExtraVideosSection
 import com.igloo.blindpenguincoder.feature.shared.KeyCrewSection
+import com.igloo.blindpenguincoder.feature.shared.MissingBackdrop
 import com.igloo.blindpenguincoder.feature.shared.OverviewSection
 import com.igloo.blindpenguincoder.feature.shared.ResumeProgress
 import com.igloo.blindpenguincoder.feature.shared.detailsSections
@@ -344,7 +345,11 @@ private fun ShowDetailsContent(
         scrollState = scrollState,
         modifier = sectionColumn.modifier,
         hero = {
-            DetailsHero(imageUrl = show.backdropUrl, backdropTag = "details_backdrop") { overMedia ->
+            DetailsHero(
+                imageUrl = show.backdropUrl,
+                backdropTag = "details_backdrop",
+                missingBackdrop = MissingBackdrop.Poster(show.posterUrl),
+            ) { overMedia ->
                 ShowDetailsHeader(
                     show = show,
                     episodes = state.episodes,

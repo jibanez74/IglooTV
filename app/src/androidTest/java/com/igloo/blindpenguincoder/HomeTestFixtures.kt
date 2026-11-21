@@ -254,6 +254,22 @@ internal val testShowHero = HomeHero(
     metadataDescription = "Rated 8.4 out of 10, TV-MA, 2022, 2 seasons",
 )
 
+/** The hero's lead page: an episode in progress, whose press resumes it; backdrop-less too. */
+internal val testContinueHero = HomeHero(
+    kind = HomeHeroKind.Continue,
+    id = 900,
+    title = "Slow Horses",
+    backdropUrl = null,
+    overview = "River Cartwright follows a lead he was told to drop.",
+    year = null,
+    certification = null,
+    ratingBadge = null,
+    extent = "S1 E3 · Bad Tradecraft · 45m left",
+    metadataDescription = "S1 E3, Bad Tradecraft, 45 minutes remaining",
+    progressFraction = 0.18f,
+    resumeLabel = "Resume Slow Horses S1 E3",
+)
+
 /** No-op actions for shells whose details overlay is closed. */
 internal val inertDetailsActions = MovieDetailsActions.Library(
     onToggleWatched = {},
