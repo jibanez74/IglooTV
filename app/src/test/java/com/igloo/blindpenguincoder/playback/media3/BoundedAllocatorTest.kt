@@ -115,16 +115,18 @@ class BoundedAllocatorTest {
         val first = roomForThree.allocate()
         roomForThree.allocate()
 
-        val hls = allocateOnAnotherThread(roomForThree)
-        val subtitles = allocateOnAnotherThread(roomForThree)
-        Thread.sleep(WAIT_MS)
-        val taken = listOf(hls, subtitles).count { it.allocation.get() != null }
-        assertEquals("both loaders took the last block below the cap", 1, taken)
+        val loaders = List(2) { allocateOnAnotherThread(roomForThree) }
+        val deadline = System.nanoTime() + DONE_MS * 1_000_000
+        while (loaders.none { it.allocation.get() != null } && System.nanoTime() < deadline) {
+            Thread.sleep(5)
+        }
+        val (winner, waiter) = loaders.partition { it.allocation.get() != null }
+        assertEquals("no loader took the last block", 1, winner.size)
+        assertNull("both loaders went past the cap", waiter.single().result(WAIT_MS))
         assertEquals(3 * length, roomForThree.totalBytesAllocated)
 
         roomForThree.release(first)
-        assertNotNull(hls.result(DONE_MS))
-        assertNotNull(subtitles.result(DONE_MS))
+        assertNotNull(waiter.single().result(DONE_MS))
     }
 
     @Test
