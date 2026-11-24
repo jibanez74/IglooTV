@@ -121,7 +121,7 @@ class BoundedAllocatorTest {
             Thread.sleep(5)
         }
         val (winner, waiter) = loaders.partition { it.allocation.get() != null }
-        assertEquals("no loader took the last block", 1, winner.size)
+        assertEquals("exactly one loader should take the last block", 1, winner.size)
         assertNull("both loaders went past the cap", waiter.single().result(WAIT_MS))
         assertEquals(3 * length, roomForThree.totalBytesAllocated)
 
@@ -164,7 +164,10 @@ class BoundedAllocatorTest {
             pending.allocation.set(on.allocate())
             pending.interrupted.set(Thread.currentThread().isInterrupted)
             pending.done.countDown()
-        }.also { it.start() }
+        }.also {
+            it.isDaemon = true
+            it.start()
+        }
         return pending
     }
 

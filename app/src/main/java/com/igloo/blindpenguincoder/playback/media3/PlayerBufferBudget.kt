@@ -84,6 +84,11 @@ internal class HeapBoundedLoadControl(
         delegate.shouldContinuePreloading(playerId, timeline, mediaPeriodId, bufferedDurationUs)
 }
 
+/**
+ * The caller must set [HeapBoundedLoadControl.playerNeedsData] from its player's
+ * `onPlaybackStateChanged`: without it, a stalled player's only way past the cap is a cancelled
+ * load (see [BoundedAllocator]).
+ */
 internal fun heapBoundedLoadControl(
     maxHeapBytes: Long = Runtime.getRuntime().maxMemory(),
 ): HeapBoundedLoadControl =
