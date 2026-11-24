@@ -154,9 +154,11 @@ internal class ExoVideoPlayerEngine(
      */
     private val roomSession = request.watchRoomId != null
 
+    private val loadControl = heapBoundedLoadControl()
+
     private val player: ExoPlayer = ExoPlayer.Builder(context)
         .setAudioAttributes(videoPlaybackAudioAttributes, /* handleAudioFocus= */ true)
-        .setLoadControl(heapBoundedLoadControl())
+        .setLoadControl(loadControl)
         .build()
 
     private val session = buildVideoMediaSession(
@@ -177,6 +179,7 @@ internal class ExoVideoPlayerEngine(
 
     private val listener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
+            loadControl.playerNeedsData = playbackState == Player.STATE_BUFFERING
             when (playbackState) {
                 Player.STATE_READY -> emit(VideoPlayerEvent.Ready(durationSec()))
                 Player.STATE_BUFFERING -> emit(VideoPlayerEvent.Buffering)
