@@ -41,9 +41,9 @@
     </queries>
 
     <!--
-        largeHeap: the video player buffers media on the Java heap (see PlayerBufferBudget.kt),
-        which on a Shield is capped at 192 MB for an app that does not ask for more, and at
-        512 MB for one that does.
+        largeHeap: the video player buffers media on the Java heap: loading stops at a third of it,
+        and a load in progress waits at half (see PlayerBufferBudget.kt). A Shield gives an app that does not ask for
+        more 192 MB, and one that does 512 MB; a Fire TV Stick gives 384 MB.
     -->
     <application
         android:name=".IglooApplication"
