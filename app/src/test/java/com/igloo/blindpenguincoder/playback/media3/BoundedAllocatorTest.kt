@@ -4,6 +4,8 @@
 package com.igloo.blindpenguincoder.playback.media3
 
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.analytics.PlayerId
 import androidx.media3.exoplayer.upstream.Allocation
 import androidx.media3.exoplayer.upstream.Allocator
 import androidx.media3.exoplayer.upstream.DefaultAllocator
@@ -44,7 +46,7 @@ class BoundedAllocatorTest {
         allocator.allocate()
 
         val third = allocateOnAnotherThread()
-        assertNull("allocated past the cap", third.result(WAIT_MS))
+        third.assertHeld("allocated past the cap")
 
         allocator.release(first)
         assertNotNull("a release did not wake the load", third.result(DONE_MS))
@@ -57,7 +59,7 @@ class BoundedAllocatorTest {
         allocator.allocate()
 
         val third = allocateOnAnotherThread()
-        assertNull(third.result(WAIT_MS))
+        third.assertHeld()
 
         allocator.release(Node(first))
         assertNotNull(third.result(DONE_MS))
@@ -69,10 +71,10 @@ class BoundedAllocatorTest {
         allocator.allocate()
 
         val third = allocateOnAnotherThread()
-        assertNull(third.result(WAIT_MS))
+        third.assertHeld()
 
         allocator.playerNeedsData = true
-        assertNull("a seek's brief buffering went past the cap", third.result(WAIT_MS))
+        third.assertHeld("a seek's brief buffering went past the cap")
 
         clockNanos.addAndGet(BoundedAllocator.BUFFERING_GRACE_MS * 1_000_000)
         assertNotNull("a stalled player was kept from its data", third.result(DONE_MS))
@@ -90,7 +92,7 @@ class BoundedAllocatorTest {
         allocator.playerNeedsData = true
 
         val third = allocateOnAnotherThread()
-        assertNull("an earlier buffering counted toward this one", third.result(WAIT_MS))
+        third.assertHeld("an earlier buffering counted toward this one")
         clockNanos.addAndGet(BoundedAllocator.BUFFERING_GRACE_MS * 1_000_000)
         assertNotNull(third.result(DONE_MS))
     }
@@ -101,7 +103,7 @@ class BoundedAllocatorTest {
         allocator.allocate()
 
         val third = allocateOnAnotherThread()
-        assertNull(third.result(WAIT_MS))
+        third.assertHeld()
 
         third.thread.interrupt()
         assertNotNull("a cancelled load stayed blocked", third.result(DONE_MS))
@@ -122,7 +124,7 @@ class BoundedAllocatorTest {
         }
         val (winner, waiter) = loaders.partition { it.allocation.get() != null }
         assertEquals("exactly one loader should take the last block", 1, winner.size)
-        assertNull("both loaders went past the cap", waiter.single().result(WAIT_MS))
+        waiter.single().assertHeld("both loaders went past the cap")
         assertEquals(3 * length, roomForThree.totalBytesAllocated)
 
         roomForThree.release(first)
@@ -148,6 +150,35 @@ class BoundedAllocatorTest {
         val held = listOf(allocator.allocate(), allocator.allocate())
         held.forEach(allocator::release)
         assertEquals(2 * length, inner.unusedBytesAllocated)
+    }
+
+    @Test
+    fun aMultiBlockNodeIsCountedOncePerBlock() {
+        val first = allocator.allocate()
+        val second = allocator.allocate()
+        allocator.release(Node(first, Node(second)))
+        assertEquals(0, allocator.totalBytesAllocated)
+        assertEquals(0, inner.totalBytesAllocated)
+    }
+
+    @Test
+    fun blocksReleasedAfterThePlayerIsReleasedStillCount() {
+        // In production the inner allocator is the load control's per-player one, whose count
+        // throws once onReleased drops the player; a deferred HLS cleanup releases after that.
+        val playerId = PlayerId.UNSET
+        val control = DefaultLoadControl()
+        control.onPrepared(playerId)
+        val perPlayer = control.getAllocator(playerId)
+        val blockLength = perPlayer.individualAllocationLength
+        val bounded =
+            BoundedAllocator(perPlayer, capBytes = 2L * blockLength, nanoTime = clockNanos::get)
+        bounded.playerNeedsData = true
+        clockNanos.addAndGet(BoundedAllocator.BUFFERING_GRACE_MS * 1_000_000)
+        val held = List(3) { bounded.allocate() }
+
+        control.onReleased(playerId)
+        held.forEach(bounded::release)
+        assertEquals(0, bounded.totalBytesAllocated)
     }
 
     @Test
@@ -181,11 +212,34 @@ class BoundedAllocatorTest {
             done.await(timeoutMs, TimeUnit.MILLISECONDS)
             return allocation.get()
         }
+
+        /**
+         * Asserts the worker is parked in the allocator's wait, not merely late to start: waits
+         * (bounded) until it has either returned or reached the wait, then requires the latter.
+         */
+        fun assertHeld(message: String = "allocated past the cap") {
+            val deadline = System.nanoTime() + DONE_MS * 1_000_000
+            while (done.count > 0 &&
+                thread.state != Thread.State.TIMED_WAITING &&
+                System.nanoTime() < deadline
+            ) {
+                Thread.sleep(1)
+            }
+            assertNull(message, result(WAIT_MS))
+            assertEquals(
+                "the worker never reached the allocator's wait",
+                Thread.State.TIMED_WAITING,
+                thread.state,
+            )
+        }
     }
 
-    private class Node(private val allocation: Allocation) : Allocator.AllocationNode {
+    private class Node(
+        private val allocation: Allocation,
+        private val next: Allocator.AllocationNode? = null,
+    ) : Allocator.AllocationNode {
         override fun getAllocation(): Allocation = allocation
-        override fun next(): Allocator.AllocationNode? = null
+        override fun next(): Allocator.AllocationNode? = next
     }
 
     private companion object {

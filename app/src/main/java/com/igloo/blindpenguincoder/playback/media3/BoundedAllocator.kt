@@ -45,6 +45,13 @@ internal class BoundedAllocator(
     private var overflowed = false
 
     /**
+     * Guarded by [lock]: the bytes this wrapper has handed out and not had back. Kept here rather
+     * than read from [inner], whose count in production is per player and throws once the load
+     * control has released that player, while a deferred HLS cleanup can still release blocks.
+     */
+    private var allocatedBytes = 0L
+
+    /**
      * Allocates under [lock], so two loaders (the HLS one and a subtitle stream's) cannot both
      * take the last block below the cap. The inner allocator's own monitor is only ever taken
      * inside [lock], never the other way round.
@@ -59,22 +66,30 @@ internal class BoundedAllocator(
             }
         }
         if (isAtCap()) overflowed = true
-        inner.allocate()
+        inner.allocate().also { allocatedBytes += inner.individualAllocationLength }
     }
 
     override fun release(allocation: Allocation) = synchronized(lock) {
         inner.release(allocation)
+        allocatedBytes -= inner.individualAllocationLength
         afterRelease()
     }
 
     override fun release(allocationNode: Allocator.AllocationNode) = synchronized(lock) {
+        var released = 0
+        var node: Allocator.AllocationNode? = allocationNode
+        while (node != null) {
+            released++
+            node = node.next()
+        }
         inner.release(allocationNode)
+        allocatedBytes -= released.toLong() * inner.individualAllocationLength
         afterRelease()
     }
 
     override fun trim() = inner.trim()
 
-    override fun getTotalBytesAllocated(): Int = inner.totalBytesAllocated
+    override fun getTotalBytesAllocated(): Int = synchronized(lock) { allocatedBytes.toInt() }
 
     override fun getIndividualAllocationLength(): Int = inner.individualAllocationLength
 
@@ -82,7 +97,7 @@ internal class BoundedAllocator(
         playerNeedsData && nanoTime() - needsDataSinceNanos >= BUFFERING_GRACE_MS * 1_000_000
 
     private fun isAtCap(): Boolean =
-        inner.totalBytesAllocated.toLong() + inner.individualAllocationLength > capBytes
+        allocatedBytes + inner.individualAllocationLength > capBytes
 
     /**
      * Released blocks stay in the inner allocator's pool for reuse. After an overflow, that pool
