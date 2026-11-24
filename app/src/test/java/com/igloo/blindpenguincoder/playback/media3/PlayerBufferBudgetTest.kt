@@ -13,6 +13,7 @@ import androidx.media3.exoplayer.trackselection.ExoTrackSelection
 import androidx.media3.exoplayer.upstream.Allocator
 import androidx.media3.exoplayer.upstream.DefaultAllocator
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -89,6 +90,13 @@ class PlayerBufferBudgetTest {
                 "shouldStartPlayback", "shouldContinuePreloading", "onReleased",
             ),
             delegate.calls,
+        )
+
+        val next = loadControl.getAllocator(playerId)
+        assertNotSame("a released player's allocator was kept", allocator, next)
+        assertTrue(
+            "a new allocator missed the buffering flag",
+            (next as BoundedAllocator).playerNeedsData,
         )
     }
 

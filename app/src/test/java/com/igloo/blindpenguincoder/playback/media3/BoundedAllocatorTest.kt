@@ -109,6 +109,46 @@ class BoundedAllocatorTest {
     }
 
     @Test
+    fun twoLoadersCannotBothTakeTheLastBlock() {
+        val roomForThree =
+            BoundedAllocator(inner, capBytes = 3L * length, nanoTime = clockNanos::get)
+        val first = roomForThree.allocate()
+        roomForThree.allocate()
+
+        val hls = allocateOnAnotherThread(roomForThree)
+        val subtitles = allocateOnAnotherThread(roomForThree)
+        Thread.sleep(WAIT_MS)
+        val taken = listOf(hls, subtitles).count { it.allocation.get() != null }
+        assertEquals("both loaders took the last block below the cap", 1, taken)
+        assertEquals(3 * length, roomForThree.totalBytesAllocated)
+
+        roomForThree.release(first)
+        assertNotNull(hls.result(DONE_MS))
+        assertNotNull(subtitles.result(DONE_MS))
+    }
+
+    @Test
+    fun theReusePoolIsTrimmedOnceAnOverflowIsPaidBack() {
+        val held = mutableListOf(allocator.allocate(), allocator.allocate())
+        allocator.playerNeedsData = true
+        clockNanos.addAndGet(BoundedAllocator.BUFFERING_GRACE_MS * 1_000_000)
+        held += allocator.allocate()
+        held += allocator.allocate()
+        assertEquals(4 * length, allocator.totalBytesAllocated)
+
+        held.forEach(allocator::release)
+        // Trimmed as the buffer fell back under the cap; only the last block released is pooled.
+        assertEquals(length, inner.unusedBytesAllocated)
+    }
+
+    @Test
+    fun theReusePoolIsLeftAloneWithoutAnOverflow() {
+        val held = listOf(allocator.allocate(), allocator.allocate())
+        held.forEach(allocator::release)
+        assertEquals(2 * length, inner.unusedBytesAllocated)
+    }
+
+    @Test
     fun releasingHandsTheMemoryBackToTheInnerAllocator() {
         val allocation = allocator.allocate()
         allocator.release(allocation)
@@ -116,10 +156,10 @@ class BoundedAllocatorTest {
         assertFalse(allocator.playerNeedsData)
     }
 
-    private fun allocateOnAnotherThread(): PendingAllocation {
+    private fun allocateOnAnotherThread(on: BoundedAllocator = allocator): PendingAllocation {
         val pending = PendingAllocation()
         pending.thread = Thread {
-            pending.allocation.set(allocator.allocate())
+            pending.allocation.set(on.allocate())
             pending.interrupted.set(Thread.currentThread().isInterrupted)
             pending.done.countDown()
         }.also { it.start() }

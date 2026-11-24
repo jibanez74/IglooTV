@@ -23,8 +23,8 @@ import androidx.media3.exoplayer.upstream.Allocator
  * That target only stops new loads: a load in progress (a whole HLS segment) finishes, and a
  * subtitle stream reads on until 1 MiB of it has arrived since it was last continued (see
  * [SubtitleStreamPeriod]). So the allocator is also capped, at half the heap: a load that reaches
- * the cap waits for playback to release what it has played ([BoundedAllocator], which also names
- * the one case it lets through).
+ * the cap waits for playback to release what it has played. [BoundedAllocator] names the two cases
+ * it lets through, a player stalled waiting on that load and a load being cancelled.
  */
 internal class HeapBoundedLoadControl(
     private val delegate: LoadControl,
@@ -97,7 +97,10 @@ internal fun heapBoundedLoadControl(
 internal fun videoBufferBudgetBytes(maxHeapBytes: Long): Int =
     minOf(maxHeapBytes / 3, MEDIA3_DEFAULT_BUFFER_BYTES.toLong()).toInt()
 
-/** Half the heap always stays free for the rest of the app, whatever a load in progress adds. */
+/**
+ * Where loads wait, keeping half the heap for the rest of the app; [BoundedAllocator] has the two
+ * exceptions.
+ */
 internal fun allocationCapBytes(maxHeapBytes: Long): Long = maxHeapBytes / 2
 
 internal const val MEDIA3_DEFAULT_BUFFER_BYTES =
