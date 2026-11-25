@@ -118,11 +118,20 @@ data class MovieDetailsUi(
         get() = heroInfoDescription(title, tagline, metadataDescription, genresLine)
 }
 
-/** [openMovieId] is the overlay's existence: null means closed and [details] is meaningless. */
+/**
+ * [openMovieId] is the overlay's existence: null means closed and [details] is meaningless.
+ *
+ * The page says one thing at a time, the latest, under its actions. [mutationNotice] is why a
+ * write failed, and it follows the user out when Back closes the page (section 11.4).
+ * [playbackNotice] is why a Play press went nowhere — the capability gate's refusal or a
+ * preparation that failed — and it is the page's alone: its advice can only be followed here,
+ * so closing the page drops it, as the show page does.
+ */
 data class MovieDetailsUiState(
     val openMovieId: Long? = null,
     val details: DetailsState<MovieDetailsUi> = DetailsState.Loading,
     val mutationNotice: String? = null,
+    val playbackNotice: String? = null,
 )
 
 private enum class PlaybackReadiness { Pending, Ready, Failed }
@@ -233,7 +242,7 @@ class MovieDetailsViewModel(
     fun close() {
         reset(keep = null)
         _uiState.update {
-            it.copy(openMovieId = null, details = DetailsState.Loading)
+            it.copy(openMovieId = null, details = DetailsState.Loading, playbackNotice = null)
         }
     }
 
@@ -271,7 +280,12 @@ class MovieDetailsViewModel(
      */
     fun showNotice(movieId: Long, message: String) {
         if (_uiState.value.openMovieId != movieId) return
-        _uiState.update { it.copy(mutationNotice = message) }
+        setNotice(write = message)
+    }
+
+    /** One notice at a time on the page, the latest; both null clears it. */
+    private fun setNotice(write: String? = null, playback: String? = null) {
+        _uiState.update { it.copy(mutationNotice = write, playbackNotice = playback) }
     }
 
     /** Optimistic: the button flips now and flips back if the server disagrees. */
@@ -316,7 +330,7 @@ class MovieDetailsViewModel(
         if (playIntentPending) return
         val movieId = _uiState.value.openMovieId ?: return
         playIntentPending = true
-        _uiState.update { it.copy(mutationNotice = null) }
+        setNotice()
 
         if (technicalRead.readiness == PlaybackReadiness.Failed) loadTechnical(movieId)
         if (progressRead.readiness == PlaybackReadiness.Failed) loadProgress(movieId)
@@ -353,7 +367,7 @@ class MovieDetailsViewModel(
             }
             is PlaybackGateResult.Blocked -> {
                 playIntentPending = false
-                _uiState.update { it.copy(mutationNotice = gate.message) }
+                setNotice(playback = gate.message)
             }
         }
     }
@@ -422,12 +436,10 @@ class MovieDetailsViewModel(
             is ApiResult.Success -> completePlayIntentIfReady()
             is ApiResult.Failure -> {
                 playIntentPending = false
-                _uiState.update {
-                    it.copy(
-                        mutationNotice = result.error.toFailureNotice("prepare playback") +
-                            " Press Play to retry preparation.",
-                    )
-                }
+                setNotice(
+                    playback = result.error.toFailureNotice("prepare playback") +
+                        " Press Play to retry preparation.",
+                )
             }
         }
     }
@@ -501,7 +513,7 @@ class MovieDetailsViewModel(
         state.epoch += 1
         state.pending += intent
         mutationQueues.getValue(type).addLast(intent)
-        _uiState.update { it.copy(mutationNotice = null) }
+        setNotice()
         publishLoaded()
         startMutationWorker(type)
     }
@@ -520,11 +532,7 @@ class MovieDetailsViewModel(
                     }
 
                     is ApiResult.Failure -> {
-                        _uiState.update {
-                            it.copy(
-                                mutationNotice = result.error.toFailureNotice(type.action),
-                            )
-                        }
+                        setNotice(write = result.error.toFailureNotice(type.action))
                         settle(type, intent) { reconcileAfterDrain = true }
                     }
                 }

@@ -63,6 +63,7 @@ internal fun MovieDetailsHeader(
     onOpenMoreMenu: () -> Unit,
     onMoreAnchorPositioned: (Rect) -> Unit,
     mutationNotice: String?,
+    playbackNotice: String?,
     progressSyncError: String?,
     onRetryProgressSync: () -> Unit,
     progressRetryRequester: FocusRequester,
@@ -150,6 +151,12 @@ internal fun MovieDetailsHeader(
                 IglooNotice(
                     text = mutationNotice,
                     modifier = Modifier.testTag("details_mutation_notice"),
+                )
+            }
+            if (playbackNotice != null) {
+                IglooNotice(
+                    text = playbackNotice,
+                    modifier = Modifier.testTag("details_playback_notice"),
                 )
             }
             if (progressSyncError != null) {

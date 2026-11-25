@@ -88,7 +88,7 @@ class MovieDetailsPlayLaunchTest {
         val viewModel = viewModel(http())
 
         viewModel.requestPlayback()
-        assertNull(viewModel.uiState.value.mutationNotice)
+        assertNull(viewModel.uiState.value.playbackNotice)
     }
 
     @Test
@@ -107,7 +107,7 @@ class MovieDetailsPlayLaunchTest {
         assertNull(request.subtitleTypeIndex)
         assertEquals(1800.0, request.resumeAtSec)
         assertEquals(10200.0, request.durationSec)
-        assertNull(viewModel.uiState.value.mutationNotice)
+        assertNull(viewModel.uiState.value.playbackNotice)
     }
 
     @Test
@@ -118,7 +118,7 @@ class MovieDetailsPlayLaunchTest {
 
         viewModel.requestPlayback()
 
-        val notice = requireNotNull(viewModel.uiState.value.mutationNotice)
+        val notice = requireNotNull(viewModel.uiState.value.playbackNotice)
         assertTrue(notice.contains("Dolby TrueHD"))
         assertTrue(notice.contains("English · 5.1 surround"))
     }
@@ -136,7 +136,7 @@ class MovieDetailsPlayLaunchTest {
 
         viewModel.requestPlayback()
 
-        val notice = requireNotNull(viewModel.uiState.value.mutationNotice)
+        val notice = requireNotNull(viewModel.uiState.value.playbackNotice)
         assertTrue(notice.contains("DivX 3"))
         assertTrue(notice.contains("Playback Settings"))
     }
@@ -153,7 +153,7 @@ class MovieDetailsPlayLaunchTest {
 
         assertEquals(PlaybackMode.Direct, request.mode)
         assertEquals("dts", request.selectedAudioTrack?.codec)
-        assertNull(viewModel.uiState.value.mutationNotice)
+        assertNull(viewModel.uiState.value.playbackNotice)
     }
 
     @Test
@@ -166,7 +166,7 @@ class MovieDetailsPlayLaunchTest {
         val request = viewModel.requestAndAwaitLaunch()
 
         assertEquals(PlaybackMode.P1080Mbps8, request.mode)
-        assertNull(viewModel.uiState.value.mutationNotice)
+        assertNull(viewModel.uiState.value.playbackNotice)
     }
 
     /**
@@ -181,8 +181,57 @@ class MovieDetailsPlayLaunchTest {
 
         viewModel.requestPlayback()
 
-        val notice = requireNotNull(viewModel.uiState.value.mutationNotice)
+        val notice = requireNotNull(viewModel.uiState.value.playbackNotice)
         assertTrue(notice.contains("Playback Settings"))
+    }
+
+    /**
+     * A refusal's advice can only be followed on this page, so it is the page's alone: it never
+     * takes the write-failure channel that follows the user out, and closing drops it.
+     */
+    @Test
+    fun `a refusal stays on the page and closing the page drops it`() = runTest {
+        val viewModel = viewModel(http(technicalJson = truehdTechnicalJson())) { _, _ -> false }
+        viewModel.open(1)
+        viewModel.awaitTracksResolved()
+        viewModel.requestPlayback()
+        assertTrue(requireNotNull(viewModel.uiState.value.playbackNotice).contains("Dolby TrueHD"))
+        assertNull(viewModel.uiState.value.mutationNotice)
+
+        viewModel.close()
+
+        assertNull(viewModel.uiState.value.playbackNotice)
+        assertNull(viewModel.uiState.value.mutationNotice)
+    }
+
+    @Test
+    fun `a failed preparation stays on the page and closing the page drops it`() = runTest {
+        val http = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
+            val path = request.url.encodedPath
+            when {
+                path.startsWith("/api/movies/details/") -> jsonResponse(movieDetailsJson())
+                path.endsWith("/technical-details") -> jsonResponse(
+                    """{"error":true,"message":"Probe failed"}""",
+                    HttpStatusCode.InternalServerError,
+                )
+                path.endsWith("/watch-progress") -> jsonResponse(watchProgressJson())
+                path.endsWith("/like-status") -> jsonResponse(likeStatusJson())
+                else -> error("Unrouted path: $path")
+            }
+        }
+        val viewModel = viewModel(http) { _, _ -> true }
+        viewModel.open(1)
+        advanceUntilIdle()
+        viewModel.requestPlayback()
+        advanceUntilIdle()
+
+        val notice = requireNotNull(viewModel.uiState.value.playbackNotice)
+        assertTrue(notice.contains("Press Play to retry preparation."))
+        assertNull(viewModel.uiState.value.mutationNotice)
+
+        viewModel.close()
+
+        assertNull(viewModel.uiState.value.playbackNotice)
     }
 
     @Test

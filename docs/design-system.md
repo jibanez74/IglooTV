@@ -2141,6 +2141,13 @@ in the persistent, polite, non-focusable `IglooNotice` beside the actions; if Ba
 closed the overlay, the same notice appears below the shell header — one place at a time, never
 both. A new mutation or opening a new movie clears it. There is no toast or inline Retry card (§10).
 
+Play's own answers take the same spot but stay on the page: the capability gate's refusal and a
+preparation that failed ("Couldn't prepare playback: … Press Play to retry preparation.") are the
+page's `playbackNotice`, because their advice (Playback Settings, another track, Play again) can
+only be followed here. Back never carries them to the shell, where "this title" would sit under
+another title's billboard. Closing the page drops them, the show page's rule (§11.4.3). The page
+shows one notice at a time, the latest: a Play press or a new mutation clears whichever is up.
+
 **Lifetime.** A movie's toggle state outlives its overlay, because a write settling after Back
 still needs somewhere to land. It is retired instead when the screen moves on — opening another
 movie, or closing the overlay — and only for movies with nothing queued, nothing owed, and nothing

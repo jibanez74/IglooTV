@@ -967,6 +967,7 @@ fun IglooApp(
                         null
                     },
                     mutationNotice = details.mutationNotice,
+                    playbackNotice = details.playbackNotice,
                     progressSyncError = progressSyncError.takeIf {
                         detailsActions is MovieDetailsActions.Library &&
                             videoPlayOrigin == VideoPlayOrigin.MovieDetails
