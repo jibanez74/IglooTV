@@ -180,6 +180,24 @@ class MovieDetailsFocusTest {
         composeRule.onNodeWithTag("continue_card_1").assertIsFocused()
     }
 
+    // A Play refusal's advice only works on the page that gave it, so it never follows Back home
+    // the way a failed write does: Home would show "this title" under a different billboard.
+    @Test
+    fun backLeavesAPlayRefusalOnThePageItCameFrom() {
+        setShellContent(
+            loadedState().copy(
+                playbackNotice = "This TV can't play this title's Dolby TrueHD audio track.",
+            ),
+        )
+        composeRule.onNodeWithTag("details_playback_notice").assertExists()
+
+        composeRule.pressBack()
+
+        composeRule.onNodeWithTag("movie_details").assertDoesNotExist()
+        composeRule.onNodeWithTag("shell_mutation_notice").assertDoesNotExist()
+        composeRule.onNodeWithTag("continue_card_1").assertIsFocused()
+    }
+
     /**
      * The hero is its own call site with its own semantics, so it gets its own round trip: it
      * announces "Open …" only once something can be opened (section 11.3.1), and Back comes

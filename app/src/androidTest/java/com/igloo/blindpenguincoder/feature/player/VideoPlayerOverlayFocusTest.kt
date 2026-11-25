@@ -613,7 +613,7 @@ class VideoPlayerOverlayFocusTest {
         // The view model contract in miniature: a refusal publishes the message and returns null.
         setShellContent {
             detailsState = detailsState.copy(
-                mutationNotice = "This TV can't play this movie's DTS audio track.",
+                playbackNotice = "This TV can't play this movie's DTS audio track.",
             )
             null
         }
@@ -622,7 +622,7 @@ class VideoPlayerOverlayFocusTest {
 
         composeRule.onNodeWithTag("movie_player").assertDoesNotExist()
         assertEquals(0, engines.size)
-        composeRule.onNodeWithTag("details_mutation_notice").assertExists()
+        composeRule.onNodeWithTag("details_playback_notice").assertExists()
         composeRule
             .onNodeWithText("This TV can't play this movie's DTS audio track.")
             .assertExists()
