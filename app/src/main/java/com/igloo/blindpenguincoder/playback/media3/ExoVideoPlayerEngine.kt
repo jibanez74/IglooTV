@@ -142,6 +142,14 @@ internal class ExoVideoPlayerEngine(
     /** A rebase waiting out [HLS_SEEK_SETTLE_MS]; the current source plays on meanwhile. */
     private var heldRebaseTargetSec: Double? = null
     private var heldRebaseJob: Job? = null
+    /**
+     * A system Forward or Back is on its way up to the screen, which adds it to its seek bar. A
+     * tick sampled meanwhile still shows where the player was and, collected after the step,
+     * would pull the bar back under it: a second quick press then lands where the first did.
+     * The screen's seek clears it; a step the screen drops costs the one tick it skips, and
+     * nothing carries into the next press.
+     */
+    private var sessionStepInFlight = false
     private var sessionLostRecoveries = 0
     private var lastSessionLostRecoveryAtMs = 0L
     private var initialSelectionApplied = false
@@ -238,10 +246,13 @@ internal class ExoVideoPlayerEngine(
         if (!playbackIntent.acceptsCommands) {
             false
         } else {
-            // A pending switch leaves the outgoing source frozen, and a held rebase leaves it
-            // playing, at a position that is no longer where the viewer is going; reporting it
-            // snaps the seek bar back and feeds the progress cadence a stale second.
-            if (pendingMode == null && heldRebaseTargetSec == null) {
+            // A pending switch leaves the outgoing source frozen, a held rebase leaves it
+            // playing, and a system step on its way up has not moved it yet: each is a position
+            // that is no longer where the viewer is going, and reporting it snaps the seek bar
+            // back and feeds the progress cadence a stale second.
+            if (sessionStepInFlight) {
+                sessionStepInFlight = false
+            } else if (pendingMode == null && heldRebaseTargetSec == null) {
                 // A seek turns the player BUFFERING at once, so READY means it has come to rest.
                 if (player.playbackState == Player.STATE_READY) {
                     settledAbsoluteSec = currentAbsoluteSec()
@@ -316,6 +327,7 @@ internal class ExoVideoPlayerEngine(
     }
 
     override fun seekTo(seconds: Double) {
+        sessionStepInFlight = false
         if (!playbackIntent.acceptsCommands) return
         val pending = pendingRestart
         when {
@@ -956,13 +968,18 @@ internal class ExoVideoPlayerEngine(
             sessionTransport(TransportCommand.SeekTo(positionMs / 1000.0))
         }
 
-        override fun seekBack() = emit(VideoPlayerEvent.SessionSeekBy(-seekBackIncrement / 1000.0))
+        override fun seekBack() = sessionSeekBy(-seekBackIncrement / 1000.0)
 
-        override fun seekForward() = emit(VideoPlayerEvent.SessionSeekBy(seekForwardIncrement / 1000.0))
+        override fun seekForward() = sessionSeekBy(seekForwardIncrement / 1000.0)
 
     }
 
     private fun sessionTransport(command: TransportCommand) = emit(VideoPlayerEvent.SessionTransport(command))
+
+    private fun sessionSeekBy(deltaSec: Double) {
+        sessionStepInFlight = true
+        emit(VideoPlayerEvent.SessionSeekBy(deltaSec))
+    }
 
     /** Instrumentation seam: the player the system's media controls and Assistant drive. */
     internal val sessionPlayer: Player get() = session.player

@@ -1167,4 +1167,27 @@ class ExoVideoPlayerEngineTest {
             engine.events.replayCache.filterIsInstance<VideoPlayerEvent.SessionTransport>().isEmpty(),
         )
     }
+
+    // A tick sampled while a system step is on its way up would reach the screen after the step
+    // and pull its seek bar back under it, so the engine skips that one tick; the next reports.
+    @Test
+    fun theTickBehindASystemStepIsSkippedOnce() {
+        val engine = engine()
+        onMain { engine.startPlayback(null, initialPlayWhenReady = true, rewindOnResume = true) }
+        waitFor("the first tick") { engine.events.replayCache.any { it is VideoPlayerEvent.Time } }
+
+        // Holding the main thread past an interval makes the next tick due behind the step.
+        onMain {
+            (engine as ExoVideoPlayerEngine).sessionPlayer.seekForward()
+            Thread.sleep(PlaybackTicker.TICK_INTERVAL_MS + 100)
+        }
+        onMain {
+            val afterStep = engine.events.replayCache.takeLastWhile { it !is VideoPlayerEvent.SessionSeekBy }
+            assertTrue("no tick after the step", afterStep.none { it is VideoPlayerEvent.Time })
+        }
+        waitFor("the tick after that") {
+            engine.events.replayCache.takeLastWhile { it !is VideoPlayerEvent.SessionSeekBy }
+                .any { it is VideoPlayerEvent.Time }
+        }
+    }
 }
