@@ -4,12 +4,12 @@ import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.repository.TEST_SERVER
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
+import com.igloo.blindpenguincoder.data.repository.serverError
 import com.igloo.blindpenguincoder.data.repository.showGenreWithCountJson
 import com.igloo.blindpenguincoder.data.repository.showLibraryItemJson
 import com.igloo.blindpenguincoder.data.repository.showsGenresJson
 import com.igloo.blindpenguincoder.data.repository.showsLibraryJson
 import com.igloo.blindpenguincoder.data.repository.showsStatsJson
-import com.igloo.blindpenguincoder.feature.library.ERROR_BODY
 import com.igloo.blindpenguincoder.feature.library.LibraryFilter
 import com.igloo.blindpenguincoder.feature.library.LibraryGenre
 import com.igloo.blindpenguincoder.feature.library.LibraryKind
@@ -168,7 +168,7 @@ class ShowLibraryViewModelTest {
     @Test
     fun `a stats failure leaves the page's own total standing`() = runTest {
         val http = routedHttp(
-            stats = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            stats = { serverError() },
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L, total = 3)) },
         )
 
@@ -200,7 +200,7 @@ class ShowLibraryViewModelTest {
             library = {
                 if (failNext) {
                     failNext = false
-                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                    serverError()
                 } else {
                     val number = it.page().toLong()
                     jsonResponse(

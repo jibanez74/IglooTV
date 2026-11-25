@@ -34,6 +34,20 @@ internal fun FocusRequester.requestFocusSafely(): Boolean =
     runCatching { requestFocus() }.isSuccess
 
 /**
+ * Runs [onClosed] when [open] turns false after having been true: an overlay's focus return when
+ * its view model can end it, so no dismiss callback is there to restore focus (section 9.3). The
+ * opener stays composed under the overlay, so the request never meets a detached node.
+ */
+@Composable
+internal fun OnClosed(open: Boolean, onClosed: () -> Unit) {
+    val wasOpen = remember { mutableStateOf(false) }
+    LaunchedEffect(open) {
+        if (wasOpen.value && !open) onClosed()
+        wasOpen.value = open
+    }
+}
+
+/**
  * Focuses a node that has only just been composed so that a screen reader hears about it.
  *
  * Two things can swallow the focus announcement. First, Compose sends `TYPE_VIEW_FOCUSED` only

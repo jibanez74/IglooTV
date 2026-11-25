@@ -4,7 +4,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -60,20 +59,20 @@ import com.igloo.blindpenguincoder.core.design.MEDIA_FALLBACK_TILE
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_CONTROL_FILL
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_HAIRLINE
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SIDE_SCRIM
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
-import com.igloo.blindpenguincoder.core.design.overMediaSideScrim
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.ArtworkState
 import com.igloo.blindpenguincoder.core.ui.BackdropOrBlurredPoster
 import com.igloo.blindpenguincoder.core.ui.IglooText
 import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.SkeletonStub
+import com.igloo.blindpenguincoder.core.ui.animatePictureAlpha
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.insetHorizontally
 import com.igloo.blindpenguincoder.core.ui.joinedLine
 import com.igloo.blindpenguincoder.core.ui.rememberArtworkState
-import com.igloo.blindpenguincoder.core.ui.standInLoaded
 import com.igloo.blindpenguincoder.feature.shared.HeroMetadataRow
 
 /**
@@ -145,12 +144,9 @@ fun HomeHero(
     // Everything a page owns is keyed by what it features, not by where it stands: the lead page
     // comes and goes with the Continue Watching rail, and a page that only moved over must keep
     // its decoded art and must not take part in a dissolve it has no part in.
-    val backdrops = pages.map { page ->
-        key(page?.kind) { rememberArtworkState(page?.backdropUrl) }
-    }
-    // What stands in for a page's missing backdrop: its poster, blurred (section 3.2).
-    val posters = pages.map { page ->
-        key(page?.kind) { rememberArtworkState(page?.posterUrl) }
+    // Each page's backdrop, and its poster, which stands in blurred for a missing one (section 3.2).
+    val art = pages.map { page ->
+        key(page?.kind) { rememberArtworkState(page?.backdropUrl) to rememberArtworkState(page?.posterUrl) }
     }
     val transition = updateTransition(targetState = activePage?.kind, label = "heroPage")
     val openPage = activePage?.let { page ->
@@ -182,8 +178,8 @@ fun HomeHero(
                 if (page != null) {
                     key(page.kind) {
                         HeroArtLayer(
-                            backdrop = backdrops[index],
-                            poster = posters[index],
+                            backdrop = art[index].first,
+                            poster = art[index].second,
                             pageAlpha = transition.artAlpha(page.kind),
                             modifier = Modifier
                                 .matchParentSize()
@@ -349,11 +345,7 @@ private fun HeroArtLayer(
     pageAlpha: () -> Float,
     modifier: Modifier = Modifier,
 ) {
-    val decodeAlpha by animateFloatAsState(
-        targetValue = if (standInLoaded(backdrop, poster)) 1f else 0f,
-        animationSpec = iglooTween(IglooMotion.PAGE_MS),
-        label = "heroBackdrop",
-    )
+    val decodeAlpha by animatePictureAlpha(backdrop, poster, label = "heroBackdrop")
     Box(modifier = modifier.graphicsLayer { alpha = pageAlpha() }) {
         BackdropOrBlurredPoster(
             backdrop = backdrop,
@@ -370,9 +362,7 @@ private fun HeroArtLayer(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .background(
-                    overMediaSideScrim(),
-                ),
+                .background(OVER_MEDIA_SIDE_SCRIM),
         )
         Box(
             modifier = Modifier
@@ -444,7 +434,7 @@ private fun HeroPlate(
             color = Color.White,
             maxLines = 2,
         )
-        HeroMetadataRow(hero = hero)
+        HomeHeroMetadataRow(hero)
         if (hero.progressFraction != null) {
             ProgressTrack(
                 fraction = hero.progressFraction,
@@ -502,7 +492,7 @@ private fun HeroEyebrow(kind: HomeHeroKind) {
  * sentence on the page's target.
  */
 @Composable
-private fun HeroMetadataRow(hero: HomeHero) {
+private fun HomeHeroMetadataRow(hero: HomeHero) {
     val plainLine = joinedLine(listOfNotNull(hero.year, hero.extent), " · ")
     if (hero.ratingBadge == null && hero.certification == null && plainLine == null) return
     HeroMetadataRow(

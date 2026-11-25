@@ -18,13 +18,6 @@ class WatchRoomSyncTest {
     private val me = 1L
     private val maria = UserSummary(id = 2, name = "Maria", avatar = null)
 
-    private fun snapshot(paused: Boolean, position: Double, connected: List<Long> = listOf(me)) =
-        WatchRoomServerEvent(
-            type = WatchRoomEventType.RoomSnapshot,
-            playback = WatchRoomPlaybackState(paused, position),
-            connectedUserIds = connected,
-        )
-
     private fun changed(paused: Boolean, position: Double) =
         WatchRoomServerEvent(type = WatchRoomEventType.PlaybackChanged, playback = WatchRoomPlaybackState(paused, position))
 

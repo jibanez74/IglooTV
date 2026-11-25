@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
+import com.igloo.blindpenguincoder.core.network.backoffMillis
 import com.igloo.blindpenguincoder.data.model.QuickConnectInitiateData
 import com.igloo.blindpenguincoder.data.model.QuickConnectStatus
 import com.igloo.blindpenguincoder.data.repository.AuthRepository
@@ -194,10 +195,6 @@ internal fun quickConnectPollDelayMillis(
     return baseIntervalMillis +
         backoffMillis(POLL_INITIAL_BACKOFF_MILLIS, consecutiveFailures - 1, MAX_POLL_BACKOFF_MILLIS)
 }
-
-/** [initialMillis] doubled for each of the [retries] already waited out, capped at [maxMillis]. */
-private fun backoffMillis(initialMillis: Long, retries: Int, maxMillis: Long): Long =
-    (initialMillis * (1L shl retries.coerceAtMost(30))).coerceAtMost(maxMillis)
 
 private fun AppError.isRetryableRedeemFailure(): Boolean = when (this) {
     AppError.Network, AppError.Timeout -> true

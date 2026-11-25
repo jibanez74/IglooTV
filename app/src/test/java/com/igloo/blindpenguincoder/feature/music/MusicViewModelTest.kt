@@ -7,16 +7,16 @@ import com.igloo.blindpenguincoder.data.repository.albumsJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.musicStatsJson
 import com.igloo.blindpenguincoder.data.repository.musiciansJson
+import com.igloo.blindpenguincoder.data.repository.serverError
 import com.igloo.blindpenguincoder.data.repository.shuffleTracksJson
 import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
 import com.igloo.blindpenguincoder.data.repository.simpleMusicianJson
 import com.igloo.blindpenguincoder.data.repository.trackListItemJson
 import com.igloo.blindpenguincoder.data.repository.tracksJson
-import com.igloo.blindpenguincoder.feature.library.ERROR_BODY
 import com.igloo.blindpenguincoder.feature.library.collectPlayRequests
 import com.igloo.blindpenguincoder.feature.library.items
-import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import com.igloo.blindpenguincoder.feature.shared.AppendState
+import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
 import com.igloo.blindpenguincoder.playback.model.MusicQueueSource
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
@@ -244,7 +244,7 @@ class MusicViewModelTest {
     fun `a failed first page is an error card on that tab and Retry re-requests it`() = runTest {
         var fail = true
         val http = routedHttp(albums = {
-            if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+            if (fail) serverError()
             else jsonResponse(albumsPage(1, totalPages = 1, ids = 5L..6L))
         })
         val model = loaded(http)
@@ -313,7 +313,7 @@ class MusicViewModelTest {
         val http = routedHttp(musicians = {
             when (it.url.parameters["page"]) {
                 "1" -> jsonResponse(musiciansPage(1, totalPages = 2, ids = 1L..3L))
-                else -> jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                else -> serverError()
             }
         })
         val model = loaded(http)
@@ -335,7 +335,7 @@ class MusicViewModelTest {
         val http = routedHttp(musicians = {
             calls += 1
             if (calls == 1) jsonResponse(musiciansPage(1, totalPages = 1, ids = 1L..3L))
-            else jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+            else serverError()
         })
         val model = loaded(http)
 
@@ -398,7 +398,7 @@ class MusicViewModelTest {
         var empty = true
         val http = routedHttp(shuffle = {
             if (empty) jsonResponse(shuffleTracksJson())
-            else jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+            else serverError()
         })
         val model = loaded(http)
         val (requests, job) = collectPlayRequests(model.playRequests)

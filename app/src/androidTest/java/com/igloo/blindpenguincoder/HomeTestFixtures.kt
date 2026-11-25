@@ -861,6 +861,9 @@ internal fun testWatchRoomsState(
     reconcileGeneration = reconcileGeneration,
 )
 
+/** The settings line a test room and the Watch Together presets share. */
+private const val TEST_ROOM_SETTINGS_LINE = "Original quality — audio adjusted · English · 5.1 surround · Subtitles off"
+
 internal val inertWatchRoomsActions = WatchRoomsActions(onShown = {}, onRefresh = {})
 
 /**
@@ -875,7 +878,7 @@ internal fun testWatchRoomPage(isOwner: Boolean = true) = WatchRoomPageUi(
     ownerId = if (isOwner) 1 else 2,
     isOwner = isOwner,
     hostLine = if (isOwner) "Hosted by Jose (you)" else "Hosted by Maria",
-    settingsLine = "Original quality — audio adjusted · English · 5.1 surround · Subtitles off",
+    settingsLine = TEST_ROOM_SETTINGS_LINE,
     members = listOf(
         RoomMemberUi(id = 1, name = "Jose", avatarUrl = null),
         RoomMemberUi(id = 2, name = "Maria", avatarUrl = null),
@@ -961,7 +964,7 @@ internal fun testWatchTogetherState(
         mode = PlaybackMode.Remux,
         audioTrack = 0,
         subtitleTrack = null,
-        settingsLine = "Original quality — audio adjusted · English · 5.1 surround · Subtitles off",
+        settingsLine = TEST_ROOM_SETTINGS_LINE,
     ),
     people = people,
     selected = selected,

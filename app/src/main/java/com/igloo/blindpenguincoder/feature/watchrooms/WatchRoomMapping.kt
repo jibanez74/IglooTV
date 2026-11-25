@@ -1,7 +1,11 @@
 package com.igloo.blindpenguincoder.feature.watchrooms
 
 import com.igloo.blindpenguincoder.core.config.ServerAddress
-import com.igloo.blindpenguincoder.core.ui.countNoun
+import com.igloo.blindpenguincoder.core.error.ApiResult
+import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
+import com.igloo.blindpenguincoder.core.network.withServerAddress
+import com.igloo.blindpenguincoder.core.ui.IglooRailState
+import com.igloo.blindpenguincoder.core.ui.countPhrase
 import com.igloo.blindpenguincoder.core.ui.formatCount
 import com.igloo.blindpenguincoder.data.model.Movie
 import com.igloo.blindpenguincoder.data.model.MovieTechnicalDetailsData
@@ -10,6 +14,8 @@ import com.igloo.blindpenguincoder.data.model.UserSummary
 import com.igloo.blindpenguincoder.data.model.WatchRoomDetail
 import com.igloo.blindpenguincoder.data.model.WatchRoomListItem
 import com.igloo.blindpenguincoder.data.model.playbackModeOf
+import com.igloo.blindpenguincoder.data.repository.WatchRoomLink
+import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.movies.audioTrackLabel
 import com.igloo.blindpenguincoder.feature.movies.primaryVideoStream
 import com.igloo.blindpenguincoder.feature.movies.roomSettingsLine
@@ -49,7 +55,7 @@ data class RoomMemberUi(
 internal fun WatchRoomListItem.toWatchRoomUi(server: ServerAddress): WatchRoomUi {
     val shown = members.take(ROOM_CARD_MEMBER_LIMIT)
     val overflow = members.size - shown.size
-    val memberLine = "${formatCount(members.size.toLong())} ${countNoun(members.size.toLong(), "member")}"
+    val memberLine = countPhrase(members.size.toLong(), "member")
     return WatchRoomUi(
         id = id,
         title = movieTitle,
@@ -102,6 +108,7 @@ internal fun toWatchRoomPageUi(
     val audio = technical.audioStreams.sortedBy { it.streamIndex }
     val subtitles = technical.subtitles.sortedBy { it.streamIndex }
     val subtitleIndex = room.subtitleTrack?.toInt()?.takeIf { it in subtitles.indices }
+    val mode = playbackModeOf(room.playbackMode)
     return WatchRoomPageUi(
         id = room.id,
         title = room.movieTitle,
@@ -111,7 +118,7 @@ internal fun toWatchRoomPageUi(
         isOwner = room.isOwner,
         hostLine = hostLine(room.owner, room.isOwner),
         settingsLine = roomSettingsLine(
-            mode = playbackModeOf(room.playbackMode),
+            mode = mode,
             audio = audio.getOrNull(room.audioTrack.toInt())?.let { audioTrackLabel(it, room.audioTrack.toInt()) },
             subtitle = subtitleIndex?.let { subtitleTrackLabel(subtitles[it], it) },
         ),
@@ -123,7 +130,7 @@ internal fun toWatchRoomPageUi(
             posterUrl = posterUrl,
             mimeType = technical.movie.mimeType,
             // An unknown future mode still plays: the room's stream is HLS unless it is direct.
-            mode = playbackModeOf(room.playbackMode) ?: PlaybackMode.Remux,
+            mode = mode ?: PlaybackMode.Remux,
             videoCodec = primaryVideoStream(technical.videoStreams)?.codec,
             // The room's audio is baked into its stream, so the player is told of none: nothing
             // to pick, and no Direct-to-Remux turn for a track it would otherwise judge.
@@ -149,3 +156,22 @@ internal fun UserSummary.toRoomMemberUi(server: ServerAddress) = RoomMemberUi(
     name = name,
     avatarUrl = serverImageUrl(server.origin, avatar),
 )
+
+/** Everyone on the server a room can invite, as Watch Together and Edit invitees list them. */
+internal suspend fun WatchRoomLink.invitablePeople(serverUrl: ServerUrlProvider): IglooRailState<RoomMemberUi> =
+    when (val result = inviteUsers().withServerAddress(serverUrl)) {
+        is ApiResult.Success -> {
+            val (users, server) = result.value
+            IglooRailState.Loaded(users.map { it.toRoomMemberUi(server) })
+        }
+        is ApiResult.Failure -> IglooRailState.Error(result.error.toLibraryDisplayMessage())
+    }
+
+/**
+ * The checked ids in the order [people] shows them, so the request reads the way the screen does.
+ * A check the list does not hold — one followed in from another device — goes last.
+ */
+internal fun orderedSelection(people: IglooRailState<RoomMemberUi>, selected: Set<Long>): List<Long> {
+    val listed = (people as? IglooRailState.Loaded)?.items.orEmpty().map { it.id }
+    return listed.filter { it in selected } + (selected - listed.toSet())
+}

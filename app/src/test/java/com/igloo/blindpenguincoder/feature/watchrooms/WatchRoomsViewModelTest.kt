@@ -4,9 +4,9 @@ import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
+import com.igloo.blindpenguincoder.data.repository.serverError
 import com.igloo.blindpenguincoder.data.repository.watchRoomJson
 import com.igloo.blindpenguincoder.data.repository.watchRoomsJson
-import com.igloo.blindpenguincoder.feature.library.ERROR_BODY
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
@@ -58,7 +58,7 @@ class WatchRoomsViewModelTest {
         (rooms as? IglooRailState.Loaded)?.items?.map { it.id }
 
     private val failure: MockRequestHandler =
-        { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) }
+        { serverError() }
 
     // --- first load -------------------------------------------------------------------------
 
@@ -77,7 +77,7 @@ class WatchRoomsViewModelTest {
         val http = roomsHttp { jsonResponse(rooms(1, 2)) }
         val model = model(http)
 
-        model.refresh()
+        model.onShown()
 
         val state = model.uiState.value
         assertEquals(listOf(1L, 2L), state.roomIds())
@@ -93,7 +93,7 @@ class WatchRoomsViewModelTest {
         val http = roomsHttp { jsonResponse(rooms()) }
         val model = model(http)
 
-        model.refresh()
+        model.onShown()
 
         assertEquals(emptyList<Long>(), model.uiState.value.roomIds())
     }
@@ -103,7 +103,7 @@ class WatchRoomsViewModelTest {
         val http = roomsHttp(failure)
         val model = model(http)
 
-        model.refresh()
+        model.onShown()
 
         assertEquals(IglooRailState.Error("nope"), model.uiState.value.rooms)
         assertNull(model.uiState.value.notice)
@@ -114,15 +114,15 @@ class WatchRoomsViewModelTest {
         val gate = CompletableDeferred<Unit>()
         var fail = true
         val http = roomsHttp {
-            if (fail) return@roomsHttp jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+            if (fail) return@roomsHttp serverError()
             gate.await()
             jsonResponse(rooms(1))
         }
         val model = model(http)
-        model.refresh()
+        model.onShown()
 
         fail = false
-        model.reload()
+        model.refresh()
 
         // Retry is the focused node; a skeleton here would dispose it mid-request.
         assertEquals(IglooRailState.Error("nope"), model.uiState.value.rooms)
@@ -144,10 +144,10 @@ class WatchRoomsViewModelTest {
             jsonResponse(rooms(2, 1))
         }
         val model = model(http)
-        model.refresh()
+        model.onShown()
 
         second = true
-        model.reload()
+        model.refresh()
 
         assertEquals(listOf(1L), model.uiState.value.roomIds())
         assertTrue(model.uiState.value.refreshing)
@@ -169,11 +169,11 @@ class WatchRoomsViewModelTest {
             jsonResponse(rooms(1))
         }
         val model = model(http)
-        model.refresh()
+        model.onShown()
 
         gated = true
-        model.reload()
-        model.reload()
+        model.refresh()
+        model.refresh()
         gate.complete(Unit)
 
         assertEquals(2, http.requests)
@@ -183,13 +183,13 @@ class WatchRoomsViewModelTest {
     fun `a failed Refresh keeps the rooms and reports through a notice the next one clears`() = runTest {
         var fail = false
         val http = roomsHttp {
-            if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) else jsonResponse(rooms(1))
+            if (fail) serverError() else jsonResponse(rooms(1))
         }
         val model = model(http)
-        model.refresh()
+        model.onShown()
 
         fail = true
-        model.reload()
+        model.refresh()
 
         val failed = model.uiState.value
         assertEquals(listOf(1L), failed.roomIds())
@@ -199,7 +199,7 @@ class WatchRoomsViewModelTest {
         assertEquals(1, failed.contentGeneration)
 
         fail = false
-        model.reload()
+        model.refresh()
 
         assertNull(model.uiState.value.notice)
     }
@@ -211,10 +211,10 @@ class WatchRoomsViewModelTest {
         var second = false
         val http = roomsHttp { jsonResponse(if (second) rooms(1, 2) else rooms(1)) }
         val model = model(http)
-        model.refresh()
+        model.onShown()
 
         second = true
-        model.refresh()
+        model.onShown()
 
         val state = model.uiState.value
         assertEquals(listOf(1L, 2L), state.roomIds())
@@ -227,13 +227,13 @@ class WatchRoomsViewModelTest {
     fun `a failed background read leaves the rooms alone and says nothing`() = runTest {
         var fail = false
         val http = roomsHttp {
-            if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) else jsonResponse(rooms(1))
+            if (fail) serverError() else jsonResponse(rooms(1))
         }
         val model = model(http)
-        model.refresh()
+        model.onShown()
 
         fail = true
-        model.refresh()
+        model.onShown()
 
         assertEquals(listOf(1L), model.uiState.value.roomIds())
         assertNull(model.uiState.value.notice)
@@ -248,8 +248,8 @@ class WatchRoomsViewModelTest {
         }
         val model = model(http)
 
-        model.refresh()
-        model.refresh()
+        model.onShown()
+        model.onShown()
         gate.complete(Unit)
 
         assertEquals(1, http.requests)
@@ -270,9 +270,9 @@ class WatchRoomsViewModelTest {
             }
         }
         val model = model(http)
-        model.refresh()
+        model.onShown()
 
-        model.reload()
+        model.refresh()
         background.complete(Unit)
 
         // The stale answer never lands, and the press gets the replacement it is owed.
@@ -285,7 +285,7 @@ class WatchRoomsViewModelTest {
     fun `a room that went away leaves the list at once and says why`() = runTest {
         val http = roomsHttp { jsonResponse(rooms(1, 2, 3)) }
         val model = model(http)
-        model.refresh()
+        model.onShown()
 
         model.onRoomGone(2, "The watch room for Movie 2 was closed.")
 
@@ -306,7 +306,7 @@ class WatchRoomsViewModelTest {
             jsonResponse(rooms(1))
         }
         val model = model(http)
-        model.refresh()
+        model.onShown()
 
         http.test.serverUrl.set(null)
         gate.complete(Unit)
@@ -333,8 +333,8 @@ class WatchRoomsViewModelTest {
             }
         }
         val model = model(http)
+        model.onShown()
         model.refresh()
-        model.reload()
 
         model.onRoomGone(2, "The watch room for Movie 2 was closed.")
         answer.complete(Unit)

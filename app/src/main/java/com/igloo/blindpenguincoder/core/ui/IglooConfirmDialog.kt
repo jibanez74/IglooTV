@@ -50,7 +50,6 @@ fun IglooConfirmDialog(
 ) {
     val dismissFocus = remember { FocusRequester() }
     val confirmFocus = remember { FocusRequester() }
-    val pendingFocus = remember { FocusRequester() }
 
     // Back cancels. The host must gate its own handlers while this is composed (section 9.3):
     // winning by registration order is not deliberate Back behavior. Live even while pending —
@@ -69,7 +68,7 @@ fun IglooConfirmDialog(
         )
 
         if (pending) {
-            IglooPendingRow(text = pendingText, focusRequester = pendingFocus)
+            IglooPendingRow(text = pendingText)
         } else {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -115,18 +114,16 @@ fun IglooConfirmDialog(
 
 /**
  * While a modal's action is in flight its buttons are replaced by one **focusable** status line:
- * this dialog's, and the Watch Together dialog's.
+ * this dialog's, and the watch-room dialogs'.
  *
  * Not disabled buttons: `clickable(enabled = false)` removes the focus target, and in an in-tree
  * modal that punches a hole in the trap — the next d-pad press would land on a card behind the
  * scrim. Keeping a pinned focusable here keeps focus inside the overlay and keeps the pins alive.
  */
 @Composable
-internal fun IglooPendingRow(
-    text: String,
-    focusRequester: FocusRequester,
-) {
+internal fun IglooPendingRow(text: String) {
     var focused by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
 
     IglooText(
         text = text,

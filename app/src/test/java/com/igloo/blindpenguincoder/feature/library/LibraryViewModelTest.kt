@@ -10,6 +10,7 @@ import com.igloo.blindpenguincoder.data.repository.movieLibraryItemJson
 import com.igloo.blindpenguincoder.data.repository.moviesGenresJson
 import com.igloo.blindpenguincoder.data.repository.moviesLibraryJson
 import com.igloo.blindpenguincoder.data.repository.moviesStatsJson
+import com.igloo.blindpenguincoder.data.repository.serverError
 import com.igloo.blindpenguincoder.feature.movies.movieLibrarySource
 import com.igloo.blindpenguincoder.feature.shared.AppendState
 import com.igloo.blindpenguincoder.feature.shared.TAB_SWITCH_DEBOUNCE_MS
@@ -81,7 +82,7 @@ class LibraryViewModelTest {
         var fail = true
         val http = routedHttp(
             library = {
-                if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                if (fail) serverError()
                 else jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
             },
         )
@@ -257,7 +258,7 @@ class LibraryViewModelTest {
             library = {
                 when {
                     it.page() == "1" -> jsonResponse(page(number = 1, totalPages = 2, ids = 1L..3L))
-                    fail -> jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                    fail -> serverError()
                     else -> jsonResponse(page(number = 2, totalPages = 2, ids = 4L..6L))
                 }
             },
@@ -372,7 +373,7 @@ class LibraryViewModelTest {
         var fail = false
         val http = routedHttp(
             library = {
-                if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                if (fail) serverError()
                 else jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
             },
         )
@@ -400,7 +401,7 @@ class LibraryViewModelTest {
                         if (firstPageCalls == 1) {
                             jsonResponse(page(number = 1, totalPages = 3, ids = 1L..3L))
                         } else {
-                            jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                            serverError()
                         }
                     }
                     else -> {
@@ -430,7 +431,7 @@ class LibraryViewModelTest {
     @Test
     fun `a failed background refresh keeps the loaded grid`() = runTest {
         val http = routedHttp(
-            stats = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            stats = { serverError() },
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
@@ -467,7 +468,7 @@ class LibraryViewModelTest {
     @Test
     fun `a stats failure uses the library page count`() = runTest {
         val http = routedHttp(
-            stats = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            stats = { serverError() },
             library = {
                 jsonResponse(page(number = 1, total = 73, totalPages = 1, ids = 1L..3L))
             },
@@ -553,7 +554,7 @@ class LibraryViewModelTest {
         var fail = false
         val http = routedHttp(
             stats = {
-                if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                if (fail) serverError()
                 else jsonResponse(moviesStatsJson(totalMovies = 96))
             },
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
@@ -766,7 +767,7 @@ class LibraryViewModelTest {
     fun `selecting the genres tab with no genres issues no request and shows the placeholder`() =
         runTest {
             val http = routedHttp(
-                genres = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+                genres = { serverError() },
                 library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
             )
             val model = loaded(http)
@@ -786,7 +787,7 @@ class LibraryViewModelTest {
         var fail = true
         val http = routedHttp(
             genres = {
-                if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                if (fail) serverError()
                 else jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = "Action")))
             },
             genreMovies = { jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L)) },
@@ -838,7 +839,7 @@ class LibraryViewModelTest {
     @Test
     fun `a failed genres read settles the tab into the placeholder`() = runTest {
         val http = routedHttp(
-            genres = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            genres = { serverError() },
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
@@ -858,7 +859,7 @@ class LibraryViewModelTest {
             genres = {
                 genreListCalls += 1
                 if (genreListCalls == 1) {
-                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                    serverError()
                 } else {
                     gate.await()
                     jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = "Action")))
@@ -886,7 +887,7 @@ class LibraryViewModelTest {
     @Test
     fun `a refresh that still cannot reach the genres stops reporting`() = runTest {
         val http = routedHttp(
-            genres = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            genres = { serverError() },
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
@@ -903,7 +904,7 @@ class LibraryViewModelTest {
     @Test
     fun `sorting from the genres placeholder changes nothing`() = runTest {
         val http = routedHttp(
-            genres = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            genres = { serverError() },
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
         )
         val model = loaded(http)
@@ -925,14 +926,14 @@ class LibraryViewModelTest {
         var libraryCalls = 0
         val gate = CompletableDeferred<Unit>()
         val http = routedHttp(
-            genres = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            genres = { serverError() },
             library = {
                 libraryCalls += 1
                 if (libraryCalls == 1) {
                     jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
                 } else {
                     gate.await()
-                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                    serverError()
                 }
             },
         )
@@ -959,7 +960,7 @@ class LibraryViewModelTest {
     fun `a failed tab switch leaves the focus generations untouched`() = runTest {
         val http = routedHttp(
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
-            liked = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            liked = { serverError() },
         )
         val model = loaded(http)
         val before = model.uiState.value
@@ -986,7 +987,7 @@ class LibraryViewModelTest {
                     ),
                 )
             },
-            liked = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            liked = { serverError() },
         )
         val model = loaded(http)
         model.loadMore()
@@ -1038,7 +1039,7 @@ class LibraryViewModelTest {
             genreMovies = {
                 if (failTheGenrePage) {
                     gate.await()
-                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                    serverError()
                 } else {
                     jsonResponse(page(number = 1, total = 26, totalPages = 1, ids = 1L..3L))
                 }
@@ -1181,7 +1182,7 @@ class LibraryViewModelTest {
     fun `a failed tab switch keeps the grid, reverts the tab, and reports a notice`() = runTest {
         val http = routedHttp(
             library = { jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L)) },
-            liked = { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) },
+            liked = { serverError() },
         )
         val model = loaded(http)
 
@@ -1209,7 +1210,7 @@ class LibraryViewModelTest {
             },
             genreMovies = {
                 if (it.url.encodedPath.contains("/genres/$failingGenre/")) {
-                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                    serverError()
                 } else {
                     jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
                 }
@@ -1230,7 +1231,7 @@ class LibraryViewModelTest {
         var fail = false
         val http = routedHttp(
             library = {
-                if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                if (fail) serverError()
                 else jsonResponse(page(number = 1, totalPages = 1, ids = 1L..3L))
             },
         )
@@ -1499,7 +1500,7 @@ class LibraryViewModelTest {
         var fail = false
         val http = routedHttp(
             genres = {
-                if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                if (fail) serverError()
                 else jsonResponse(moviesGenresJson(movieGenreWithCountJson(id = 7, tag = "Action")))
             },
         )
@@ -1552,7 +1553,7 @@ class LibraryViewModelTest {
                 if (likedCalls == 1) {
                     jsonResponse(page(number = 1, total = 3, totalPages = 1, ids = 1L..3L))
                 } else {
-                    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                    serverError()
                 }
             },
         )
@@ -1626,7 +1627,7 @@ class LibraryViewModelTest {
                         }
                         else -> {
                             reconcileGate.await()
-                            jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+                            serverError()
                         }
                     }
                 },
@@ -1789,7 +1790,7 @@ class LibraryViewModelTest {
         if (it.page() == "1") {
             jsonResponse(page(number = 1, totalPages = 3, ids = 1L..48L))
         } else {
-            jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+            serverError()
         }
     }
 

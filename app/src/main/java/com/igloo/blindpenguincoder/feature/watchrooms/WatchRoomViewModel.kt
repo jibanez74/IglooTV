@@ -14,7 +14,6 @@ import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.RoomSocket
 import com.igloo.blindpenguincoder.data.repository.WatchRoomLink
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
-import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.player.PlayerRoom
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ReadOnlyDetailsLoader
@@ -119,8 +118,8 @@ class WatchRoomViewModel(
     private val link: WatchRoomLink,
     private val movies: MovieRepository,
     private val serverUrl: ServerUrlProvider,
-    selfId: Long,
-    private val onRoomGone: (roomId: Long, notice: String?) -> Unit,
+    private val selfId: Long,
+    private val onRoomGone: (roomId: Long, notice: String) -> Unit,
     /** A monotonic clock; the room's playhead is read on it. */
     val clock: () -> Long,
 ) : ViewModel() {
@@ -144,8 +143,8 @@ class WatchRoomViewModel(
         // Every room read that lands — a member change, a reconnect, the return from the
         // background — brings an open Edit invitees up to date with it.
         viewModelScope.launch {
-            loader.uiState.collect { page ->
-                val loaded = (page.details as? DetailsState.Loaded)?.value ?: return@collect
+            loader.uiState.collect { state ->
+                val loaded = (state.details as? DetailsState.Loaded)?.value ?: return@collect
                 followMembers(loaded.ownerId, loaded.members.map { it.id }.toSet())
             }
         }
@@ -171,6 +170,12 @@ class WatchRoomViewModel(
     private var heldSeekSec: Double? = null
     private var foreground = true
 
+    /** The open room's id, loaded or not. */
+    private val openId: Long? get() = loader.uiState.value.id
+
+    /** The open room's page, once it has loaded. */
+    private val page: WatchRoomPageUi? get() = (loader.uiState.value.details as? DetailsState.Loaded)?.value
+
     fun open(roomId: Long) {
         leave()
         roomSeen = false
@@ -183,14 +188,14 @@ class WatchRoomViewModel(
         inviteesJob?.cancel()
         disconnect()
         loader.close()
-        room.value = WatchRoomUiState(sync = WatchRoomSync(room.value.sync.selfId))
+        room.value = WatchRoomUiState(sync = WatchRoomSync(selfId))
     }
 
     fun retry() = loader.retry()
 
     fun onForeground() {
         foreground = true
-        val id = loader.uiState.value.id ?: return
+        val id = openId ?: return
         if (connectJob?.isActive != true) connect(id)
     }
 
@@ -205,10 +210,10 @@ class WatchRoomViewModel(
      * room this viewer has to themselves starts, since there is nobody to wait for.
      */
     fun watch() {
-        val page = (loader.uiState.value.details as? DetailsState.Loaded)?.value ?: return
-        val state = room.value
-        val playhead = state.sync.playhead ?: return
-        val startingAlone = playhead.paused && state.sync.alone
+        val page = page ?: return
+        val sync = room.value.sync
+        val playhead = sync.playhead ?: return
+        val startingAlone = sync.pausedAlone
         room.update { it.copy(startPlaying = !playhead.paused || startingAlone, startingAlone = startingAlone) }
         playRequestChannel.trySend(
             page.playRequest.copy(resumeAtSec = playhead.positionAt(clock()).takeIf { it > 0.0 }),
@@ -255,7 +260,7 @@ class WatchRoomViewModel(
     }
 
     fun confirmClose() {
-        val id = loader.uiState.value.id ?: return
+        val id = openId ?: return
         if (room.value.closing) return
         room.update { it.copy(closing = true) }
         viewModelScope.launch {
@@ -264,7 +269,7 @@ class WatchRoomViewModel(
                 // Already gone — its movie deleted, or closed on another device: the same end.
                 is ApiResult.Failure if result.error.isNotFound() -> roomGone(id, closedNotice())
                 // A failure for a room already left (and another opened) is not this page's news.
-                is ApiResult.Failure -> if (loader.uiState.value.id == id) {
+                is ApiResult.Failure -> if (openId == id) {
                     room.update {
                         it.copy(
                             closing = false,
@@ -289,7 +294,7 @@ class WatchRoomViewModel(
 
     /** An invitee leaves for good: the room drops off their list on every device. */
     fun confirmLeave() {
-        val id = loader.uiState.value.id ?: return
+        val id = openId ?: return
         if (room.value.leaving) return
         room.update { it.copy(leaving = true) }
         viewModelScope.launch {
@@ -299,7 +304,7 @@ class WatchRoomViewModel(
                 is ApiResult.Failure if result.error.isNotFound() -> roomGone(id, closedNotice())
                 // Already not a member (left on another device): there is nothing left to leave.
                 is ApiResult.Failure if result.error.isRoomGone() -> roomGone(id, leftNotice())
-                is ApiResult.Failure -> if (loader.uiState.value.id == id) {
+                is ApiResult.Failure -> if (openId == id) {
                     room.update {
                         it.copy(
                             leaving = false,
@@ -314,7 +319,7 @@ class WatchRoomViewModel(
 
     /** The owner's Edit invitees: the room's invitees checked, everyone else on the server listed. */
     fun editInvitees() {
-        val page = (loader.uiState.value.details as? DetailsState.Loaded)?.value ?: return
+        val page = page ?: return
         // A save still out answers first: reopening now would start from the old list.
         if (!page.isOwner || room.value.editing != null || savingInvitees) return
         val invitees = page.members.map { it.id }.filter { it != page.ownerId }.toSet()
@@ -343,18 +348,16 @@ class WatchRoomViewModel(
      * the page: a dialog never carries an inline error (section 9.3).
      */
     fun saveInvitees() {
-        val id = loader.uiState.value.id ?: return
+        val id = openId ?: return
         val editing = room.value.editing ?: return
         if (editing.saving || !editing.changed) return
-        // In the order the list shows them, so the request reads the way the screen does.
-        val listed = (editing.people as? IglooRailState.Loaded)?.items.orEmpty().map { it.id }
-        val invited = listed.filter { it in editing.selected } + (editing.selected - listed.toSet())
+        val invited = orderedSelection(editing.people, editing.selected)
         room.update { it.copy(editing = editing.copy(saving = true)) }
         savingInvitees = true
         viewModelScope.launch {
             val result = link.updateMembers(id, invited)
             savingInvitees = false
-            if (loader.uiState.value.id != id) return@launch
+            if (openId != id) return@launch
             when (result) {
                 is ApiResult.Success -> {
                     room.update { it.copy(editing = null) }
@@ -395,14 +398,7 @@ class WatchRoomViewModel(
         inviteesJob?.cancel()
         room.update { state -> state.copy(editing = state.editing?.copy(people = IglooRailState.Loading)) }
         inviteesJob = viewModelScope.launch {
-            val result = link.inviteUsers().withServerAddress(serverUrl)
-            val people = when (result) {
-                is ApiResult.Success -> {
-                    val (users, server) = result.value
-                    IglooRailState.Loaded(users.map { it.toRoomMemberUi(server) })
-                }
-                is ApiResult.Failure -> IglooRailState.Error(result.error.toLibraryDisplayMessage())
-            }
+            val people = link.invitablePeople(serverUrl)
             room.update { state -> state.copy(editing = state.editing?.copy(people = people)) }
         }
     }
@@ -442,21 +438,21 @@ class WatchRoomViewModel(
                                     // The page re-reads itself: who is in the room, and the host's
                                     // line, come from the room's details.
                                     WatchRoomEventType.MembersChanged -> {
-                                        val ownerId = (loader.uiState.value.details as? DetailsState.Loaded)?.value?.ownerId
+                                        val ownerId = page?.ownerId
                                         val members = event.members
                                         if (ownerId != null && members != null) {
                                             followMembers(ownerId, members.map { it.id }.toSet())
                                         }
                                         loader.refresh()
                                     }
+                                    WatchRoomEventType.RoomSnapshot -> {
+                                        attempt = 0
+                                        // Back after a drop or the background: a member change made
+                                        // meanwhile never reached this TV, so the page re-reads the room.
+                                        if (roomSeen) loader.refresh()
+                                        roomSeen = true
+                                    }
                                     else -> Unit
-                                }
-                                if (event.type == WatchRoomEventType.RoomSnapshot) {
-                                    attempt = 0
-                                    // Back after a drop or the background: a member change made
-                                    // meanwhile never reached this TV, so the page re-reads the room.
-                                    if (roomSeen) loader.refresh()
-                                    roomSeen = true
                                 }
                                 val step = room.value.sync.onEvent(event, clock())
                                 room.update { state ->
@@ -467,8 +463,7 @@ class WatchRoomViewModel(
                                         // follow, and this player's first frame must not drag it back.
                                         startingAlone = state.startingAlone && when (event.type) {
                                             WatchRoomEventType.PlaybackChanged -> false
-                                            WatchRoomEventType.RoomSnapshot ->
-                                                step.sync.playhead?.paused == true && step.sync.alone
+                                            WatchRoomEventType.RoomSnapshot -> step.sync.pausedAlone
                                             else -> true
                                         },
                                     )
@@ -531,23 +526,21 @@ class WatchRoomViewModel(
         }
     }
 
-    private fun roomGone(roomId: Long, notice: String?) {
-        if (loader.uiState.value.id != roomId) return
+    private fun roomGone(roomId: Long, notice: String) {
+        if (openId != roomId) return
         leave()
         onRoomGone(roomId, notice)
     }
 
-    private fun closedNotice(): String = roomTitle()
+    private fun closedNotice(): String = page?.title
         ?.let { "The watch room for $it was closed." } ?: "The watch room was closed."
 
-    private fun leftNotice(): String = roomTitle()
+    private fun leftNotice(): String = page?.title
         ?.let { "You left the watch room for $it." } ?: "You left the watch room."
 
     /** The owner removed this user, or they left on another device: the server does not say which. */
-    private fun removedNotice(): String = roomTitle()
+    private fun removedNotice(): String = page?.title
         ?.let { "You're no longer in the watch room for $it." } ?: "You're no longer in this watch room."
-
-    private fun roomTitle(): String? = (loader.uiState.value.details as? DetailsState.Loaded)?.value?.title
 
     private suspend fun fetchPage(id: Long): ApiResult<WatchRoomPageUi> = coroutineScope {
         when (val detail = link.watchRoom(id)) {

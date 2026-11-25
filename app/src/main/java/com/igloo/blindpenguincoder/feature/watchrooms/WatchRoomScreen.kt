@@ -8,9 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,7 +34,6 @@ import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
 import com.igloo.blindpenguincoder.core.design.overMedia
 import com.igloo.blindpenguincoder.core.design.scaled
-import com.igloo.blindpenguincoder.core.ui.IglooAvatar
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
 import com.igloo.blindpenguincoder.core.ui.IglooConfirmDialog
@@ -44,6 +41,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooIcons
 import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooPinnedError
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.OnClosed
 import com.igloo.blindpenguincoder.core.ui.PoliteAnnouncement
 import com.igloo.blindpenguincoder.core.ui.SectionHeading
 import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
@@ -97,9 +95,9 @@ fun WatchRoomScreen(
     // hands focus back to the control that opened it (section 9.3). An effect, not the dismiss
     // callback, because the view model ends some of them; the opener stays composed either way,
     // so the request cannot land on a detached node.
-    ReturnFocusWhenClosed(state.confirmingClose, closeRequester)
-    ReturnFocusWhenClosed(state.confirmingLeave, leaveRequester)
-    ReturnFocusWhenClosed(state.editing != null, editRequester)
+    OnClosed(state.confirmingClose) { closeRequester.requestFocusSafely() }
+    OnClosed(state.confirmingLeave) { leaveRequester.requestFocusSafely() }
+    OnClosed(state.editing != null) { editRequester.requestFocusSafely() }
 
     LifecycleStartEffect(actions) {
         actions.onForeground()
@@ -192,15 +190,6 @@ fun WatchRoomScreen(
         if (editing != null && page != null) {
             EditInviteesDialog(title = page.title, editing = editing, actions = actions)
         }
-    }
-}
-
-@Composable
-private fun ReturnFocusWhenClosed(open: Boolean, opener: FocusRequester) {
-    var wasOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(open) {
-        if (wasOpen && !open) opener.requestFocusSafely()
-        wasOpen = open
     }
 }
 
@@ -439,12 +428,7 @@ private fun PeopleSection(
                     horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IglooAvatar(
-                        name = person.member.name,
-                        avatarUrl = person.member.avatarUrl,
-                        size = IglooTheme.icons.lg,
-                        textStyle = IglooTheme.typography.label,
-                    )
+                    RoomMemberAvatar(person.member)
                     IglooText(
                         text = person.name,
                         style = IglooTheme.typography.bodyMedium,
@@ -460,7 +444,7 @@ private fun PeopleSection(
                             maxLines = 1,
                         )
                     }
-                    PresenceDot(watching = person.watching)
+                    RoomDot(if (person.watching) colors.primary else colors.muted)
                     IglooText(
                         text = if (person.watching) "Watching" else "Away",
                         style = IglooTheme.typography.label,
@@ -482,15 +466,6 @@ private data class RoomPersonUi(
     val spoken: String
         get() = listOfNotNull(name, "host".takeIf { host }, if (watching) "watching" else "away")
             .joinToString(", ")
-}
-
-@Composable
-private fun PresenceDot(watching: Boolean) {
-    Box(
-        modifier = Modifier
-            .size(IglooTheme.sizes.dot)
-            .background(if (watching) IglooTheme.colors.primary else IglooTheme.colors.muted, CircleShape),
-    )
 }
 
 /** Where the room is, drawn and spoken. */
@@ -529,7 +504,7 @@ private fun RoomStatusLine(status: RoomStatus, overMedia: Boolean) {
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (status.playing) PresenceDot(watching = true)
+        if (status.playing) RoomDot(IglooTheme.colors.primary)
         HeroLine(status.text, overMedia)
     }
 }

@@ -8,7 +8,6 @@ import com.igloo.blindpenguincoder.core.network.IglooJson
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 
 /** Persists the [ProfileVault]. Everything it holds is secret: never log or display it. */
@@ -67,9 +66,8 @@ class DataStoreProfileStore(
         val json = cipher.decrypt(blob) ?: return null
         return try {
             IglooJson.decodeFromString<ProfileVault>(json)
-        } catch (_: SerializationException) {
-            null
         } catch (_: IllegalArgumentException) {
+            // A SerializationException is one too.
             null
         }
     }

@@ -14,6 +14,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
+import com.igloo.blindpenguincoder.TestLifecycleOwner
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.letChromeHide
 import com.igloo.blindpenguincoder.playback.youtube.FakeTrailerPlayerEngine

@@ -62,7 +62,7 @@ internal val MEDIA_FALLBACK_GLYPH = Color(0xFF8094AE)
  * prose sits over busy art, and gone by the far edge so the art still reads. The Home hero and
  * the details heroes share it so the two surfaces read alike.
  */
-internal fun overMediaSideScrim(): Brush = Brush.horizontalGradient(
+internal val OVER_MEDIA_SIDE_SCRIM: Brush = Brush.horizontalGradient(
     0f to Color.Black.copy(alpha = 0.80f),
     0.65f to Color.Black.copy(alpha = 0.55f),
     1f to Color.Black.copy(alpha = 0f),

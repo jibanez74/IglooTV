@@ -32,8 +32,8 @@ internal fun watchRoomPresets(
     // Positions in stream_index order, which is what the server counts.
     val audio = technical.audioStreams.sortedBy { it.streamIndex }
     val subtitles = technical.subtitles.sortedBy { it.streamIndex }
-    val audioIndex = audio.indexOfFirst { it.id == settings.selectedAudioId }.takeIf { it >= 0 } ?: 0
-    val subtitleIndex = subtitles.indexOfFirst { it.id == settings.selectedSubtitleId }.takeIf { it >= 0 }
+    val audioIndex = typeIndexOf(settings.selectedAudioId, audio.map { it.id }) ?: 0
+    val subtitleIndex = typeIndexOf(settings.selectedSubtitleId, subtitles.map { it.id })
     val mode = settings.selectedMode.takeUnless {
         it == PlaybackMode.Direct && !roomDirectAllowed(technical.movie.mimeType, technical.videoStreams, audio, audioIndex)
     } ?: PlaybackMode.Remux

@@ -1,26 +1,14 @@
 package com.igloo.blindpenguincoder.feature.watchrooms
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.FocusRequester.Companion.Cancel
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.ui.IglooAvatar
-import com.igloo.blindpenguincoder.core.ui.IglooButton
-import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
-import com.igloo.blindpenguincoder.core.ui.IglooCheckRow
 import com.igloo.blindpenguincoder.core.ui.IglooListDialog
 import com.igloo.blindpenguincoder.core.ui.IglooPendingRow
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
@@ -36,8 +24,6 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 @Composable
 fun WatchTogetherDialog(state: WatchTogetherUiState, actions: WatchTogetherActions) {
     val people = (state.people as? IglooRailState.Loaded)?.items.orEmpty()
-    val createRequester = remember { FocusRequester() }
-    val pendingRequester = remember { FocusRequester() }
     IglooListDialog(
         title = "Watch together",
         rowCount = people.size,
@@ -65,13 +51,7 @@ fun WatchTogetherDialog(state: WatchTogetherUiState, actions: WatchTogetherActio
                     .padding(top = IglooTheme.spacing.sm)
                     .semantics { heading() },
             )
-            when (val list = state.people) {
-                IglooRailState.Loading -> DialogProse("Loading people…")
-                is IglooRailState.Error -> DialogProse("Couldn't load people: ${list.message}")
-                is IglooRailState.Loaded -> if (list.items.isEmpty()) {
-                    DialogProse("No one else has an account on this server yet.")
-                }
-            }
+            PeopleListStatus(state.people)
         },
         footer = {
             state.hint?.let { hint ->
@@ -87,87 +67,32 @@ fun WatchTogetherDialog(state: WatchTogetherUiState, actions: WatchTogetherActio
         },
         buttons = { entry, up ->
             if (state.creating) {
-                IglooPendingRow(text = state.pendingText, focusRequester = pendingRequester)
+                IglooPendingRow(text = state.pendingText)
             } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.md),
-                ) {
-                    IglooButton(
-                        text = "Cancel",
-                        onClick = actions.onDismiss,
-                        variant = IglooButtonVariant.Ghost,
-                        // Its own width: Create's label is the longer one and must not truncate.
-                        modifier = Modifier
-                            .focusRequester(entry)
-                            .focusProperties {
-                                this.up = up ?: Cancel
-                                left = Cancel
-                                down = Cancel
-                                right = createRequester
-                            }
-                            .testTag("watch_together_cancel"),
-                    )
-                    val failed = state.people is IglooRailState.Error
-                    IglooButton(
-                        text = if (failed) "Retry" else "Create and join room",
-                        semanticLabel = if (failed) "Retry loading people" else "Create and join room",
-                        // Inert until there is anyone to invite; the hint covers nobody chosen.
-                        onClick = when {
-                            failed -> actions.onRetry
-                            people.isEmpty() -> null
-                            else -> actions.onCreate
-                        },
-                        stateDescription = state.presets?.settingsLine?.takeUnless { failed },
-                        modifier = Modifier
-                            .weight(1f)
-                            .focusRequester(createRequester)
-                            .focusProperties {
-                                this.up = up ?: Cancel
-                                left = entry
-                                right = Cancel
-                                down = Cancel
-                            }
-                            .testTag("watch_together_create"),
-                    )
-                }
+                InviteeButtons(
+                    entry = entry,
+                    up = up,
+                    onCancel = actions.onDismiss,
+                    cancelTag = "watch_together_cancel",
+                    people = state.people,
+                    onRetry = actions.onRetry,
+                    actionText = "Create and join room",
+                    // Inert until there is anyone to invite; the hint covers nobody chosen.
+                    onAction = actions.onCreate.takeUnless { people.isEmpty() },
+                    actionState = state.presets?.settingsLine,
+                    actionTag = "watch_together_create",
+                )
             }
         },
     ) { rowFocus ->
-        people.forEachIndexed { index, person ->
-            val invited = person.id in state.selected
-            IglooCheckRow(
-                label = person.name,
-                checked = invited,
-                onToggle = { actions.onToggle(person.id) },
-                actionLabel = if (invited) "Don't invite" else "Invite",
-                leading = {
-                    IglooAvatar(
-                        name = person.name,
-                        avatarUrl = person.avatarUrl,
-                        size = IglooTheme.icons.lg,
-                        textStyle = IglooTheme.typography.label,
-                    )
-                },
-                modifier = Modifier
-                    .rowFocus(index)
-                    .testTag("watch_together_invitee_${person.id}"),
-            )
-        }
+        InviteeRows(
+            people = people,
+            selected = state.selected,
+            onToggle = actions.onToggle,
+            rowFocus = rowFocus,
+            rowTag = { "watch_together_invitee_$it" },
+        )
     }
-}
-
-/**
- * Prose the user reads to decide: cardForeground, as the confirm dialog's body (section 9.3).
- * Edit invitees shares it.
- */
-@Composable
-internal fun DialogProse(text: String) {
-    IglooText(
-        text = text,
-        style = IglooTheme.typography.bodyMedium,
-        color = IglooTheme.colors.cardForeground,
-    )
 }
 
 private const val INVITE_HEADING = "Invite people"

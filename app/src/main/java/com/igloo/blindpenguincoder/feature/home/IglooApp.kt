@@ -49,9 +49,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooEasing
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.AnnouncedSection
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
@@ -63,9 +63,11 @@ import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooScrim
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.OnClosed
 import com.igloo.blindpenguincoder.core.ui.PosterCardProgress
 import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.announcedSection
+import com.igloo.blindpenguincoder.core.ui.enumKeyedSaver
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.hiddenFromAccessibilityIf
 import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
@@ -76,7 +78,6 @@ import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusAnnounced
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
-import com.igloo.blindpenguincoder.core.ui.enumKeyedSaver
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.feature.library.LibraryActions
@@ -105,16 +106,15 @@ import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.search.SearchActions
-import com.igloo.blindpenguincoder.feature.search.VoiceSearch
 import com.igloo.blindpenguincoder.feature.search.SearchScreen
 import com.igloo.blindpenguincoder.feature.search.SearchUiState
+import com.igloo.blindpenguincoder.feature.search.VoiceSearch
 import com.igloo.blindpenguincoder.feature.search.rememberSearchPaneMemory
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.PosterItemCard
 import com.igloo.blindpenguincoder.feature.shared.ProgressSyncRetry
 import com.igloo.blindpenguincoder.feature.shared.RailEntry
 import com.igloo.blindpenguincoder.feature.shared.SeeAllCard
-import com.igloo.blindpenguincoder.feature.shared.key
 import com.igloo.blindpenguincoder.feature.shared.withSeeAll
 import com.igloo.blindpenguincoder.feature.shows.EpisodeLaunchSite
 import com.igloo.blindpenguincoder.feature.shows.ShowDetailsActions
@@ -634,14 +634,8 @@ fun IglooApp(
     }
     // The Watch Together dialog gone with its page still here — Cancel, Back, or a creation that
     // failed and left its reason on the page — hands focus back to the More trigger (section 9.3).
-    // An effect, because a failure ends the dialog from its view model; the trigger stays
-    // composed under it, so the request never meets a detached node.
-    var watchTogetherWasShown by remember { mutableStateOf(false) }
-    LaunchedEffect(watchTogether.shown) {
-        if (watchTogetherWasShown && !watchTogether.shown && detailsOpen && !roomOpen) {
-            restoreFocus(moreReturnRequester)
-        }
-        watchTogetherWasShown = watchTogether.shown
+    OnClosed(watchTogether.shown) {
+        if (detailsOpen && !roomOpen) restoreFocus(moreReturnRequester)
     }
     val openRoom: (Long) -> Unit = { roomId ->
         roomOrigin = RoomOrigin.WatchRoomsPane
@@ -1657,7 +1651,6 @@ private fun HomeRails(
             state = home.latestMovies,
             itemKey = { it.id },
             wiring = wiring,
-            seeAll = HomeSeeAll(shelf = "Movies", spokenShelf = "movies", tag = "movies"),
         ) { movie, itemModifier, cardAspect ->
             PosterItemCard(
                 item = movie,
@@ -1672,7 +1665,6 @@ private fun HomeRails(
             state = home.latestShows,
             itemKey = { it.id },
             wiring = wiring,
-            seeAll = HomeSeeAll(shelf = "TV Shows", spokenShelf = "TV shows", tag = "shows"),
         ) { show, itemModifier, cardAspect ->
             PosterItemCard(
                 item = show,
@@ -1689,7 +1681,6 @@ private fun HomeRails(
             itemKey = { it.id },
             wiring = wiring,
             cardAspect = IglooTheme.layout.albumAspect,
-            seeAll = HomeSeeAll(shelf = "Albums", spokenShelf = "albums", tag = "albums"),
         ) { album, itemModifier, cardAspect ->
             AlbumCard(
                 album = album,
@@ -1733,7 +1724,8 @@ private const val RETRY_SECTION = "retry"
 /**
  * One Home rail (section 11.3.2): an [IglooMediaRail] that speaks its section on entry, keeps
  * its own focus memory in [HomeRailWiring.lastFocusedByRail], retries alone and carries its
- * return requester. Only the first section holds the pane's [entryRequester].
+ * return requester. Only the first section holds the pane's [entryRequester]. A rail of recent
+ * additions ends in the way into the whole shelf, its copy's [HomeRailCopy.seeAll].
  */
 @Composable
 private fun <T> HomeRailSection(
@@ -1743,54 +1735,19 @@ private fun <T> HomeRailSection(
     wiring: HomeRailWiring,
     entryRequester: FocusRequester? = null,
     cardAspect: Float = IglooTheme.layout.posterAspect,
-    seeAll: HomeSeeAll? = null,
-    itemContent: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
-) {
-    if (seeAll == null) {
-        HomeRailBody(rail, state, itemKey, wiring, entryRequester, cardAspect, itemContent)
-        return
-    }
-    // A rail of recent additions ends in the way into the whole shelf (section 11.3.2).
-    val entries = remember(state) { state.withSeeAll(itemKey) }
-    HomeRailBody(rail, entries, { it.key }, wiring, entryRequester, cardAspect) {
-            entry, itemModifier, aspect ->
-        when (entry) {
-            is RailEntry.Item -> itemContent(entry.item, itemModifier, aspect)
-            RailEntry.SeeAll -> SeeAllCard(
-                subtitle = seeAll.shelf,
-                label = "See all ${seeAll.spokenShelf}",
-                icon = rail.copy.emptyIcon,
-                aspect = aspect,
-                onClick = { wiring.onSeeAll(rail) },
-                modifier = itemModifier.testTag("home_see_all_${seeAll.tag}"),
-            )
-        }
-    }
-}
-
-/** A Home rail's See-all card: the shelf it opens, as drawn, as spoken, and as tagged. */
-private class HomeSeeAll(val shelf: String, val spokenShelf: String, val tag: String)
-
-/** [HomeRailSection]'s rail itself, over whatever its entries turned out to be. */
-@Composable
-private fun <T> HomeRailBody(
-    rail: HomeRail,
-    state: IglooRailState<T>,
-    itemKey: (T) -> Long,
-    wiring: HomeRailWiring,
-    entryRequester: FocusRequester?,
-    cardAspect: Float,
     itemContent: @Composable (item: T, itemModifier: Modifier, cardAspect: Float) -> Unit,
 ) {
     val copy = rail.copy
+    val seeAll = copy.seeAll
     val tools = wiring.tools(rail)
+    val entries = remember(state) { state.withSeeAll(itemKey, seeAll = seeAll != null) }
     IglooMediaRail(
         announceSectionTitle = true,
         screenReader = wiring.screenReader,
         contentInset = wiring.contentInset,
         title = copy.title,
-        state = state,
-        itemKey = itemKey,
+        state = entries,
+        itemKey = { it.key },
         entryRequester = entryRequester ?: tools.entry,
         modifier = Modifier.announcedSection(tools),
         leftFocusRequester = wiring.leftFocusRequester,
@@ -1802,9 +1759,25 @@ private fun <T> HomeRailBody(
         onRetry = { wiring.onRetry(rail) },
         returnRequester = wiring.returnRequesters.getValue(rail),
         cardAspect = cardAspect,
-        itemContent = itemContent,
-    )
+    ) { entry, itemModifier, aspect ->
+        when (entry) {
+            is RailEntry.Item -> itemContent(entry.item, itemModifier, aspect)
+            RailEntry.SeeAll -> if (seeAll != null) {
+                SeeAllCard(
+                    subtitle = seeAll.shelf,
+                    label = "See all ${seeAll.spokenShelf}",
+                    icon = copy.emptyIcon,
+                    aspect = aspect,
+                    onClick = { wiring.onSeeAll(rail) },
+                    modifier = itemModifier.testTag("home_see_all_${seeAll.tag}"),
+                )
+            }
+        }
+    }
 }
+
+/** A Home rail's See-all card: the shelf it opens, as drawn, as spoken, and as tagged. */
+private class HomeSeeAll(val shelf: String, val spokenShelf: String, val tag: String)
 
 /** A rail's heading, its skeleton anchor's announcement, and its empty state's line and glyph. */
 private class HomeRailCopy(
@@ -1812,6 +1785,8 @@ private class HomeRailCopy(
     val loadingLabel: String,
     val emptyText: String,
     val emptyIcon: ImageVector,
+    /** Recent additions only: the rail's closing card into the whole shelf. */
+    val seeAll: HomeSeeAll? = null,
 )
 
 private val HomeRail.copy: HomeRailCopy
@@ -1827,18 +1802,21 @@ private val HomeRail.copy: HomeRailCopy
             loadingLabel = "Loading recently added movies",
             emptyText = "No movies in your library yet. Add a movies folder on the server and run a scan.",
             emptyIcon = IglooIcons.Movies,
+            seeAll = HomeSeeAll(shelf = "Movies", spokenShelf = "movies", tag = "movies"),
         )
         HomeRail.LatestShows -> HomeRailCopy(
             title = "Recently Added Shows",
             loadingLabel = "Loading recently added shows",
             emptyText = "No shows in your library yet. Add a shows folder on the server and run a scan.",
             emptyIcon = IglooIcons.TvShows,
+            seeAll = HomeSeeAll(shelf = "TV Shows", spokenShelf = "TV shows", tag = "shows"),
         )
         HomeRail.LatestAlbums -> HomeRailCopy(
             title = "Recently Added Albums",
             loadingLabel = "Loading recently added albums",
             emptyText = MusicTab.Albums.emptyMessage(),
             emptyIcon = IglooIcons.Music,
+            seeAll = HomeSeeAll(shelf = "Albums", spokenShelf = "albums", tag = "albums"),
         )
         HomeRail.InTheaters -> HomeRailCopy(
             title = "Now Playing in Theaters",

@@ -7,8 +7,8 @@ import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.audioStreamJson
 import com.igloo.blindpenguincoder.data.repository.continueWatchingEpisodeJson
-import com.igloo.blindpenguincoder.data.repository.continueWatchingMovieJson
 import com.igloo.blindpenguincoder.data.repository.continueWatchingJson
+import com.igloo.blindpenguincoder.data.repository.continueWatchingMovieJson
 import com.igloo.blindpenguincoder.data.repository.episodePlaybackJson
 import com.igloo.blindpenguincoder.data.repository.episodeTechnicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
@@ -18,6 +18,7 @@ import com.igloo.blindpenguincoder.data.repository.latestMoviesJson
 import com.igloo.blindpenguincoder.data.repository.latestShowJson
 import com.igloo.blindpenguincoder.data.repository.latestShowsJson
 import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
+import com.igloo.blindpenguincoder.data.repository.serverError
 import com.igloo.blindpenguincoder.data.repository.showDetailsJson
 import com.igloo.blindpenguincoder.data.repository.showSeasonSummaryJson
 import com.igloo.blindpenguincoder.data.repository.simpleAlbumJson
@@ -32,8 +33,8 @@ import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -287,7 +288,7 @@ class HomeViewModelTest {
             latest = {
                 if (!failed) {
                     failed = true
-                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                    serverError()
                 } else {
                     gate.await()
                     jsonResponse(latestMoviesJson(latestMovieJson(id = 3, title = "Ran")))
@@ -890,7 +891,7 @@ class HomeViewModelTest {
     fun `a failed latest fetch hides the hero`() = runTest {
         val http = routedHttp(
             latest = {
-                jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                serverError()
             },
         )
 
@@ -956,7 +957,7 @@ class HomeViewModelTest {
         val http = routedHttp(
             latest = { jsonResponse(latestMoviesJson(latestMovieJson(id = 1, title = "Heat"))) },
             details = {
-                jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                serverError()
             },
         )
         val viewModel = viewModel(http)
@@ -976,7 +977,7 @@ class HomeViewModelTest {
                 if (detailsRequests == 1) {
                     jsonResponse(movieDetailsJson(id = 1, title = "Heat"))
                 } else {
-                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                    serverError()
                 }
             },
         )
@@ -1002,7 +1003,7 @@ class HomeViewModelTest {
             latest = {
                 if (!failed) {
                     failed = true
-                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                    serverError()
                 } else {
                     gate.await()
                     jsonResponse(latestMoviesJson(latestMovieJson(id = 3, title = "Ran")))
@@ -1352,10 +1353,7 @@ class HomeViewModelTest {
             continueWatching = {
                 when (answer++) {
                     0 -> jsonResponse(continueWatchingJson(continueWatchingEpisodeJson()))
-                    1 -> jsonResponse(
-                        """{"error":true,"message":"boom"}""",
-                        HttpStatusCode.InternalServerError,
-                    )
+                    1 -> serverError()
                     else -> jsonResponse(continueWatchingJson())
                 }
             },
@@ -1420,7 +1418,7 @@ class HomeViewModelTest {
             return viewModel(http).awaitHeroPages().map { it.kind }
         }
         val boom: MockRequestHandler = {
-            jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+            serverError()
         }
 
         // An empty show library, a failed latest fetch, and a failed details fetch.
@@ -1457,7 +1455,7 @@ class HomeViewModelTest {
                 if (showRequests == 1) {
                     jsonResponse(showDetailsJson(id = 40, name = "Severance"))
                 } else {
-                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                    serverError()
                 }
             },
         )
@@ -1509,7 +1507,7 @@ class HomeViewModelTest {
             continueWatching = {
                 if (!failed) {
                     failed = true
-                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                    serverError()
                 } else {
                     gate.await()
                     jsonResponse(continueWatchingJson(continueWatchingMovieJson(id = 3, title = "Ran")))
@@ -1646,7 +1644,7 @@ class HomeViewModelTest {
             albums = {
                 if (!failed) {
                     failed = true
-                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                    serverError()
                 } else {
                     gate.await()
                     jsonResponse(latestAlbumsJson(simpleAlbumJson(id = 4, title = "Tribalistas")))
@@ -1764,7 +1762,7 @@ class HomeViewModelTest {
             theaters = {
                 if (!failed) {
                     failed = true
-                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                    serverError()
                 } else {
                     gate.await()
                     jsonResponse(theaterMoviesJson(theaterMovieJson(id = 4, title = "Heat 2")))

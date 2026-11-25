@@ -147,5 +147,9 @@ class WatchRoomPresetsMappingTest {
             "Original quality — plays the file as-is · English · Stereo · Subtitles off",
             presets(subtitle = SubtitleChoice.Off).settingsLine,
         )
+        assertEquals(
+            "Original quality — plays the file as-is · Default · Subtitles: English",
+            roomSettingsLine(PlaybackMode.Direct, audio = null, subtitle = "English"),
+        )
     }
 }

@@ -1,6 +1,5 @@
 package com.igloo.blindpenguincoder.feature.shared
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,15 +41,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.design.MEDIA_FALLBACK_TILE
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SECONDARY
+import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_SIDE_SCRIM
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TERTIARY
 import com.igloo.blindpenguincoder.core.design.OVER_MEDIA_TRACK
-import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.overMedia
-import com.igloo.blindpenguincoder.core.design.overMediaSideScrim
 import com.igloo.blindpenguincoder.core.design.scaled
 import com.igloo.blindpenguincoder.core.ui.ArtworkOrGlyph
 import com.igloo.blindpenguincoder.core.ui.BackdropOrBlurredPoster
@@ -62,6 +59,7 @@ import com.igloo.blindpenguincoder.core.ui.ProgressTrack
 import com.igloo.blindpenguincoder.core.ui.RatingBadge
 import com.igloo.blindpenguincoder.core.ui.RatingBadgeSpec
 import com.igloo.blindpenguincoder.core.ui.SkeletonStub
+import com.igloo.blindpenguincoder.core.ui.animatePictureAlpha
 import com.igloo.blindpenguincoder.core.ui.clearedSemanticsIf
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.iglooSurface
@@ -69,7 +67,6 @@ import com.igloo.blindpenguincoder.core.ui.overMediaPill
 import com.igloo.blindpenguincoder.core.ui.pinnedSideways
 import com.igloo.blindpenguincoder.core.ui.pinnedToScreen
 import com.igloo.blindpenguincoder.core.ui.rememberArtworkState
-import com.igloo.blindpenguincoder.core.ui.standInLoaded
 import com.igloo.blindpenguincoder.core.ui.withRequester
 
 /*
@@ -114,29 +111,23 @@ internal fun DetailsHero(
     val onTile = standIn != null
     val overMedia = onTile || art.loaded
     val showsPicture = art.showsArtwork || poster.showsArtwork
-    val backdropAlpha by animateFloatAsState(
-        targetValue = if (standInLoaded(art, poster)) 1f else 0f,
-        animationSpec = iglooTween(IglooMotion.PAGE_MS),
-        label = "detailsBackdrop",
-    )
+    val backdropAlpha by animatePictureAlpha(art, poster, label = "detailsBackdrop")
 
     Box(
         modifier = Modifier
             .testTag("details_hero")
             .fillMaxWidth()
-            .heightIn(min = HERO_MIN_HEIGHT.scaled()),
+            .heightIn(min = HERO_MIN_HEIGHT.scaled())
+            .then(if (onTile) Modifier.background(MEDIA_FALLBACK_TILE) else Modifier),
     ) {
-        if (onTile) Box(Modifier.matchParentSize().background(MEDIA_FALLBACK_TILE))
-        if (showsPicture) {
-            BackdropOrBlurredPoster(
-                backdrop = art,
-                poster = poster,
-                modifier = Modifier
-                    .testTag(backdropTag)
-                    .matchParentSize()
-                    .graphicsLayer { alpha = backdropAlpha },
-            )
-        }
+        BackdropOrBlurredPoster(
+            backdrop = art,
+            poster = poster,
+            modifier = Modifier
+                .testTag(backdropTag)
+                .matchParentSize()
+                .graphicsLayer { alpha = backdropAlpha },
+        )
         if (showsPicture || onTile) {
             // Alpha-zero stops come from the color itself — Color.Transparent is black at zero
             // and would gray the token fade.
@@ -149,9 +140,7 @@ internal fun DetailsHero(
                     // On the tile the scrim is licensed at once; over the bare canvas it arrives
                     // with the picture it is there for.
                     .graphicsLayer { alpha = if (onTile) 1f else backdropAlpha }
-                    .background(
-                        overMediaSideScrim(),
-                    ),
+                    .background(OVER_MEDIA_SIDE_SCRIM),
             )
             Box(
                 modifier = Modifier

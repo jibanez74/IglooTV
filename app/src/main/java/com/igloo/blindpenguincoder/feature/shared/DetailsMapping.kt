@@ -1,7 +1,6 @@
 package com.igloo.blindpenguincoder.feature.shared
 
-import com.igloo.blindpenguincoder.core.ui.countNoun
-import com.igloo.blindpenguincoder.core.ui.formatCount
+import com.igloo.blindpenguincoder.core.ui.countPhrase
 import com.igloo.blindpenguincoder.core.ui.formatRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenRemainingTime
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTimeThroughSeconds
@@ -102,7 +101,7 @@ internal fun castMembers(cast: List<CastCredit>, apiBaseUrl: String): List<CastM
             character = it.character.takeIf { character -> character.isNotBlank() },
             photoUrl = tmdbImageUrl(apiBaseUrl, TmdbImageSize.W185, it.profilePath),
             episodeCountText = it.episodeCount?.takeIf { count -> count > 0 }
-                ?.let { count -> "${formatCount(count)} ${countNoun(count, "episode")}" },
+                ?.let { count -> countPhrase(count, "episode") },
         )
     }
 

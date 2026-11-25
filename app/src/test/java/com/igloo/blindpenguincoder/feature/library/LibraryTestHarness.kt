@@ -15,8 +15,6 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 
-internal const val ERROR_BODY = """{"error":true,"message":"nope"}"""
-
 /** Records what a library pane actually asked the backend for, so the paging can be asserted. */
 internal class RoutedHttp {
     val paths = mutableListOf<String>()

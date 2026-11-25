@@ -1,7 +1,9 @@
 package com.igloo.blindpenguincoder.core.ui
 
 import android.graphics.Bitmap
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -13,6 +15,8 @@ import coil3.request.transformations
 import coil3.size.Scale
 import coil3.size.Size
 import coil3.transform.Transformation
+import com.igloo.blindpenguincoder.core.design.IglooMotion
+import com.igloo.blindpenguincoder.core.design.iglooTween
 
 /**
  * A hero's picture: the title's backdrop, or — when it has none, or it fails to load — its
@@ -32,9 +36,19 @@ internal fun BackdropOrBlurredPoster(
     }
 }
 
-/** Whether [backdrop], or [poster] standing in for it, has decoded and is on screen. */
-internal fun standInLoaded(backdrop: ArtworkState, poster: ArtworkState): Boolean =
-    if (backdrop.showsArtwork) backdrop.loaded else poster.showsArtwork && poster.loaded
+/**
+ * The alpha a hero's [BackdropOrBlurredPoster] fades in on: 0 until [backdrop], or [poster]
+ * standing in for it, has decoded, then 1 over a page's motion.
+ */
+@Composable
+internal fun animatePictureAlpha(backdrop: ArtworkState, poster: ArtworkState, label: String): State<Float> {
+    val loaded = if (backdrop.showsArtwork) backdrop.loaded else poster.showsArtwork && poster.loaded
+    return animateFloatAsState(
+        targetValue = if (loaded) 1f else 0f,
+        animationSpec = iglooTween(IglooMotion.PAGE_MS),
+        label = label,
+    )
+}
 
 /**
  * [state]'s image blurred past recognising and cropped to fill its box. The web does this with a

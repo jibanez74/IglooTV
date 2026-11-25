@@ -1,6 +1,6 @@
 package com.igloo.blindpenguincoder.feature.search
 
-import com.igloo.blindpenguincoder.core.ui.countNoun
+import com.igloo.blindpenguincoder.core.ui.countPhrase
 import com.igloo.blindpenguincoder.core.ui.formatCount
 import com.igloo.blindpenguincoder.data.model.SearchAllData
 import com.igloo.blindpenguincoder.data.model.TrackListItem
@@ -92,7 +92,7 @@ internal fun List<SearchSectionUi>.totalMatches(): Long = sumOf { it.total }
 
 /** The header's visible line: `"42 results for “casino”"`, or `"No results for “casino”"`. */
 internal fun resultsCountLine(total: Long, query: String): String =
-    if (total == 0L) "No results for “$query”" else "${formatCount(total)} ${countNoun(total, "result")} for “$query”"
+    if (total == 0L) "No results for “$query”" else "${countPhrase(total, "result")} for “$query”"
 
 /**
  * The header's spoken line on the All view: the total, then each category's count, so a screen
@@ -103,7 +103,7 @@ internal fun spokenResultsSummary(sections: List<SearchSectionUi>, query: String
     if (total == 0L) return "No results for $query."
     val breakdown = sections.filter { it.total > 0 }
         .joinToString(", ") { "${formatCount(it.total)} ${it.kind.noun(it.total)}" }
-    return "${formatCount(total)} ${countNoun(total, "result")} for $query: $breakdown."
+    return "${countPhrase(total, "result")} for $query: $breakdown."
 }
 
 /** The All-view card at the end of a section with more matches than it shows. */

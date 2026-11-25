@@ -20,7 +20,7 @@ import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.SkeletonAnchor
 import com.igloo.blindpenguincoder.core.ui.countNoun
-import com.igloo.blindpenguincoder.core.ui.formatCount
+import com.igloo.blindpenguincoder.core.ui.countPhrase
 import com.igloo.blindpenguincoder.core.ui.withRequester
 import com.igloo.blindpenguincoder.feature.shared.PaneCardGrid
 import com.igloo.blindpenguincoder.feature.shared.PaneFirstPageError
@@ -206,7 +206,7 @@ private fun spokenCount(rooms: IglooRailState<WatchRoomUi>): String = when (room
     is IglooRailState.Error -> "Watch rooms unavailable"
     is IglooRailState.Loaded -> {
         val count = rooms.items.size.toLong()
-        "${formatCount(count)} ${countNoun(count, "watch room")}"
+        countPhrase(count, "watch room")
     }
 }
 

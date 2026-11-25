@@ -28,6 +28,11 @@ class BoundedAllocatorTest {
 
     private val clockNanos = AtomicLong(0L)
 
+    /** The fake clock moves past a buffering player's grace. */
+    private fun passTheGrace() {
+        clockNanos.addAndGet(BoundedAllocator.BUFFERING_GRACE_MS * 1_000_000)
+    }
+
     /** Room for exactly two allocations. */
     private val allocator =
         BoundedAllocator(inner, capBytes = 2L * length, nanoTime = clockNanos::get)
@@ -76,7 +81,7 @@ class BoundedAllocatorTest {
         allocator.playerNeedsData = true
         third.assertHeld("a seek's brief buffering went past the cap")
 
-        clockNanos.addAndGet(BoundedAllocator.BUFFERING_GRACE_MS * 1_000_000)
+        passTheGrace()
         assertNotNull("a stalled player was kept from its data", third.result(DONE_MS))
         allocator.allocate()
         assertEquals(4 * length, allocator.totalBytesAllocated)
@@ -87,13 +92,13 @@ class BoundedAllocatorTest {
         allocator.allocate()
         allocator.allocate()
         allocator.playerNeedsData = true
-        clockNanos.addAndGet(BoundedAllocator.BUFFERING_GRACE_MS * 1_000_000)
+        passTheGrace()
         allocator.playerNeedsData = false
         allocator.playerNeedsData = true
 
         val third = allocateOnAnotherThread()
         third.assertHeld("an earlier buffering counted toward this one")
-        clockNanos.addAndGet(BoundedAllocator.BUFFERING_GRACE_MS * 1_000_000)
+        passTheGrace()
         assertNotNull(third.result(DONE_MS))
     }
 
@@ -135,7 +140,7 @@ class BoundedAllocatorTest {
     fun theReusePoolIsTrimmedOnceAnOverflowIsPaidBack() {
         val held = mutableListOf(allocator.allocate(), allocator.allocate())
         allocator.playerNeedsData = true
-        clockNanos.addAndGet(BoundedAllocator.BUFFERING_GRACE_MS * 1_000_000)
+        passTheGrace()
         held += allocator.allocate()
         held += allocator.allocate()
         assertEquals(4 * length, allocator.totalBytesAllocated)
@@ -173,7 +178,7 @@ class BoundedAllocatorTest {
         val bounded =
             BoundedAllocator(perPlayer, capBytes = 2L * blockLength, nanoTime = clockNanos::get)
         bounded.playerNeedsData = true
-        clockNanos.addAndGet(BoundedAllocator.BUFFERING_GRACE_MS * 1_000_000)
+        passTheGrace()
         val held = List(3) { bounded.allocate() }
 
         control.onReleased(playerId)

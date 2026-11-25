@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,13 +19,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooButton
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
@@ -36,6 +31,7 @@ import com.igloo.blindpenguincoder.core.ui.IglooNotice
 import com.igloo.blindpenguincoder.core.ui.IglooTab
 import com.igloo.blindpenguincoder.core.ui.IglooTabRow
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.PoliteAnnouncement
 import com.igloo.blindpenguincoder.core.ui.formatCount
 import com.igloo.blindpenguincoder.core.ui.insetHorizontally
 import com.igloo.blindpenguincoder.core.ui.withRequester
@@ -140,15 +136,7 @@ internal fun PaneHeader(
                         color = colors.mutedForeground,
                         modifier = Modifier.semantics { hideFromAccessibility() },
                     )
-                    Box(
-                        modifier = Modifier
-                            .size(1.dp)
-                            .testTag(countTag)
-                            .semantics {
-                                contentDescription = countDescription
-                                liveRegion = LiveRegionMode.Polite
-                            },
-                    )
+                    PoliteAnnouncement(countDescription, Modifier.testTag(countTag))
                 }
             }
             if (notice != null) {

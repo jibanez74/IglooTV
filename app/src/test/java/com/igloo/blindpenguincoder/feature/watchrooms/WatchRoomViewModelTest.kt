@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.watchrooms
 
+import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
@@ -22,7 +23,6 @@ import com.igloo.blindpenguincoder.playback.model.TransportCommand
 import com.igloo.blindpenguincoder.playback.model.VideoPlayRequest
 import java.io.EOFException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -30,18 +30,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WatchRoomViewModelTest {
+
+    @get:Rule
+    val main = MainDispatcherRule()
 
     private val maria = UserSummary(id = 2, name = "Maria", avatar = null)
     private val me = UserSummary(id = 1, name = "Jose", avatar = null)
@@ -142,18 +144,11 @@ class WatchRoomViewModelTest {
         subtitleTrack = null,
     )
 
-    private fun snapshot(paused: Boolean, position: Double, connected: List<Long>) = WatchRoomServerEvent(
-        type = WatchRoomEventType.RoomSnapshot,
-        playback = WatchRoomPlaybackState(paused, position),
-        connectedUserIds = connected,
-    )
-
     /** The view model on runTest's scheduler, its clock that scheduler's, and its room open. */
     private fun test(
         link: FakeRoomLink = FakeRoomLink(detail()),
         block: suspend TestScope.(WatchRoomViewModel, FakeRoomLink) -> Unit,
     ) = runTest {
-        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val http = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
             when (request.url.encodedPath) {
                 "/api/movies/details/1" -> jsonResponse(movieDetailsJson())
@@ -176,9 +171,28 @@ class WatchRoomViewModelTest {
         } finally {
             // The reconnect loop runs for as long as the room is open.
             viewModel.leave()
-            Dispatchers.resetMain()
         }
     }
+
+    /** The link drops, and the first reconnect's one-second wait runs out. */
+    private fun TestScope.reconnect(link: FakeRoomLink) {
+        link.hangUp()
+        runCurrent()
+        advanceTimeBy(1_001)
+    }
+
+    private fun WatchRoomViewModel.leaveRoom() {
+        requestLeave()
+        confirmLeave()
+    }
+
+    private fun WatchRoomViewModel.closeRoom() {
+        requestClose()
+        confirmClose()
+    }
+
+    private val WatchRoomViewModel.pageMemberIds: List<Long>
+        get() = (uiState.value.details as DetailsState.Loaded).value.members.map { it.id }
 
     private suspend fun TestScope.watched(viewModel: WatchRoomViewModel): List<VideoPlayRequest> {
         val requests = mutableListOf<VideoPlayRequest>()
@@ -272,20 +286,6 @@ class WatchRoomViewModelTest {
     }
 
     @Test
-    fun `a dropped link reconnects on the web's schedule`() = test { viewModel, link ->
-        link.emit(snapshot(paused = false, position = 100.0, connected = listOf(1, 2)))
-        runCurrent()
-
-        link.hangUp()
-        runCurrent()
-        assertEquals(RoomConnection.Reconnecting, viewModel.uiState.value.sync.connection)
-        advanceTimeBy(999)
-        assertEquals(1, link.joins)
-        advanceTimeBy(2)
-        assertEquals(2, link.joins)
-    }
-
-    @Test
     fun `a room that is no longer the user's is left with the web's words`() = test(
         FakeRoomLink(detail()).apply { join = ApiResult.Failure(AppError.Api("access denied", 403)) },
     ) { viewModel, _ ->
@@ -320,8 +320,7 @@ class WatchRoomViewModelTest {
     fun `a close that fails stays in the room and says why`() = test(
         FakeRoomLink(detail()).apply { delete = ApiResult.Failure(AppError.Network) },
     ) { viewModel, _ ->
-        viewModel.requestClose()
-        viewModel.confirmClose()
+        viewModel.closeRoom()
         runCurrent()
 
         val state = viewModel.uiState.value
@@ -378,6 +377,7 @@ class WatchRoomViewModelTest {
         // A snapshot resets the schedule: the next drop waits one second again.
         link.hangUp()
         runCurrent()
+        assertEquals(RoomConnection.Reconnecting, viewModel.uiState.value.sync.connection)
         advanceTimeBy(1_001)
         assertEquals(4, link.joins)
     }
@@ -420,8 +420,7 @@ class WatchRoomViewModelTest {
     fun `a close that finds the room already gone leaves it`() = test(
         FakeRoomLink(detail()).apply { delete = ApiResult.Failure(AppError.Api("room not found", 404)) },
     ) { viewModel, _ ->
-        viewModel.requestClose()
-        viewModel.confirmClose()
+        viewModel.closeRoom()
         runCurrent()
 
         assertEquals(listOf(7L to "The watch room for Heat was closed."), gone)
@@ -439,8 +438,7 @@ class WatchRoomViewModelTest {
         runCurrent()
 
         assertEquals(reads + 1, link.roomReads)
-        val page = (viewModel.uiState.value.details as DetailsState.Loaded).value
-        assertEquals(listOf(1L, 3L), page.members.map { it.id })
+        assertEquals(listOf(1L, 3L), viewModel.pageMemberIds)
     }
 
     @Test
@@ -450,15 +448,12 @@ class WatchRoomViewModelTest {
         val reads = link.roomReads
 
         link.room = detail().copy(members = listOf(me, ana))
-        link.hangUp()
-        runCurrent()
-        advanceTimeBy(1_001)
+        reconnect(link)
         link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
         runCurrent()
 
         assertEquals(reads + 1, link.roomReads)
-        val page = (viewModel.uiState.value.details as DetailsState.Loaded).value
-        assertEquals(listOf(1L, 3L), page.members.map { it.id })
+        assertEquals(listOf(1L, 3L), viewModel.pageMemberIds)
     }
 
     @Test
@@ -491,8 +486,7 @@ class WatchRoomViewModelTest {
     fun `the leaver's own revoked event reads as leaving, not as a removal`() = test(
         FakeRoomLink(detail(isOwner = false)).apply { leaveGate = CompletableDeferred() },
     ) { viewModel, link ->
-        viewModel.requestLeave()
-        viewModel.confirmLeave()
+        viewModel.leaveRoom()
         runCurrent()
 
         // The server revokes the leaver's sockets before it answers the leave.
@@ -508,8 +502,7 @@ class WatchRoomViewModelTest {
     fun `a leave that fails stays in the room and says why`() = test(
         FakeRoomLink(detail(isOwner = false)).apply { leave = ApiResult.Failure(AppError.Network) },
     ) { viewModel, _ ->
-        viewModel.requestLeave()
-        viewModel.confirmLeave()
+        viewModel.leaveRoom()
         runCurrent()
 
         val state = viewModel.uiState.value
@@ -523,8 +516,7 @@ class WatchRoomViewModelTest {
     fun `a leave answered 403 means the room was already not this user's`() = test(
         FakeRoomLink(detail(isOwner = false)).apply { leave = ApiResult.Failure(AppError.Api("access denied", 403)) },
     ) { viewModel, link ->
-        viewModel.requestLeave()
-        viewModel.confirmLeave()
+        viewModel.leaveRoom()
         runCurrent()
 
         assertEquals(1, link.leaves)
@@ -558,8 +550,7 @@ class WatchRoomViewModelTest {
         assertEquals(listOf(listOf(3L)), link.updates)
         assertNull(viewModel.uiState.value.editing)
         assertEquals(reads + 1, link.roomReads)
-        val page = (viewModel.uiState.value.details as DetailsState.Loaded).value
-        assertEquals(listOf(1L, 3L), page.members.map { it.id })
+        assertEquals(listOf(1L, 3L), viewModel.pageMemberIds)
     }
 
     @Test
@@ -618,8 +609,7 @@ class WatchRoomViewModelTest {
         runCurrent()
 
         assertEquals(reads + 1, link.roomReads)
-        val page = (viewModel.uiState.value.details as DetailsState.Loaded).value
-        assertEquals(listOf(1L, 3L), page.members.map { it.id })
+        assertEquals(listOf(1L, 3L), viewModel.pageMemberIds)
     }
 
     @Test
@@ -669,14 +659,11 @@ class WatchRoomViewModelTest {
     ) { viewModel, link ->
         link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1, 2)))
         runCurrent()
-        viewModel.requestLeave()
-        viewModel.confirmLeave()
+        viewModel.leaveRoom()
         runCurrent()
 
         link.join = ApiResult.Failure(AppError.Api("access denied", 403))
-        link.hangUp()
-        runCurrent()
-        advanceTimeBy(1_001)
+        reconnect(link)
 
         assertEquals(listOf(7L to "You left the watch room for Heat."), gone)
         link.leaveGate!!.complete(Unit)
@@ -687,8 +674,7 @@ class WatchRoomViewModelTest {
     fun `a leave answered 404 says the room was closed`() = test(
         FakeRoomLink(detail(isOwner = false)).apply { leave = ApiResult.Failure(AppError.Api("room not found", 404)) },
     ) { viewModel, _ ->
-        viewModel.requestLeave()
-        viewModel.confirmLeave()
+        viewModel.leaveRoom()
         runCurrent()
 
         assertEquals(listOf(7L to "The watch room for Heat was closed."), gone)
@@ -747,8 +733,7 @@ class WatchRoomViewModelTest {
     fun `Back hides a close in flight, which still ends the room`() = test(
         FakeRoomLink(detail()).apply { deleteGate = CompletableDeferred() },
     ) { viewModel, link ->
-        viewModel.requestClose()
-        viewModel.confirmClose()
+        viewModel.closeRoom()
         runCurrent()
 
         viewModel.dismissClose()
@@ -796,8 +781,7 @@ class WatchRoomViewModelTest {
             deleteGate = CompletableDeferred()
         },
     ) { viewModel, link ->
-        viewModel.requestClose()
-        viewModel.confirmClose()
+        viewModel.closeRoom()
         runCurrent()
         link.emit(WatchRoomServerEvent(type = WatchRoomEventType.RoomAccessRevoked))
         runCurrent()
@@ -822,9 +806,7 @@ class WatchRoomViewModelTest {
         watched(viewModel)
         assertTrue(viewModel.uiState.value.startingAlone)
 
-        link.hangUp()
-        runCurrent()
-        advanceTimeBy(1_001)
+        reconnect(link)
         link.emit(snapshot(paused = false, position = 300.0, connected = listOf(1, 2)))
         runCurrent()
 
@@ -840,9 +822,7 @@ class WatchRoomViewModelTest {
         runCurrent()
         watched(viewModel)
 
-        link.hangUp()
-        runCurrent()
-        advanceTimeBy(1_001)
+        reconnect(link)
         link.emit(snapshot(paused = true, position = 0.0, connected = listOf(1)))
         runCurrent()
 
