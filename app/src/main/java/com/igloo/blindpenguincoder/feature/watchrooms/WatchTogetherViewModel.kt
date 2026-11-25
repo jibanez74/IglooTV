@@ -5,12 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.error.AppError
 import com.igloo.blindpenguincoder.core.network.ServerUrlProvider
-import com.igloo.blindpenguincoder.core.network.withServerAddress
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.CreateWatchRoomRequest
 import com.igloo.blindpenguincoder.data.repository.WatchRoomRepository
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
-import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.movies.WatchRoomPresets
 import com.igloo.blindpenguincoder.playback.hls.capacityRetryDelayMs
 import com.igloo.blindpenguincoder.playback.model.HLS_WAITING_FOR_CAPACITY_MESSAGE
@@ -125,10 +123,7 @@ class WatchTogetherViewModel(
             _uiState.update { it.copy(hint = NOBODY_INVITED_HINT) }
             return
         }
-        // In the order the list shows them, so the request reads the way the screen does.
-        val invited = (state.people as? IglooRailState.Loaded)?.items.orEmpty()
-            .map { it.id }
-            .filter { it in state.selected }
+        val invited = orderedSelection(state.people, state.selected)
         _uiState.update { it.copy(creating = true) }
         viewModelScope.launch {
             val request = CreateWatchRoomRequest(
@@ -167,18 +162,8 @@ class WatchTogetherViewModel(
         peopleJob?.cancel()
         _uiState.update { it.copy(people = IglooRailState.Loading) }
         peopleJob = viewModelScope.launch {
-            val result = rooms.inviteUsers().withServerAddress(serverUrl)
-            _uiState.update { state ->
-                state.copy(
-                    people = when (result) {
-                        is ApiResult.Success -> {
-                            val (users, server) = result.value
-                            IglooRailState.Loaded(users.map { it.toRoomMemberUi(server) })
-                        }
-                        is ApiResult.Failure -> IglooRailState.Error(result.error.toLibraryDisplayMessage())
-                    },
-                )
-            }
+            val people = rooms.invitablePeople(serverUrl)
+            _uiState.update { it.copy(people = people) }
         }
     }
 }

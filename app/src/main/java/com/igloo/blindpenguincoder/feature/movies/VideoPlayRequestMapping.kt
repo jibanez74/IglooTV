@@ -81,7 +81,7 @@ internal fun buildVideoPlayRequest(
  * ordering that survives demuxing, where ExoPlayer exposes the same streams as the Nth track
  * group of the type. Null in, null out: no explicit track, or subtitles off.
  */
-private fun typeIndexOf(selectedId: Long?, orderedIds: List<Long>): Int? =
+internal fun typeIndexOf(selectedId: Long?, orderedIds: List<Long>): Int? =
     selectedId?.let { orderedIds.indexOf(it) }?.takeIf { it >= 0 }
 
 /**

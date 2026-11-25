@@ -16,6 +16,9 @@ fun formatCount(count: Long): String = integerCountFormat.format(count)
 fun countNoun(count: Long, singular: String): String =
     if (count == 1L) singular else singular + "s"
 
+/** A grouped count and its noun: "1,234 results", "1 member". */
+fun countPhrase(count: Long, singular: String): String = "${formatCount(count)} ${countNoun(count, singular)}"
+
 /** A line built from [values]: blanks dropped, and null rather than an empty line. */
 fun joinedLine(values: List<String>, separator: String): String? = values
     .filter { it.isNotBlank() }

@@ -44,14 +44,7 @@ internal fun MemberStack(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         for (member in members) {
-            MemberStackCell(rim) {
-                IglooAvatar(
-                    name = member.name,
-                    avatarUrl = member.avatarUrl,
-                    size = avatarSize,
-                    textStyle = IglooTheme.typography.label,
-                )
-            }
+            MemberStackCell(rim) { RoomMemberAvatar(member, avatarSize) }
         }
         if (overflowCount > 0) {
             MemberStackCell(rim) {
@@ -103,11 +96,7 @@ fun RoomPresenceBadge(state: WatchRoomUiState) {
         horizontalArrangement = Arrangement.spacedBy(IglooTheme.spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(IglooTheme.sizes.dot)
-                .background(if (reconnecting) OVER_MEDIA_TERTIARY else IglooTheme.colors.primary, CircleShape),
-        )
+        RoomDot(if (reconnecting) OVER_MEDIA_TERTIARY else IglooTheme.colors.primary)
         IglooText(
             text = if (reconnecting) RECONNECTING_LABEL else "${formatCount(connected.size.toLong())} watching",
             style = IglooTheme.typography.label.overMedia(true),
@@ -123,6 +112,27 @@ fun RoomPresenceBadge(state: WatchRoomUiState) {
             )
         }
     }
+}
+
+/** A room member's face, or their initial. */
+@Composable
+internal fun RoomMemberAvatar(member: RoomMemberUi, size: Dp = IglooTheme.icons.lg) {
+    IglooAvatar(
+        name = member.name,
+        avatarUrl = member.avatarUrl,
+        size = size,
+        textStyle = IglooTheme.typography.label,
+    )
+}
+
+/** A presence dot: who is watching, or whether the room's link is up. */
+@Composable
+internal fun RoomDot(color: Color) {
+    Box(
+        modifier = Modifier
+            .size(IglooTheme.sizes.dot)
+            .background(color, CircleShape),
+    )
 }
 
 /** The room's link is down and coming back; said on the room screen and over the player alike. */

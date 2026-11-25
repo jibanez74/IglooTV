@@ -49,9 +49,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.igloo.blindpenguincoder.core.design.IglooEasing
 import com.igloo.blindpenguincoder.core.design.IglooMotion
 import com.igloo.blindpenguincoder.core.design.IglooTheme
-import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.design.iglooTween
 import com.igloo.blindpenguincoder.core.design.scaled
+import com.igloo.blindpenguincoder.core.error.ApiResult
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.AnnouncedSection
 import com.igloo.blindpenguincoder.core.ui.IglooButtonVariant
@@ -63,9 +63,11 @@ import com.igloo.blindpenguincoder.core.ui.IglooPosterCard
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.core.ui.IglooScrim
 import com.igloo.blindpenguincoder.core.ui.IglooText
+import com.igloo.blindpenguincoder.core.ui.OnClosed
 import com.igloo.blindpenguincoder.core.ui.PosterCardProgress
 import com.igloo.blindpenguincoder.core.ui.SCRIM_ALPHA
 import com.igloo.blindpenguincoder.core.ui.announcedSection
+import com.igloo.blindpenguincoder.core.ui.enumKeyedSaver
 import com.igloo.blindpenguincoder.core.ui.focusRing
 import com.igloo.blindpenguincoder.core.ui.hiddenFromAccessibilityIf
 import com.igloo.blindpenguincoder.core.ui.iglooAuroraBackdrop
@@ -76,7 +78,6 @@ import com.igloo.blindpenguincoder.core.ui.rememberRefocusAfterSwap
 import com.igloo.blindpenguincoder.core.ui.rememberSpokenAccessibilityEnabled
 import com.igloo.blindpenguincoder.core.ui.requestFocusAnnounced
 import com.igloo.blindpenguincoder.core.ui.requestFocusSafely
-import com.igloo.blindpenguincoder.core.ui.enumKeyedSaver
 import com.igloo.blindpenguincoder.data.model.AuthUser
 import com.igloo.blindpenguincoder.data.repository.MusicQueueFetcher
 import com.igloo.blindpenguincoder.feature.library.LibraryActions
@@ -105,9 +106,9 @@ import com.igloo.blindpenguincoder.feature.player.TrailerPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerScreen
 import com.igloo.blindpenguincoder.feature.player.VideoPlayerViewModel
 import com.igloo.blindpenguincoder.feature.search.SearchActions
-import com.igloo.blindpenguincoder.feature.search.VoiceSearch
 import com.igloo.blindpenguincoder.feature.search.SearchScreen
 import com.igloo.blindpenguincoder.feature.search.SearchUiState
+import com.igloo.blindpenguincoder.feature.search.VoiceSearch
 import com.igloo.blindpenguincoder.feature.search.rememberSearchPaneMemory
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.PosterItemCard
@@ -634,14 +635,8 @@ fun IglooApp(
     }
     // The Watch Together dialog gone with its page still here — Cancel, Back, or a creation that
     // failed and left its reason on the page — hands focus back to the More trigger (section 9.3).
-    // An effect, because a failure ends the dialog from its view model; the trigger stays
-    // composed under it, so the request never meets a detached node.
-    var watchTogetherWasShown by remember { mutableStateOf(false) }
-    LaunchedEffect(watchTogether.shown) {
-        if (watchTogetherWasShown && !watchTogether.shown && detailsOpen && !roomOpen) {
-            restoreFocus(moreReturnRequester)
-        }
-        watchTogetherWasShown = watchTogether.shown
+    OnClosed(watchTogether.shown) {
+        if (detailsOpen && !roomOpen) restoreFocus(moreReturnRequester)
     }
     val openRoom: (Long) -> Unit = { roomId ->
         roomOrigin = RoomOrigin.WatchRoomsPane

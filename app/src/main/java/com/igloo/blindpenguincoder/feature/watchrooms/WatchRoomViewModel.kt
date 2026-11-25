@@ -14,7 +14,6 @@ import com.igloo.blindpenguincoder.data.repository.MovieRepository
 import com.igloo.blindpenguincoder.data.repository.RoomSocket
 import com.igloo.blindpenguincoder.data.repository.WatchRoomLink
 import com.igloo.blindpenguincoder.feature.auth.toFailureNotice
-import com.igloo.blindpenguincoder.feature.auth.toLibraryDisplayMessage
 import com.igloo.blindpenguincoder.feature.player.PlayerRoom
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.feature.shared.ReadOnlyDetailsLoader
@@ -352,9 +351,7 @@ class WatchRoomViewModel(
         val id = openId ?: return
         val editing = room.value.editing ?: return
         if (editing.saving || !editing.changed) return
-        // In the order the list shows them, so the request reads the way the screen does.
-        val listed = (editing.people as? IglooRailState.Loaded)?.items.orEmpty().map { it.id }
-        val invited = listed.filter { it in editing.selected } + (editing.selected - listed.toSet())
+        val invited = orderedSelection(editing.people, editing.selected)
         room.update { it.copy(editing = editing.copy(saving = true)) }
         savingInvitees = true
         viewModelScope.launch {
@@ -401,14 +398,7 @@ class WatchRoomViewModel(
         inviteesJob?.cancel()
         room.update { state -> state.copy(editing = state.editing?.copy(people = IglooRailState.Loading)) }
         inviteesJob = viewModelScope.launch {
-            val result = link.inviteUsers().withServerAddress(serverUrl)
-            val people = when (result) {
-                is ApiResult.Success -> {
-                    val (users, server) = result.value
-                    IglooRailState.Loaded(users.map { it.toRoomMemberUi(server) })
-                }
-                is ApiResult.Failure -> IglooRailState.Error(result.error.toLibraryDisplayMessage())
-            }
+            val people = link.invitablePeople(serverUrl)
             room.update { state -> state.copy(editing = state.editing?.copy(people = people)) }
         }
     }
