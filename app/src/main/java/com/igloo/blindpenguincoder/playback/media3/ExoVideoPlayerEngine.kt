@@ -297,6 +297,8 @@ internal class ExoVideoPlayerEngine(
     ) {
         if (!playbackIntent.start(initialPlayWhenReady)) return
         emitDesiredPlayWhenReady()
+        // A step from before playback started was dropped; it must not swallow the first tick.
+        sessionStepInFlight = false
         ticker.start()
         val targetSec = when {
             !isHls -> startPositionSec ?: 0.0
