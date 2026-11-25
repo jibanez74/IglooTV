@@ -4,9 +4,9 @@ import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
+import com.igloo.blindpenguincoder.data.repository.serverError
 import com.igloo.blindpenguincoder.data.repository.watchRoomJson
 import com.igloo.blindpenguincoder.data.repository.watchRoomsJson
-import com.igloo.blindpenguincoder.feature.library.ERROR_BODY
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
@@ -58,7 +58,7 @@ class WatchRoomsViewModelTest {
         (rooms as? IglooRailState.Loaded)?.items?.map { it.id }
 
     private val failure: MockRequestHandler =
-        { jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) }
+        { serverError() }
 
     // --- first load -------------------------------------------------------------------------
 
@@ -114,7 +114,7 @@ class WatchRoomsViewModelTest {
         val gate = CompletableDeferred<Unit>()
         var fail = true
         val http = roomsHttp {
-            if (fail) return@roomsHttp jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+            if (fail) return@roomsHttp serverError()
             gate.await()
             jsonResponse(rooms(1))
         }
@@ -183,7 +183,7 @@ class WatchRoomsViewModelTest {
     fun `a failed Refresh keeps the rooms and reports through a notice the next one clears`() = runTest {
         var fail = false
         val http = roomsHttp {
-            if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) else jsonResponse(rooms(1))
+            if (fail) serverError() else jsonResponse(rooms(1))
         }
         val model = model(http)
         model.onShown()
@@ -227,7 +227,7 @@ class WatchRoomsViewModelTest {
     fun `a failed background read leaves the rooms alone and says nothing`() = runTest {
         var fail = false
         val http = roomsHttp {
-            if (fail) jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError) else jsonResponse(rooms(1))
+            if (fail) serverError() else jsonResponse(rooms(1))
         }
         val model = model(http)
         model.onShown()

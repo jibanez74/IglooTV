@@ -1,8 +1,11 @@
 package com.igloo.blindpenguincoder.feature.watchrooms
 
+import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
 import com.igloo.blindpenguincoder.data.model.PlaybackMode
 import com.igloo.blindpenguincoder.data.repository.TestHttp
+import com.igloo.blindpenguincoder.data.repository.createWatchRoomJson
+import com.igloo.blindpenguincoder.data.repository.inviteUsersJson
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.feature.movies.WatchRoomPresets
 import com.igloo.blindpenguincoder.playback.model.HLS_WAITING_FOR_CAPACITY_MESSAGE
@@ -11,17 +14,14 @@ import io.ktor.client.engine.mock.toByteArray
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -31,10 +31,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WatchTogetherViewModelTest {
+
+    @get:Rule
+    val main = MainDispatcherRule()
 
     private val presets = WatchRoomPresets(
         mode = PlaybackMode.Remux,
@@ -48,18 +52,18 @@ class WatchTogetherViewModelTest {
 
     /** The server's answers to a create, in order; the last repeats. */
     private var createAnswers = listOf<Pair<HttpStatusCode, String>>(
-        HttpStatusCode.Created to """{"error":false,"data":{"room_id":12}}""",
+        HttpStatusCode.Created to createWatchRoomJson(),
     )
 
     private fun test(block: suspend TestScope.(WatchTogetherViewModel) -> Unit) = runTest {
-        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         var creates = 0
         val http = TestHttp(UnconfinedTestDispatcher(testScheduler)) { request ->
             when (request.url.encodedPath) {
                 "/api/users" -> jsonResponse(
-                    """{"error":false,"data":{"users":[""" +
-                        """{"id":2,"name":"Maria","email":"m@example.com","avatar":null},""" +
-                        """{"id":3,"name":"Ana","email":"a@example.com","avatar":null}]}}""",
+                    inviteUsersJson(
+                        """{"id":2,"name":"Maria","email":"m@example.com","avatar":null}""",
+                        """{"id":3,"name":"Ana","email":"a@example.com","avatar":null}""",
+                    ),
                 )
                 "/api/watch-rooms" -> {
                     createBodies += request.body.toByteArray().decodeToString()
@@ -80,13 +84,9 @@ class WatchTogetherViewModelTest {
             failureMovies += movieId
             failures += notice
         }
-        try {
-            viewModel.open(movieId = 42, title = "Heat", presets = presets)
-            runCurrent()
-            block(viewModel)
-        } finally {
-            Dispatchers.resetMain()
-        }
+        viewModel.open(movieId = 42, title = "Heat", presets = presets)
+        runCurrent()
+        block(viewModel)
     }
 
     private suspend fun TestScope.created(viewModel: WatchTogetherViewModel, act: () -> Unit): List<CreatedRoom> {
@@ -138,7 +138,7 @@ class WatchTogetherViewModelTest {
     fun `a full server is waited out for as long as it asks`() = test { viewModel ->
         createAnswers = listOf(
             HttpStatusCode.ServiceUnavailable to """{"error":true,"message":"the server has no room"}""",
-            HttpStatusCode.Created to """{"error":false,"data":{"room_id":12}}""",
+            HttpStatusCode.Created to createWatchRoomJson(),
         )
         viewModel.toggle(2)
 
@@ -175,7 +175,7 @@ class WatchTogetherViewModelTest {
     fun `dismissing while creating stops showing the work, not the work`() = test { viewModel ->
         createAnswers = listOf(
             HttpStatusCode.ServiceUnavailable to """{"error":true,"message":"full"}""",
-            HttpStatusCode.Created to """{"error":false,"data":{"room_id":12}}""",
+            HttpStatusCode.Created to createWatchRoomJson(),
         )
         viewModel.toggle(2)
         viewModel.create()
@@ -216,7 +216,7 @@ class WatchTogetherViewModelTest {
         assertTrue(viewModel.uiState.value.creating)
 
         // Let the server make room so the creation ends inside the test.
-        createAnswers = listOf(HttpStatusCode.Created to """{"error":false,"data":{"room_id":12}}""")
+        createAnswers = listOf(HttpStatusCode.Created to createWatchRoomJson())
         advanceUntilIdle()
         assertFalse(viewModel.uiState.value.creating)
     }

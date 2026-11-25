@@ -15,6 +15,7 @@ import com.igloo.blindpenguincoder.data.repository.likeStatusJson
 import com.igloo.blindpenguincoder.data.repository.likeToggleJson
 import com.igloo.blindpenguincoder.data.repository.movieDetailsJson
 import com.igloo.blindpenguincoder.data.repository.productionCompanyJson
+import com.igloo.blindpenguincoder.data.repository.serverError
 import com.igloo.blindpenguincoder.data.repository.subtitleJson
 import com.igloo.blindpenguincoder.data.repository.technicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.videoStreamJson
@@ -196,7 +197,7 @@ class MovieDetailsViewModelTest {
         val http = routedHttp(
             details = {
                 if (fail) {
-                    jsonResponse("""{"error":true,"message":"boom"}""", HttpStatusCode.InternalServerError)
+                    serverError()
                 } else {
                     jsonResponse(populatedDetailsJson())
                 }

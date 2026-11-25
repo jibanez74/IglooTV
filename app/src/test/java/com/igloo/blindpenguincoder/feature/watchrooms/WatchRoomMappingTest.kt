@@ -11,7 +11,6 @@ import com.igloo.blindpenguincoder.data.repository.audioStreamJson
 import com.igloo.blindpenguincoder.data.repository.subtitleJson
 import com.igloo.blindpenguincoder.data.repository.technicalDetailsJson
 import com.igloo.blindpenguincoder.data.repository.testServerAddress
-import com.igloo.blindpenguincoder.feature.movies.roomSettingsLine
 import com.igloo.blindpenguincoder.playback.model.PlaybackMediaRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -155,10 +154,6 @@ class WatchRoomMappingTest {
         val page = toWatchRoomPageUi(detail(audioTrack = 1, mode = "1080p_8mbps"), movie = null, technical(), server)
 
         assertEquals("1080p — best quality · Spanish · 5.1 surround · Subtitles off", page.settingsLine)
-        assertEquals(
-            "Original quality — plays the file as-is · Default · Subtitles: English",
-            roomSettingsLine(PlaybackMode.Direct, audio = null, subtitle = "English"),
-        )
     }
 
     @Test

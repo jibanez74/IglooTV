@@ -147,6 +147,13 @@ fun testServerHealthProbe(
     dispatcher = dispatcher,
 )
 
+/** The server's error envelope; its message, "nope", is what a failure's notice reads. */
+internal const val ERROR_BODY = """{"error":true,"message":"nope"}"""
+
+/** A 500 with [ERROR_BODY]. */
+fun MockRequestHandleScope.serverError(): HttpResponseData =
+    jsonResponse(ERROR_BODY, HttpStatusCode.InternalServerError)
+
 fun MockRequestHandleScope.jsonResponse(
     body: String,
     status: HttpStatusCode = HttpStatusCode.OK,
@@ -1043,3 +1050,10 @@ fun watchRoomDetailJson(
 
 fun watchRoomsJson(vararg rooms: String): String =
     """{"error":false,"message":"watch rooms","data":{"rooms":[${rooms.joinToString(",")}]}}"""
+
+/** `POST /watch-rooms`'s answer: the new room's id. */
+fun createWatchRoomJson(roomId: Long = 12): String = """{"error":false,"data":{"room_id":$roomId}}"""
+
+/** `GET /users`: everyone a room can invite, as [userSummaryJson]-shaped entries with an email. */
+fun inviteUsersJson(vararg users: String): String =
+    """{"error":false,"data":{"users":[${users.joinToString(",")}]}}"""

@@ -5,6 +5,7 @@ import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.musicianDetailsJson
 import com.igloo.blindpenguincoder.data.repository.musicianJson
+import com.igloo.blindpenguincoder.data.repository.serverError
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import io.ktor.client.engine.mock.MockRequestHandler
 import io.ktor.http.HttpStatusCode
@@ -81,7 +82,7 @@ class MusicianDetailsViewModelTest {
         var fail = false
         val model = viewModel(
             http {
-                if (fail) jsonResponse("""{"error":true,"message":"nope"}""", HttpStatusCode.InternalServerError)
+                if (fail) serverError()
                 else jsonResponse(musicianDetailsJson())
             },
         )

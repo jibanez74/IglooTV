@@ -4,6 +4,7 @@ import com.igloo.blindpenguincoder.MainDispatcherRule
 import com.igloo.blindpenguincoder.data.repository.TestHttp
 import com.igloo.blindpenguincoder.data.repository.jsonResponse
 import com.igloo.blindpenguincoder.data.repository.likedTrackIdsJson
+import com.igloo.blindpenguincoder.data.repository.serverError
 import com.igloo.blindpenguincoder.data.repository.trackLikeToggleJson
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
@@ -135,7 +136,7 @@ class TrackLikesViewModelTest {
                 seedCalls += 1
                 jsonResponse(likedTrackIdsJson(3, 5))
             },
-            toggle = { jsonResponse("""{"error":true,"message":"nope"}""", HttpStatusCode.InternalServerError) },
+            toggle = { serverError() },
         )
         val model = seeded(routed)
 
@@ -153,7 +154,7 @@ class TrackLikesViewModelTest {
         var fail = true
         val routed = routed(toggle = { id ->
             if (fail) {
-                jsonResponse("""{"error":true,"message":"nope"}""", HttpStatusCode.InternalServerError)
+                serverError()
             } else {
                 jsonResponse(trackLikeToggleJson(trackId = id, isLiked = true))
             }
@@ -176,7 +177,7 @@ class TrackLikesViewModelTest {
             if (seedCalls == 1) {
                 jsonResponse(likedTrackIdsJson(3, 5))
             } else {
-                jsonResponse("""{"error":true,"message":"nope"}""", HttpStatusCode.InternalServerError)
+                serverError()
             }
         })
         val model = seeded(routed)

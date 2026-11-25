@@ -29,12 +29,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.igloo.blindpenguincoder.AnimationScaleRule
 import com.igloo.blindpenguincoder.TestIglooApp
+import com.igloo.blindpenguincoder.TestLifecycleOwner
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.navigation.IglooDestination
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
@@ -75,10 +74,7 @@ class WatchRoomsBehaviorTest {
                 columns = IglooTheme.layout.roomGridColumns
                 TestIglooApp(
                     watchRooms = roomsState,
-                    watchRoomsActions = WatchRoomsActions(
-                        onShown = {},
-                        onRefresh = { refreshCalls += 1 },
-                    ),
+                    watchRoomsActions = inertWatchRoomsActions.copy(onRefresh = { refreshCalls += 1 }),
                 )
             }
         }
@@ -425,7 +421,7 @@ class WatchRoomsBehaviorTest {
     @Test
     fun thePaneAsksForItsListWhenItComesOnScreenAndOnEveryStart() {
         var shown = 0
-        val owner = ManualLifecycleOwner()
+        val owner = TestLifecycleOwner()
         composeRule.runOnUiThread { owner.registry.currentState = Lifecycle.State.STARTED }
         composeRule.setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
@@ -458,10 +454,5 @@ class WatchRoomsBehaviorTest {
         composeRule.runOnUiThread { owner.registry.currentState = Lifecycle.State.STARTED }
         composeRule.waitForIdle()
         assertEquals(2, shown)
-    }
-
-    private class ManualLifecycleOwner : LifecycleOwner {
-        val registry = LifecycleRegistry(this)
-        override val lifecycle: Lifecycle get() = registry
     }
 }

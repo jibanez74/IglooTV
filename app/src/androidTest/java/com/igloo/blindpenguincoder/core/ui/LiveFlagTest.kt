@@ -8,10 +8,9 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.igloo.blindpenguincoder.TestLifecycleOwner
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,10 +30,7 @@ class LiveFlagTest {
 
     private var truth = false
     private var reportChange: () -> Unit = {}
-    private val lifecycleOwner = object : LifecycleOwner {
-        val registry = LifecycleRegistry(this)
-        override val lifecycle: Lifecycle get() = registry
-    }
+    private val lifecycleOwner = TestLifecycleOwner()
 
     private fun setContent() {
         composeRule.runOnUiThread { lifecycleOwner.registry.currentState = Lifecycle.State.RESUMED }

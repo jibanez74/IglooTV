@@ -24,7 +24,6 @@ import com.igloo.blindpenguincoder.clickActionLabelled
 import com.igloo.blindpenguincoder.closedWatchRoomState
 import com.igloo.blindpenguincoder.core.design.IglooTheme
 import com.igloo.blindpenguincoder.core.ui.IglooRailState
-import com.igloo.blindpenguincoder.feature.movies.MovieDetailsActions
 import com.igloo.blindpenguincoder.feature.movies.MovieDetailsUiState
 import com.igloo.blindpenguincoder.feature.shared.DetailsState
 import com.igloo.blindpenguincoder.pressBack
@@ -69,14 +68,6 @@ class WatchTogetherDialogTest {
             IglooTheme {
                 TestIglooApp(
                     details = MovieDetailsUiState(openMovieId = 1, details = DetailsState.Loaded(testMovieDetails())),
-                    detailsActions = MovieDetailsActions.Library(
-                        onToggleWatched = {},
-                        onToggleLike = {},
-                        onSelectPlaybackMode = {},
-                        onSelectAudioTrack = {},
-                        onSelectSubtitle = {},
-                        onRetry = {},
-                    ),
                     watchTogether = together,
                     watchTogetherActions = WatchTogetherActions(
                         onToggle = { toggled += it },

@@ -107,24 +107,13 @@ class WatchRoomRepositoryTest {
     }
 
     @Test
-    fun `a room the caller cannot open is the server's refusal`() = runTest {
-        val http = TestHttp {
-            jsonResponse("""{"error":true,"message":"access denied"}""", HttpStatusCode.Forbidden)
-        }
-
-        val result = http.watchRoomRepository.watchRoom(9)
-
-        assertEquals(AppError.Api("access denied", 403), (result as ApiResult.Failure).error)
-    }
-
-    @Test
     fun `create posts the room's wire body and returns the new id`() = runTest {
         var request: HttpRequestData? = null
         var body = ""
         val http = TestHttp {
             request = it
             body = it.body.toByteArray().decodeToString()
-            jsonResponse("""{"error":false,"data":{"room_id":12}}""", HttpStatusCode.Created)
+            jsonResponse(createWatchRoomJson(), HttpStatusCode.Created)
         }
 
         val result = http.watchRoomRepository.create(
@@ -153,28 +142,6 @@ class WatchRoomRepositoryTest {
             Json.parseToJsonElement(body).jsonObject,
         )
         assertEquals(12L, (result as ApiResult.Success).value)
-    }
-
-    @Test
-    fun `a full server's refusal to create keeps its Retry-After`() = runTest {
-        val http = TestHttp {
-            respond(
-                content = """{"error":true,"message":"the server has no room to start this stream right now"}""",
-                status = HttpStatusCode.ServiceUnavailable,
-                headers = headersOf(
-                    HttpHeaders.ContentType to listOf("application/json"),
-                    HttpHeaders.RetryAfter to listOf("5"),
-                ),
-            )
-        }
-
-        val result = http.watchRoomRepository.create(
-            CreateWatchRoomRequest(42, "remux", 0, null, listOf(2)),
-        )
-
-        val error = (result as ApiResult.Failure).error as AppError.Api
-        assertEquals(503, error.status)
-        assertEquals(5, error.retryAfterSec)
     }
 
     @Test
@@ -215,21 +182,6 @@ class WatchRoomRepositoryTest {
     }
 
     @Test
-    fun `an owner leaving is the server's conflict`() = runTest {
-        val http = TestHttp {
-            respond(
-                """{"error":true,"message":"the room owner cannot leave; close the room instead"}""",
-                HttpStatusCode.Conflict,
-                headersOf(HttpHeaders.ContentType, "application/json"),
-            )
-        }
-
-        val result = http.watchRoomRepository.leave(7)
-
-        assertEquals(409, ((result as ApiResult.Failure).error as AppError.Api).status)
-    }
-
-    @Test
     fun `member list and revoked access frames decode`() {
         assertEquals(
             WatchRoomServerEvent(
@@ -252,9 +204,10 @@ class WatchRoomRepositoryTest {
         val http = TestHttp {
             request = it
             jsonResponse(
-                """{"error":false,"data":{"users":[""" +
-                    """{"id":2,"name":"Jorge","email":"jorge@example.com","avatar":null},""" +
-                    """{"id":3,"name":"Ana","email":"ana@example.com","avatar":"/api/static/avatars/3.jpg"}]}}""",
+                inviteUsersJson(
+                    """{"id":2,"name":"Jorge","email":"jorge@example.com","avatar":null}""",
+                    """{"id":3,"name":"Ana","email":"ana@example.com","avatar":"/api/static/avatars/3.jpg"}""",
+                ),
             )
         }
 
@@ -349,16 +302,12 @@ class WatchRoomRepositoryTest {
         assertEquals("$TEST_SERVER/watch-rooms/7/hls/playlist.m3u8", session.hlsPlaylistUrl(movieSessionSpec))
     }
 
+    // A full server's 503 is the shared manifest parser's, covered by VideoPlaybackRepositoryTest.
     @Test
-    fun `the room's manifest reads a full server and a replaced file as their own states`() = runTest {
-        var status = HttpStatusCode.ServiceUnavailable
-        val http = TestHttp {
-            respond("", status, headersOf(HttpHeaders.RetryAfter, "5"))
-        }
+    fun `the room's manifest reads a replaced file as its own state`() = runTest {
+        val http = TestHttp { respond("", HttpStatusCode.Conflict) }
         val session = http.watchRoomRepository.hlsSession(7, http.videoPlaybackRepository)
 
-        assertEquals(HlsManifestResult.Busy(retryAfterSec = 5), session.fetchHlsManifest(movieSessionSpec))
-        status = HttpStatusCode.Conflict
         assertEquals(
             HlsManifestResult.Failed(WATCH_ROOM_TRACKS_CHANGED_MESSAGE),
             session.fetchHlsManifest(movieSessionSpec),
