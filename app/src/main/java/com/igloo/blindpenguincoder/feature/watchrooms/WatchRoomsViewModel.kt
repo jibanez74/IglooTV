@@ -68,7 +68,7 @@ class WatchRoomsViewModel(
      * a failure leaves it alone without a word: nobody asked, and a moment of bad wifi as the TV
      * wakes is not news. A request already out, whoever started it, answers for this one too.
      */
-    fun refresh() {
+    fun onShown() {
         if (loadJob?.isActive == true) return
         load(userInitiated = false)
     }
@@ -79,7 +79,7 @@ class WatchRoomsViewModel(
      * and a second press meanwhile is ignored. It supersedes a background read in flight, whose
      * answer would otherwise land without the focus move the press is owed.
      */
-    fun reload() {
+    fun refresh() {
         if (_uiState.value.refreshing) return
         load(userInitiated = true)
     }
@@ -89,7 +89,7 @@ class WatchRoomsViewModel(
      * Its card goes at once, without waiting for a re-read, and [notice] says why in the header.
      * A reconcile, not a replace: focus stays where the user is unless it was on that card.
      */
-    fun onRoomGone(roomId: Long, notice: String?) {
+    fun onRoomGone(roomId: Long, notice: String) {
         if (loadJob?.isActive == true) goneDuringLoad += roomId
         _uiState.update { state ->
             val rooms = state.rooms as? IglooRailState.Loaded ?: return@update state.copy(notice = notice)
@@ -142,4 +142,4 @@ class WatchRoomsViewModel(
     }
 }
 
-fun WatchRoomsViewModel.actions() = WatchRoomsActions(onShown = ::refresh, onRefresh = ::reload)
+fun WatchRoomsViewModel.actions() = WatchRoomsActions(onShown = ::onShown, onRefresh = ::refresh)

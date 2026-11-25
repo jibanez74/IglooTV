@@ -22,7 +22,6 @@ import io.ktor.websocket.readText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.mapNotNull
-import kotlinx.serialization.SerializationException
 
 /**
  * What a room's screen needs from the server, owned here so JVM tests can fake it: MockEngine
@@ -113,9 +112,8 @@ class WatchRoomRepository(
 /** One text frame from a room, or null for a message this build cannot read (a newer server's). */
 internal fun decodeRoomEvent(text: String): WatchRoomServerEvent? = try {
     IglooJson.decodeFromString<WatchRoomServerEvent>(text)
-} catch (_: SerializationException) {
-    null
 } catch (_: IllegalArgumentException) {
+    // A SerializationException is one too.
     null
 }
 

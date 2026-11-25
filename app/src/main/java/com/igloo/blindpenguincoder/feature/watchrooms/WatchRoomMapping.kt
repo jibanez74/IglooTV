@@ -102,6 +102,7 @@ internal fun toWatchRoomPageUi(
     val audio = technical.audioStreams.sortedBy { it.streamIndex }
     val subtitles = technical.subtitles.sortedBy { it.streamIndex }
     val subtitleIndex = room.subtitleTrack?.toInt()?.takeIf { it in subtitles.indices }
+    val mode = playbackModeOf(room.playbackMode)
     return WatchRoomPageUi(
         id = room.id,
         title = room.movieTitle,
@@ -111,7 +112,7 @@ internal fun toWatchRoomPageUi(
         isOwner = room.isOwner,
         hostLine = hostLine(room.owner, room.isOwner),
         settingsLine = roomSettingsLine(
-            mode = playbackModeOf(room.playbackMode),
+            mode = mode,
             audio = audio.getOrNull(room.audioTrack.toInt())?.let { audioTrackLabel(it, room.audioTrack.toInt()) },
             subtitle = subtitleIndex?.let { subtitleTrackLabel(subtitles[it], it) },
         ),
@@ -123,7 +124,7 @@ internal fun toWatchRoomPageUi(
             posterUrl = posterUrl,
             mimeType = technical.movie.mimeType,
             // An unknown future mode still plays: the room's stream is HLS unless it is direct.
-            mode = playbackModeOf(room.playbackMode) ?: PlaybackMode.Remux,
+            mode = mode ?: PlaybackMode.Remux,
             videoCodec = primaryVideoStream(technical.videoStreams)?.codec,
             // The room's audio is baked into its stream, so the player is told of none: nothing
             // to pick, and no Direct-to-Remux turn for a track it would otherwise judge.

@@ -37,7 +37,6 @@ import com.igloo.blindpenguincoder.core.ui.IglooText
 fun WatchTogetherDialog(state: WatchTogetherUiState, actions: WatchTogetherActions) {
     val people = (state.people as? IglooRailState.Loaded)?.items.orEmpty()
     val createRequester = remember { FocusRequester() }
-    val pendingRequester = remember { FocusRequester() }
     IglooListDialog(
         title = "Watch together",
         rowCount = people.size,
@@ -87,7 +86,7 @@ fun WatchTogetherDialog(state: WatchTogetherUiState, actions: WatchTogetherActio
         },
         buttons = { entry, up ->
             if (state.creating) {
-                IglooPendingRow(text = state.pendingText, focusRequester = pendingRequester)
+                IglooPendingRow(text = state.pendingText)
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

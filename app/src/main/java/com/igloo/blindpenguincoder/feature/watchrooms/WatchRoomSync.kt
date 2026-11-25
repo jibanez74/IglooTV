@@ -1,5 +1,6 @@
 package com.igloo.blindpenguincoder.feature.watchrooms
 
+import com.igloo.blindpenguincoder.core.network.backoffMillis
 import com.igloo.blindpenguincoder.core.ui.formatSpokenTime
 import com.igloo.blindpenguincoder.data.model.WatchRoomClientEvent
 import com.igloo.blindpenguincoder.data.model.WatchRoomCommandType
@@ -40,6 +41,9 @@ data class WatchRoomSync(
 ) {
     /** Nobody but this user is connected (their other devices count as them). */
     val alone: Boolean get() = connectedUserIds.all { it == selfId }
+
+    /** The room is paused with nobody else in it: there is nobody to wait for. */
+    val pausedAlone: Boolean get() = playhead?.paused == true && alone
 
     fun onEvent(event: WatchRoomServerEvent, nowMs: Long): RoomSyncStep = when (event.type) {
         WatchRoomEventType.RoomSnapshot -> event.playback
@@ -101,7 +105,7 @@ data class WatchRoomSync(
         // was its last connection, or the server restarted. Coming back to it alone, this TV is
         // the only memory of the room, so it puts the room back where it is.
         val forgotten = playback.paused && playback.positionSec == 0.0 && ownPosition > 0.0
-        if (known != null && forgotten && connected.all { it == selfId }) {
+        if (known != null && forgotten && live.alone) {
             val kept = known.copy(positionSec = ownPosition, atMs = nowMs)
             val command = WatchRoomClientEvent(
                 if (kept.paused) WatchRoomCommandType.Pause else WatchRoomCommandType.Play,
@@ -148,7 +152,7 @@ data class WatchRoomSync(
  * takes, the web client's schedule.
  */
 fun roomReconnectDelayMs(attempt: Int): Long =
-    (FIRST_RECONNECT_DELAY_MS shl attempt.coerceIn(0, RECONNECT_DOUBLINGS)).coerceAtMost(MAX_RECONNECT_DELAY_MS)
+    backoffMillis(FIRST_RECONNECT_DELAY_MS, attempt, MAX_RECONNECT_DELAY_MS)
 
 /** What another member did, in the words TalkBack speaks; null when nothing a viewer would notice changed. */
 private fun describeChange(previous: RoomPlayhead?, next: RoomPlayhead, nowMs: Long): String? {
@@ -184,5 +188,4 @@ private const val ECHO_POSITION_TOLERANCE_SEC = 0.5
 private const val ECHO_TIMEOUT_MS = 5_000L
 private const val MAX_PENDING_ECHOES = 8
 private const val FIRST_RECONNECT_DELAY_MS = 1_000L
-private const val RECONNECT_DOUBLINGS = 4
 private const val MAX_RECONNECT_DELAY_MS = 16_000L

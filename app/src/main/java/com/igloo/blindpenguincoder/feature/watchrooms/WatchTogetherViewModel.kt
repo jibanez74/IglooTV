@@ -129,7 +129,7 @@ class WatchTogetherViewModel(
         val invited = (state.people as? IglooRailState.Loaded)?.items.orEmpty()
             .map { it.id }
             .filter { it in state.selected }
-        _uiState.update { it.copy(creating = true, pendingText = CREATING_ROOM) }
+        _uiState.update { it.copy(creating = true) }
         viewModelScope.launch {
             val request = CreateWatchRoomRequest(
                 movieId = movieId,

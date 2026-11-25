@@ -31,7 +31,6 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
 fun EditInviteesDialog(title: String, editing: EditInviteesUi, actions: WatchRoomActions) {
     val people = (editing.people as? IglooRailState.Loaded)?.items.orEmpty()
     val saveRequester = remember { FocusRequester() }
-    val pendingRequester = remember { FocusRequester() }
     IglooListDialog(
         title = "Edit invitees",
         rowCount = people.size,
@@ -53,7 +52,7 @@ fun EditInviteesDialog(title: String, editing: EditInviteesUi, actions: WatchRoo
         },
         buttons = { entry, up ->
             if (editing.saving) {
-                IglooPendingRow(text = "Saving invitees…", focusRequester = pendingRequester)
+                IglooPendingRow(text = "Saving invitees…")
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
