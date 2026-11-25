@@ -14,15 +14,16 @@ import com.igloo.blindpenguincoder.core.ui.IglooRailState
  * recent additions.
  */
 internal sealed interface RailEntry<out T> {
-    data class Item<T>(val item: T, val key: Long) : RailEntry<T>
-    data object SeeAll : RailEntry<Nothing>
+    /** The entry's rail key, which a rail's focus memory holds. */
+    val key: Long
+
+    data class Item<T>(val item: T, override val key: Long) : RailEntry<T>
+
+    data object SeeAll : RailEntry<Nothing> {
+        /** No item's id, so a rail's focus memory can hold the card like any other. */
+        override val key = -1L
+    }
 }
-
-/** The See-all card's rail key: no item's id, so a rail's focus memory can hold it like any card. */
-internal const val SEE_ALL_KEY = -1L
-
-internal val RailEntry<*>.key: Long
-    get() = if (this is RailEntry.Item) key else SEE_ALL_KEY
 
 /** [items] as entries, closed by the See-all card when [seeAll]. */
 internal fun <T> railEntries(
@@ -35,12 +36,13 @@ internal fun <T> railEntries(
 }
 
 /**
- * A loaded rail's cards closed by the See-all card. An empty rail gets none — there is nothing to
- * see more of, and its empty state already says so — and a loading or failed one passes through.
+ * A loaded rail's cards, closed by the See-all card when [seeAll]. An empty rail gets none —
+ * there is nothing to see more of, and its empty state already says so — and a loading or failed
+ * one passes through.
  */
-internal fun <T> IglooRailState<T>.withSeeAll(itemKey: (T) -> Long): IglooRailState<RailEntry<T>> =
+internal fun <T> IglooRailState<T>.withSeeAll(itemKey: (T) -> Long, seeAll: Boolean): IglooRailState<RailEntry<T>> =
     when (this) {
-        is IglooRailState.Loaded -> IglooRailState.Loaded(railEntries(items, itemKey, items.isNotEmpty()))
+        is IglooRailState.Loaded -> IglooRailState.Loaded(railEntries(items, itemKey, seeAll && items.isNotEmpty()))
         is IglooRailState.Loading -> this
         is IglooRailState.Error -> this
     }

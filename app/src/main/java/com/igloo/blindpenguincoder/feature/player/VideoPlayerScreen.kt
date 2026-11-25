@@ -645,8 +645,7 @@ fun VideoPlayerScreen(
         )
         // What another member did is the news while the picture plays or rests; loading and
         // buffering words still win, since they say why nothing moves.
-        val roomNotice = room?.notice?.text
-            ?.takeIf { state.phase == VideoPlayerPhase.Playing || state.phase == VideoPlayerPhase.Paused }
+        val roomNotice = room?.notice?.text?.takeIf { settled }
         PoliteAnnouncement(roomNotice ?: phaseAnnouncement)
     }
 }

@@ -87,8 +87,7 @@ internal fun LibraryGenreRow(
         contentInset = contentInset,
         rowTag = "${kind.tagPrefix}_genre_row",
         onPress = { id ->
-            genres.firstOrNull { it.id == id }
-                ?.let { genre -> onSelectGenre(LibraryFilter.Genre(genre.id, genre.tag)) }
+            genresById[id]?.let { genre -> onSelectGenre(LibraryFilter.Genre(genre.id, genre.tag)) }
         },
         onChipFocusChanged = onFocusChanged,
     ) { chip, selected, onClick, modifier ->

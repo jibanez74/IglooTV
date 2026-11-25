@@ -133,13 +133,14 @@ private const val SERVICE_BIND_SETTLE_MS = 1_500L
 /**
  * Words for TalkBack wherever its focus is parked: the players' play-state flips driven by media
  * keys, and what another member of a watch room did. Polite — it narrates, it never interrupts. A
- * null [text] composes nothing, which is how a moment with nothing to say stays quiet.
+ * null [text] composes nothing, which is how a moment with nothing to say stays quiet. A pane
+ * header's count is one too, under [modifier]'s tag.
  */
 @Composable
-internal fun PoliteAnnouncement(text: String?) {
+internal fun PoliteAnnouncement(text: String?, modifier: Modifier = Modifier) {
     if (text == null) return
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(1.dp)
             .clearAndSetSemantics {
                 liveRegion = LiveRegionMode.Polite

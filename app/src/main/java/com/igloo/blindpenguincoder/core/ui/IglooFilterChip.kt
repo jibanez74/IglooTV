@@ -34,8 +34,8 @@ fun IglooFilterChip(
     selected: Boolean,
     onClick: () -> Unit,
     semanticLabel: String,
+    actionLabel: String,
     modifier: Modifier = Modifier,
-    actionLabel: String = semanticLabel,
 ) {
     val colors = IglooTheme.colors
     SelectablePill(

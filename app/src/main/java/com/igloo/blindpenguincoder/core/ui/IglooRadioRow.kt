@@ -76,10 +76,10 @@ fun IglooRadioRow(
 }
 
 /**
- * One row of a checklist on a card ground — the Watch Together dialog's invitees: [IglooRadioRow]'s
- * row with a check glyph, and an optional [leading] slot (an avatar) between the glyph and the
- * label. One cleared Checkbox node speaking the label and whether it is checked, its press offered
- * as [actionLabel].
+ * One row of a checklist on a card ground — the watch-room dialogs' invitees: [IglooRadioRow]'s
+ * row with a check glyph, and a [leading] slot (an avatar) between the glyph and the label. One
+ * cleared Checkbox node speaking the label and whether it is checked, its press offered as
+ * [actionLabel].
  */
 @Composable
 fun IglooCheckRow(
@@ -87,8 +87,8 @@ fun IglooCheckRow(
     checked: Boolean,
     onToggle: () -> Unit,
     actionLabel: String,
+    leading: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    leading: (@Composable () -> Unit)? = null,
 ) {
     ChoiceRow(
         label = label,
