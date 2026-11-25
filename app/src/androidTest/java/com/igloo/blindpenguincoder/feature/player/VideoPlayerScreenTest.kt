@@ -753,6 +753,58 @@ class VideoPlayerScreenTest {
         assertEquals(listOf("start:null:true", "pause", "seek:120.0", "play"), engine.playbackCommands)
     }
 
+    // Two quick system Forwards add up on the seek bar, as two key presses do, though the
+    // player has not reported either landing yet.
+    @Test
+    fun theSystemsRelativeSeeksAddUpOnTheSeekBar() {
+        setContent()
+        startPlaying()
+        tick(100.0)
+
+        engine.emit(VideoPlayerEvent.SessionSeekBy(15.0))
+        engine.emit(VideoPlayerEvent.SessionSeekBy(15.0))
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("start:null:true", "seek:115.0", "seek:130.0"), engine.playbackCommands)
+    }
+
+    // A system Forward while the resume question is up does nothing, and nothing of it is kept:
+    // the next one, before the first tick, starts from the saved position.
+    @Test
+    fun aSystemSeekDroppedAtTheResumeQuestionLeavesNothingBehind() {
+        setContent(playRequest(resumeAtSec = 900.0))
+        engine.emit(VideoPlayerEvent.SessionSeekBy(15.0))
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), engine.playbackCommands)
+
+        composeRule.onNodeWithTag("movie_resume").performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        engine.emit(VideoPlayerEvent.SessionSeekBy(15.0))
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("start:900.0:true", "seek:915.0"), engine.playbackCommands)
+    }
+
+    // Dropped while a menu is open; minutes later the next one starts from where playback is.
+    @Test
+    fun aSystemSeekDroppedUnderAMenuLeavesNothingBehind() {
+        setContent()
+        startPlaying()
+        emitTracks()
+        tick(100.0)
+        openPlayerMenu("movie_audio")
+
+        engine.emit(VideoPlayerEvent.SessionSeekBy(15.0))
+        composeRule.waitForIdle()
+        composeRule.pressBack()
+        composeRule.onNodeWithTag("movie_track_menu").assertDoesNotExist()
+        tick(400.0)
+        engine.emit(VideoPlayerEvent.SessionSeekBy(15.0))
+        composeRule.waitForIdle()
+
+        assertEquals(listOf("seek:415.0"), engine.playbackCommands.filter { it.startsWith("seek:") })
+    }
+
     @Test
     fun mediaTransportKeysSeekTenSecondsRegardlessOfChrome() {
         setContent()
@@ -2103,6 +2155,7 @@ class VideoPlayerScreenTest {
 
         engine.emit(VideoPlayerEvent.SessionTransport(TransportCommand.Play))
         engine.emit(VideoPlayerEvent.SessionTransport(TransportCommand.SeekTo(500.0)))
+        engine.emit(VideoPlayerEvent.SessionSeekBy(15.0))
         composeRule.waitForIdle()
 
         assertEquals(before, engine.playbackCommands)

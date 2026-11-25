@@ -38,11 +38,17 @@ data class VideoPlayerState(
      */
     val modeRefusalMessage: String? = null,
 ) {
-    /** The resume decision was made; the engine is starting and the chrome shows loading. */
-    fun onResumeChosen(): VideoPlayerState = when (phase) {
+    /**
+     * The resume decision was made; the engine is starting and the chrome shows loading. The bar
+     * starts at [startSec], as it does when there is no question to ask: a seek made before the
+     * first tick (an HLS session can take seconds to start) adds to where playback is headed,
+     * not to zero.
+     */
+    fun onResumeChosen(startSec: Double): VideoPlayerState = when (phase) {
         VideoPlayerPhase.AwaitingResume -> copy(
             phase = VideoPlayerPhase.Loading,
             playWhenReady = true,
+            currentTimeSec = clampToPlayable(startSec),
         )
         else -> this
     }
@@ -160,7 +166,8 @@ internal fun videoPlayerAnnouncement(
 
 /**
  * What the engine reports upward. Each maps onto a [VideoPlayerState] transition, except
- * [SessionTransport], which is a command for the screen rather than news about the player.
+ * [SessionTransport] and [SessionSeekBy], which are commands for the screen rather than news
+ * about the player.
  */
 sealed interface VideoPlayerEvent {
     data class Ready(val durationSec: Double) : VideoPlayerEvent
@@ -198,6 +205,13 @@ sealed interface VideoPlayerEvent {
      * place: the optimistic seek bar, Up Next's lapse and a watch room's broadcast all see it.
      */
     data class SessionTransport(val command: TransportCommand) : VideoPlayerEvent
+
+    /**
+     * The system's Forward or Back, as the step alone. The screen adds it to its own seek bar,
+     * as a key press does, so quick presses add up and one the screen drops leaves nothing
+     * behind for the next to build on.
+     */
+    data class SessionSeekBy(val deltaSec: Double) : VideoPlayerEvent
 }
 
 sealed interface TransportCommand {
@@ -220,5 +234,5 @@ fun VideoPlayerState.onEvent(event: VideoPlayerEvent): VideoPlayerState = when (
     is VideoPlayerEvent.QualityOptionsChanged -> onQualityOptionsChanged(event.options)
     is VideoPlayerEvent.ModeRefused -> onModeRefused(event.message)
     is VideoPlayerEvent.StatusMessage -> onStatusMessage(event.message)
-    is VideoPlayerEvent.SessionTransport -> this
+    is VideoPlayerEvent.SessionTransport, is VideoPlayerEvent.SessionSeekBy -> this
 }

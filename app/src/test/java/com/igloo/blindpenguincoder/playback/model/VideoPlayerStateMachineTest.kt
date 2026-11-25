@@ -18,10 +18,12 @@ class VideoPlayerStateMachineTest {
     // --- resume ---
 
     @Test
-    fun `resume choice moves awaiting-resume to loading and nothing else`() {
-        val awaiting = VideoPlayerState(phase = VideoPlayerPhase.AwaitingResume)
-        assertEquals(VideoPlayerPhase.Loading, awaiting.onResumeChosen().phase)
-        assertEquals(VideoPlayerPhase.Playing, playing().onResumeChosen().phase)
+    fun `resume choice moves awaiting-resume to loading at the chosen start and nothing else`() {
+        val awaiting = VideoPlayerState(phase = VideoPlayerPhase.AwaitingResume, durationSec = 7200.0)
+        val resumed = awaiting.onResumeChosen(startSec = 900.0)
+        assertEquals(VideoPlayerPhase.Loading, resumed.phase)
+        assertEquals(900.0, resumed.currentTimeSec, 0.0)
+        assertEquals(playing(), playing().onResumeChosen(startSec = 900.0))
     }
 
     @Test

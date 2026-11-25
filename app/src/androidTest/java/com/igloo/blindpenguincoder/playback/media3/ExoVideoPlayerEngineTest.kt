@@ -1136,24 +1136,58 @@ class ExoVideoPlayerEngineTest {
         assertFalse(engine.statusMessages().contains(SUBTITLES_UNAVAILABLE_MESSAGE))
     }
 
-    // Two quick Forward presses from the system add up, though the screen has applied neither.
+    // The system's Forward and Back go up as the step alone; the screen adds it to its seek bar,
+    // as a key press does. The engine keeps no target between presses, so a press the screen
+    // dropped (here: before playback started at the saved position) cannot carry into the next.
     @Test
-    fun theSystemsRelativeSeeksAddUpBeforeTheScreenAppliesThem() {
+    fun theSystemsRelativeSeeksGoUpAsStepsWithNothingKeptBetweenThem() {
         val engine = engine()
-        onMain { engine.startPlayback(null, initialPlayWhenReady = true, rewindOnResume = true) }
-
-        var incrementSec = 0.0
+        var forwardSec = 0.0
+        var backSec = 0.0
         onMain {
             val session = (engine as ExoVideoPlayerEngine).sessionPlayer
-            incrementSec = session.seekForwardIncrement / 1000.0
-            session.seekForward()
+            forwardSec = session.seekForwardIncrement / 1000.0
+            backSec = session.seekBackIncrement / 1000.0
             session.seekForward()
         }
+        onMain { engine.startPlayback(600.0, initialPlayWhenReady = true, rewindOnResume = true) }
+        onMain {
+            val session = (engine as ExoVideoPlayerEngine).sessionPlayer
+            session.seekForward()
+            session.seekBack()
+        }
 
-        val targets = engine.events.replayCache.filterIsInstance<VideoPlayerEvent.SessionTransport>()
-            .map { (it.command as TransportCommand.SeekTo).seconds }
-        assertEquals(2, targets.size)
-        assertTrue(incrementSec > 0.0)
-        assertEquals("the second press starts from the first's target", targets[0] + incrementSec, targets[1], 0.001)
+        assertTrue(forwardSec > 0.0 && backSec > 0.0)
+        assertEquals(
+            listOf(forwardSec, forwardSec, -backSec),
+            engine.events.replayCache.filterIsInstance<VideoPlayerEvent.SessionSeekBy>().map { it.deltaSec },
+        )
+        assertTrue(
+            "a relative seek is never turned into an absolute target here",
+            engine.events.replayCache.filterIsInstance<VideoPlayerEvent.SessionTransport>().isEmpty(),
+        )
+    }
+
+    // A tick sampled while a system step is on its way up would reach the screen after the step
+    // and pull its seek bar back under it, so the engine skips that one tick; the next reports.
+    @Test
+    fun theTickBehindASystemStepIsSkippedOnce() {
+        val engine = engine()
+        onMain { engine.startPlayback(null, initialPlayWhenReady = true, rewindOnResume = true) }
+        waitFor("the first tick") { engine.events.replayCache.any { it is VideoPlayerEvent.Time } }
+
+        // Holding the main thread past an interval makes the next tick due behind the step.
+        onMain {
+            (engine as ExoVideoPlayerEngine).sessionPlayer.seekForward()
+            Thread.sleep(PlaybackTicker.TICK_INTERVAL_MS + 100)
+        }
+        onMain {
+            val afterStep = engine.events.replayCache.takeLastWhile { it !is VideoPlayerEvent.SessionSeekBy }
+            assertTrue("no tick after the step", afterStep.none { it is VideoPlayerEvent.Time })
+        }
+        waitFor("the tick after that") {
+            engine.events.replayCache.takeLastWhile { it !is VideoPlayerEvent.SessionSeekBy }
+                .any { it is VideoPlayerEvent.Time }
+        }
     }
 }
