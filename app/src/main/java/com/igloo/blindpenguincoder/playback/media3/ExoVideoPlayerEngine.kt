@@ -316,8 +316,6 @@ internal class ExoVideoPlayerEngine(
     }
 
     override fun seekTo(seconds: Double) {
-        // A relative seek is applied once the screen seeks there; any other seek supersedes it.
-        pendingSessionSeekSec = null
         if (!playbackIntent.acceptsCommands) return
         val pending = pendingRestart
         when {
@@ -927,9 +925,10 @@ internal class ExoVideoPlayerEngine(
     /**
      * [IntentRoutingPlayer] shifted onto the absolute movie timeline, so the system's
      * now-playing surface and Assistant seeks agree with the on-screen seek bar. Its transport
-     * goes up to the screen as [VideoPlayerEvent.SessionTransport] instead of acting here: the
-     * screen runs it through the same controls a press does, which then come back down to
-     * [play], [pause] and [seekTo] and the rebase logic behind it.
+     * goes up to the screen as [VideoPlayerEvent.SessionTransport] and
+     * [VideoPlayerEvent.SessionSeekBy] instead of acting here: the screen runs it through the
+     * same controls a press does, which then come back down to [play], [pause] and [seekTo] and
+     * the rebase logic behind it.
      */
     private inner class AbsoluteTimelinePlayer(player: Player) : IntentRoutingPlayer(
         player,
@@ -957,25 +956,13 @@ internal class ExoVideoPlayerEngine(
             sessionTransport(TransportCommand.SeekTo(positionMs / 1000.0))
         }
 
-        override fun seekBack() = sessionSeekBy(-seekBackIncrement / 1000.0)
+        override fun seekBack() = emit(VideoPlayerEvent.SessionSeekBy(-seekBackIncrement / 1000.0))
 
-        override fun seekForward() = sessionSeekBy(seekForwardIncrement / 1000.0)
+        override fun seekForward() = emit(VideoPlayerEvent.SessionSeekBy(seekForwardIncrement / 1000.0))
 
     }
 
     private fun sessionTransport(command: TransportCommand) = emit(VideoPlayerEvent.SessionTransport(command))
-
-    /**
-     * The last relative seek handed to the screen and not yet applied: two quick presses must
-     * add up (100 s, +10, +10 = 120), not both start from where the player still is.
-     */
-    private var pendingSessionSeekSec: Double? = null
-
-    private fun sessionSeekBy(deltaSec: Double) {
-        val target = (pendingSessionSeekSec ?: intendedAbsoluteSec()) + deltaSec
-        pendingSessionSeekSec = target
-        sessionTransport(TransportCommand.SeekTo(target))
-    }
 
     /** Instrumentation seam: the player the system's media controls and Assistant drive. */
     internal val sessionPlayer: Player get() = session.player

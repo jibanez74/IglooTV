@@ -214,9 +214,9 @@ fun VideoPlayerScreen(
     }
 
     // Every transport command runs through these four: the chrome, the keys, and the system's
-    // media controls, which the engine hands up as SessionTransport. In a room each is the
-    // viewer's command to everyone; following the room calls the engine directly instead, so
-    // what the room did never echoes back as this viewer's.
+    // media controls, which the engine hands up as SessionTransport and SessionSeekBy. In a room
+    // each is the viewer's command to everyone; following the room calls the engine directly
+    // instead, so what the room did never echoes back as this viewer's.
     val play: () -> Unit = {
         engine.play()
         latestRoom?.onTransport(TransportCommand.Play, state.currentTimeSec)
@@ -247,6 +247,12 @@ fun VideoPlayerScreen(
             val previous = state
             val next = previous.onEvent(event)
             state = next
+            // The system's media controls obey the same gate as the keys: on the error surface,
+            // the resume question or an open menu they do nothing (in a room they would move
+            // everyone while this screen shows Retry).
+            val systemControlsLive = next.phase != VideoPlayerPhase.Error &&
+                next.phase != VideoPlayerPhase.AwaitingResume &&
+                playerMenu == null
             when (event) {
                 is VideoPlayerEvent.Error -> if (event.unauthorized) unauthorized = true
                 is VideoPlayerEvent.IsPlayingChanged -> if (event.playing && !startReported) {
@@ -293,20 +299,14 @@ fun VideoPlayerScreen(
                     lastPositionSec = next.currentTimeSec
                     latestRoom?.onTransport(TransportCommand.Pause, next.currentTimeSec)
                 }
-                // The system's media controls obey the same gate as the keys: on the error surface,
-                // the resume question or an open menu they do nothing (in a room they would move
-                // everyone while this screen shows Retry).
-                is VideoPlayerEvent.SessionTransport -> if (
-                    next.phase != VideoPlayerPhase.Error &&
-                    next.phase != VideoPlayerPhase.AwaitingResume &&
-                    playerMenu == null
-                ) {
+                is VideoPlayerEvent.SessionTransport -> if (systemControlsLive) {
                     when (val command = event.command) {
                         TransportCommand.Play -> play()
                         TransportCommand.Pause -> pause()
                         is TransportCommand.SeekTo -> seekToSec(command.seconds)
                     }
                 }
+                is VideoPlayerEvent.SessionSeekBy -> if (systemControlsLive) seekBy(event.deltaSec)
                 else -> Unit
             }
         }
@@ -572,7 +572,7 @@ fun VideoPlayerScreen(
             val resume = {
                 host.playWhenReadyIntent = true
                 resumeDecided = true
-                state = state.onResumeChosen()
+                state = state.onResumeChosen(chosenStartSec)
             }
             ResumePrompt(
                 resumeAtSec = requireNotNull(request.resumePromptSec),
